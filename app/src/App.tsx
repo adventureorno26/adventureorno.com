@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
 import MapView from './routes/MapView';
+import RoutesView from './routes/RoutesView';
 import Settings from './routes/Settings';
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,14 @@ export default function App() {
         element={
           <RequireAuth>
             <MapView />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/place/:id/routes"
+        element={
+          <RequireAuth>
+            <RoutesView />
           </RequireAuth>
         }
       />

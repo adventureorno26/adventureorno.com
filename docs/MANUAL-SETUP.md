@@ -40,8 +40,33 @@ scoped to that bucket for the Worker.
 
 ## 6. Strava API app (Phase 4, 10 min)
 strava.com/settings/api → Create app. Category: Data Importer. Website: https://adventureorno.com.
-Authorization Callback Domain: adventureorno.com. Save Client ID + Secret. Phase 4 walks the
-one-time OAuth and webhook subscription.
+**Authorization Callback Domain:** `aanfyhsjbtnqzphuoiem.supabase.co` (the OAuth callback is the
+`strava-auth` Edge Function). Save Client ID + Secret, then:
+
+**a. Server secrets** (from the repo root, token in `.env.local`):
+```bash
+supabase secrets set STRAVA_CLIENT_ID=<id> STRAVA_CLIENT_SECRET=<secret> \
+  --project-ref aanfyhsjbtnqzphuoiem
+```
+**b. Client id** → add `VITE_STRAVA_CLIENT_ID=<id>` to `.env.local` **and** Cloudflare Pages env,
+then rebuild/redeploy the SPA (Vite bakes it at build time).
+
+**c. Connect** — open `/settings` on the live site → **Connect Strava** → approve. You should land
+back on `?strava=connected`.
+
+**d. Create the push subscription** (one time; the verify token is in `.env.local` as
+`STRAVA_VERIFY_TOKEN`):
+```bash
+source .env.local
+curl -X POST https://www.strava.com/api/v3/push_subscriptions \
+  -F client_id=<id> -F client_secret=<secret> \
+  -F callback_url=https://aanfyhsjbtnqzphuoiem.supabase.co/functions/v1/strava-webhook \
+  -F verify_token=$STRAVA_VERIFY_TOKEN
+```
+Strava immediately GETs the callback with a challenge; the deployed `strava-webhook` echoes it and
+the subscription activates. Verify: `curl -G https://www.strava.com/api/v3/push_subscriptions \
+-d client_id=<id> -d client_secret=<secret>` should list it. After that, finished activities
+appear on the map within ~a minute; `/settings → Strava → Backfill` pulls history.
 
 ## 7. iPhone setup — Erica's phone (Phase 2–3, ~20 min)
 - Build the **daily photo Shortcut** from `/docs/ios-shortcut-daily.md` (Claude Code generates

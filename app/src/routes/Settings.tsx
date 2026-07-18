@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { lastAutomatedUpload, photosEnabled } from '../lib/photos';
 import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
+import { backfillPage, isStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 
 function timeAgo(iso: string): { text: string; hours: number } {
   const then = new Date(iso).getTime();
@@ -147,6 +148,95 @@ function GeocodeCard() {
   );
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+function StravaCard({ ownerId }: { ownerId: string }) {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const clientId = import.meta.env.VITE_STRAVA_CLIENT_ID;
+
+  useEffect(() => {
+    isStravaConnected().then(setConnected);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('strava') === 'connected') setConnected(true);
+  }, []);
+
+  async function runBackfill(days: number) {
+    setRunning(true);
+    setProgress('Starting…');
+    const before = Math.floor(Date.now() / 1000);
+    const after = before - days * 86400;
+    let page = 1;
+    let stored = 0;
+    let processed = 0;
+    try {
+      for (;;) {
+        const r = await backfillPage(after, before, page);
+        stored += r.stored;
+        processed += r.processed;
+        setProgress(`Page ${page}: ${processed} activities scanned, ${stored} stored…`);
+        if (!r.hasMore) break;
+        page++;
+        await sleep(1500); // gentle pacing under the 100/15min limit
+      }
+      setProgress(`Done — ${stored} activities stored from the last ${days} days.`);
+    } catch (e) {
+      setProgress(e instanceof Error ? e.message : 'Backfill failed');
+    }
+    setRunning(false);
+  }
+
+  if (!clientId) {
+    return (
+      <div className="card">
+        <b>Strava</b>
+        <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
+          Set <code>VITE_STRAVA_CLIENT_ID</code> (and the server secrets) after creating the Strava
+          API app — see MANUAL-SETUP §6.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <b>Strava</b>
+      {connected === null ? (
+        <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>Checking…</div>
+      ) : connected ? (
+        <>
+          <div style={{ color: '#4dd07a', fontSize: 13, margin: '4px 0 10px' }}>
+            ✓ Connected. New activities import automatically via webhook.
+          </div>
+          <div className="btn-row" style={{ marginTop: 0 }}>
+            <button disabled={running} onClick={() => void runBackfill(365)}>
+              {running ? 'Importing…' : 'Backfill last 12 months'}
+            </button>
+            <button disabled={running} onClick={() => void runBackfill(30)}>
+              Last 30 days
+            </button>
+          </div>
+          {progress && (
+            <div className="banner" style={{ marginTop: 8 }}>
+              {progress}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
+            Connect Strava to auto-import hikes, walks, runs, and rides.
+          </div>
+          <a href={stravaAuthorizeUrl(clientId, ownerId)}>
+            <button className="primary">Connect Strava</button>
+          </a>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { profile, signOut } = useAuth();
 
@@ -171,12 +261,14 @@ export default function Settings() {
           <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
           <HomeZoneCard />
           <GeocodeCard />
+
+          <h2 style={{ marginTop: 28 }}>Strava</h2>
+          <StravaCard ownerId={profile.id} />
         </>
       )}
 
       <h2 style={{ marginTop: 28 }}>Coming soon</h2>
       <ul style={{ color: 'var(--muted)', lineHeight: 1.7 }}>
-        <li>Strava routes &amp; mileage (Phase 4)</li>
         <li>Invites &amp; roles, trips (Phase 5)</li>
         <li>Timeline import (Phase 6)</li>
       </ul>

@@ -2,6 +2,36 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## 2026-07-18 — Phase 4: Strava webhooks, routes view, mileage
+
+- **Three Edge Functions, shared logic in `_shared/strava.ts`.** `strava-auth`
+  (OAuth callback, `--no-verify-jwt`, upserts tokens), `strava-webhook`
+  (`--no-verify-jwt`, GET challenge handshake + POST create/update/delete),
+  `strava-backfill` (owner-only, one page/call). All deployed live; the webhook
+  handshake is **verified live** (correct verify token echoes the challenge,
+  wrong token → 403).
+- **Tokens are server-only.** `strava_accounts` has RLS enabled with **no
+  policies** (deny-all to clients); only the service_role Edge Functions touch it.
+  The SPA learns connection state through the `strava_connected()` SECURITY
+  DEFINER RPC — never the tokens themselves.
+- **Rule #2 lives in one function** (`shouldIngest`): Hike/Walk/Run always;
+  everything else only if the start point is outside the home zone. Used
+  identically by the webhook and the backfill.
+- **Backfill is client-driven pagination.** Each invocation processes one
+  `per_page=100` page and returns `{hasMore, page}`; the SPA loops with a 1.5 s
+  gap and a progress line, so we stay under Strava's 100/15 min limit and never
+  blow the function wall-clock. 429 surfaces as "wait and resume".
+- **New activities in a new area create a place** (`assign_activity_place`,
+  30 km) that flows through the Phase 3 geocode/naming pipeline — a hike
+  somewhere new proves the visit.
+- **Mileage = a security-invoker aggregate view** (`activity_mileage`, one row
+  per type). The client reads a handful of rows, animates a count-up to the sum,
+  and shows the per-type breakdown on hover — never summing thousands of rows.
+- **Routes view** decodes `summary_polyline` with `@mapbox/polyline`, draws one
+  colored line per type, fits bounds, and deep-links each to strava.com. Reached
+  from the place panel; hover popups now show real 📷/🥾 counts via the
+  `place_counts` view.
+
 ## 2026-07-18 — Phase 3: Overland ingest + nightly clustering
 
 - **Clustering is one idempotent SQL function** (`cluster_unassigned()`), run
