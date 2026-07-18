@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../auth/AuthProvider';
 import type { MileageRow, Place } from '../lib/types';
 import { fetchMileage } from '../lib/strava';
 
@@ -36,6 +37,8 @@ function useCountUp(target: number): number {
 }
 
 export default function StatsBar({ places, addMode, onToggleAdd }: Props) {
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const countries = uniqueCount(places.map((p) => p.country));
   const states = uniqueCount(places.map((p) => p.admin1));
 
@@ -72,9 +75,14 @@ export default function StatsBar({ places, addMode, onToggleAdd }: Props) {
       <div className="spacer" />
 
       <div className="actions">
-        <button className={addMode ? 'primary' : ''} onClick={onToggleAdd}>
-          {addMode ? 'Click map to place…' : '+ Add place'}
-        </button>
+        {canEdit && (
+          <button className={addMode ? 'primary' : ''} onClick={onToggleAdd}>
+            {addMode ? 'Click map to place…' : '+ Add place'}
+          </button>
+        )}
+        <Link to="/trips">
+          <button>Trips</button>
+        </Link>
         <Link to="/settings">
           <button>Settings</button>
         </Link>

@@ -7,7 +7,23 @@ import { supabase } from './supabase';
 import type { Photo } from './types';
 
 const PHOTO_COLS =
-  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, created_at';
+  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at';
+
+export async function fetchPhotosForEntry(entryId: string): Promise<Photo[]> {
+  const { data, error } = await supabase
+    .from('photos')
+    .select(PHOTO_COLS)
+    .eq('entry_id', entryId)
+    .order('taken_at', { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as Photo[];
+}
+
+/** Attach/detach a photo to an entry (entry_id = null detaches). */
+export async function linkPhotoToEntry(photoId: string, entryId: string | null): Promise<void> {
+  const { error } = await supabase.from('photos').update({ entry_id: entryId }).eq('id', photoId);
+  if (error) throw error;
+}
 
 export const GATEWAY = (import.meta.env.VITE_PHOTO_GATEWAY_URL ?? '').replace(/\/+$/, '');
 

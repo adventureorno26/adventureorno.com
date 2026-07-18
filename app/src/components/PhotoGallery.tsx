@@ -49,6 +49,7 @@ export default function PhotoGallery({ place }: Props) {
     );
   }
 
+  const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
   const canDelete = (p: Photo): boolean =>
     profile?.role === 'owner' || p.uploaded_by === profile?.id;
 
@@ -98,35 +99,37 @@ export default function PhotoGallery({ place }: Props) {
 
   return (
     <div>
-      <div
-        className={`dropzone ${dragOver ? 'over' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          void upload(Array.from(e.dataTransfer.files), false);
-        }}
-        onClick={() => fileRef.current?.click()}
-        role="button"
-        tabIndex={0}
-      >
-        {busy ? 'Uploading…' : 'Drag photos here, or click to choose'}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/heic,image/heif"
-          multiple
-          hidden
-          onChange={(e) => {
-            void upload(Array.from(e.target.files ?? []), false);
-            e.target.value = '';
+      {canUpload && (
+        <div
+          className={`dropzone ${dragOver ? 'over' : ''}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
           }}
-        />
-      </div>
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            void upload(Array.from(e.dataTransfer.files), false);
+          }}
+          onClick={() => fileRef.current?.click()}
+          role="button"
+          tabIndex={0}
+        >
+          {busy ? 'Uploading…' : 'Drag photos here, or click to choose'}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/heic,image/heif"
+            multiple
+            hidden
+            onChange={(e) => {
+              void upload(Array.from(e.target.files ?? []), false);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      )}
 
       {note && (
         <div className="banner" style={{ marginTop: 8 }}>

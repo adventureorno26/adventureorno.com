@@ -472,6 +472,115 @@ a {
   margin: 2px 0 4px;
 }
 
+/* ---------- People / trips ---------- */
+.person-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 4px;
+}
+.trip-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 14px;
+}
+.trip-stats b {
+  font-size: 17px;
+}
+
+/* ---------- Entry ↔ photo links ---------- */
+.entry-photos {
+  margin-top: 8px;
+}
+.entry-photo-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.entry-photo {
+  width: 54px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.link-photos-btn {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.photo-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.photo-picker .pick {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.photo-picker .pick.on {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+}
+.photo-picker .pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-picker .pick-check {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---------- Mobile: place panel becomes a bottom sheet ---------- */
+@media (max-width: 640px) {
+  .panel {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 72vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
+  }
+  .routes-panel {
+    top: auto;
+    height: 60vh;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+  }
+  .stats-bar {
+    flex-wrap: wrap;
+  }
+  .tray {
+    bottom: 8px;
+  }
+}
+
 /* MapLibre popup theming */
 .maplibregl-popup-content {
   background: var(--panel);

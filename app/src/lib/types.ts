@@ -2,7 +2,7 @@
 // Geography columns are exposed to the client as plain lat/lng doubles; the DB
 // keeps a generated geography(Point,4326) column in sync for spatial queries.
 
-export type Role = 'owner' | 'editor';
+export type Role = 'owner' | 'editor' | 'viewer';
 
 export type EntryKind = 'restaurant' | 'activity' | 'stay' | 'note';
 
@@ -45,7 +45,31 @@ export interface Photo {
   is_landscape: boolean | null;
   source: PhotoSource;
   uploaded_by: string | null;
+  entry_id: string | null;
   created_at: string;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: Role;
+  accepted_at: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface Trip {
+  id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+}
+
+export interface TripStats {
+  places: number;
+  photos: number;
+  miles: number;
 }
 
 export interface Entry {
