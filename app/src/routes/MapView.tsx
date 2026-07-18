@@ -230,6 +230,16 @@ export default function MapView() {
     navigate('/');
   }
 
+  // A merge removes the loser and updates the winner's aggregates. Re-fetch to
+  // pick up recomputed visit stats / cover photo from the server.
+  function handleMerged(loserId: string, winner: Place) {
+    setPlaces((prev) => prev.filter((p) => p.id !== loserId));
+    fetchPlaces()
+      .then(setPlaces)
+      .catch(() => undefined);
+    navigate(`/place/${winner.id}`);
+  }
+
   return (
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
@@ -254,9 +264,11 @@ export default function MapView() {
       {selectedPlace && (
         <PlacePanel
           place={selectedPlace}
+          allPlaces={places}
           onClose={() => navigate('/')}
           onPlaceChanged={handlePlaceChanged}
           onPlaceDeleted={handlePlaceDeleted}
+          onMerged={handleMerged}
         />
       )}
     </div>
