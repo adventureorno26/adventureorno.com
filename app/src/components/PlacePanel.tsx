@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   createEntry,
   deleteEntry,
@@ -209,6 +210,10 @@ export default function PlacePanel({
           </div>
         </div>
       )}
+
+      <p style={{ margin: '10px 0 0' }}>
+        <Link to={`/place/${place.id}/routes`}>🥾 View routes in this area →</Link>
+      </p>
 
       <h3 style={{ marginTop: 22 }}>Photos</h3>
       <PhotoGallery place={place} />

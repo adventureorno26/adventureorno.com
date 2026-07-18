@@ -61,6 +61,28 @@ export interface Entry {
   created_at: string;
 }
 
+export interface Activity {
+  id: string;
+  strava_id: number | null;
+  type: string; // Hike / Walk / Run / Ride / ...
+  name: string | null;
+  distance: number; // meters
+  moving_time: number | null; // seconds
+  elapsed_time: number | null;
+  start_date: string | null;
+  lat: number;
+  lng: number;
+  summary_polyline: string | null;
+  place_id: string | null;
+}
+
+export interface MileageRow {
+  type: string;
+  activity_count: number;
+  meters: number;
+  miles: number;
+}
+
 // Draft shapes for inserts (server fills id / created_at / created_by).
 export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'> &
   Partial<Pick<Place, 'first_visit' | 'last_visit'>>;

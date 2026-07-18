@@ -4,6 +4,7 @@ import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces } from '../lib/data';
+import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
@@ -12,20 +13,28 @@ import UnassignedTray from '../components/UnassignedTray';
 
 const SOURCE_ID = 'places';
 
-function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+function toFeatureCollection(
+  places: Place[],
+  counts: Map<string, PlaceCount>,
+): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: 'FeatureCollection',
-    features: places.map((p) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-      properties: {
-        id: p.id,
-        name: p.name,
-        country: p.country ?? '',
-        first_visit: p.first_visit ?? '',
-        last_visit: p.last_visit ?? '',
-      },
-    })),
+    features: places.map((p) => {
+      const c = counts.get(p.id);
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: {
+          id: p.id,
+          name: p.name,
+          country: p.country ?? '',
+          first_visit: p.first_visit ?? '',
+          last_visit: p.last_visit ?? '',
+          photos: c?.photo_count ?? 0,
+          routes: c?.route_count ?? 0,
+        },
+      };
+    }),
   };
 }
 
@@ -34,6 +43,7 @@ export default function MapView() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const addModeRef = useRef(false);
+  const countsRef = useRef<Map<string, PlaceCount>>(new Map());
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -52,14 +62,23 @@ export default function MapView() {
   const syncSource = useCallback((rows: Place[]) => {
     const map = mapRef.current;
     if (!map || !map.getSource(SOURCE_ID)) return;
-    (map.getSource(SOURCE_ID) as GeoJSONSource).setData(toFeatureCollection(rows));
+    (map.getSource(SOURCE_ID) as GeoJSONSource).setData(
+      toFeatureCollection(rows, countsRef.current),
+    );
   }, []);
 
-  // Initial data load.
+  // Initial data load — places, plus per-place photo/route counts for popups.
   useEffect(() => {
     fetchPlaces()
       .then(setPlaces)
       .catch((e) => setBanner(e instanceof Error ? e.message : 'Failed to load places'));
+    fetchPlaceCounts()
+      .then((c) => {
+        countsRef.current = c;
+        syncSource(places);
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // One-time map init.
@@ -170,8 +189,8 @@ export default function MapView() {
         <div class="popup-name">${escapeHtml(p.name)}</div>
         <div class="popup-meta">${escapeHtml(dates)}</div>
         <div class="popup-chips">
-          <span class="chip">📷 —</span>
-          <span class="chip">🥾 —</span>
+          <span class="chip">📷 ${Number(p.photos) || 0}</span>
+          <span class="chip">🥾 ${Number(p.routes) || 0}</span>
         </div>`;
       popup
         .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
