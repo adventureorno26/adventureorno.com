@@ -2,7 +2,7 @@
 // Geography columns are exposed to the client as plain lat/lng doubles; the DB
 // keeps a generated geography(Point,4326) column in sync for spatial queries.
 
-export type Role = 'owner' | 'editor';
+export type Role = 'owner' | 'editor' | 'viewer';
 
 export type EntryKind = 'restaurant' | 'activity' | 'stay' | 'note';
 
@@ -25,6 +25,9 @@ export interface Place {
   first_visit: string | null; // date
   last_visit: string | null; // date
   cover_photo_id: string | null;
+  auto: boolean; // created by the clustering job; badge until first edited
+  needs_geocode: boolean;
+  visit_count: number;
   created_by: string | null;
   created_at: string;
 }
@@ -42,7 +45,31 @@ export interface Photo {
   is_landscape: boolean | null;
   source: PhotoSource;
   uploaded_by: string | null;
+  entry_id: string | null;
   created_at: string;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: Role;
+  accepted_at: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface Trip {
+  id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+}
+
+export interface TripStats {
+  places: number;
+  photos: number;
+  miles: number;
 }
 
 export interface Entry {
@@ -56,6 +83,28 @@ export interface Entry {
   date: string | null; // date
   created_by: string | null;
   created_at: string;
+}
+
+export interface Activity {
+  id: string;
+  strava_id: number | null;
+  type: string; // Hike / Walk / Run / Ride / ...
+  name: string | null;
+  distance: number; // meters
+  moving_time: number | null; // seconds
+  elapsed_time: number | null;
+  start_date: string | null;
+  lat: number;
+  lng: number;
+  summary_polyline: string | null;
+  place_id: string | null;
+}
+
+export interface MileageRow {
+  type: string;
+  activity_count: number;
+  meters: number;
+  miles: number;
 }
 
 // Draft shapes for inserts (server fills id / created_at / created_by).

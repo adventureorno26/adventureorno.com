@@ -1,21 +1,27 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   createEntry,
   deleteEntry,
   deletePlace,
   fetchEntries,
+  mergePlaces,
   updateEntry,
   updatePlace,
 } from '../lib/data';
 import type { Entry, NewEntry, Place } from '../lib/types';
+import { useAuth } from '../auth/AuthProvider';
 import EntryEditor from './EntryEditor';
+import EntryPhotos from './EntryPhotos';
 import PhotoGallery from './PhotoGallery';
 
 interface Props {
   place: Place;
+  allPlaces: Place[];
   onClose: () => void;
   onPlaceChanged: (place: Place) => void;
   onPlaceDeleted: (id: string) => void;
+  onMerged: (loserId: string, winner: Place) => void;
 }
 
 function Stars({ n }: { n: number }) {
@@ -27,12 +33,22 @@ function Stars({ n }: { n: number }) {
   );
 }
 
-export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDeleted }: Props) {
+export default function PlacePanel({
+  place,
+  allPlaces,
+  onClose,
+  onPlaceChanged,
+  onPlaceDeleted,
+  onMerged,
+}: Props) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [addingEntry, setAddingEntry] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editingHeader, setEditingHeader] = useState(false);
+  const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   // Editable header fields
   const [name, setName] = useState(place.name);
@@ -65,11 +81,27 @@ export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDele
         country: country.trim() || null,
         first_visit: first || null,
         last_visit: last || null,
+        // An edited place is no longer just an auto-generated default.
+        auto: false,
       });
       onPlaceChanged(updated);
       setEditingHeader(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save place');
+    }
+  }
+
+  async function mergeFrom(loserId: string) {
+    const loser = allPlaces.find((p) => p.id === loserId);
+    if (!loser) return;
+    if (!confirm(`Merge "${loser.name}" into "${place.name}"? "${loser.name}" will be deleted.`))
+      return;
+    try {
+      await mergePlaces(loserId, place.id);
+      onMerged(loserId, place);
+      setMerging(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not merge places');
     }
   }
 
@@ -104,7 +136,14 @@ export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDele
   return (
     <aside className="panel">
       <div className="panel-head">
-        <h2>{place.name}</h2>
+        <h2>
+          {place.name}
+          {place.auto && (
+            <span className="auto-badge" title="Auto-created by the nightly clustering job">
+              auto
+            </span>
+          )}
+        </h2>
         <button className="close" onClick={onClose} aria-label="Close">
           ×
         </button>
@@ -112,6 +151,7 @@ export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDele
       <div className="meta">
         {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'} ·{' '}
         {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
+        {place.visit_count > 0 && ` · ${place.visit_count} day${place.visit_count > 1 ? 's' : ''}`}
       </div>
 
       {error && <div className="banner">{error}</div>}
@@ -140,13 +180,46 @@ export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDele
           </div>
         </div>
       ) : (
-        <div className="btn-row">
-          <button onClick={() => setEditingHeader(true)}>Edit place</button>
-          <button className="danger" onClick={() => void removePlace()}>
-            Delete place
-          </button>
+        canEdit && (
+          <div className="btn-row">
+            <button onClick={() => setEditingHeader(true)}>Edit place</button>
+            <button onClick={() => setMerging((v) => !v)}>Merge…</button>
+            <button className="danger" onClick={() => void removePlace()}>
+              Delete place
+            </button>
+          </div>
+        )
+      )}
+
+      {merging && (
+        <div className="entry">
+          <label>Merge another place into this one (it will be deleted)</label>
+          <select
+            defaultValue=""
+            onChange={(e) => e.target.value && void mergeFrom(e.target.value)}
+          >
+            <option value="" disabled>
+              Choose a place to absorb…
+            </option>
+            {allPlaces
+              .filter((p) => p.id !== place.id)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.admin1 ? ` — ${p.admin1}` : ''}
+                </option>
+              ))}
+          </select>
+          <div className="btn-row">
+            <button onClick={() => setMerging(false)}>Cancel</button>
+          </div>
         </div>
       )}
+
+      <p style={{ margin: '10px 0 0' }}>
+        <Link to={`/place/${place.id}/routes`}>🥾 View routes in this area →</Link>
+      </p>
 
       <h3 style={{ marginTop: 22 }}>Photos</h3>
       <PhotoGallery place={place} />
@@ -183,24 +256,36 @@ export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDele
                   </a>
                 </p>
               )}
-              <div className="row-actions">
-                <button onClick={() => setEditingEntryId(e.id)}>Edit</button>
-                <button className="danger" onClick={() => void removeEntry(e.id)}>
-                  Delete
-                </button>
-              </div>
+              <EntryPhotos entryId={e.id} placeId={place.id} canEdit={canEdit} />
+              {canEdit && (
+                <div className="row-actions">
+                  <button onClick={() => setEditingEntryId(e.id)}>Edit</button>
+                  <button className="danger" onClick={() => void removeEntry(e.id)}>
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           ),
         )
       )}
 
-      {addingEntry ? (
-        <EntryEditor placeId={place.id} onSave={addEntry} onCancel={() => setAddingEntry(false)} />
-      ) : (
-        <button className="primary" style={{ marginTop: 12 }} onClick={() => setAddingEntry(true)}>
-          + Add entry
-        </button>
-      )}
+      {canEdit &&
+        (addingEntry ? (
+          <EntryEditor
+            placeId={place.id}
+            onSave={addEntry}
+            onCancel={() => setAddingEntry(false)}
+          />
+        ) : (
+          <button
+            className="primary"
+            style={{ marginTop: 12 }}
+            onClick={() => setAddingEntry(true)}
+          >
+            + Add entry
+          </button>
+        ))}
     </aside>
   );
 }
