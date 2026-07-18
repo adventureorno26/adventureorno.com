@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place } from './types';
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, created_by, created_at';
 const ENTRY_COLS = 'id, place_id, kind, title, body, rating, url, date, created_by, created_at';
 
 export async function fetchPlaces(): Promise<Place[]> {

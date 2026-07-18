@@ -260,6 +260,161 @@ a {
   text-align: left;
 }
 
+/* ---------- Photos: dropzone, gallery, lightbox ---------- */
+.dropzone {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--panel-2);
+}
+.dropzone:hover,
+.dropzone.over {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.thumb {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+  display: block;
+}
+.thumb-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  background: rgba(15, 17, 21, 0.7);
+  border-color: transparent;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.thumb:hover .thumb-del {
+  opacity: 1;
+}
+.img-skeleton,
+.img-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: var(--panel-2);
+  color: var(--muted);
+}
+.img-skeleton {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.88);
+  display: grid;
+  place-items: center;
+  cursor: zoom-out;
+}
+.lightbox-img {
+  max-width: 94vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  font-size: 24px;
+  background: transparent;
+  border: none;
+  color: #fff;
+}
+
+/* ---------- Unassigned-photos tray ---------- */
+.tray {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 6;
+  width: min(320px, calc(100% - 28px));
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.tray-head {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: var(--panel);
+  font-size: 13px;
+}
+.tray-body {
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+.tray-add {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+  margin: 2px 0 8px;
+}
+.tray-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+}
+.tray-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
+.tray-controls {
+  flex: 1;
+}
+
+/* ---------- Settings cards ---------- */
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--panel-2);
+}
+.card-warn {
+  border-color: #6b4a17;
+  background: #23190c;
+}
+
 /* MapLibre popup theming */
 .maplibregl-popup-content {
   background: var(--panel);

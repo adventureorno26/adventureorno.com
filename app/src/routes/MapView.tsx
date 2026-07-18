@@ -8,6 +8,7 @@ import { isInHomeZone } from '../lib/geo';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
+import UnassignedTray from '../components/UnassignedTray';
 
 const SOURCE_ID = 'places';
 
@@ -38,6 +39,8 @@ export default function MapView() {
   const [ready, setReady] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+
+  const [trayNonce, setTrayNonce] = useState(0);
 
   const navigate = useNavigate();
   const { id: selectedId } = useParams();
@@ -241,6 +244,12 @@ export default function MapView() {
           {banner}
         </div>
       )}
+
+      <UnassignedTray
+        key={trayNonce}
+        places={places}
+        onChanged={() => setTrayNonce((n) => n + 1)}
+      />
 
       {selectedPlace && (
         <PlacePanel
