@@ -67,7 +67,8 @@ Deno.serve(async (req) => {
     return json({ error: 'invalid json body' }, 400);
   }
   const email = (payload.email ?? '').trim().toLowerCase();
-  const role = payload.role === 'owner' ? 'owner' : 'editor';
+  const role =
+    payload.role === 'owner' ? 'owner' : payload.role === 'viewer' ? 'viewer' : 'editor';
   const redirectTo = payload.redirectTo ?? 'https://adventureorno.com/login';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return json({ error: 'valid email required' }, 400);

@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { lastAutomatedUpload, photosEnabled } from '../lib/photos';
 import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
 import { backfillPage, isStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
+import PeopleCard from '../components/PeopleCard';
 
 function timeAgo(iso: string): { text: string; hours: number } {
   const then = new Date(iso).getTime();
@@ -255,6 +256,9 @@ export default function Settings() {
 
       {profile?.role === 'owner' && (
         <>
+          <h2 style={{ marginTop: 28 }}>People</h2>
+          <PeopleCard meId={profile.id} />
+
           <h2 style={{ marginTop: 28 }}>Photos</h2>
           <PhotoHealthCard />
 

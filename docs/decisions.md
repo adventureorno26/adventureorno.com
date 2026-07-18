@@ -2,6 +2,31 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## 2026-07-18 — Phase 5: partner access, trips, PWA polish
+
+- **'viewer' role = just a CHECK-constraint change.** Writes were already gated by
+  `is_editor_or_owner()` (excludes viewer) and reads by `is_member()` (any
+  profile), so read-only access needed no new policies — only allowing 'viewer'
+  in `profiles`/`invites`. Editor/viewer write UI is hidden client-side *and*
+  blocked by RLS; owner-only tables (settings, invites, ingest_tokens,
+  strava_accounts) are unchanged, so there's still no path for a non-owner to mint
+  a device token (rule #7).
+- **Revoke = delete the profile.** No profile + no pending invite → `claim_invite`
+  fails → the app shows "no access". Auth user can linger harmlessly.
+  (Josh/joshforman@gmail.com was provisioned directly as editor at session start;
+  the invite UI is the general path.)
+- **Trips are computed, not join-tabled.** A place belongs to a trip when its
+  `first_visit` is in the trip's date range — one indexed query, no membership
+  rows to keep in sync. `trip_stats()` returns places/photos/miles for the range.
+- **Photo↔entry linking via a nullable `photos.entry_id`** (ON DELETE SET NULL) —
+  a photo keeps its place and optionally points at one entry. The entry card shows
+  its photos with an attach/detach picker over the place's gallery.
+- **Shell-only service worker.** Network-first for navigations (offline open),
+  cache-first for hashed `/assets/`, and it **explicitly ignores cross-origin** —
+  so photo bytes (photo-gateway) and Supabase API are never cached. Manifest +
+  generated PNG icons make it installable; og:image is a generated branded card,
+  never a real photo (privacy). Panel becomes a bottom sheet ≤ 640 px.
+
 ## 2026-07-18 — Phase 4: Strava webhooks, routes view, mileage
 
 - **Three Edge Functions, shared logic in `_shared/strava.ts`.** `strava-auth`

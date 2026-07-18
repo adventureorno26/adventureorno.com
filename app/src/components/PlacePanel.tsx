@@ -10,7 +10,9 @@ import {
   updatePlace,
 } from '../lib/data';
 import type { Entry, NewEntry, Place } from '../lib/types';
+import { useAuth } from '../auth/AuthProvider';
 import EntryEditor from './EntryEditor';
+import EntryPhotos from './EntryPhotos';
 import PhotoGallery from './PhotoGallery';
 
 interface Props {
@@ -45,6 +47,8 @@ export default function PlacePanel({
   const [editingHeader, setEditingHeader] = useState(false);
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   // Editable header fields
   const [name, setName] = useState(place.name);
@@ -176,13 +180,15 @@ export default function PlacePanel({
           </div>
         </div>
       ) : (
-        <div className="btn-row">
-          <button onClick={() => setEditingHeader(true)}>Edit place</button>
-          <button onClick={() => setMerging((v) => !v)}>Merge…</button>
-          <button className="danger" onClick={() => void removePlace()}>
-            Delete place
-          </button>
-        </div>
+        canEdit && (
+          <div className="btn-row">
+            <button onClick={() => setEditingHeader(true)}>Edit place</button>
+            <button onClick={() => setMerging((v) => !v)}>Merge…</button>
+            <button className="danger" onClick={() => void removePlace()}>
+              Delete place
+            </button>
+          </div>
+        )
       )}
 
       {merging && (
@@ -250,24 +256,36 @@ export default function PlacePanel({
                   </a>
                 </p>
               )}
-              <div className="row-actions">
-                <button onClick={() => setEditingEntryId(e.id)}>Edit</button>
-                <button className="danger" onClick={() => void removeEntry(e.id)}>
-                  Delete
-                </button>
-              </div>
+              <EntryPhotos entryId={e.id} placeId={place.id} canEdit={canEdit} />
+              {canEdit && (
+                <div className="row-actions">
+                  <button onClick={() => setEditingEntryId(e.id)}>Edit</button>
+                  <button className="danger" onClick={() => void removeEntry(e.id)}>
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           ),
         )
       )}
 
-      {addingEntry ? (
-        <EntryEditor placeId={place.id} onSave={addEntry} onCancel={() => setAddingEntry(false)} />
-      ) : (
-        <button className="primary" style={{ marginTop: 12 }} onClick={() => setAddingEntry(true)}>
-          + Add entry
-        </button>
-      )}
+      {canEdit &&
+        (addingEntry ? (
+          <EntryEditor
+            placeId={place.id}
+            onSave={addEntry}
+            onCancel={() => setAddingEntry(false)}
+          />
+        ) : (
+          <button
+            className="primary"
+            style={{ marginTop: 12 }}
+            onClick={() => setAddingEntry(true)}
+          >
+            + Add entry
+          </button>
+        ))}
     </aside>
   );
 }
