@@ -24,7 +24,24 @@ export interface Place {
   lng: number;
   first_visit: string | null; // date
   last_visit: string | null; // date
+  cover_photo_id: string | null;
   created_by: string | null;
+  created_at: string;
+}
+
+export type PhotoSource = 'shortcut' | 'manual';
+
+export interface Photo {
+  id: string;
+  place_id: string | null;
+  lat: number;
+  lng: number;
+  taken_at: string | null;
+  width: number | null;
+  height: number | null;
+  is_landscape: boolean | null;
+  source: PhotoSource;
+  uploaded_by: string | null;
   created_at: string;
 }
 
