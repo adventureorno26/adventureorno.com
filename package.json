@@ -1,0 +1,20 @@
+{
+  "name": "adventureorno",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Private travel-map web app — adventureorno.com",
+  "workspaces": [
+    "app",
+    "workers/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace app",
+    "build": "npm run build --workspace app",
+    "lint": "npm run lint --workspace app",
+    "test": "npm run test --workspace app",
+    "preview": "npm run preview --workspace app"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
