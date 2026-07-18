@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { lastAutomatedUpload, photosEnabled } from '../lib/photos';
+import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
 
 function timeAgo(iso: string): { text: string; hours: number } {
   const then = new Date(iso).getTime();
@@ -41,6 +42,111 @@ function PhotoHealthCard() {
   );
 }
 
+const METERS_PER_MILE = 1609.344;
+
+function HomeZoneCard() {
+  const [zone, setZone] = useState<HomeZone | null>(null);
+  const [miles, setMiles] = useState('15');
+  const [lat, setLat] = useState('');
+  const [lng, setLng] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchHomeZone()
+      .then((z) => {
+        setZone(z);
+        setLat(String(z.lat));
+        setLng(String(z.lng));
+        setMiles((z.radius_m / METERS_PER_MILE).toFixed(1));
+      })
+      .catch(() => setMsg('Could not load home zone'));
+  }, []);
+
+  async function save() {
+    setMsg(null);
+    try {
+      const next: HomeZone = {
+        lat: Number(lat),
+        lng: Number(lng),
+        radius_m: Math.round(Number(miles) * METERS_PER_MILE),
+      };
+      await updateHomeZone(next);
+      setZone(next);
+      setMsg('Saved. New ingests use this immediately.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Could not save');
+    }
+  }
+
+  if (!zone) return <div className="card">Loading home zone…</div>;
+  return (
+    <div className="card">
+      <b>Home exclusion zone</b>
+      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 8px' }}>
+        Photos and pings within this radius are never stored (business rule #1). Strava
+        Hike/Walk/Run are the only exception.
+      </div>
+      <div className="field-row">
+        <div>
+          <label>Center latitude</label>
+          <input value={lat} onChange={(e) => setLat(e.target.value)} />
+        </div>
+        <div>
+          <label>Center longitude</label>
+          <input value={lng} onChange={(e) => setLng(e.target.value)} />
+        </div>
+        <div>
+          <label>Radius (miles)</label>
+          <input value={miles} onChange={(e) => setMiles(e.target.value)} />
+        </div>
+      </div>
+      <div className="btn-row">
+        <button className="primary" onClick={() => void save()}>
+          Save home zone
+        </button>
+      </div>
+      {msg && (
+        <div className="banner" style={{ marginTop: 8 }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GeocodeCard() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await triggerGeocode();
+      setMsg(`Named ${r.named} of ${r.considered} pending place(s).`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Failed');
+    }
+    setBusy(false);
+  }
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <b>Auto-created places</b>
+      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 8px' }}>
+        The nightly job clusters photos + location pings into places and names them. You can name
+        any pending ones now.
+      </div>
+      <button disabled={busy} onClick={() => void run()}>
+        {busy ? 'Naming…' : 'Name new places now'}
+      </button>
+      {msg && (
+        <div className="banner" style={{ marginTop: 8 }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { profile, signOut } = useAuth();
 
@@ -61,12 +167,16 @@ export default function Settings() {
         <>
           <h2 style={{ marginTop: 28 }}>Photos</h2>
           <PhotoHealthCard />
+
+          <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
+          <HomeZoneCard />
+          <GeocodeCard />
         </>
       )}
 
       <h2 style={{ marginTop: 28 }}>Coming soon</h2>
       <ul style={{ color: 'var(--muted)', lineHeight: 1.7 }}>
-        <li>Location &amp; Strava import (Phase 3–4)</li>
+        <li>Strava routes &amp; mileage (Phase 4)</li>
         <li>Invites &amp; roles, trips (Phase 5)</li>
         <li>Timeline import (Phase 6)</li>
       </ul>

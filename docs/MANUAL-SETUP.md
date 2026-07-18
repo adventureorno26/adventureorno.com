@@ -47,8 +47,16 @@ one-time OAuth and webhook subscription.
 - Build the **daily photo Shortcut** from `/docs/ios-shortcut-daily.md` (Claude Code generates
   this exact spec in Phase 2). Automations: daily 9:00 PM + "when joining home Wi-Fi", both set
   to Run Immediately / no confirmation.
-- Install **Overland** (App Store, free) → server URL + device token from Phase 3 output.
-  Suggested settings: significant-location mode, batch 50, trip mode off.
+- Install **Overland** (App Store, free). In its settings:
+  - **Receiver Endpoint URL:**
+    `https://aanfyhsjbtnqzphuoiem.supabase.co/functions/v1/ingest-overland?token=<ERICA_DEVICE_INGEST_TOKEN>`
+    (the same device token as the photo Shortcut — value is in `.env.local` as
+    `ERICA_DEVICE_INGEST_TOKEN`. Overland can't add custom headers, so the token
+    rides in the query string.)
+  - Significant-location or continuous mode, **batch 50**, trip mode off.
+  - Tap **Send Now** once — you should see a green success and a `{"result":"ok"}`.
+  Home-zone points and anything with accuracy > 200 m are dropped server-side, so
+  a full day of tracking around home stores nothing until you leave the zone.
 
 ## 8. Partner's iPhone (Phase 5, 5 min)
 Nothing to install for ingestion (by design — his photos are manual-only). He just accepts his

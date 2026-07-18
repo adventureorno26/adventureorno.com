@@ -2,6 +2,38 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## 2026-07-18 — Phase 3: Overland ingest + nightly clustering
+
+- **Clustering is one idempotent SQL function** (`cluster_unassigned()`), run
+  nightly by pg_cron at 07:00 UTC (≈ 03:00 ET). It re-derives every touched
+  place's first/last visit, `visit_count`, and cover photo from *all* its current
+  children, so a re-run is a genuine no-op. **Verified live** against the spec
+  fixture: 30 photos + 500 pings across 3 cities + Leesburg → exactly 3 places,
+  Leesburg's 3 photos + 50 pings excluded, second run created nothing.
+- **DBSCAN eps in degrees (~10 km), minpoints = 1.** Cities are far enough apart
+  that the small latitude distortion never changes membership; the
+  nearest-existing-place attach uses exact `ST_DWithin` geography (10 km).
+  minpoints = 1 means pings-only clusters still create places — being there counts.
+- **`visit_count` = distinct calendar days with any child.** A deterministic,
+  idempotent definition (the spec's ">48 h gap" heuristic isn't re-runnable).
+- **Naming is split out** to the `geocode-new-places` Edge Function because SQL
+  can't call MapTiler. The job flags new places `needs_geocode`; a second cron at
+  07:05 UTC (pg_net → the function, service-role key read from **Vault**, never in
+  committed SQL) names them. Reverse-geocode is constrained to
+  `types=municipality,place,locality` so places get a city name, not the nearest
+  street. Owner can also trigger it from /settings.
+- **Edge-function auth by JWT role claim.** `geocode-new-places` runs
+  verify_jwt = true; inside, a `service_role` claim = the cron, anything else must
+  be an owner. (Comparing the raw service key failed — the injected key ≠ the one
+  we send; the signed claim is the reliable signal.)
+- **Overland auth reuses the one device token** (rule #7), accepted as
+  `Authorization: Bearer` or `?token=` since Overland can't set custom headers.
+  `ingest-overland` runs with `--no-verify-jwt` (device token, not a Supabase JWT)
+  and drops home-zone + accuracy > 200 m points before insert. **Verified live.**
+- **Merge + auto badge.** `merge_places(loser, winner)` (SECURITY DEFINER, editor+)
+  moves all children, recomputes the winner, deletes the loser. Clustering-created
+  places show an "auto" badge until first edited (editing sets `auto = false`).
+
 ## 2026-07-18 — Phase 2: photo pipeline (R2 Worker, gallery, deletion)
 
 - **All photo bytes flow through one Worker** (`workers/photo-gateway`), the only

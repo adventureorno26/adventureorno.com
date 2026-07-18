@@ -25,6 +25,9 @@ export interface Place {
   first_visit: string | null; // date
   last_visit: string | null; // date
   cover_photo_id: string | null;
+  auto: boolean; // created by the clustering job; badge until first edited
+  needs_geocode: boolean;
+  visit_count: number;
   created_by: string | null;
   created_at: string;
 }
