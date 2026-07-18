@@ -14,6 +14,9 @@ export const supabase = createClient(url, key, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true, // required for magic-link login
-    flowType: 'pkce',
+    // Magic links (and admin-generated links) deliver tokens in the URL hash.
+    // Implicit flow consumes those and works even if the link is opened on a
+    // different device than it was requested from — PKCE would not.
+    flowType: 'implicit',
   },
 });

@@ -34,3 +34,25 @@ Short, dated notes on choices made while building. Newest first.
   name, visit dates, and placeholder photo/route chips.
 - **Cloudflare Pages SPA fallback** via `app/public/_redirects` (`/* /index.html
   200`) so deep links and hard reloads route correctly.
+- **Auth uses implicit flow, not PKCE.** Magic links (and admin-generated links)
+  deliver tokens in the URL hash. PKCE only completes when the link is opened in
+  the same browser that requested it (code verifier in localStorage) — brittle
+  for a "request on phone, open from email" flow. Implicit consumes the hash
+  tokens directly and works cross-device, which suits a private invite-only app.
+- **Migration helper functions are defined after their tables.** Postgres
+  validates `language sql` function bodies at creation, so the
+  `is_member/is_owner/...` helpers that read `public.profiles` must come after the
+  `create table` statements (not at the top).
+
+### Phase 1 deployment (done 2026-07-18)
+- Migration applied to the live project via the Supabase **Management API query
+  endpoint** (`POST /v1/projects/{ref}/database/query`) — no DB password needed,
+  just a personal access token. `invite` Edge Function deployed via the CLI.
+- Owner (Erica) bootstrapped: auth user + `owner` profile created via the Admin
+  API; auth config set (site_url, redirect allow-list, signups disabled).
+- Site deployed to **Cloudflare Pages** (`adventureorno`) via `wrangler pages
+  deploy` (Direct Upload — env baked at build). Custom domains `adventureorno.com`
+  + `www` attached via the Pages API; SSL auto-provisioning.
+- Verified end-to-end in a browser on the live stack: magic-link login → owner
+  map; place/entry INSERT/UPDATE/DELETE through RLS as the owner JWT; anonymous
+  requests return 0 rows across all tables; 20-place world-zoom clustering.

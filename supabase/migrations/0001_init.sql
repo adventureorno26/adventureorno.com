@@ -13,52 +13,6 @@
 create extension if not exists postgis;
 
 -- ---------------------------------------------------------------------------
--- Helper functions (security definer so policies can consult `profiles`
--- without triggering RLS recursion).
--- ---------------------------------------------------------------------------
-create or replace function public.current_app_role()
-returns text
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select role from public.profiles where id = auth.uid();
-$$;
-
-create or replace function public.is_member()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (select 1 from public.profiles where id = auth.uid());
-$$;
-
-create or replace function public.is_owner()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (select 1 from public.profiles where id = auth.uid() and role = 'owner');
-$$;
-
-create or replace function public.is_editor_or_owner()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.profiles where id = auth.uid() and role in ('owner', 'editor')
-  );
-$$;
-
--- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
 
@@ -197,6 +151,52 @@ create table public.ingest_tokens (
   last_used_at timestamptz,
   revoked_at   timestamptz
 );
+
+-- ---------------------------------------------------------------------------
+-- Helper functions (security definer so policies can consult `profiles`
+-- without triggering RLS recursion). Defined after the tables they read.
+-- ---------------------------------------------------------------------------
+create or replace function public.current_app_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+create or replace function public.is_member()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = auth.uid());
+$$;
+
+create or replace function public.is_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'owner');
+$$;
+
+create or replace function public.is_editor_or_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles where id = auth.uid() and role in ('owner', 'editor')
+  );
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Seed: home-exclusion zone — 15 statute miles (24140 m) around Leesburg, VA.
