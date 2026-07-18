@@ -1,0 +1,3 @@
+# SPA fallback — every route is served by index.html so client-side routing
+# (/login, /place/:id, /settings) works on hard loads and deep links.
+/*    /index.html   200
