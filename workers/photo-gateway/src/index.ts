@@ -1,0 +1,265 @@
+// photo-gateway — the ONLY path to photo bytes in R2.
+//
+//   POST /ingest       Erica's daily Shortcut. Bearer = device ingest token.
+//   POST /upload       Manual drag-and-drop. Bearer = user session JWT.
+//   GET  /photo/:id    Authenticated read (?size=full|thumb). Streams from R2.
+//   POST /delete/:id   Permanent, sticky deletion (rule #6).
+//
+// Pipeline (rules #4, #5, #6): hash → deleted? → duplicate? → EXIF gate →
+// home-zone → resize 2400/400 (strips EXIF) → R2 write → photos row.
+
+import {
+  deletePhotoRow,
+  findPhotoByHash,
+  getHomeZone,
+  getPhoto,
+  hashIsDeleted,
+  insertPhoto,
+  resolveDeviceToken,
+  resolveSession,
+  sha256Hex,
+  type Caller,
+  type Env,
+} from './supa';
+import { readExif, screenshotGate } from './exif';
+import { ingestDecision } from './decide';
+import { renderVariants } from './images';
+
+const EARTH_RADIUS_M = 6371008.8;
+const toRad = (d: number): number => (d * Math.PI) / 180;
+function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+function corsHeaders(env: Env, origin: string | null): Record<string, string> {
+  const allowed = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+  const allow = origin && allowed.includes(origin) ? origin : allowed[0];
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
+  };
+}
+
+function json(body: unknown, status: number, cors: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, 'Content-Type': 'application/json' },
+  });
+}
+
+function bearer(req: Request): string | null {
+  const h = req.headers.get('Authorization') ?? '';
+  return h.startsWith('Bearer ') ? h.slice(7).trim() : null;
+}
+
+async function readImageBytes(req: Request): Promise<{
+  bytes: Uint8Array;
+  lat: number | null;
+  lng: number | null;
+  placeId: string | null;
+  override: boolean;
+}> {
+  const ct = req.headers.get('Content-Type') ?? '';
+  if (ct.includes('multipart/form-data')) {
+    const form = await req.formData();
+    const file = (form.get('photo') ?? form.get('file')) as File | null;
+    if (!file) throw new Error('no photo field');
+    const num = (k: string): number | null => {
+      const v = form.get(k);
+      return v != null && v !== '' ? Number(v) : null;
+    };
+    return {
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      lat: num('lat'),
+      lng: num('lng'),
+      placeId: (form.get('place_id') as string | null) || null,
+      override: form.get('override') === 'true',
+    };
+  }
+  // Raw body (the iOS Shortcut posts the JPEG as the request body).
+  const buf = new Uint8Array(await req.arrayBuffer());
+  const url = new URL(req.url);
+  const qnum = (k: string): number | null => {
+    const v = url.searchParams.get(k);
+    return v != null && v !== '' ? Number(v) : null;
+  };
+  return {
+    bytes: buf,
+    lat: qnum('lat'),
+    lng: qnum('lng'),
+    placeId: url.searchParams.get('place_id'),
+    override: url.searchParams.get('override') === 'true',
+  };
+}
+
+interface IngestOutcome {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+async function runPipeline(
+  env: Env,
+  req: Request,
+  source: 'shortcut' | 'manual',
+  uploadedBy: string | null,
+  allowOverride: boolean,
+): Promise<IngestOutcome> {
+  const { bytes, lat: formLat, lng: formLng, placeId, override } = await readImageBytes(req);
+  if (bytes.byteLength === 0) return { status: 400, body: { error: 'empty body' } };
+
+  const sha = await sha256Hex(bytes);
+  const isDeleted = await hashIsDeleted(env, sha);
+  const isDuplicate = isDeleted ? false : await findPhotoByHash(env, sha);
+
+  const exif = await readExif(bytes);
+  const lat = exif.lat ?? formLat;
+  const lng = exif.lng ?? formLng;
+  const hasCoords = lat != null && lng != null;
+
+  // Home-exclusion zone (rule #1) — only meaningful once we have coordinates.
+  const zone = await getHomeZone(env);
+  const inZone = hasCoords ? haversineM(lat!, lng!, zone.lat, zone.lng) <= zone.radius_m : false;
+
+  // Single ordered decision (rules #1, #5, #6). On /upload a deliberate override
+  // clears screenshot/home-zone warnings; deletion is never overridable.
+  const skip = ingestDecision({
+    isDeleted,
+    isDuplicate,
+    gate: screenshotGate(exif, hasCoords),
+    hasCoords,
+    inZone,
+    manual: allowOverride,
+    override,
+  });
+  if (skip) return { status: 200, body: { skipped: skip } };
+  // Past the gate: coordinates are guaranteed present.
+
+  let variants;
+  try {
+    variants = renderVariants(bytes, Number(env.MAX_EDGE), Number(env.THUMB_EDGE));
+  } catch {
+    return { status: 200, body: { skipped: 'undecodable' } };
+  }
+
+  const uuid = crypto.randomUUID();
+  const r2Key = `photos/${uuid}.jpg`;
+  const thumbKey = `thumbs/${uuid}.jpg`;
+  await env.PHOTOS.put(r2Key, variants.web.bytes, {
+    httpMetadata: { contentType: 'image/jpeg' },
+  });
+  await env.PHOTOS.put(thumbKey, variants.thumb.bytes, {
+    httpMetadata: { contentType: 'image/jpeg' },
+  });
+
+  const id = await insertPhoto(env, {
+    place_id: placeId,
+    lat: lat!,
+    lng: lng!,
+    taken_at: exif.takenAt,
+    r2_key: r2Key,
+    thumb_key: thumbKey,
+    width: variants.web.width,
+    height: variants.web.height,
+    sha256: sha,
+    uploaded_by: uploadedBy,
+    source,
+  });
+
+  return { status: 200, body: { ok: true, id } };
+}
+
+async function handlePhoto(env: Env, req: Request, id: string, caller: Caller | null,
+  cors: Record<string, string>): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  const photo = await getPhoto(env, id);
+  if (!photo) return json({ error: 'not found' }, 404, cors);
+  const size = new URL(req.url).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
+  const key = size === 'thumb' ? photo.thumb_key : photo.r2_key;
+  const obj = await env.PHOTOS.get(key);
+  if (!obj) return json({ error: 'object missing' }, 404, cors);
+  return new Response(obj.body, {
+    status: 200,
+    headers: {
+      ...cors,
+      'Content-Type': 'image/jpeg',
+      // Private: only ever fetched with a valid session bearer; never shared.
+      'Cache-Control': 'private, max-age=86400',
+      ETag: photo.sha256,
+    },
+  });
+}
+
+async function handleDelete(env: Env, id: string, caller: Caller | null,
+  cors: Record<string, string>): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  const photo = await getPhoto(env, id);
+  if (!photo) return json({ error: 'not found' }, 404, cors);
+  // Owner may delete any photo; an editor only their own uploads (rule #6).
+  if (caller.role !== 'owner' && photo.uploaded_by !== caller.userId) {
+    return json({ error: 'forbidden' }, 403, cors);
+  }
+  await env.PHOTOS.delete([photo.r2_key, photo.thumb_key]);
+  await deletePhotoRow(env, photo, caller.userId);
+  return json({ ok: true }, 200, cors);
+}
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const origin = req.headers.get('Origin');
+    const cors = corsHeaders(env, origin);
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+
+    const url = new URL(req.url);
+    const path = url.pathname.replace(/\/+$/, '');
+
+    try {
+      // --- Device ingest (Erica's Shortcut) ---------------------------------
+      if (path === '/ingest' && req.method === 'POST') {
+        const tok = bearer(req);
+        const profileId = tok ? await resolveDeviceToken(env, tok) : null;
+        if (!profileId) return json({ error: 'invalid device token' }, 401, cors);
+        const out = await runPipeline(env, req, 'shortcut', profileId, false);
+        return json(out.body, out.status, cors);
+      }
+
+      // --- Manual upload (owner or editor session) --------------------------
+      if (path === '/upload' && req.method === 'POST') {
+        const jwt = bearer(req);
+        const caller = jwt ? await resolveSession(env, jwt) : null;
+        if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+        const out = await runPipeline(env, req, 'manual', caller.userId, true);
+        return json(out.body, out.status, cors);
+      }
+
+      // --- Authenticated read -----------------------------------------------
+      const photoMatch = path.match(/^\/photo\/([0-9a-f-]{36})$/i);
+      if (photoMatch && req.method === 'GET') {
+        const jwt = bearer(req);
+        const caller = jwt ? await resolveSession(env, jwt) : null;
+        return handlePhoto(env, req, photoMatch[1], caller, cors);
+      }
+
+      // --- Deletion ---------------------------------------------------------
+      const delMatch = path.match(/^\/delete\/([0-9a-f-]{36})$/i);
+      if (delMatch && req.method === 'POST') {
+        const jwt = bearer(req);
+        const caller = jwt ? await resolveSession(env, jwt) : null;
+        return handleDelete(env, delMatch[1], caller, cors);
+      }
+
+      if (path === '/health') return json({ ok: true }, 200, cors);
+      return json({ error: 'not found' }, 404, cors);
+    } catch (err) {
+      // Never leak coordinates/tokens in error text.
+      return json({ error: 'internal error', detail: String(err).slice(0, 200) }, 500, cors);
+    }
+  },
+};

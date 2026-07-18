@@ -1,0 +1,23 @@
+# photo-gateway — R2 upload, resize, signed reads, permanent deletion.
+# Deploy: cd workers/photo-gateway && npx wrangler deploy
+# Secrets (set once, never committed):
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   npx wrangler secret put SUPABASE_ANON_KEY
+name = "adventureorno-photo-gateway"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# R2 bucket must be created first (MANUAL-SETUP §5):
+#   npx wrangler r2 bucket create adventureorno-photos
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "adventureorno-photos"
+
+[vars]
+SUPABASE_URL = "https://aanfyhsjbtnqzphuoiem.supabase.co"
+# Comma-separated browser origins allowed to call /upload, /photo, /delete.
+ALLOWED_ORIGINS = "https://adventureorno.com,https://www.adventureorno.com,http://localhost:5173"
+# Longest-edge caps (business rule #4).
+MAX_EDGE = "2400"
+THUMB_EDGE = "400"

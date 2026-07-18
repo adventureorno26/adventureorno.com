@@ -9,6 +9,7 @@ import {
 } from '../lib/data';
 import type { Entry, NewEntry, Place } from '../lib/types';
 import EntryEditor from './EntryEditor';
+import PhotoGallery from './PhotoGallery';
 
 interface Props {
   place: Place;
@@ -146,6 +147,9 @@ export default function PlacePanel({ place, onClose, onPlaceChanged, onPlaceDele
           </button>
         </div>
       )}
+
+      <h3 style={{ marginTop: 22 }}>Photos</h3>
+      <PhotoGallery place={place} />
 
       <h3 style={{ marginTop: 22 }}>Entries</h3>
 

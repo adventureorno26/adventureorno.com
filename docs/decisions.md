@@ -2,6 +2,38 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## 2026-07-18 — Phase 2: photo pipeline (R2 Worker, gallery, deletion)
+
+- **All photo bytes flow through one Worker** (`workers/photo-gateway`), the only
+  path to R2. Three entry points: `/ingest` (device-token auth, Erica's daily
+  Shortcut, raw JPEG body), `/upload` (session auth, manual multipart, home-zone
+  & screenshot checks become overridable warnings), `/photo/:id?size=` (session
+  auth, streams bytes), `/delete/:id` (session auth, permanent + sticky).
+- **The ingest gate is one pure function** (`decide.ts::ingestDecision`) fed by
+  async checks, so the ordering (deleted → duplicate → no_gps → screenshot →
+  home_zone) is unit-tested without R2/DB. Deletion is checked first and can
+  never be overridden (rule #6). 11 worker tests + the acceptance "re-upload of a
+  deleted photo is rejected".
+- **Resize via Photon (WASM)**, not sharp — sharp doesn't run in Workers.
+  Re-encoding to JPEG is also how GPS EXIF gets stripped from the stored file;
+  coordinates live only in the DB (rule #4). Web ≤ 2400 px, thumb ≤ 400 px.
+- **Private reads, no signed URLs / public bucket.** `<img>` can't send a bearer,
+  so the client fetches photo bytes with an `Authorization` header and uses an
+  object URL (`AuthedImg`). Keeps every read behind a session with zero public
+  surface, at the cost of not being CDN-cacheable (fine for a 2-person app).
+- **Photo-health = token heartbeat.** The Worker stamps
+  `ingest_tokens.last_used_at` on every *authenticated* `/ingest` (even when the
+  photo is skipped), so a silently-dying Shortcut shows a stale time. Surfaced to
+  the owner via the `last_automated_upload()` SECURITY DEFINER RPC (no token rows
+  leak) and a yellow >48 h warning in /settings.
+- **One device token, minted server-side** (rule #7). Raw value shown once →
+  `.env.local`; only its SHA-256 is stored. No UI to create more.
+- **Graceful when unconfigured.** `VITE_PHOTO_GATEWAY_URL` is unset until R2 is
+  provisioned; `photosEnabled()` hides the dropzone/gallery/tray so the live site
+  keeps working before the human R2 step (`docs/deploy-photo-gateway.md`).
+- **Deferred to Phase 3:** unassigned photos are assigned to places manually via
+  the map tray (nearest-place default); the nightly clustering job automates this.
+
 ## 2026-07-18 — Phase 1: skeleton, schema, map, invite-only auth
 
 - **Monorepo via npm workspaces.** `app` (Vite + React 18 + TS), `workers/*`
