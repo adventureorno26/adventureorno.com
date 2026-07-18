@@ -5,6 +5,7 @@ import MapView from './routes/MapView';
 import RoutesView from './routes/RoutesView';
 import Settings from './routes/Settings';
 import Trips from './routes/Trips';
+import ImportTimeline from './routes/ImportTimeline';
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
   return <div className="center-screen">{children}</div>;
@@ -56,6 +57,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Trips />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings/import"
+        element={
+          <RequireAuth>
+            <ImportTimeline />
           </RequireAuth>
         }
       />

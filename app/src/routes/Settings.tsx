@@ -5,6 +5,7 @@ import { lastAutomatedUpload, photosEnabled } from '../lib/photos';
 import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
 import { backfillPage, isStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 import PeopleCard from '../components/PeopleCard';
+import { runClusteringNow } from '../lib/timeline';
 
 function timeAgo(iso: string): { text: string; hours: number } {
   const then = new Date(iso).getTime();
@@ -119,7 +120,7 @@ function HomeZoneCard() {
 function GeocodeCard() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  async function run() {
+  async function name() {
     setBusy(true);
     setMsg(null);
     try {
@@ -130,16 +131,37 @@ function GeocodeCard() {
     }
     setBusy(false);
   }
+  async function cluster() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const c = await runClusteringNow();
+      setMsg(
+        `Clustered ${c.points} points → ${c.clusters_created} new, ${c.clusters_attached} attached.`,
+      );
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Failed');
+    }
+    setBusy(false);
+  }
   return (
     <div className="card" style={{ marginTop: 12 }}>
       <b>Auto-created places</b>
       <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 8px' }}>
-        The nightly job clusters photos + location pings into places and names them. You can name
-        any pending ones now.
+        The nightly job clusters photos + location pings into places and names them. Run it now
+        after a backfill or import.
       </div>
-      <button disabled={busy} onClick={() => void run()}>
-        {busy ? 'Naming…' : 'Name new places now'}
-      </button>
+      <div className="btn-row" style={{ marginTop: 0 }}>
+        <button disabled={busy} onClick={() => void cluster()}>
+          {busy ? 'Working…' : 'Cluster now'}
+        </button>
+        <button disabled={busy} onClick={() => void name()}>
+          Name new places
+        </button>
+        <Link to="/settings/import">
+          <button>Import Google Timeline…</button>
+        </Link>
+      </div>
       {msg && (
         <div className="banner" style={{ marginTop: 8 }}>
           {msg}

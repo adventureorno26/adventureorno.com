@@ -2,6 +2,29 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## 2026-07-18 — Phase 6: backfill the past year
+
+- **Strava backfill reuses the Phase 4 driver** (`/settings → Backfill last 12
+  months`) — paginated, paced, idempotent (upsert on strava_id). No new server
+  code, just the trailing-365-day run.
+- **Photo backfill is the daily Shortcut with a date-range filter**
+  (`ios-shortcut-backfill.md`), run month-by-month. The Worker's SHA-256 dedupe
+  makes overlapping months and re-runs safe — no duplicates, no resurrected
+  deletions (rule #6).
+- **Google Timeline import is client-parse + server-write.** The browser handles
+  the (large) Takeout JSON — a tolerant parser (`timeline.ts`, 5 unit tests)
+  covers the classic `locations[]` (latitudeE7) and the on-device
+  `semanticSegments/timelinePath` + visit-anchor shapes — then streams points in
+  500-count batches to the owner-only `import-timeline` Edge Function, which
+  applies the home-zone backstop and writes `location_pings`. Auth verified live
+  (401/invalid session for non-owners).
+- **`cluster_now()` = owner-guarded `cluster_unassigned()`** so the import/backfill
+  flow can build places immediately (Cluster now → Name new places) instead of
+  waiting for the 03:00 cron. Import runs the whole chain (import → cluster →
+  geocode) and reports the tallies.
+- **Cleanup uses the tools already built:** merge, inline rename, cover photos
+  (Phase 3) — auto places wear the badge until touched.
+
 ## 2026-07-18 — Phase 5: partner access, trips, PWA polish
 
 - **'viewer' role = just a CHECK-constraint change.** Writes were already gated by
