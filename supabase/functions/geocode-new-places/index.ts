@@ -39,21 +39,27 @@ interface Geo {
 
 async function reverseGeocode(lng: number, lat: number): Promise<Geo | null> {
   try {
-    // Prefer a locality-level name ("Asheville") over the nearest street/POI by
-    // restricting the reverse-geocode to municipality/place/locality types.
-    const res = await fetch(
-      `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}&limit=1` +
-        `&types=municipality,place,locality,municipal_district`,
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      features?: Array<{
-        text?: string;
-        place_name?: string;
-        context?: Array<{ id: string; text: string }>;
-      }>;
+    type Feat = {
+      text?: string;
+      place_name?: string;
+      context?: Array<{ id: string; text: string }>;
     };
-    const f = data.features?.[0];
+    const lookup = async (types?: string): Promise<Feat | null> => {
+      const url =
+        `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}&limit=1` +
+        (types ? `&types=${types}` : '');
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const d = (await r.json()) as { features?: Feat[] };
+      return d.features?.[0] ?? null;
+    };
+    // Prefer a locality-level name ("Asheville"); if the point is remote (a
+    // trailhead, coastline) and no locality matches, fall back to anything
+    // MapTiler can name (county/region/POI) rather than leaving "Unnamed place".
+    const f =
+      (await lookup('municipality,place,locality,municipal_district')) ??
+      (await lookup('county,region,subregion')) ??
+      (await lookup());
     if (!f) return null;
     const ctx = (prefix: string): string | null =>
       f.context?.find((c) => c.id.startsWith(prefix))?.text ?? null;
