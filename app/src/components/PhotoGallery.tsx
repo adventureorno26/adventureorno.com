@@ -7,6 +7,7 @@ import {
   photosEnabled,
   uploadPhoto,
 } from '../lib/photos';
+import { updatePlace } from '../lib/data';
 import type { Photo, Place } from '../lib/types';
 import AuthedImg from './AuthedImg';
 
@@ -105,6 +106,16 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     setBusy(false);
   }
 
+  async function setCover(p: Photo) {
+    try {
+      await updatePlace(place.id, { cover_photo_id: p.id });
+      onUploaded?.(); // refresh the place so its map marker updates
+      setNote('Cover photo updated.');
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Could not set cover');
+    }
+  }
+
   async function remove(p: Photo) {
     if (!confirm('Delete this photo permanently? It can never be re-added.')) return;
     try {
@@ -172,8 +183,17 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
       ) : (
         <div className="gallery">
           {photos.map((p) => (
-            <div className="thumb" key={p.id}>
+            <div className={`thumb ${place.cover_photo_id === p.id ? 'is-cover' : ''}`} key={p.id}>
               <AuthedImg photoId={p.id} size="thumb" onClick={() => setLightbox(p)} />
+              {canUpload && (
+                <button
+                  className="thumb-cover"
+                  title={place.cover_photo_id === p.id ? 'Cover photo' : 'Set as cover (map marker)'}
+                  onClick={() => void setCover(p)}
+                >
+                  {place.cover_photo_id === p.id ? '★' : '☆'}
+                </button>
+              )}
               {canDelete(p) && (
                 <button className="thumb-del" title="Delete photo" onClick={() => void remove(p)}>
                   🗑
