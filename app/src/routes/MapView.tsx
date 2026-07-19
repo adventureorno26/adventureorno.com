@@ -151,18 +151,6 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
-      // Colored category pin images (+ a neutral default).
-      for (const c of CATEGORIES) {
-        if (!map.hasImage(`pin-${c.slug}`)) {
-          map.addImage(`pin-${c.slug}`, makePinImage(c.slug, c.color), { pixelRatio: 2 });
-        }
-      }
-      if (!map.hasImage('pin-default')) {
-        map.addImage('pin-default', makePinImage('default', categoryColor('default')), {
-          pixelRatio: 2,
-        });
-      }
-
       // Highlight ring under the selected pin.
       map.addLayer({
         id: 'pin-highlight',
@@ -179,7 +167,21 @@ export default function MapView() {
           'circle-translate': [0, -18],
         },
       });
-      // The colored pins (grow when selected).
+      // A visible fallback dot beneath the pins so places are ALWAYS visible even
+      // if the pin icon fails to render.
+      map.addLayer({
+        id: 'place-dot',
+        type: 'circle',
+        source: SOURCE_ID,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#22d3ee',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#eaf7ff',
+        },
+      });
+      // The colored category pins (grow when selected).
       map.addLayer({
         id: 'place-pins',
         type: 'symbol',
@@ -192,20 +194,38 @@ export default function MapView() {
           'icon-allow-overlap': true,
         },
       });
-      // Transparent hit target on top so taps always land, even if an icon
-      // fails to render (this was the earlier click bug).
+      // Transparent hit target on top so taps ALWAYS land on a place.
       map.addLayer({
         id: 'place-hit',
         type: 'circle',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-radius': 20,
+          'circle-radius': 22,
           'circle-color': '#000',
           'circle-opacity': 0,
-          'circle-translate': [0, -16],
+          'circle-translate': [0, -10],
         },
       });
+
+      // Pin images LAST + fail-safe, so a rendering error can never stop the
+      // layers above from being added (that broke clicking before).
+      try {
+        for (const c of CATEGORIES) {
+          if (!map.hasImage(`pin-${c.slug}`)) {
+            map.addImage(`pin-${c.slug}`, makePinImage(c.slug, c.color), { pixelRatio: 2 });
+          }
+        }
+        if (!map.hasImage('pin-default')) {
+          map.addImage('pin-default', makePinImage('default', categoryColor('default')), {
+            pixelRatio: 2,
+          });
+        }
+        // Icons rendered — hide the fallback dot.
+        map.setLayoutProperty('place-dot', 'visibility', 'none');
+      } catch {
+        // Keep the fallback dots; pins just won't show.
+      }
 
       setReady(true);
     });

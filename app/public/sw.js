@@ -1,20 +1,20 @@
-// Service worker — caches the app SHELL only. It must NEVER cache photo bytes
-// (private, signed reads through the photo-gateway) or Supabase API responses.
-// Strategy: precache the shell on install; network-first for navigations with a
-// cached fallback so the app opens offline; cache-first for hashed build assets.
+// Service worker — NETWORK-FIRST so the app always loads the latest code when
+// online (cache is only a fallback for offline). It must never cache photo bytes
+// (private, signed reads) or the Supabase/worker APIs — those are cross-origin
+// and skipped entirely.
 
-const SHELL = 'aon-shell-v2';
-const SHELL_URLS = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png'];
+const CACHE = 'aon-v3';
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_URLS)).then(() => self.skipWaiting()));
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/index.html']).catch(() => undefined)));
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -24,35 +24,20 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  // Never touch cross-origin (Supabase API, photo-gateway, MapTiler tiles).
+  // Only handle our own origin; never touch cross-origin (Supabase, photo
+  // gateway, MapTiler) so uploads/reads always go straight to the network.
   if (url.origin !== self.location.origin) return;
 
-  // App navigations: network-first, fall back to cached shell (offline open).
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(SHELL).then((c) => c.put('/index.html', copy));
-          return res;
-        })
-        .catch(() => caches.match('/index.html').then((r) => r ?? Response.error())),
-    );
-    return;
-  }
-
-  // Hashed build assets (immutable): cache-first.
-  if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(
-      caches.match(request).then(
-        (hit) =>
-          hit ??
-          fetch(request).then((res) => {
-            const copy = res.clone();
-            caches.open(SHELL).then((c) => c.put(request, copy));
-            return res;
-          }),
+  // Network-first: fetch fresh, cache a copy, fall back to cache only if offline.
+  event.respondWith(
+    fetch(request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => undefined);
+        return res;
+      })
+      .catch(() =>
+        caches.match(request).then((hit) => hit ?? caches.match('/index.html')),
       ),
-    );
-  }
+  );
 });

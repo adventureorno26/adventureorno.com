@@ -274,38 +274,6 @@ export default function PlacePanel({
         </details>
       )}
 
-      {canEdit && (
-        <div className="btn-row">
-          <button onClick={() => setMerging((v) => !v)}>Merge…</button>
-          <button className="danger" onClick={() => void removePlace()}>
-            Delete
-          </button>
-        </div>
-      )}
-
-      {merging && (
-        <div className="entry">
-          <label>Merge another place into this one (it will be deleted)</label>
-          <select
-            defaultValue=""
-            onChange={(e) => e.target.value && void mergeFrom(e.target.value)}
-          >
-            <option value="" disabled>
-              Choose a place to absorb…
-            </option>
-            {allPlaces
-              .filter((p) => p.id !== place.id)
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.admin1 ? ` — ${p.admin1}` : ''}
-                </option>
-              ))}
-          </select>
-        </div>
-      )}
-
       {/* Visits — each day links to the day view (map + spots) */}
       <h3 style={{ marginTop: 22 }}>Visits</h3>
       {days === null ? (
@@ -337,6 +305,37 @@ export default function PlacePanel({
 
       <h3 style={{ marginTop: 22 }}>Photos</h3>
       <PhotoGallery place={place} />
+
+      {canEdit && (
+        <div className="btn-row" style={{ marginTop: 22 }}>
+          <button onClick={() => setMerging((v) => !v)}>Merge…</button>
+          <button className="danger" onClick={() => void removePlace()}>
+            Delete
+          </button>
+        </div>
+      )}
+      {merging && (
+        <div className="entry">
+          <label>Merge another place into this one (it will be deleted)</label>
+          <select
+            defaultValue=""
+            onChange={(e) => e.target.value && void mergeFrom(e.target.value)}
+          >
+            <option value="" disabled>
+              Choose a place to absorb…
+            </option>
+            {allPlaces
+              .filter((p) => p.id !== place.id)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.admin1 ? ` — ${p.admin1}` : ''}
+                </option>
+              ))}
+          </select>
+        </div>
+      )}
     </aside>
   );
 }
