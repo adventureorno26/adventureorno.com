@@ -46,3 +46,44 @@ export async function reverseGeocode(
     return null;
   }
 }
+
+export interface ForwardResult extends ReverseGeocodeResult {
+  lat: number;
+  lng: number;
+}
+
+/**
+ * Forward-geocode a typed address / place name into coordinates + a name.
+ * Powers "add a place manually" (no map click needed). Returns null on failure.
+ */
+export async function forwardGeocode(query: string): Promise<ForwardResult | null> {
+  const q = query.trim();
+  if (!q) return null;
+  try {
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${KEY}&limit=1`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      features?: Array<
+        MapTilerFeature & {
+          center?: [number, number];
+          geometry?: { coordinates: [number, number] };
+        }
+      >;
+    };
+    const f = data.features?.[0];
+    const center = f?.center ?? f?.geometry?.coordinates;
+    if (!f || !center) return null;
+    const contextText = (prefix: string): string | null =>
+      f.context?.find((c) => c.id.startsWith(prefix))?.text ?? null;
+    return {
+      lng: center[0],
+      lat: center[1],
+      name: f.text ?? f.place_name ?? q,
+      country: contextText('country'),
+      admin1: contextText('region') ?? contextText('subregion'),
+    };
+  } catch {
+    return null;
+  }
+}

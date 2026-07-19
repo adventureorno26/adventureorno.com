@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
+import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces } from '../lib/data';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
@@ -49,6 +49,8 @@ export default function MapView() {
   const [ready, setReady] = useState(false);
   const [addMode, setAddMode] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [address, setAddress] = useState('');
+  const [searching, setSearching] = useState(false);
 
   const [trayNonce, setTrayNonce] = useState(0);
 
@@ -110,11 +112,11 @@ export default function MapView() {
         source: SOURCE_ID,
         filter: ['has', 'point_count'],
         paint: {
-          'circle-color': '#4f9dff',
-          'circle-opacity': 0.85,
+          'circle-color': '#3b82f6',
+          'circle-opacity': 0.9,
           'circle-radius': ['step', ['get', 'point_count'], 16, 10, 22, 50, 30],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#0f1115',
+          'circle-stroke-width': 3,
+          'circle-stroke-color': 'rgba(96,165,250,0.35)',
         },
       });
       map.addLayer({
@@ -135,10 +137,10 @@ export default function MapView() {
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-color': '#ffcc4d',
+          'circle-color': '#22d3ee',
           'circle-radius': 7,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#0f1115',
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#06121f',
         },
       });
 
@@ -240,6 +242,43 @@ export default function MapView() {
     }
   }
 
+  // Add a place by typing an address / place name (no map click needed).
+  async function handleAddByAddress() {
+    const q = address.trim();
+    if (!q) return;
+    setSearching(true);
+    setBanner('Finding that address…');
+    const geo = await forwardGeocode(q);
+    if (!geo) {
+      setBanner(`Couldn't find "${q}". Try a more specific address or place name.`);
+      setSearching(false);
+      return;
+    }
+    if (isInHomeZone({ lng: geo.lng, lat: geo.lat })) {
+      setBanner('That address is inside the 15-mile home zone — places there are not tracked.');
+      setSearching(false);
+      return;
+    }
+    try {
+      const created = await createPlace({
+        name: geo.name,
+        country: geo.country,
+        admin1: geo.admin1,
+        lng: geo.lng,
+        lat: geo.lat,
+      });
+      setPlaces((prev) => [...prev, created]);
+      setAddress('');
+      setAddMode(false);
+      setBanner(null);
+      mapRef.current?.flyTo({ center: [geo.lng, geo.lat], zoom: 12 });
+      navigate(`/place/${created.id}`);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Could not create place');
+    }
+    setSearching(false);
+  }
+
   function handlePlaceChanged(updated: Place) {
     setPlaces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
@@ -264,6 +303,26 @@ export default function MapView() {
       <div ref={containerRef} className="map-canvas" />
 
       <StatsBar places={places} addMode={addMode} onToggleAdd={() => setAddMode((v) => !v)} />
+
+      {addMode && (
+        <div className="add-bar">
+          <input
+            autoFocus
+            placeholder="Type an address or place name…"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void handleAddByAddress()}
+          />
+          <button
+            className="primary"
+            disabled={searching || !address.trim()}
+            onClick={() => void handleAddByAddress()}
+          >
+            {searching ? 'Finding…' : 'Add'}
+          </button>
+          <span className="add-hint">or click the map</span>
+        </div>
+      )}
 
       {banner && (
         <div
