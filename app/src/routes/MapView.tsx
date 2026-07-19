@@ -8,7 +8,6 @@ import { uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
-import { makePinImage } from '../lib/pins';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
@@ -35,7 +34,7 @@ function toFeatureCollection(
           last_visit: p.last_visit ?? '',
           photos: c?.photo_count ?? 0,
           routes: c?.route_count ?? 0,
-          primary: primaryCategory(p),
+          color: categoryColor(primaryCategory(p)),
         },
       };
     }),
@@ -164,34 +163,33 @@ export default function MapView() {
           'circle-blur': 0.5,
           'circle-stroke-width': 2,
           'circle-stroke-color': '#60a5fa',
-          'circle-translate': [0, -18],
         },
       });
-      // A visible fallback dot beneath the pins so places are ALWAYS visible even
-      // if the pin icon fails to render.
+      // Soft category-colored glow under each place.
       map.addLayer({
-        id: 'place-dot',
+        id: 'place-glow',
         type: 'circle',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-radius': 6,
-          'circle-color': '#22d3ee',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#eaf7ff',
+          'circle-radius': 15,
+          'circle-color': ['get', 'color'],
+          'circle-opacity': 0.28,
+          'circle-blur': 1,
         },
       });
-      // The colored category pins (grow when selected).
+      // Color-coded place markers (grow when selected). Reliable circles — no
+      // fragile icon images.
       map.addLayer({
         id: 'place-pins',
-        type: 'symbol',
+        type: 'circle',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
-        layout: {
-          'icon-image': ['concat', 'pin-', ['get', 'primary']],
-          'icon-size': ['case', ['boolean', ['feature-state', 'selected'], false], 1.2, 0.9],
-          'icon-anchor': 'bottom',
-          'icon-allow-overlap': true,
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['case', ['boolean', ['feature-state', 'selected'], false], 9, 7],
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#ffffff',
         },
       });
       // Transparent hit target on top so taps ALWAYS land on a place.
@@ -201,31 +199,11 @@ export default function MapView() {
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-radius': 22,
+          'circle-radius': 20,
           'circle-color': '#000',
           'circle-opacity': 0,
-          'circle-translate': [0, -10],
         },
       });
-
-      // Pin images LAST + fail-safe, so a rendering error can never stop the
-      // layers above from being added (that broke clicking before).
-      try {
-        for (const c of CATEGORIES) {
-          if (!map.hasImage(`pin-${c.slug}`)) {
-            map.addImage(`pin-${c.slug}`, makePinImage(c.slug, c.color), { pixelRatio: 2 });
-          }
-        }
-        if (!map.hasImage('pin-default')) {
-          map.addImage('pin-default', makePinImage('default', categoryColor('default')), {
-            pixelRatio: 2,
-          });
-        }
-        // Icons rendered — hide the fallback dot.
-        map.setLayoutProperty('place-dot', 'visibility', 'none');
-      } catch {
-        // Keep the fallback dots; pins just won't show.
-      }
 
       setReady(true);
     });
