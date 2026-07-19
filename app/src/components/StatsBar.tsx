@@ -8,6 +8,7 @@ interface Props {
   places: Place[];
   addMode: boolean;
   onToggleAdd: () => void;
+  onAddPhotos: (files: FileList) => void;
 }
 
 function uniqueCount(values: (string | null)[]): number {
@@ -36,11 +37,13 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({ places, addMode, onToggleAdd }: Props) {
+export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const countries = uniqueCount(places.map((p) => p.country));
   const states = uniqueCount(places.map((p) => p.admin1));
+  const [addMenu, setAddMenu] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
@@ -59,27 +62,65 @@ export default function StatsBar({ places, addMode, onToggleAdd }: Props) {
 
   return (
     <div className="stats-bar">
-      <div className="stat">
-        <b>{places.length}</b> <span className="label">places</span>
-      </div>
-      <div className="stat">
-        <b>{countries}</b> <span className="label">countries</span>
-      </div>
-      <div className="stat">
-        <b>{states}</b> <span className="label">states</span>
-      </div>
-      <div className="stat" title={breakdown || 'No Strava activities yet'}>
-        <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
+      <div className="stat-row">
+        <div className="stat">
+          <b>{places.length}</b> <span className="label">places</span>
+        </div>
+        <div className="stat">
+          <b>{countries}</b> <span className="label">countries</span>
+        </div>
+        <div className="stat">
+          <b>{states}</b> <span className="label">states</span>
+        </div>
+        <div className="stat" title={breakdown || 'No Strava activities yet'}>
+          <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
+        </div>
       </div>
 
       <div className="spacer" />
 
       <div className="actions">
-        {canEdit && (
-          <button className={addMode ? 'primary' : ''} onClick={onToggleAdd}>
-            {addMode ? 'Click map to place…' : '+ Add place'}
-          </button>
-        )}
+        {canEdit &&
+          (addMode ? (
+            <button className="primary" onClick={onToggleAdd}>
+              Click map to place…
+            </button>
+          ) : (
+            <div className="add-wrap">
+              <button onClick={() => setAddMenu((v) => !v)}>+ Add</button>
+              {addMenu && (
+                <div className="add-menu">
+                  <button
+                    onClick={() => {
+                      setAddMenu(false);
+                      onToggleAdd();
+                    }}
+                  >
+                    📍 Place
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAddMenu(false);
+                      fileRef.current?.click();
+                    }}
+                  >
+                    📷 Photo
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/heic,image/heif"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length) onAddPhotos(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          ))}
         <Link to="/trips">
           <button>Trips</button>
         </Link>

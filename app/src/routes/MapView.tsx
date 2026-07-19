@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
-import { createPlace, fetchPlaces } from '../lib/data';
+import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
+import { uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import type { Place } from '../lib/types';
@@ -268,6 +269,39 @@ export default function MapView() {
     }
   }
 
+  // Add photos from the library — the worker auto-places each by its GPS.
+  async function handleAddPhotos(files: FileList) {
+    setBanner('Uploading photos…');
+    let added = 0;
+    let noGps = 0;
+    for (const f of Array.from(files)) {
+      try {
+        const r = await uploadPhoto(f);
+        if (r.ok) added++;
+        else if (r.skipped === 'no_gps') noGps++;
+      } catch {
+        /* ignore per-file */
+      }
+    }
+    if (added > 0) await triggerGeocode().catch(() => undefined);
+    const rows = await fetchPlaces().catch(() => places);
+    setPlaces(rows);
+    await fetchPlaceCounts()
+      .then((c) => {
+        countsRef.current = c;
+        syncSource(rows);
+      })
+      .catch(() => undefined);
+    setTrayNonce((n) => n + 1);
+    setBanner(
+      added > 0
+        ? `Added ${added} photo${added > 1 ? 's' : ''} to the map.`
+        : noGps > 0
+          ? 'Those photos have no GPS location, so they can’t be placed.'
+          : 'No photos added.',
+    );
+  }
+
   // Add a place by typing an address / place name (no map click needed).
   async function handleAddByAddress() {
     const q = address.trim();
@@ -328,7 +362,12 @@ export default function MapView() {
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
 
-      <StatsBar places={places} addMode={addMode} onToggleAdd={() => setAddMode((v) => !v)} />
+      <StatsBar
+        places={places}
+        addMode={addMode}
+        onToggleAdd={() => setAddMode((v) => !v)}
+        onAddPhotos={handleAddPhotos}
+      />
 
       {addMode && (
         <div className="add-bar">
