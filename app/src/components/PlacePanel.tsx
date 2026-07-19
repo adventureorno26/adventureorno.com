@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { deletePlace, fetchPlace, fetchPlaceDays, mergePlaces, updatePlace } from '../lib/data';
-import type { Place, PlaceDay } from '../lib/types';
+import {
+  addVisit,
+  deletePlace,
+  deleteVisit,
+  fetchPlace,
+  fetchVisits,
+  mergePlaces,
+  updatePlace,
+} from '../lib/data';
+import type { Place, Visit } from '../lib/types';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { forwardGeocode } from '../lib/maptiler';
@@ -19,22 +27,17 @@ interface Props {
   onMerged: (loserId: string, winner: Place) => void;
 }
 
-function dayLabel(iso: string): string {
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function daySummary(d: PlaceDay): string {
-  const parts: string[] = [];
-  if (d.activities) parts.push(`${d.activities} route${d.activities > 1 ? 's' : ''}`);
-  if (d.entries) parts.push(`${d.entries} spot${d.entries > 1 ? 's' : ''}`);
-  if (d.photos) parts.push(`${d.photos} photo${d.photos > 1 ? 's' : ''}`);
-  return parts.join(' · ') || 'Visited';
+/** A visit as one line: single day, or a compact date range. */
+function fmtVisit(v: Visit): string {
+  const s = new Date(v.start_date + 'T00:00:00');
+  const e = new Date(v.end_date + 'T00:00:00');
+  const full: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+  if (v.start_date === v.end_date) return s.toLocaleDateString(undefined, full);
+  const sameYear = s.getFullYear() === e.getFullYear();
+  const startOpt: Intl.DateTimeFormatOptions = sameYear
+    ? { month: 'short', day: 'numeric' }
+    : full;
+  return `${s.toLocaleDateString(undefined, startOpt)} – ${e.toLocaleDateString(undefined, full)}`;
 }
 
 export default function PlacePanel({
@@ -48,34 +51,62 @@ export default function PlacePanel({
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
-  const [days, setDays] = useState<PlaceDay[] | null>(null);
+  const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [addingVisit, setAddingVisit] = useState(false);
+  const [vStart, setVStart] = useState('');
+  const [vEnd, setVEnd] = useState('');
+  const [vMulti, setVMulti] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(place.name);
   const [review, setReview] = useState(place.review ?? '');
-  const [first, setFirst] = useState(place.first_visit ?? '');
-  const [last, setLast] = useState(place.last_visit ?? '');
   const [loc, setLoc] = useState('');
 
   useEffect(() => {
     setName(place.name);
     setReview(place.review ?? '');
-    setFirst(place.first_visit ?? '');
-    setLast(place.last_visit ?? '');
   }, [place]);
 
+  async function reloadVisits() {
+    setVisits(await fetchVisits(place.id).catch(() => []));
+  }
   useEffect(() => {
     let active = true;
-    setDays(null);
-    fetchPlaceDays(place.id)
-      .then((rows) => active && setDays(rows))
-      .catch(() => active && setDays([]));
+    setVisits(null);
+    fetchVisits(place.id)
+      .then((rows) => active && setVisits(rows))
+      .catch(() => active && setVisits([]));
     return () => {
       active = false;
     };
   }, [place.id]);
+
+  async function submitVisit() {
+    const start = vStart;
+    const end = vMulti && vEnd ? vEnd : vStart;
+    if (!start) return;
+    try {
+      await addVisit(place.id, start, end < start ? start : end);
+      setAddingVisit(false);
+      setVStart('');
+      setVEnd('');
+      setVMulti(false);
+      await reloadVisits();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add visit');
+    }
+  }
+  async function removeVisit(id: string) {
+    if (!confirm('Delete this visit?')) return;
+    try {
+      await deleteVisit(id);
+      await reloadVisits();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete visit');
+    }
+  }
 
   async function patch(p: Parameters<typeof updatePlace>[1]) {
     try {
@@ -91,16 +122,13 @@ export default function PlacePanel({
   async function refreshPlace() {
     const updated = await fetchPlace(place.id).catch(() => null);
     if (updated) onPlaceChanged(updated);
+    await reloadVisits(); // a new photo/activity day may have added a visit
   }
 
   async function saveName() {
     setEditingName(false);
     if (name.trim() && name.trim() !== place.name) await patch({ name: name.trim(), auto: false });
     else setName(place.name);
-  }
-
-  async function saveDates() {
-    await patch({ first_visit: first || null, last_visit: last || null });
   }
 
   async function setLocation(query: string) {
@@ -201,34 +229,8 @@ export default function PlacePanel({
       )}
       <div className="meta">
         {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
-        {place.visit_count > 0 &&
-          ` · ${place.visit_count} day${place.visit_count > 1 ? 's' : ''} here`}
+        {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
       </div>
-
-      {/* Trip dates — editable so multi-day visits aren't cut to one activity */}
-      {canEdit ? (
-        <div className="date-edit">
-          <input
-            type="date"
-            value={first}
-            onChange={(e) => setFirst(e.target.value)}
-            onBlur={() => void saveDates()}
-          />
-          <span className="date-arrow">→</span>
-          <input
-            type="date"
-            value={last}
-            onChange={(e) => setLast(e.target.value)}
-            onBlur={() => void saveDates()}
-          />
-        </div>
-      ) : (
-        (place.first_visit || place.last_visit) && (
-          <div className="meta">
-            {[place.first_visit, place.last_visit].filter(Boolean).join(' → ')}
-          </div>
-        )
-      )}
 
       {/* Set / move the location by address (for photos added without GPS) */}
       {canEdit && (
@@ -332,31 +334,75 @@ export default function PlacePanel({
         </details>
       )}
 
-      {/* Visits — each day links to the day view (map + spots) */}
-      <h3 style={{ marginTop: 22 }}>Visits</h3>
-      {days === null ? (
+      {/* Visits — each trip; tap to open its day (map + photos + spots) */}
+      <div className="visits-head">
+        <h3 style={{ margin: '22px 0 0' }}>
+          Visits{visits && visits.length > 0 ? ` (${visits.length})` : ''}
+        </h3>
+        {canEdit && !addingVisit && (
+          <button
+            className="link-btn"
+            onClick={() => {
+              setAddingVisit(true);
+              setVStart(new Date().toISOString().slice(0, 10));
+            }}
+          >
+            ＋ Add a visit
+          </button>
+        )}
+      </div>
+
+      {canEdit && addingVisit && (
+        <div className="entry" style={{ marginTop: 8 }}>
+          <label>Date{vMulti ? ' — from' : ''}</label>
+          <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
+          {vMulti && (
+            <>
+              <label>to</label>
+              <input type="date" value={vEnd} onChange={(e) => setVEnd(e.target.value)} />
+            </>
+          )}
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={vMulti}
+              onChange={(e) => setVMulti(e.target.checked)}
+              style={{ width: 'auto' }}
+            />
+            Multiple days
+          </label>
+          <div className="btn-row">
+            <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
+              Add visit
+            </button>
+            <button onClick={() => setAddingVisit(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {visits === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
-      ) : days.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13 }}>No dated visits yet.</p>
+      ) : visits.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+          No visits logged yet. Add one, or upload a photo here.
+        </p>
       ) : (
         <div className="visits">
-          {days.map((d) => (
-            <Link key={d.day} className="visit-row" to={`/place/${place.id}/day/${d.day}`}>
-              <span className="visit-main">
-                {d.label ? (
-                  <>
-                    <span className="visit-name">{d.label}</span>
-                    <span className="visit-date sub">{dayLabel(d.day)}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="visit-date">{dayLabel(d.day)}</span>
-                    <span className="visit-date sub">{daySummary(d)}</span>
-                  </>
-                )}
-              </span>
-              <span className="visit-arrow">›</span>
-            </Link>
+          {visits.map((v) => (
+            <div key={v.id} className="visit-row">
+              <Link className="visit-main" to={`/place/${place.id}/day/${v.start_date}`}>
+                <span className="visit-date">{fmtVisit(v)}</span>
+              </Link>
+              {canEdit && (
+                <button
+                  className="visit-del"
+                  title="Delete visit"
+                  onClick={() => void removeVisit(v.id)}
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

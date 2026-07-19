@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Entry, NewEntry, NewPlace, Place, PlaceDay } from './types';
+import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
 
 // All reads/writes go through RLS; the client never sees rows it isn't allowed
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
@@ -81,6 +81,33 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
   const { data, error } = await supabase.rpc('place_days', { p_place: placeId });
   if (error) throw error;
   return (data ?? []) as PlaceDay[];
+}
+
+const VISIT_COLS = 'id, place_id, start_date, end_date, note, created_at';
+
+export async function fetchVisits(placeId: string): Promise<Visit[]> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select(VISIT_COLS)
+    .eq('place_id', placeId)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Visit[];
+}
+
+export async function addVisit(placeId: string, start: string, end: string): Promise<Visit> {
+  const { data, error } = await supabase
+    .from('visits')
+    .insert({ place_id: placeId, start_date: start, end_date: end })
+    .select(VISIT_COLS)
+    .single();
+  if (error) throw error;
+  return data as Visit;
+}
+
+export async function deleteVisit(id: string): Promise<void> {
+  const { error } = await supabase.from('visits').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function createEntry(e: NewEntry): Promise<Entry> {

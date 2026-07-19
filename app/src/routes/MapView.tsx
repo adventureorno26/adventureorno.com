@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
-import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
+import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
 import { fetchPhotoObjectUrl, readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
@@ -53,6 +53,8 @@ export default function MapView() {
   const failedCoverRef = useRef<Set<string>>(new Set()); // covers that wouldn't load → show a pin
   const placesRef = useRef<Place[]>([]);
   const selectedIdRef = useRef<string | null>(null);
+  // Placeholder pins created by a map tap — auto-removed on close if left empty.
+  const pendingRef = useRef<Set<string>>(new Set());
   const navigateRef = useRef<(to: string) => void>(() => undefined);
   const syncMarkersRef = useRef<() => void>(() => undefined);
 
@@ -396,11 +398,32 @@ export default function MapView() {
         lat,
       });
       setPlaces((prev) => [...prev, created]);
+      pendingRef.current.add(created.id); // remove on close if left empty
       setBanner(null);
       navigate(`/place/${created.id}`);
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'Could not create place');
     }
+  }
+
+  // Close the card; if it was a placeholder pin left with no info, delete it.
+  async function handleCloseCard(id: string | undefined) {
+    navigate('/');
+    if (!id || !pendingRef.current.has(id)) return;
+    pendingRef.current.delete(id);
+    const p = placesRef.current.find((x) => x.id === id);
+    if (!p) return;
+    const looksEmpty =
+      !p.cover_photo_id &&
+      p.rating == null &&
+      !p.review &&
+      (p.categories?.length ?? 0) === 0 &&
+      (p.visit_count ?? 0) === 0;
+    if (!looksEmpty) return;
+    const vis = await fetchVisits(id).catch(() => []);
+    if (vis.length > 0) return; // a visit was logged — keep it
+    await deletePlace(id).catch(() => undefined);
+    setPlaces((prev) => prev.filter((x) => x.id !== id));
   }
 
   // Add photos: geotagged ones auto-place by GPS; photos WITHOUT a location get
@@ -517,6 +540,7 @@ export default function MapView() {
         lat: geo.lat,
       });
       setPlaces((prev) => [...prev, created]);
+      pendingRef.current.add(created.id);
       setAddress('');
       setAddMode(false);
       setBanner(null);
@@ -529,6 +553,7 @@ export default function MapView() {
   }
 
   function handlePlaceChanged(updated: Place) {
+    pendingRef.current.delete(updated.id); // it's been edited — no longer a throwaway
     setPlaces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
 
@@ -605,7 +630,7 @@ export default function MapView() {
         <PlacePanel
           place={selectedPlace}
           allPlaces={places}
-          onClose={() => navigate('/')}
+          onClose={() => void handleCloseCard(selectedPlace.id)}
           onPlaceChanged={handlePlaceChanged}
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}

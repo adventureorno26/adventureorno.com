@@ -218,32 +218,35 @@ export default function DayView() {
                       View on Strava ↗
                     </a>
                   )}
-                  {canEdit &&
-                    (movingId === a.id ? (
-                      <div className="move-picker">
-                        <select
-                          defaultValue=""
-                          onChange={(e) => e.target.value && void moveToExisting(a, e.target.value)}
-                        >
-                          <option value="">Move to an existing place…</option>
-                          {allPlaces
-                            .filter((p) => p.id !== id)
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                        </select>
-                        <div className="move-picker-row">
-                          <button onClick={() => void moveToNew(a)}>＋ New place here</button>
-                          <button onClick={() => setMovingId(null)}>Cancel</button>
+                  {canEdit && (
+                    <div className="route-move">
+                      {movingId === a.id ? (
+                        <div className="move-picker">
+                          <select
+                            defaultValue=""
+                            onChange={(e) => e.target.value && void moveToExisting(a, e.target.value)}
+                          >
+                            <option value="">Move to an existing place…</option>
+                            {allPlaces
+                              .filter((p) => p.id !== id)
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                          </select>
+                          <div className="move-picker-row">
+                            <button onClick={() => void moveToNew(a)}>＋ New place here</button>
+                            <button onClick={() => setMovingId(null)}>Cancel</button>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <button className="link-btn" onClick={() => setMovingId(a.id)}>
-                        Wrong place? Move ↗
-                      </button>
-                    ))}
+                      ) : (
+                        <button className="link-btn" onClick={() => setMovingId(a.id)}>
+                          Wrong place? Move ↗
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

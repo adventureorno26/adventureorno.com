@@ -45,6 +45,15 @@ export interface PlaceDay {
   label: string | null; // Strava activity name for that day, if any
 }
 
+export interface Visit {
+  id: string;
+  place_id: string;
+  start_date: string; // date
+  end_date: string; // date (= start_date for a single-day visit)
+  note: string | null;
+  created_at: string;
+}
+
 export type PhotoSource = 'shortcut' | 'manual';
 
 export interface Photo {
