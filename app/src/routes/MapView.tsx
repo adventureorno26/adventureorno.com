@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
+import {
+  MAPTILER_STYLE_URL,
+  forwardGeocode,
+  reverseGeocode,
+  type SearchResult,
+} from '../lib/maptiler';
 import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
 import { fetchPhotoObjectUrl, readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
@@ -12,6 +17,7 @@ import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
+import MapSearch from '../components/MapSearch';
 
 const SOURCE_ID = 'places';
 
@@ -430,6 +436,30 @@ export default function MapView() {
     setPlaces((prev) => prev.filter((x) => x.id !== id));
   }
 
+  // Search a location and drop a card there (auto-removes on close if left empty).
+  async function handleSearchPick(r: SearchResult) {
+    if (isInHomeZone({ lng: r.lng, lat: r.lat })) {
+      setBanner('That location is inside the 15-mile home zone — places there are not tracked.');
+      return;
+    }
+    try {
+      const created = await createPlace({
+        name: r.name,
+        country: r.country,
+        admin1: r.admin1,
+        lng: r.lng,
+        lat: r.lat,
+      });
+      setPlaces((prev) => [...prev, created]);
+      pendingRef.current.add(created.id);
+      setBanner(null);
+      mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: 12 });
+      navigate(`/place/${created.id}`);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Could not add place');
+    }
+  }
+
   // Add photos: geotagged ones auto-place by GPS; photos WITHOUT a location get
   // a fresh card (placed at the current map center) so you can set the spot.
   async function handleAddPhotos(files: FileList) {
@@ -586,6 +616,8 @@ export default function MapView() {
         onToggleAdd={() => setAddMode((v) => !v)}
         onAddPhotos={handleAddPhotos}
       />
+
+      <MapSearch onPick={handleSearchPick} />
 
       <div className="tag-filter">
         <span className="tag-filter-ico">🔍</span>

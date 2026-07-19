@@ -53,6 +53,50 @@ export interface ForwardResult extends ReverseGeocodeResult {
   lng: number;
 }
 
+export interface SearchResult extends ForwardResult {
+  id: string;
+  label: string; // full "place_name" for the dropdown
+}
+
+/** Autocomplete search → up to 5 location suggestions (map "search to add"). */
+export async function searchGeocode(query: string): Promise<SearchResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  try {
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${KEY}&limit=5&autocomplete=true`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      features?: Array<
+        MapTilerFeature & {
+          id?: string;
+          center?: [number, number];
+          geometry?: { coordinates: [number, number] };
+        }
+      >;
+    };
+    return (data.features ?? [])
+      .map((f): SearchResult | null => {
+        const center = f.center ?? f.geometry?.coordinates;
+        if (!center) return null;
+        const ctx = (p: string): string | null =>
+          f.context?.find((c) => c.id.startsWith(p))?.text ?? null;
+        return {
+          id: f.id ?? f.place_name ?? `${center[0]},${center[1]}`,
+          label: f.place_name ?? f.text ?? q,
+          name: f.text ?? f.place_name ?? q,
+          country: ctx('country'),
+          admin1: ctx('region') ?? ctx('subregion'),
+          lat: center[1],
+          lng: center[0],
+        };
+      })
+      .filter((x): x is SearchResult => x !== null);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Forward-geocode a typed address / place name into coordinates + a name.
  * Powers "add a place manually" (no map click needed). Returns null on failure.

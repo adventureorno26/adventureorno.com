@@ -2060,3 +2060,76 @@ textarea {
 .directions-btn:hover {
   background: rgba(59, 130, 246, 0.24);
 }
+
+/* Map location search (search a place to add) */
+.map-search {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, calc(100vw - 28px));
+  z-index: 7;
+}
+.map-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+}
+.map-search-box input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 14px;
+}
+.map-search-box input:focus {
+  box-shadow: none;
+}
+.map-search-ico {
+  font-size: 14px;
+}
+.map-search-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.map-search-list {
+  margin-top: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden auto;
+  box-shadow: var(--shadow);
+  max-height: 50vh;
+}
+.map-search-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 11px 13px;
+  font-size: 14px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.map-search-list button:last-child {
+  border-bottom: none;
+}
+.map-search-list button:hover {
+  background: var(--accent-soft);
+}
+.stat-detail {
+  z-index: 9;
+}
