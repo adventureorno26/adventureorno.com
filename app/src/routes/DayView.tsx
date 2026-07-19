@@ -4,7 +4,14 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
 import { MAPTILER_STYLE_URL } from '../lib/maptiler';
-import { createEntry, deleteEntry, fetchEntriesForDay, fetchPlace, updateEntry } from '../lib/data';
+import {
+  createEntry,
+  deleteEntry,
+  fetchEntriesForDay,
+  fetchPlace,
+  updateEntry,
+  updatePlace,
+} from '../lib/data';
 import { fetchActivitiesForDay } from '../lib/strava';
 import type { Activity, Entry, NewEntry, Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
@@ -128,13 +135,21 @@ export default function DayView() {
     else map.once('load', draw);
   }, [acts]);
 
-  async function addSpot(draft: NewEntry) {
+  async function applyTags(tags: string[]) {
+    if (!tags.length || !id) return;
+    const next = [...new Set([...(place?.categories ?? []), ...tags])];
+    const updated = await updatePlace(id, { categories: next }).catch(() => null);
+    if (updated) setPlace(updated);
+  }
+  async function addSpot(draft: NewEntry, tags: string[]) {
     await createEntry({ ...draft, place_id: id!, date: draft.date || date! });
+    await applyTags(tags);
     setAdding(false);
     await loadEntries();
   }
-  async function saveSpot(entryId: string, draft: NewEntry) {
+  async function saveSpot(entryId: string, draft: NewEntry, tags: string[]) {
     await updateEntry(entryId, draft);
+    await applyTags(tags);
     setEditingId(null);
     await loadEntries();
   }
@@ -204,7 +219,7 @@ export default function DayView() {
               key={e.id}
               placeId={id!}
               existing={e}
-              onSave={(d) => saveSpot(e.id, d)}
+              onSave={(d, tags) => saveSpot(e.id, d, tags)}
               onCancel={() => setEditingId(null)}
             />
           ) : (

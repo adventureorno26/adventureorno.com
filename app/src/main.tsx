@@ -15,9 +15,18 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// Register the shell-only service worker (installable PWA, offline shell).
+// Stale service-worker caches were serving old code and blocking updates.
+// Unregister any existing worker and clear all caches so the app ALWAYS loads
+// the latest code from the network.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-  });
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => regs.forEach((r) => r.unregister()))
+    .catch(() => undefined);
+}
+if ('caches' in window) {
+  caches
+    .keys()
+    .then((keys) => keys.forEach((k) => caches.delete(k)))
+    .catch(() => undefined);
 }
