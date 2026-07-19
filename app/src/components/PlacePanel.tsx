@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { deletePlace, fetchPlaceDays, mergePlaces, updatePlace } from '../lib/data';
+import { deletePlace, fetchPlace, fetchPlaceDays, mergePlaces, updatePlace } from '../lib/data';
 import type { Place, PlaceDay } from '../lib/types';
-import {
-  MANUAL_CATEGORIES,
-  categoryIcon,
-  categoryLabel,
-  effectiveCategories,
-} from '../lib/categories';
+import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { forwardGeocode } from '../lib/maptiler';
 import { photosEnabled } from '../lib/photos';
@@ -89,6 +84,13 @@ export default function PlacePanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save');
     }
+  }
+
+  // After photos change, re-pull the place so its cover_photo_id updates — this
+  // is what turns its map marker into the cover photo (automatically).
+  async function refreshPlace() {
+    const updated = await fetchPlace(place.id).catch(() => null);
+    if (updated) onPlaceChanged(updated);
   }
 
   async function saveName() {
@@ -286,13 +288,26 @@ export default function PlacePanel({
         place.review && <p className="body">{place.review}</p>
       )}
 
-      {/* Category tags */}
+      {/* Category tags — tap × to remove a tag you added (tags derived from your
+          Strava activities can't be removed here since they reflect real routes). */}
       <div className="cats">
-        {effectiveCategories(place).map((slug) => (
-          <span key={slug} className="cat-chip" title={categoryLabel(slug)}>
-            {categoryIcon(slug)} {categoryLabel(slug)}
-          </span>
-        ))}
+        {effectiveCategories(place).map((slug) => {
+          const removable = canEdit && (place.categories ?? []).includes(slug);
+          return (
+            <span key={slug} className="cat-chip" title={categoryLabel(slug)}>
+              {categoryIcon(slug)} {categoryLabel(slug)}
+              {removable && (
+                <button
+                  className="cat-chip-x"
+                  title={`Remove ${categoryLabel(slug)} tag`}
+                  onClick={() => void toggleCat(slug)}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          );
+        })}
         {effectiveCategories(place).length === 0 && (
           <span style={{ color: 'var(--muted)', fontSize: 12 }}>No tags yet</span>
         )}
@@ -301,7 +316,7 @@ export default function PlacePanel({
         <details className="cat-edit">
           <summary>Edit tags</summary>
           <div className="cat-picker">
-            {MANUAL_CATEGORIES.map((c) => {
+            {CATEGORIES.map((c) => {
               const on = (place.categories ?? []).includes(c.slug);
               return (
                 <button
@@ -347,7 +362,7 @@ export default function PlacePanel({
       )}
 
       <h3 style={{ marginTop: 22 }}>Photos</h3>
-      <PhotoGallery place={place} />
+      <PhotoGallery place={place} onUploaded={refreshPlace} />
 
       {canEdit && (
         <div className="btn-row" style={{ marginTop: 22 }}>

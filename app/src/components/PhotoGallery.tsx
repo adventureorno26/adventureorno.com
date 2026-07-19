@@ -14,6 +14,9 @@ interface Props {
   place: Place;
   // When set, the gallery shows only this date's photos and pins uploads to it.
   day?: string;
+  // Fired after photos are added, so the parent can refresh the place (e.g. to
+  // pick up the new cover photo and convert its map marker).
+  onUploaded?: () => void;
 }
 
 const SKIP_LABELS: Record<string, string> = {
@@ -27,7 +30,7 @@ const SKIP_LABELS: Record<string, string> = {
 // Skips a deliberate manual upload is allowed to override.
 const OVERRIDABLE = new Set(['screenshot', 'home_zone']);
 
-export default function PhotoGallery({ place, day }: Props) {
+export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,7 +93,10 @@ export default function PhotoGallery({ place, day }: Props) {
         skips.push(`${file.name} failed: ${e instanceof Error ? e.message : 'error'}`);
       }
     }
-    if (added > 0) setPhotos(await load());
+    if (added > 0) {
+      setPhotos(await load());
+      onUploaded?.();
+    }
     const parts: string[] = [];
     if (added) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
     if (skips.length) parts.push(`Skipped: ${skips.join('; ')}`);

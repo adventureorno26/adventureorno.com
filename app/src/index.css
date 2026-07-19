@@ -1639,3 +1639,24 @@ textarea {
   box-shadow: 0 0 0 3px var(--ring, #38bdf8), 0 5px 16px rgba(2, 8, 23, 0.6);
   z-index: 3;
 }
+
+/* Remove-tag × on card chips */
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.cat-chip-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 1px 0 4px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+.cat-chip-x:hover {
+  color: var(--danger);
+  background: none;
+}

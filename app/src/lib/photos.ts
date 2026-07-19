@@ -204,6 +204,7 @@ async function accessToken(): Promise<string> {
 export interface UploadResult {
   ok: boolean;
   id?: string;
+  place_id?: string | null; // the place the photo was auto-assigned to (by GPS)
   skipped?: string;
 }
 
@@ -284,13 +285,15 @@ export async function deletePhoto(photoId: string): Promise<void> {
   if (!res.ok) throw new Error(`Delete failed (${res.status})`);
 }
 
-/** Fetch photo bytes as an object URL (caller must revoke on unmount). */
+/** Fetch photo bytes as an object URL (caller must revoke on unmount). Retries,
+ *  since a dropped fetch on mobile leaves a cover-photo marker blank. */
 export async function fetchPhotoObjectUrl(
   photoId: string,
   size: 'full' | 'thumb',
 ): Promise<string> {
   const token = await accessToken();
-  const res = await fetch(`${GATEWAY}/photo/${photoId}?size=${size}`, {
+  const res = await postWithRetry(`${GATEWAY}/photo/${photoId}?size=${size}`, {
+    method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Photo fetch failed (${res.status})`);

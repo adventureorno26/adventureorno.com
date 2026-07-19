@@ -50,6 +50,7 @@ export default function MapView() {
   // clean teardrop pin.
   const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
   const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → objectURL
+  const failedCoverRef = useRef<Set<string>>(new Set()); // covers that wouldn't load → show a pin
   const placesRef = useRef<Place[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const navigateRef = useRef<(to: string) => void>(() => undefined);
@@ -100,19 +101,23 @@ export default function MapView() {
   }, []);
 
   // Load a place's cover thumbnail into an <img>, caching the object URL.
-  const loadCover = useCallback((photoId: string, img: HTMLImageElement) => {
-    const cached = coverUrlRef.current.get(photoId);
-    if (cached) {
-      img.src = cached;
-      return;
-    }
-    void fetchPhotoObjectUrl(photoId, 'thumb')
-      .then((url) => {
-        coverUrlRef.current.set(photoId, url);
-        img.src = url;
-      })
-      .catch(() => undefined);
-  }, []);
+  // onFail fires if the photo can't be fetched/decoded → caller shows a pin.
+  const loadCover = useCallback(
+    (photoId: string, img: HTMLImageElement, onFail: () => void) => {
+      const cached = coverUrlRef.current.get(photoId);
+      if (cached) {
+        img.src = cached;
+        return;
+      }
+      void fetchPhotoObjectUrl(photoId, 'thumb')
+        .then((url) => {
+          coverUrlRef.current.set(photoId, url);
+          img.src = url;
+        })
+        .catch(() => onFail());
+    },
+    [],
+  );
 
   // Build a marker element for a place: circular cover-photo thumbnail if it has
   // one, else a clean teardrop pin. Returns the element + its map anchor.
@@ -121,14 +126,27 @@ export default function MapView() {
       const color = categoryColor(cat);
       const el = document.createElement('div');
       let anchor: 'center' | 'bottom';
-      if (place.cover_photo_id) {
+      const cover = place.cover_photo_id;
+      if (cover && !failedCoverRef.current.has(cover)) {
         el.className = 'photo-marker';
         el.style.setProperty('--ring', color);
+        el.style.background = color; // colored disc while the photo loads
         const img = document.createElement('img');
         img.alt = '';
         img.decoding = 'async';
+        // If the cover can't load, fall back to a clean pin (never an empty circle).
+        const onFail = () => {
+          failedCoverRef.current.add(cover);
+          const e = markersRef.current.get(place.id);
+          if (e) {
+            e.marker.remove();
+            markersRef.current.delete(place.id);
+          }
+          syncMarkersRef.current();
+        };
+        img.onerror = onFail;
         el.appendChild(img);
-        loadCover(place.cover_photo_id, img);
+        loadCover(cover, img, onFail);
         anchor = 'center';
       } else {
         el.className = 'geo-marker';
@@ -390,6 +408,7 @@ export default function MapView() {
   async function handleAddPhotos(files: FileList) {
     setBanner('Uploading photos…');
     let added = 0;
+    let geoPlaceId: string | null = null; // place the (first) geotagged photo landed on
     const skips: Record<string, number> = {};
     const noLoc: File[] = [];
     for (const f of Array.from(files)) {
@@ -397,8 +416,10 @@ export default function MapView() {
       if (gps) {
         try {
           const r = await uploadPhoto(f, { lat: gps.lat, lng: gps.lng });
-          if (r.ok) added++;
-          else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
+          if (r.ok) {
+            added++;
+            if (!geoPlaceId && r.place_id) geoPlaceId = r.place_id;
+          } else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
         } catch {
           skips.error = (skips.error ?? 0) + 1;
         }
@@ -446,6 +467,13 @@ export default function MapView() {
     if (newPlaceId) {
       setBanner('Set this place’s location using the address box on the card.');
       navigate(`/place/${newPlaceId}`);
+    } else if (geoPlaceId) {
+      // Geotagged photo(s) auto-placed — open the card so the location/name/tags
+      // can be adjusted just like any other place.
+      setBanner(
+        added > 1 ? `Added ${added} photos. Review the location and details here.` : null,
+      );
+      navigate(`/place/${geoPlaceId}`);
     } else if (added > 0) {
       setBanner(`Added ${added} photo${added > 1 ? 's' : ''} to the map.`);
     } else {

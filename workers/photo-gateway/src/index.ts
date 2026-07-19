@@ -212,7 +212,7 @@ async function runPipeline(
   // the trip length).
   if (finalPlaceId) await recomputePlace(env, finalPlaceId);
 
-  return { status: 200, body: { ok: true, id } };
+  return { status: 200, body: { ok: true, id, place_id: finalPlaceId ?? null } };
 }
 
 async function handlePhoto(env: Env, req: Request, id: string, caller: Caller | null,
