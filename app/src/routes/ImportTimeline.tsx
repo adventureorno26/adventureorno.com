@@ -17,15 +17,26 @@ export default function ImportTimeline() {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      const points = parseTimeline(json);
-      if (points.length === 0) {
+      const all = parseTimeline(json);
+      if (all.length === 0) {
         setStatus(
           'No location points found in that file. Is it a Timeline/Location History export?',
         );
         setBusy(false);
         return;
       }
-      setStatus(`Found ${points.length.toLocaleString()} points. Uploading…`);
+      // Only the last 7 months (points with no timestamp are kept).
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - 7);
+      const points = all.filter((p) => !p.time || new Date(p.time) >= cutoff);
+      if (points.length === 0) {
+        setStatus(`Found ${all.length} points but none within the last 7 months.`);
+        setBusy(false);
+        return;
+      }
+      setStatus(
+        `Found ${all.length.toLocaleString()} points; importing ${points.length.toLocaleString()} from the last 7 months…`,
+      );
       const saved = await importPoints(points, (sent, total, saved) => {
         setStatus(
           `Uploading ${sent.toLocaleString()}/${total.toLocaleString()} — ${saved.toLocaleString()} stored (home-zone points skipped)…`,
