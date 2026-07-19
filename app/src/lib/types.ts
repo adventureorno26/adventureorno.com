@@ -54,6 +54,15 @@ export interface Visit {
   created_at: string;
 }
 
+export interface Video {
+  id: string;
+  place_id: string | null;
+  poster_key: string | null;
+  taken_at: string | null;
+  duration_s: number | null;
+  created_at: string;
+}
+
 export type PhotoSource = 'shortcut' | 'manual';
 
 export interface Photo {

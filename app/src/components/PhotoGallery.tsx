@@ -10,8 +10,11 @@ import {
   uploadPhoto,
 } from '../lib/photos';
 import { updatePlace } from '../lib/data';
-import type { Photo, Place } from '../lib/types';
+import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
+import type { Photo, Place, Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
+import VideoTile from './VideoTile';
+import VideoPlayer from './VideoPlayer';
 
 interface Props {
   place: Place;
@@ -36,6 +39,8 @@ const OVERRIDABLE = new Set(['screenshot', 'home_zone']);
 export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [playing, setPlaying] = useState<Video | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [overridable, setOverridable] = useState<File[]>([]);
@@ -46,6 +51,10 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
 
   const load = (): Promise<Photo[]> =>
     day ? fetchPhotosForPlaceOnDay(place.id, day) : fetchPhotosForPlace(place.id);
+  const loadVideos = () =>
+    fetchVideosForPlace(place.id)
+      .then((v) => setVideos(day ? v.filter((x) => (x.taken_at ?? '').slice(0, 10) === day) : v))
+      .catch(() => setVideos([]));
 
   useEffect(() => {
     if (!photosEnabled()) return;
@@ -54,6 +63,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     load()
       .then((rows) => active && setPhotos(rows))
       .catch(() => active && setPhotos([]));
+    void loadVideos();
     return () => {
       active = false;
     };
@@ -77,10 +87,17 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     setBusy(true);
     setNote(null);
     let added = 0;
+    let vids = 0;
     const skips: string[] = [];
     const retryable: File[] = [];
     for (const file of files) {
+      const isVideo = file.type.startsWith('video/') || /\.(mov|mp4|m4v|webm)$/i.test(file.name);
       try {
+        if (isVideo) {
+          const r = await uploadVideo(file, { placeId: place.id, lat: place.lat, lng: place.lng });
+          if (r.ok) vids++;
+          continue;
+        }
         const r = await uploadPhoto(file, {
           placeId: place.id,
           lat: place.lat,
@@ -97,12 +114,12 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
         skips.push(`${file.name} failed: ${e instanceof Error ? e.message : 'error'}`);
       }
     }
-    if (added > 0) {
-      setPhotos(await load());
-      onUploaded?.();
-    }
+    if (added > 0) setPhotos(await load());
+    if (vids > 0) await loadVideos();
+    if (added > 0 || vids > 0) onUploaded?.();
     const parts: string[] = [];
     if (added) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
+    if (vids) parts.push(`${vids} video${vids > 1 ? 's' : ''} added`);
     if (skips.length) parts.push(`Skipped: ${skips.join('; ')}`);
     setNote(parts.join(' · ') || 'Nothing to add');
     setOverridable(retryable);
@@ -151,6 +168,16 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     }
   }
 
+  async function removeVideo(v: Video) {
+    if (!confirm('Delete this video permanently?')) return;
+    try {
+      await deleteVideo(v.id);
+      setVideos((prev) => prev.filter((x) => x.id !== v.id));
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
   // Keyboard nav for the carousel.
   useEffect(() => {
     if (lightIdx == null) return;
@@ -191,11 +218,11 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
           role="button"
           tabIndex={0}
         >
-          {busy ? 'Uploading…' : 'Drag photos here, or click to choose'}
+          {busy ? 'Uploading…' : 'Drag photos or videos here, or click to choose'}
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/heic,image/heif"
+            accept="image/jpeg,image/heic,image/heif,video/*"
             multiple
             hidden
             onChange={(e) => {
@@ -223,8 +250,8 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
 
       {photos === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading photos…</p>
-      ) : photos.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13 }}>No photos yet.</p>
+      ) : photos.length === 0 && videos.length === 0 ? (
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>No photos or videos yet.</p>
       ) : (
         <div className="gallery">
           {photos.map((p, i) => (
@@ -246,8 +273,20 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
               )}
             </div>
           ))}
+          {videos.map((v) => (
+            <div className="thumb-wrap" key={v.id}>
+              <VideoTile id={v.id} onClick={() => setPlaying(v)} />
+              {canUpload && (
+                <button className="thumb-del" title="Delete video" onClick={() => void removeVideo(v)}>
+                  🗑
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
+
+      {playing && <VideoPlayer video={playing} onClose={() => setPlaying(null)} />}
 
       {openPhoto &&
         createPortal(

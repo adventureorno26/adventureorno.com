@@ -103,7 +103,7 @@ async function prepareUpload(file: File): Promise<Prepared> {
 
 /** POST with an abort timeout + retries — mobile networks drop requests, which
  *  surface as "Load failed"/"Failed to fetch". Retrying makes uploads reliable. */
-async function postWithRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
+export async function postWithRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
   let lastErr: unknown;
   for (let i = 0; i < tries; i++) {
     const ctrl = new AbortController();
@@ -185,7 +185,7 @@ export async function assignPhotoToPlace(photoId: string, placeId: string | null
   if (error) throw error;
 }
 
-async function accessToken(): Promise<string> {
+export async function accessToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   let session = data.session;
   // Proactively refresh if the token is missing or within 2 min of expiry — a

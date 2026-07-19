@@ -173,6 +173,62 @@ export async function getPhoto(env: Env, id: string): Promise<FullPhotoRow | nul
   return rows[0] ?? null;
 }
 
+export interface VideoRow {
+  place_id: string | null;
+  r2_key: string;
+  poster_key: string | null;
+  content_type: string;
+  taken_at: string | null;
+  lat: number | null;
+  lng: number | null;
+  duration_s: number | null;
+  uploaded_by: string | null;
+  source: 'manual';
+}
+
+export async function insertVideo(env: Env, row: VideoRow): Promise<string> {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/videos`, {
+    method: 'POST',
+    headers: { ...restHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) throw new Error(`insert video failed: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as Array<{ id: string }>)[0].id;
+}
+
+export async function setVideoPoster(env: Env, id: string, posterKey: string): Promise<void> {
+  await fetch(`${env.SUPABASE_URL}/rest/v1/videos?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: restHeaders(env),
+    body: JSON.stringify({ poster_key: posterKey }),
+  });
+}
+
+export interface FullVideoRow {
+  id: string;
+  r2_key: string;
+  poster_key: string | null;
+  content_type: string;
+  uploaded_by: string | null;
+}
+
+export async function getVideo(env: Env, id: string): Promise<FullVideoRow | null> {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/videos?select=id,r2_key,poster_key,content_type,uploaded_by&id=eq.${id}&limit=1`,
+    { headers: restHeaders(env) },
+  );
+  if (!res.ok) return null;
+  return ((await res.json()) as FullVideoRow[])[0] ?? null;
+}
+
+export async function deleteVideoRow(env: Env, id: string): Promise<void> {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/videos?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: restHeaders(env),
+  });
+  if (!res.ok) throw new Error(`delete video row failed: ${res.status}`);
+}
+
 /** Delete the DB row and record the content hash so the file can never be
  *  re-ingested (business rule #6). R2 object removal happens in the caller. */
 export async function deletePhotoRow(env: Env, photo: FullPhotoRow, byUser: string): Promise<void> {

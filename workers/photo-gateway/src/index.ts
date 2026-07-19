@@ -11,14 +11,18 @@
 import {
   assignPlace,
   deletePhotoRow,
+  deleteVideoRow,
   findPhotoByHash,
   recomputePlace,
   getHomeZone,
   getPhoto,
+  getVideo,
   hashIsDeleted,
   insertPhoto,
+  insertVideo,
   resolveDeviceToken,
   resolveSession,
+  setVideoPoster,
   sha256Hex,
   type Caller,
   type Env,
@@ -250,6 +254,132 @@ async function handleDelete(env: Env, id: string, caller: Caller | null,
   return json({ ok: true }, 200, cors);
 }
 
+// --- Video handlers (bytes stream straight to R2; no server processing) ------
+async function handleUploadVideo(
+  env: Env,
+  req: Request,
+  caller: Caller | null,
+  cors: Record<string, string>,
+): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  if (!req.body) return json({ error: 'empty body' }, 400, cors);
+  const url = new URL(req.url);
+  const qnum = (k: string): number | null => {
+    const v = url.searchParams.get(k);
+    return v != null && v !== '' ? Number(v) : null;
+  };
+  // The browser sets Content-Type from the File (video/mp4, video/quicktime, …).
+  const ct = req.headers.get('Content-Type') || '';
+  const contentType = ct.startsWith('video/') ? ct : 'video/mp4';
+  const uuid = crypto.randomUUID();
+  const r2Key = `videos/${uuid}`;
+  await env.PHOTOS.put(r2Key, req.body, { httpMetadata: { contentType } });
+  const lat = qnum('lat');
+  const lng = qnum('lng');
+  let placeId = url.searchParams.get('place_id') || null;
+  if (!placeId && lat != null && lng != null) placeId = await assignPlace(env, lat, lng);
+  const id = await insertVideo(env, {
+    place_id: placeId,
+    r2_key: r2Key,
+    poster_key: null,
+    content_type: contentType,
+    taken_at: url.searchParams.get('taken_at'),
+    lat,
+    lng,
+    duration_s: qnum('duration'),
+    uploaded_by: caller.userId,
+    source: 'manual',
+  });
+  if (placeId) await recomputePlace(env, placeId).catch(() => undefined);
+  return json({ ok: true, id, place_id: placeId ?? null }, 200, cors);
+}
+
+async function handleVideoPosterPut(
+  env: Env,
+  req: Request,
+  id: string,
+  caller: Caller | null,
+  cors: Record<string, string>,
+): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  if (!req.body) return json({ error: 'empty body' }, 400, cors);
+  const video = await getVideo(env, id);
+  if (!video) return json({ error: 'not found' }, 404, cors);
+  const posterKey = `posters/${id}.jpg`;
+  await env.PHOTOS.put(posterKey, req.body, { httpMetadata: { contentType: 'image/jpeg' } });
+  await setVideoPoster(env, id, posterKey);
+  return json({ ok: true }, 200, cors);
+}
+
+async function handleVideoGet(
+  env: Env,
+  req: Request,
+  id: string,
+  caller: Caller | null,
+  cors: Record<string, string>,
+): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  const video = await getVideo(env, id);
+  if (!video) return json({ error: 'not found' }, 404, cors);
+  const range = req.headers.get('Range');
+  const rm = range ? /bytes=(\d+)-(\d*)/.exec(range) : null;
+  if (rm) {
+    const offset = Number(rm[1]);
+    const end = rm[2] ? Number(rm[2]) : undefined;
+    const length = end != null ? end - offset + 1 : undefined;
+    const obj = await env.PHOTOS.get(video.r2_key, { range: { offset, length } });
+    if (!obj) return json({ error: 'not found' }, 404, cors);
+    const total = obj.size;
+    return new Response(obj.body, {
+      status: 206,
+      headers: {
+        ...cors,
+        'Content-Type': video.content_type,
+        'Accept-Ranges': 'bytes',
+        'Content-Range': `bytes ${offset}-${end ?? total - 1}/${total}`,
+      },
+    });
+  }
+  const obj = await env.PHOTOS.get(video.r2_key);
+  if (!obj) return json({ error: 'not found' }, 404, cors);
+  return new Response(obj.body, {
+    status: 200,
+    headers: { ...cors, 'Content-Type': video.content_type, 'Accept-Ranges': 'bytes' },
+  });
+}
+
+async function handleVideoPosterGet(
+  env: Env,
+  id: string,
+  caller: Caller | null,
+  cors: Record<string, string>,
+): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  const video = await getVideo(env, id);
+  if (!video?.poster_key) return json({ error: 'not found' }, 404, cors);
+  const obj = await env.PHOTOS.get(video.poster_key);
+  if (!obj) return json({ error: 'not found' }, 404, cors);
+  return new Response(obj.body, { status: 200, headers: { ...cors, 'Content-Type': 'image/jpeg' } });
+}
+
+async function handleVideoDelete(
+  env: Env,
+  id: string,
+  caller: Caller | null,
+  cors: Record<string, string>,
+): Promise<Response> {
+  if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
+  const video = await getVideo(env, id);
+  if (!video) return json({ error: 'not found' }, 404, cors);
+  if (caller.role !== 'owner' && video.uploaded_by !== caller.userId) {
+    return json({ error: 'forbidden' }, 403, cors);
+  }
+  const keys = video.poster_key ? [video.r2_key, video.poster_key] : [video.r2_key];
+  await env.PHOTOS.delete(keys);
+  await deleteVideoRow(env, id);
+  return json({ ok: true }, 200, cors);
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const origin = req.headers.get('Origin');
@@ -292,6 +422,30 @@ export default {
         const jwt = bearer(req);
         const caller = jwt ? await resolveSession(env, jwt) : null;
         return handleDelete(env, delMatch[1], caller, cors);
+      }
+
+      // --- Video: upload (raw stream), poster, playback, delete -------------
+      const session = async () => {
+        const jwt = bearer(req);
+        return jwt ? resolveSession(env, jwt) : null;
+      };
+      if (path === '/upload-video' && req.method === 'POST') {
+        return handleUploadVideo(env, req, await session(), cors);
+      }
+      const vposter = path.match(/^\/video-poster\/([0-9a-f-]{36})$/i);
+      if (vposter && req.method === 'POST') {
+        return handleVideoPosterPut(env, req, vposter[1], await session(), cors);
+      }
+      if (vposter && req.method === 'GET') {
+        return handleVideoPosterGet(env, vposter[1], await session(), cors);
+      }
+      const vget = path.match(/^\/video\/([0-9a-f-]{36})$/i);
+      if (vget && req.method === 'GET') {
+        return handleVideoGet(env, req, vget[1], await session(), cors);
+      }
+      const vdel = path.match(/^\/video-delete\/([0-9a-f-]{36})$/i);
+      if (vdel && req.method === 'POST') {
+        return handleVideoDelete(env, vdel[1], await session(), cors);
       }
 
       if (path === '/health') return json({ ok: true }, 200, cors);
