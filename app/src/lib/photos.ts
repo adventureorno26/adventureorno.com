@@ -185,30 +185,35 @@ export async function assignPhotoToPlace(photoId: string, placeId: string | null
   if (error) throw error;
 }
 
+// Dedupe concurrent refreshes: when a gallery mounts many <img>s at once they
+// all call accessToken() together. Without this, each fires its own
+// refreshSession(); the first rotates the refresh token and the rest error,
+// which previously nuked the whole session (every photo → 401 / caution sign).
+// One shared in-flight refresh fixes that.
+let refreshInFlight: Promise<string | null> | null = null;
+
 export async function accessToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
-  let session = data.session;
-  // Proactively refresh if the token is missing or within 2 min of expiry — a
-  // stale token makes the Worker reject the upload with 401 "unauthenticated"
-  // (common on mobile PWAs where background auto-refresh is suspended).
+  const session = data.session;
   const expMs = session?.expires_at ? session.expires_at * 1000 : 0;
-  if (!session || expMs - Date.now() < 120_000) {
-    const { data: refreshed, error } = await supabase.auth.refreshSession();
-    if (refreshed.session) {
-      session = refreshed.session;
-    } else if (error || !session) {
-      // The refresh token is invalid (e.g. session was revoked) — sign out so the
-      // app bounces to the login screen for a clean re-auth, instead of leaving
-      // the user with 401s (broken photos, failed saves).
-      await supabase.auth.signOut().catch(() => undefined);
-      throw new Error('Your session expired — please sign in again.');
-    }
+  const fresh = session && expMs - Date.now() > 60_000;
+  if (fresh) return session!.access_token;
+
+  // Missing or near-expiry — refresh once, shared across concurrent callers.
+  if (!refreshInFlight) {
+    refreshInFlight = supabase.auth
+      .refreshSession()
+      .then(({ data: r }) => r.session?.access_token ?? null)
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null;
+      });
   }
-  const token = session?.access_token;
-  if (!token) {
-    await supabase.auth.signOut().catch(() => undefined);
-    throw new Error('Your session expired — please sign in again.');
-  }
+  const refreshed = await refreshInFlight;
+  // Prefer the refreshed token; otherwise fall back to any still-usable current
+  // token (a transient refresh failure shouldn't break an otherwise-valid session).
+  const token = refreshed ?? session?.access_token ?? null;
+  if (!token) throw new Error('Your session expired — please sign out and sign in again.');
   return token;
 }
 
