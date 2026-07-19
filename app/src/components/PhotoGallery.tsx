@@ -148,7 +148,15 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }
 
   // ---- Carousel (full-screen photo viewer) ----
-  const list = photos ?? [];
+  // Strict chronological order (newest first); photos with no EXIF date fall into
+  // their upload-time position rather than clumping at the end, so scrolling the
+  // carousel always moves through them by date. The gallery groups use the same
+  // order, so the flat index the carousel uses matches what you see.
+  const list = photos
+    ? [...photos].sort((a, b) =>
+        (b.taken_at ?? b.created_at ?? '').localeCompare(a.taken_at ?? a.created_at ?? ''),
+      )
+    : [];
   const openPhoto = lightIdx != null ? list[lightIdx] : null;
   const step = (d: number) =>
     setLightIdx((i) => (i == null || list.length === 0 ? i : (i + d + list.length) % list.length));
@@ -203,9 +211,9 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   // the carousel still works), so the gallery reads chronologically.
   const photoDateGroups: { date: string; label: string; items: { photo: Photo; idx: number }[] }[] =
     [];
-  if (photos && photos.length) {
+  if (list.length) {
     const byDate = new Map<string, { photo: Photo; idx: number }[]>();
-    photos.forEach((p, idx) => {
+    list.forEach((p, idx) => {
       const key = (p.taken_at ?? '').slice(0, 10) || 'undated';
       if (!byDate.has(key)) byDate.set(key, []);
       byDate.get(key)!.push({ photo: p, idx });
