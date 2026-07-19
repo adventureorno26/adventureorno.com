@@ -58,6 +58,15 @@ export async function fetchActivitiesForDay(placeId: string, day: string): Promi
   return (data ?? []) as Activity[];
 }
 
+/** Move a misgrouped activity to a different place (server recomputes both). */
+export async function reassignActivity(activityId: string, placeId: string): Promise<void> {
+  const { error } = await supabase.rpc('reassign_activity', {
+    p_activity: activityId,
+    p_place: placeId,
+  });
+  if (error) throw error;
+}
+
 export async function isStravaConnected(): Promise<boolean> {
   const { data, error } = await supabase.rpc('strava_connected');
   if (error) return false;

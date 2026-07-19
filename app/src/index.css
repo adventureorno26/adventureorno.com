@@ -1557,43 +1557,56 @@ textarea {
   margin-top: 14px;
 }
 
-/* Photo markers — cover photo as a circular map pin, ringed by category color */
-.photo-marker {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 3px solid var(--ring, #38bdf8);
-  background: #0b1a2b;
-  overflow: hidden;
+/* Modern geo pins — SVG teardrop, category-colored, soft drop shadow */
+.geo-marker {
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.55);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  will-change: transform;
+  transition: transform 0.12s ease;
 }
-.photo-marker img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.geo-marker .geo-pin {
   display: block;
+  filter: drop-shadow(0 3px 4px rgba(2, 8, 23, 0.55));
 }
-.photo-marker-fallback {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  filter: saturate(1.1);
+.geo-marker:hover {
+  transform: translateY(-2px) scale(1.08);
+  z-index: 2;
 }
-.photo-marker:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-}
-.photo-marker.selected {
-  transform: scale(1.2);
-  border-color: #fff;
-  box-shadow: 0 0 0 3px var(--ring, #38bdf8), 0 5px 16px rgba(0, 0, 0, 0.6);
+.geo-marker.selected {
+  transform: scale(1.28);
   z-index: 3;
+}
+.geo-marker.selected .geo-pin {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85))
+    drop-shadow(0 4px 6px rgba(2, 8, 23, 0.6));
+}
+
+/* Reassign a misgrouped activity to another place */
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent, #38bdf8);
+  padding: 2px 0;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.move-picker {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.move-picker select {
+  font-size: 13px;
+  width: 100%;
+}
+.move-picker-row {
+  display: flex;
+  gap: 6px;
+}
+.move-picker-row button {
+  font-size: 12px;
+  padding: 5px 9px;
 }

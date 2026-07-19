@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
-import { MAPTILER_STYLE_URL } from '../lib/maptiler';
+import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
 import {
   createEntry,
+  createPlace,
   deleteEntry,
   fetchEntriesForDay,
   fetchPlace,
+  fetchPlaces,
   updateEntry,
 } from '../lib/data';
-import { fetchActivitiesForDay } from '../lib/strava';
+import { fetchActivitiesForDay, reassignActivity } from '../lib/strava';
 import { categoryIcon, categoryLabel } from '../lib/categories';
 import type { Activity, Entry, NewEntry, Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
@@ -45,6 +47,7 @@ function dayLabel(iso: string): string {
 
 export default function DayView() {
   const { id, date } = useParams();
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -55,6 +58,8 @@ export default function DayView() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [allPlaces, setAllPlaces] = useState<Place[]>([]);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   async function loadEntries() {
     if (id && date) setEntries(await fetchEntriesForDay(id, date));
@@ -65,8 +70,33 @@ export default function DayView() {
     void fetchPlace(id).then(setPlace);
     void fetchActivitiesForDay(id, date).then(setActs);
     void loadEntries();
+    if (canEdit) void fetchPlaces().then(setAllPlaces).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, date]);
+
+  // Move a misgrouped activity to another place — or split it out to a new place
+  // at its own start coordinates.
+  async function moveToExisting(a: Activity, placeId: string) {
+    setMovingId(null);
+    await reassignActivity(a.id, placeId);
+    await Promise.all([
+      fetchActivitiesForDay(id!, date!).then(setActs),
+      fetchPlace(id!).then(setPlace),
+    ]);
+  }
+  async function moveToNew(a: Activity) {
+    setMovingId(null);
+    const geo = await reverseGeocode(a.lng, a.lat).catch(() => null);
+    const created = await createPlace({
+      name: geo?.name ?? a.name ?? 'Moved activity',
+      country: geo?.country ?? null,
+      admin1: geo?.admin1 ?? null,
+      lng: a.lng,
+      lat: a.lat,
+    });
+    await reassignActivity(a.id, created.id);
+    navigate(`/place/${created.id}`);
+  }
 
   // Map init + draw the day's routes.
   useEffect(() => {
@@ -188,6 +218,32 @@ export default function DayView() {
                       View on Strava ↗
                     </a>
                   )}
+                  {canEdit &&
+                    (movingId === a.id ? (
+                      <div className="move-picker">
+                        <select
+                          defaultValue=""
+                          onChange={(e) => e.target.value && void moveToExisting(a, e.target.value)}
+                        >
+                          <option value="">Move to an existing place…</option>
+                          {allPlaces
+                            .filter((p) => p.id !== id)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                        </select>
+                        <div className="move-picker-row">
+                          <button onClick={() => void moveToNew(a)}>＋ New place here</button>
+                          <button onClick={() => setMovingId(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="link-btn" onClick={() => setMovingId(a.id)}>
+                        Wrong place? Move ↗
+                      </button>
+                    ))}
                 </div>
               </div>
             ))}
