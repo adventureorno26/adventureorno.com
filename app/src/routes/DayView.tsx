@@ -10,6 +10,7 @@ import type { Activity, Entry, NewEntry, Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import EntryEditor from '../components/EntryEditor';
 import EntryPhotos from '../components/EntryPhotos';
+import PhotoGallery from '../components/PhotoGallery';
 import StarRating from '../components/StarRating';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -170,6 +171,14 @@ export default function DayView() {
                 </div>
               </div>
             ))}
+          </>
+        )}
+
+        {/* Photos from this day */}
+        {place && (
+          <>
+            <h3 style={{ marginTop: 18 }}>Photos this day</h3>
+            <PhotoGallery place={place} day={date} />
           </>
         )}
 

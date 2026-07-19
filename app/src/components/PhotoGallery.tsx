@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { deletePhoto, fetchPhotosForPlace, photosEnabled, uploadPhoto } from '../lib/photos';
+import {
+  deletePhoto,
+  fetchPhotosForPlace,
+  fetchPhotosForPlaceOnDay,
+  photosEnabled,
+  uploadPhoto,
+} from '../lib/photos';
 import type { Photo, Place } from '../lib/types';
 import AuthedImg from './AuthedImg';
 
 interface Props {
   place: Place;
+  // When set, the gallery shows only this date's photos and pins uploads to it.
+  day?: string;
 }
 
 const SKIP_LABELS: Record<string, string> = {
@@ -19,7 +27,7 @@ const SKIP_LABELS: Record<string, string> = {
 // Skips a deliberate manual upload is allowed to override.
 const OVERRIDABLE = new Set(['screenshot', 'home_zone']);
 
-export default function PhotoGallery({ place }: Props) {
+export default function PhotoGallery({ place, day }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,17 +37,21 @@ export default function PhotoGallery({ place }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  const load = (): Promise<Photo[]> =>
+    day ? fetchPhotosForPlaceOnDay(place.id, day) : fetchPhotosForPlace(place.id);
+
   useEffect(() => {
     if (!photosEnabled()) return;
     let active = true;
     setPhotos(null);
-    fetchPhotosForPlace(place.id)
+    load()
       .then((rows) => active && setPhotos(rows))
       .catch(() => active && setPhotos([]));
     return () => {
       active = false;
     };
-  }, [place.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [place.id, day]);
 
   if (!photosEnabled()) {
     return (
@@ -67,6 +79,7 @@ export default function PhotoGallery({ place }: Props) {
           lat: place.lat,
           lng: place.lng,
           override,
+          takenAt: day ? `${day}T12:00:00Z` : undefined,
         });
         if (r.ok) added++;
         else if (r.skipped) {
@@ -77,7 +90,7 @@ export default function PhotoGallery({ place }: Props) {
         skips.push(`${file.name} failed: ${e instanceof Error ? e.message : 'error'}`);
       }
     }
-    if (added > 0) setPhotos(await fetchPhotosForPlace(place.id));
+    if (added > 0) setPhotos(await load());
     const parts: string[] = [];
     if (added) parts.push(`${added} photo${added > 1 ? 's' : ''} added`);
     if (skips.length) parts.push(`Skipped: ${skips.join('; ')}`);

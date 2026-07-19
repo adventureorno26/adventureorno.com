@@ -40,6 +40,21 @@ export async function fetchPhotosForPlace(placeId: string): Promise<Photo[]> {
   return (data ?? []) as Photo[];
 }
 
+/** Photos taken at a place on a specific day (day view). */
+export async function fetchPhotosForPlaceOnDay(placeId: string, day: string): Promise<Photo[]> {
+  const next = new Date(day + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + 1);
+  const { data, error } = await supabase
+    .from('photos')
+    .select(PHOTO_COLS)
+    .eq('place_id', placeId)
+    .gte('taken_at', day)
+    .lt('taken_at', next.toISOString().slice(0, 10))
+    .order('taken_at', { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as Photo[];
+}
+
 export async function fetchUnassignedPhotos(): Promise<Photo[]> {
   const { data, error } = await supabase
     .from('photos')
@@ -73,7 +88,13 @@ export interface UploadResult {
  *  EXIF lacks GPS, and/or a place to attach to immediately. */
 export async function uploadPhoto(
   file: File,
-  opts: { placeId?: string; lat?: number; lng?: number; override?: boolean } = {},
+  opts: {
+    placeId?: string;
+    lat?: number;
+    lng?: number;
+    override?: boolean;
+    takenAt?: string; // force the photo onto a specific date (day view uploads)
+  } = {},
 ): Promise<UploadResult> {
   if (!photosEnabled()) throw new Error('Photo uploads are not configured yet.');
   const token = await accessToken();
@@ -83,6 +104,7 @@ export async function uploadPhoto(
   if (opts.lat != null) form.set('lat', String(opts.lat));
   if (opts.lng != null) form.set('lng', String(opts.lng));
   if (opts.override) form.set('override', 'true');
+  if (opts.takenAt) form.set('taken_at', opts.takenAt);
 
   const res = await fetch(`${GATEWAY}/upload`, {
     method: 'POST',

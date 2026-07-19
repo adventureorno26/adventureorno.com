@@ -66,6 +66,7 @@ async function readImageBytes(req: Request): Promise<{
   lng: number | null;
   placeId: string | null;
   override: boolean;
+  takenAt: string | null;
 }> {
   const ct = req.headers.get('Content-Type') ?? '';
   if (ct.includes('multipart/form-data')) {
@@ -82,6 +83,7 @@ async function readImageBytes(req: Request): Promise<{
       lng: num('lng'),
       placeId: (form.get('place_id') as string | null) || null,
       override: form.get('override') === 'true',
+      takenAt: (form.get('taken_at') as string | null) || null,
     };
   }
   // Raw body (the iOS Shortcut posts the JPEG as the request body).
@@ -97,6 +99,7 @@ async function readImageBytes(req: Request): Promise<{
     lng: qnum('lng'),
     placeId: url.searchParams.get('place_id'),
     override: url.searchParams.get('override') === 'true',
+    takenAt: url.searchParams.get('taken_at'),
   };
 }
 
@@ -112,7 +115,8 @@ async function runPipeline(
   uploadedBy: string | null,
   allowOverride: boolean,
 ): Promise<IngestOutcome> {
-  const { bytes, lat: formLat, lng: formLng, placeId, override } = await readImageBytes(req);
+  const { bytes, lat: formLat, lng: formLng, placeId, override, takenAt } =
+    await readImageBytes(req);
   if (bytes.byteLength === 0) return { status: 400, body: { error: 'empty body' } };
 
   const sha = await sha256Hex(bytes);
@@ -163,7 +167,8 @@ async function runPipeline(
     place_id: placeId,
     lat: lat!,
     lng: lng!,
-    taken_at: exif.takenAt,
+    // Day-view uploads pin the photo to a chosen date; otherwise use EXIF.
+    taken_at: takenAt ?? exif.takenAt,
     r2_key: r2Key,
     thumb_key: thumbKey,
     width: variants.web.width,
