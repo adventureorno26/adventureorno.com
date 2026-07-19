@@ -68,13 +68,23 @@ Deno.serve(async (req) => {
     .update({ last_used_at: new Date().toISOString() })
     .eq('id', tok.id);
 
-  let payload: { locations?: OverlandFeature[] };
+  // Accepts BOTH Overland ({locations:[Feature]}) and OwnTracks
+  // ({_type:'location', lat, lon, tst, acc}). OwnTracks posts one message per
+  // request and expects a JSON *array* back; Overland expects {"result":"ok"}.
+  let payload: {
+    locations?: OverlandFeature[];
+    _type?: string;
+    lat?: number;
+    lon?: number;
+    tst?: number;
+    acc?: number;
+  };
   try {
     payload = await req.json();
   } catch {
     return json({ result: 'error', error: 'bad json' }, 400);
   }
-  const features = payload.locations ?? [];
+  const isOwnTracks = typeof payload._type === 'string';
 
   const { data: setting } = await admin
     .from('settings')
@@ -87,27 +97,54 @@ Deno.serve(async (req) => {
     radius_m: number;
   };
 
-  const rows: Array<{
+  interface Row {
     lat: number;
     lng: number;
     recorded_at: string;
     source: string;
     accuracy: number | null;
-  }> = [];
+  }
+  const keep = (lat: number, lng: number, acc: number | null): boolean =>
+    !(acc != null && acc > ACCURACY_MAX_M) && haversineM(lat, lng, zone.lat, zone.lng) > zone.radius_m;
+
+  const rows: Row[] = [];
+
+  if (isOwnTracks) {
+    // Only 'location' messages carry coordinates; ack everything else (transition,
+    // waypoint, lwt, …) with an empty array so the app doesn't retry.
+    if (payload._type === 'location' && typeof payload.lat === 'number' && typeof payload.lon === 'number') {
+      const acc = typeof payload.acc === 'number' ? payload.acc : null;
+      if (keep(payload.lat, payload.lon, acc)) {
+        rows.push({
+          lat: payload.lat,
+          lng: payload.lon,
+          recorded_at: payload.tst ? new Date(payload.tst * 1000).toISOString() : new Date().toISOString(),
+          source: 'owntracks',
+          accuracy: acc,
+        });
+      }
+    }
+    if (rows.length > 0) await admin.from('location_pings').insert(rows);
+    return json([]); // OwnTracks expects a (possibly empty) array of messages back
+  }
+
+  // Overland batch.
+  const features = payload.locations ?? [];
   for (const f of features) {
     const c = f.geometry?.coordinates;
     if (!c || c.length < 2) continue;
     const [lng, lat] = c;
     if (typeof lat !== 'number' || typeof lng !== 'number') continue;
-    const acc = f.properties?.horizontal_accuracy;
-    if (typeof acc === 'number' && acc > ACCURACY_MAX_M) continue; // too fuzzy
-    if (haversineM(lat, lng, zone.lat, zone.lng) <= zone.radius_m) continue; // home zone
+    const acc = typeof f.properties?.horizontal_accuracy === 'number'
+      ? f.properties.horizontal_accuracy
+      : null;
+    if (!keep(lat, lng, acc)) continue;
     rows.push({
       lat,
       lng,
       recorded_at: f.properties?.timestamp ?? new Date().toISOString(),
       source: 'overland',
-      accuracy: typeof acc === 'number' ? acc : null,
+      accuracy: acc,
     });
   }
 
