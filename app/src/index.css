@@ -1166,3 +1166,84 @@ a {
   margin: 0 10px 2px;
   letter-spacing: 1px;
 }
+
+/* ---------- Stat hero ---------- */
+.stat-hero {
+  display: flex;
+  gap: 7px;
+  pointer-events: auto;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+}
+.stat-hero .stat {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 4px 8px;
+  gap: 5px;
+}
+.stat-ico {
+  font-size: 13px;
+}
+.stats-bar .actions button {
+  min-width: 40px;
+}
+@media (max-width: 520px) {
+  .hide-sm {
+    display: none !important;
+  }
+}
+
+/* ---------- Places manager ---------- */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.place-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.place-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: rgba(19, 31, 54, 0.4);
+}
+.place-row.sel {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.place-row-main {
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+.place-row-name {
+  font-weight: 600;
+}
+.place-row-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+.place-row-cats {
+  font-size: 16px;
+  letter-spacing: 1px;
+  flex: none;
+  max-width: 40%;
+  text-align: right;
+  overflow: hidden;
+}

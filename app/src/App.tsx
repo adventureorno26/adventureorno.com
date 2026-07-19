@@ -8,6 +8,7 @@ import MapView from './routes/MapView';
 // routes view) stays out of the initial map bundle.
 const RoutesView = lazy(() => import('./routes/RoutesView'));
 const DayView = lazy(() => import('./routes/DayView'));
+const PlacesList = lazy(() => import('./routes/PlacesList'));
 const Settings = lazy(() => import('./routes/Settings'));
 const Trips = lazy(() => import('./routes/Trips'));
 const ImportTimeline = lazy(() => import('./routes/ImportTimeline'));
@@ -71,6 +72,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Trips />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/places"
+          element={
+            <RequireAuth>
+              <PlacesList />
             </RequireAuth>
           }
         />
