@@ -193,11 +193,22 @@ async function accessToken(): Promise<string> {
   // (common on mobile PWAs where background auto-refresh is suspended).
   const expMs = session?.expires_at ? session.expires_at * 1000 : 0;
   if (!session || expMs - Date.now() < 120_000) {
-    const { data: refreshed } = await supabase.auth.refreshSession();
-    if (refreshed.session) session = refreshed.session;
+    const { data: refreshed, error } = await supabase.auth.refreshSession();
+    if (refreshed.session) {
+      session = refreshed.session;
+    } else if (error || !session) {
+      // The refresh token is invalid (e.g. session was revoked) — sign out so the
+      // app bounces to the login screen for a clean re-auth, instead of leaving
+      // the user with 401s (broken photos, failed saves).
+      await supabase.auth.signOut().catch(() => undefined);
+      throw new Error('Your session expired — please sign in again.');
+    }
   }
   const token = session?.access_token;
-  if (!token) throw new Error('Your session expired — please sign out and sign in again.');
+  if (!token) {
+    await supabase.auth.signOut().catch(() => undefined);
+    throw new Error('Your session expired — please sign in again.');
+  }
   return token;
 }
 

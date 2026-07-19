@@ -399,6 +399,70 @@ a {
   background: transparent;
   border: none;
   color: #fff;
+  z-index: 52;
+}
+/* Carousel prev/next */
+.lightbox-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 34px;
+  line-height: 1;
+  width: 48px;
+  height: 64px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  z-index: 52;
+}
+.lightbox-nav:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+.lightbox-nav.prev {
+  left: 12px;
+}
+.lightbox-nav.next {
+  right: 12px;
+}
+/* Date + download bar, bottom center */
+.lightbox-bar {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 52;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(6, 10, 20, 0.72);
+  backdrop-filter: blur(10px);
+  cursor: default;
+}
+.lightbox-date {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.lightbox-dl {
+  background: rgba(255, 255, 255, 0.14);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.lightbox-dl:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.lightbox-count {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ---------- Unassigned-photos tray ---------- */

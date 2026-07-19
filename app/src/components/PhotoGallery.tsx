@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   deletePhoto,
+  fetchPhotoObjectUrl,
   fetchPhotosForPlace,
   fetchPhotosForPlaceOnDay,
   photosEnabled,
@@ -37,9 +39,10 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [overridable, setOverridable] = useState<File[]>([]);
-  const [lightbox, setLightbox] = useState<Photo | null>(null);
+  const [lightIdx, setLightIdx] = useState<number | null>(null); // carousel position
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const touchX = useRef<number | null>(null);
 
   const load = (): Promise<Photo[]> =>
     day ? fetchPhotosForPlaceOnDay(place.id, day) : fetchPhotosForPlace(place.id);
@@ -121,10 +124,52 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     try {
       await deletePhoto(p.id);
       setPhotos((prev) => (prev ?? []).filter((x) => x.id !== p.id));
-      if (lightbox?.id === p.id) setLightbox(null);
+      setLightIdx(null);
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Delete failed');
     }
+  }
+
+  // ---- Carousel (full-screen photo viewer) ----
+  const list = photos ?? [];
+  const openPhoto = lightIdx != null ? list[lightIdx] : null;
+  const step = (d: number) =>
+    setLightIdx((i) => (i == null || list.length === 0 ? i : (i + d + list.length) % list.length));
+
+  async function download(p: Photo) {
+    try {
+      const url = await fetchPhotoObjectUrl(p.id, 'full');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `adventure-${(p.taken_at ?? '').slice(0, 10) || p.id.slice(0, 8)}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Download failed');
+    }
+  }
+
+  // Keyboard nav for the carousel.
+  useEffect(() => {
+    if (lightIdx == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightIdx(null);
+      else if (e.key === 'ArrowRight') step(1);
+      else if (e.key === 'ArrowLeft') step(-1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightIdx, list.length]);
+
+  function fmtTaken(p: Photo): string {
+    if (!p.taken_at) return '';
+    const d = new Date(p.taken_at);
+    return Number.isNaN(d.getTime())
+      ? ''
+      : d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
   return (
@@ -182,9 +227,9 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
         <p style={{ color: 'var(--muted)', fontSize: 13 }}>No photos yet.</p>
       ) : (
         <div className="gallery">
-          {photos.map((p) => (
+          {photos.map((p, i) => (
             <div className={`thumb ${place.cover_photo_id === p.id ? 'is-cover' : ''}`} key={p.id}>
-              <AuthedImg photoId={p.id} size="thumb" onClick={() => setLightbox(p)} />
+              <AuthedImg photoId={p.id} size="thumb" onClick={() => setLightIdx(i)} />
               {canUpload && (
                 <button
                   className="thumb-cover"
@@ -204,14 +249,76 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
         </div>
       )}
 
-      {lightbox && (
-        <div className="lightbox" onClick={() => setLightbox(null)}>
-          <AuthedImg photoId={lightbox.id} size="full" alt="" className="lightbox-img" />
-          <button className="lightbox-close" onClick={() => setLightbox(null)}>
+      {openPhoto &&
+        createPortal(
+          <div
+            className="lightbox"
+            onClick={() => setLightIdx(null)}
+          onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+          onTouchEnd={(e) => {
+            if (touchX.current == null) return;
+            const dx = e.changedTouches[0].clientX - touchX.current;
+            if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+            touchX.current = null;
+          }}
+        >
+          <button className="lightbox-close" onClick={() => setLightIdx(null)} title="Close">
             ×
           </button>
-        </div>
-      )}
+
+          {list.length > 1 && (
+            <button
+              className="lightbox-nav prev"
+              onClick={(e) => {
+                e.stopPropagation();
+                step(-1);
+              }}
+              title="Previous"
+            >
+              ‹
+            </button>
+          )}
+
+          <AuthedImg
+            key={openPhoto.id}
+            photoId={openPhoto.id}
+            size="full"
+            alt=""
+            className="lightbox-img"
+          />
+
+          {list.length > 1 && (
+            <button
+              className="lightbox-nav next"
+              onClick={(e) => {
+                e.stopPropagation();
+                step(1);
+              }}
+              title="Next"
+            >
+              ›
+            </button>
+          )}
+
+          {/* Date taken, bottom center; download button beside it. */}
+          <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
+            <span className="lightbox-date">{fmtTaken(openPhoto)}</span>
+            <button
+              className="lightbox-dl"
+              onClick={() => void download(openPhoto)}
+              title="Download photo"
+            >
+              ⤓ Download
+            </button>
+            {list.length > 1 && (
+              <span className="lightbox-count">
+                {(lightIdx ?? 0) + 1} / {list.length}
+              </span>
+            )}
+          </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
