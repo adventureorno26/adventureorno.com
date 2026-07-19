@@ -38,10 +38,13 @@ adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventur
 5. **No screenshots.** The upload Worker rejects: any image without GPS EXIF, any PNG, and any
    image whose EXIF lacks a camera make/model. (The iOS Shortcut also filters `Is Screenshot =
    false` and `Has GPS = true` — the Worker is the backstop, not the only gate.)
-6. **Deletion is permanent and sticky.** Owner can delete any photo; an editor can delete photos
-   they uploaded. Deletion removes the R2 objects and DB row AND inserts the photo's SHA-256
-   content hash into `deleted_hashes`. The upload Worker rejects any upload whose hash is in
-   `deleted_hashes` — a deleted photo must never reappear via the nightly Shortcut.
+6. **Deletion blocks the automated re-import, but a manual re-upload can bring a photo back.**
+   Owner can delete any photo; an editor can delete photos they uploaded. Deletion removes the R2
+   objects and DB row AND inserts the photo's SHA-256 hash into `deleted_hashes`. The nightly
+   Shortcut ingest still rejects any upload whose hash is in `deleted_hashes` (so deletions aren't
+   auto-resurrected). A **deliberate manual upload** (override) may re-add a deleted photo — doing
+   so clears the hash from `deleted_hashes`. (Changed from the original "permanent + sticky" rule
+   at the owner's request.)
 7. **Auto-upload is Erica-only.** Exactly one device ingest token exists (Erica's). The partner
    has role `editor`: full manual upload / entry editing rights in the UI, but no ingest token is
    ever issued to him, and there is no UI to create additional device tokens without owner role.

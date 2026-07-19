@@ -15,10 +15,11 @@ export interface DecideInput {
   override: boolean; // user asked to override warnings (manual only)
 }
 
-/** Returns the skip reason, or null to proceed with storage. Ordering matters:
- *  deletion is checked first and can never be overridden. */
+/** Returns the skip reason, or null to proceed with storage. A deliberate
+ *  manual re-upload can bring back a previously-deleted photo (override); the
+ *  automated ingest still won't resurrect deletions on its own. */
 export function ingestDecision(i: DecideInput): SkipReason | null {
-  if (i.isDeleted) return 'deleted';
+  if (i.isDeleted && !(i.manual && i.override)) return 'deleted';
   if (i.isDuplicate) return 'duplicate';
 
   // No coordinates at all is always fatal — we can't place the photo.

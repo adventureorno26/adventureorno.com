@@ -20,6 +20,7 @@ import {
   hashIsDeleted,
   insertPhoto,
   insertVideo,
+  removeDeletedHash,
   resolveDeviceToken,
   resolveSession,
   setVideoPoster,
@@ -167,7 +168,9 @@ async function runPipeline(
     override,
   });
   if (skip) return { status: 200, body: { skipped: skip } };
-  // Past the gate: coordinates are guaranteed present.
+  // Past the gate: coordinates are guaranteed present. A manual re-upload of a
+  // previously-deleted photo fully un-deletes it (clear the sticky hash).
+  if (isDeleted && allowOverride) await removeDeletedHash(env, sha).catch(() => undefined);
 
   // Manual UI uploads arrive pre-rendered (web + thumb) from the browser, so we
   // store them directly and NEVER run the WASM decoder (which crashed on

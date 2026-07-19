@@ -130,6 +130,14 @@ export async function findPhotoByHash(env: Env, sha256: string): Promise<boolean
   return ((await res.json()) as unknown[]).length > 0;
 }
 
+/** Remove a hash from deleted_hashes (a manual re-upload fully un-deletes it). */
+export async function removeDeletedHash(env: Env, sha256: string): Promise<void> {
+  await fetch(`${env.SUPABASE_URL}/rest/v1/deleted_hashes?sha256=eq.${sha256}`, {
+    method: 'DELETE',
+    headers: restHeaders(env),
+  });
+}
+
 export interface PhotoRow {
   place_id: string | null;
   lat: number;

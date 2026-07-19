@@ -17,11 +17,11 @@ describe('ingestDecision', () => {
     expect(ingestDecision(base)).toBeNull();
   });
 
-  it('rejects a previously-deleted photo — even on manual override (rule #6, sticky)', () => {
+  it('blocks a deleted photo on the automated path but lets a manual override re-add it', () => {
     expect(ingestDecision({ ...base, isDeleted: true })).toBe('deleted');
     expect(
       ingestDecision({ ...base, isDeleted: true, manual: true, override: true }),
-    ).toBe('deleted');
+    ).toBeNull();
   });
 
   it('dedupes an already-stored photo', () => {
