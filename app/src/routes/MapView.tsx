@@ -106,6 +106,19 @@ export default function MapView() {
         clusterRadius: 45,
       });
 
+      // Soft glow beneath clusters.
+      map.addLayer({
+        id: 'cluster-glow',
+        type: 'circle',
+        source: SOURCE_ID,
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': '#3b82f6',
+          'circle-opacity': 0.28,
+          'circle-blur': 1,
+          'circle-radius': ['step', ['get', 'point_count'], 26, 10, 34, 50, 44],
+        },
+      });
       map.addLayer({
         id: 'clusters',
         type: 'circle',
@@ -113,10 +126,10 @@ export default function MapView() {
         filter: ['has', 'point_count'],
         paint: {
           'circle-color': '#3b82f6',
-          'circle-opacity': 0.9,
+          'circle-opacity': 0.95,
           'circle-radius': ['step', ['get', 'point_count'], 16, 10, 22, 50, 30],
-          'circle-stroke-width': 3,
-          'circle-stroke-color': 'rgba(96,165,250,0.35)',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'rgba(200,230,255,0.7)',
         },
       });
       map.addLayer({
@@ -131,6 +144,19 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
+      // Glowing halo beneath each place, then the crisp beacon on top.
+      map.addLayer({
+        id: 'point-glow',
+        type: 'circle',
+        source: SOURCE_ID,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': '#22d3ee',
+          'circle-opacity': 0.35,
+          'circle-blur': 1,
+          'circle-radius': 15,
+        },
+      });
       map.addLayer({
         id: 'unclustered-point',
         type: 'circle',
@@ -138,9 +164,9 @@ export default function MapView() {
         filter: ['!', ['has', 'point_count']],
         paint: {
           'circle-color': '#22d3ee',
-          'circle-radius': 7,
+          'circle-radius': 6.5,
           'circle-stroke-width': 2.5,
-          'circle-stroke-color': '#06121f',
+          'circle-stroke-color': '#eaf7ff',
         },
       });
 

@@ -906,3 +906,94 @@ a {
   color: var(--muted);
   font-size: 18px;
 }
+
+/* ---------- Place panel: cover hero + polish ---------- */
+.panel-hero {
+  position: relative;
+  margin: -16px -18px 14px;
+  height: 190px;
+  overflow: hidden;
+}
+.panel-hero-img,
+.panel-hero .img-skeleton {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.panel-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6, 10, 20, 0.1) 40%, rgba(6, 10, 20, 0.92) 100%);
+}
+.hero-title {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 10px;
+  z-index: 2;
+}
+.hero-title h2 {
+  margin: 0;
+  font-size: 24px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+.hero-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(6, 10, 20, 0.55) !important;
+  backdrop-filter: blur(6px);
+  color: #fff !important;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Section headings with a subtle accent tick */
+.panel h3,
+.routes-panel h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding-left: 10px;
+  position: relative;
+}
+.panel h3::before,
+.routes-panel h3::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--grad);
+}
+
+/* Panel entrance animation */
+.panel {
+  animation: panel-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes panel-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@media (max-width: 640px) {
+  .panel {
+    animation: sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+  }
+}

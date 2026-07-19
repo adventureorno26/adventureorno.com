@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { deletePlace, fetchPlaceDays, mergePlaces, updatePlace } from '../lib/data';
 import type { Place, PlaceDay } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
+import { photosEnabled } from '../lib/photos';
+import AuthedImg from './AuthedImg';
 import PhotoGallery from './PhotoGallery';
 import StarRating from './StarRating';
 
@@ -110,21 +112,38 @@ export default function PlacePanel({
     }
   }
 
+  const hasHero = Boolean(place.cover_photo_id) && photosEnabled();
+
   return (
     <aside className="panel">
-      <div className="panel-head">
-        <h2>
-          {place.name}
-          {place.auto && !place.is_home && (
-            <span className="auto-badge" title="Auto-created by clustering">
-              auto
-            </span>
-          )}
-        </h2>
-        <button className="close" onClick={onClose} aria-label="Close">
-          ×
-        </button>
-      </div>
+      {hasHero ? (
+        <div className="panel-hero">
+          <AuthedImg photoId={place.cover_photo_id!} size="full" className="panel-hero-img" />
+          <button className="close hero-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+          <div className="hero-title">
+            <h2>
+              {place.name}
+              {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
+            </h2>
+          </div>
+        </div>
+      ) : (
+        <div className="panel-head">
+          <h2>
+            {place.name}
+            {place.auto && !place.is_home && (
+              <span className="auto-badge" title="Auto-created by clustering">
+                auto
+              </span>
+            )}
+          </h2>
+          <button className="close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
+      )}
       <div className="meta">
         {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
         {place.visit_count > 0 &&
