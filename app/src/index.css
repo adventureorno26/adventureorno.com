@@ -2016,3 +2016,47 @@ textarea {
 .photo-date-group .gallery {
   margin-top: 0;
 }
+
+/* Carousel bottom bar on ONE line: date · count + compact download */
+.lightbox-bar {
+  flex-wrap: nowrap;
+  gap: 12px;
+  max-width: calc(100vw - 24px);
+}
+.lightbox-meta {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lightbox-meta .lightbox-count {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+.lightbox-dl {
+  flex: none;
+  font-size: 15px;
+  padding: 5px 10px;
+  line-height: 1;
+}
+
+/* Directions button on the place card */
+.directions-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  color: var(--accent-hover);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+.directions-btn:hover {
+  background: rgba(59, 130, 246, 0.24);
+}

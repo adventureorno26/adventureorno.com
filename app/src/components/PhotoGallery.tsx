@@ -393,21 +393,25 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
             </button>
           )}
 
-          {/* Date taken, bottom center; download button beside it. */}
+          {/* Date + count on one line; download as a compact icon. */}
           <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
-            <span className="lightbox-date">{fmtTaken(openPhoto)}</span>
+            <span className="lightbox-meta">
+              {fmtTaken(openPhoto)}
+              {list.length > 1 && (
+                <span className="lightbox-count">
+                  {fmtTaken(openPhoto) ? ' · ' : ''}
+                  {(lightIdx ?? 0) + 1} / {list.length}
+                </span>
+              )}
+            </span>
             <button
               className="lightbox-dl"
               onClick={() => void download(openPhoto)}
               title="Download photo"
+              aria-label="Download"
             >
-              ⤓ Download
+              ⤓
             </button>
-            {list.length > 1 && (
-              <span className="lightbox-count">
-                {(lightIdx ?? 0) + 1} / {list.length}
-              </span>
-            )}
           </div>
           </div>,
           document.body,

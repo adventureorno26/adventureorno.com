@@ -285,6 +285,15 @@ export default function PlacePanel({
         {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
       </div>
 
+      <a
+        className="directions-btn"
+        href={`https://maps.apple.com/?daddr=${place.lat},${place.lng}&dirflg=d`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        🧭 Directions
+      </a>
+
       {/* Set / move the location by address (for photos added without GPS) */}
       {canEdit && (
         <details className="cat-edit">

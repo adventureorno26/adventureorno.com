@@ -231,8 +231,12 @@ export default function MapView() {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAPTILER_STYLE_URL,
-      center: [-98.5, 39.5], // continental US
-      zoom: 3.4,
+      // Open framed on the whole contiguous US (responsive to screen size).
+      bounds: [
+        [-125, 24.5],
+        [-66.5, 49.5],
+      ],
+      fitBoundsOptions: { padding: 24 },
       attributionControl: { compact: true },
     });
     mapRef.current = map;

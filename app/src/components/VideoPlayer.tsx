@@ -59,10 +59,16 @@ export default function VideoPlayer({ video, onClose }: { video: Video; onClose:
         <div style={{ color: '#fff' }}>Loading…</div>
       )}
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
-        <span className="lightbox-date">{fmtDate(video)}</span>
+        <span className="lightbox-meta">{fmtDate(video)}</span>
         {url && (
-          <a className="lightbox-dl" href={url} download={`adventure-${video.id.slice(0, 8)}.mp4`}>
-            ⤓ Download
+          <a
+            className="lightbox-dl"
+            href={url}
+            download={`adventure-${video.id.slice(0, 8)}.mp4`}
+            title="Download video"
+            aria-label="Download"
+          >
+            ⤓
           </a>
         )}
       </div>
