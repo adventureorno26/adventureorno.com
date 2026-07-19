@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { createTrip, deleteTrip, fetchTripStats, fetchTrips } from '../lib/trips';
-import type { Trip, TripStats } from '../lib/types';
+import { addPlaceToTrip, createTrip, deleteTrip, fetchTripPlaces, fetchTripStats, fetchTrips } from '../lib/trips';
+import type { Place, Trip, TripStats } from '../lib/types';
 
 function TripCard({
   trip,
@@ -14,11 +14,38 @@ function TripCard({
   onDeleted: () => void;
 }) {
   const [stats, setStats] = useState<TripStats | null>(null);
+  const [places, setPlaces] = useState<Place[] | null>(null);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
   useEffect(() => {
     fetchTripStats(trip.id)
       .then(setStats)
       .catch(() => setStats(null));
   }, [trip.id]);
+
+  function loadPlaces() {
+    fetchTripPlaces(trip)
+      .then(setPlaces)
+      .catch(() => setPlaces([]));
+  }
+  useEffect(loadPlaces, [trip.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function addPlace() {
+    if (!q.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await addPlaceToTrip(trip, q);
+      setQ('');
+      loadPlaces();
+      fetchTripStats(trip.id).then(setStats).catch(() => undefined);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not add place');
+    }
+    setBusy(false);
+  }
 
   return (
     <div className="card" style={{ marginBottom: 12 }}>
@@ -51,6 +78,33 @@ function TripCard({
           <b>{stats ? Number(stats.miles).toFixed(1) : '…'}</b> miles
         </span>
       </div>
+
+      {/* Places in this trip — each is a real pin on the map */}
+      {places && places.length > 0 && (
+        <div className="trip-places">
+          {places.map((p) => (
+            <Link key={p.id} className="trip-place" to={`/place/${p.id}`}>
+              📍 {p.name}
+              {p.admin1 ? <span className="muted"> · {p.admin1}</span> : null}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {canEdit && (
+        <div className="field-row" style={{ marginTop: 10 }}>
+          <input
+            placeholder="Add a place (e.g. Fort Bragg, NC)"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void addPlace()}
+          />
+          <button className="primary" style={{ flex: 'none' }} disabled={busy} onClick={() => void addPlace()}>
+            {busy ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+      )}
+      {err && <div className="banner">{err}</div>}
     </div>
   );
 }
@@ -91,8 +145,8 @@ export default function Trips() {
       </Link>
       <h1>Trips</h1>
       <p style={{ color: 'var(--muted)' }}>
-        A trip is a date range. Places automatically belong to it when their first visit falls
-        inside the range.
+        A trip is a named date range. Add places to it below (each drops a pin on the map), and
+        anywhere you visit within the dates joins automatically.
       </p>
 
       {canEdit && (

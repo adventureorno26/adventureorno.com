@@ -1794,3 +1794,26 @@ textarea {
 .route-move .link-btn {
   display: block;
 }
+
+/* Places listed inside a trip card */
+.trip-places {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+.trip-place {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+}
+.trip-place:hover {
+  background: var(--accent-soft);
+}
+.trip-place .muted {
+  color: var(--muted);
+}
