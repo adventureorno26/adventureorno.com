@@ -7,6 +7,20 @@ import exifr from 'exifr';
 import { supabase } from './supabase';
 import type { Photo } from './types';
 
+/** Read a photo's GPS coordinates (or null) — used to decide auto-place vs. a
+ *  "set a location" card. */
+export async function readGps(file: File): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const g = (await exifr.gps(file)) as { latitude?: number; longitude?: number } | undefined;
+    if (g && typeof g.latitude === 'number' && typeof g.longitude === 'number') {
+      return { lat: g.latitude, lng: g.longitude };
+    }
+  } catch {
+    /* no gps */
+  }
+  return null;
+}
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();

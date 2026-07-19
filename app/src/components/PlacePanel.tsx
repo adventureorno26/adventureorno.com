@@ -9,6 +9,7 @@ import {
   effectiveCategories,
 } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
+import { forwardGeocode } from '../lib/maptiler';
 import { photosEnabled } from '../lib/photos';
 import AuthedImg from './AuthedImg';
 import PhotoGallery from './PhotoGallery';
@@ -61,6 +62,7 @@ export default function PlacePanel({
   const [review, setReview] = useState(place.review ?? '');
   const [first, setFirst] = useState(place.first_visit ?? '');
   const [last, setLast] = useState(place.last_visit ?? '');
+  const [loc, setLoc] = useState('');
 
   useEffect(() => {
     setName(place.name);
@@ -97,6 +99,23 @@ export default function PlacePanel({
 
   async function saveDates() {
     await patch({ first_visit: first || null, last_visit: last || null });
+  }
+
+  async function setLocation(query: string) {
+    const q = query.trim();
+    if (!q) return;
+    setError(null);
+    const geo = await forwardGeocode(q);
+    if (!geo) {
+      setError(`Couldn't find "${q}".`);
+      return;
+    }
+    await patch({
+      lat: geo.lat,
+      lng: geo.lng,
+      admin1: place.admin1 ?? geo.admin1,
+      country: place.country ?? geo.country,
+    });
   }
 
   async function toggleCat(slug: string) {
@@ -207,6 +226,30 @@ export default function PlacePanel({
             {[place.first_visit, place.last_visit].filter(Boolean).join(' → ')}
           </div>
         )
+      )}
+
+      {/* Set / move the location by address (for photos added without GPS) */}
+      {canEdit && (
+        <details className="cat-edit">
+          <summary>📍 Set / move location</summary>
+          <div className="field-row" style={{ marginTop: 4 }}>
+            <input
+              placeholder="Type an address or place…"
+              value={loc}
+              onChange={(e) => setLoc(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void setLocation(loc).then(() => setLoc(''));
+              }}
+            />
+            <button
+              className="primary"
+              style={{ flex: 'none' }}
+              onClick={() => void setLocation(loc).then(() => setLoc(''))}
+            >
+              Set
+            </button>
+          </div>
+        </details>
       )}
 
       {error && <div className="banner">{error}</div>}

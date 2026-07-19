@@ -4,7 +4,7 @@ import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
-import { uploadPhoto } from '../lib/photos';
+import { readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
@@ -342,20 +342,51 @@ export default function MapView() {
     }
   }
 
-  // Add photos from the library — the worker auto-places each by its GPS.
+  // Add photos: geotagged ones auto-place by GPS; photos WITHOUT a location get
+  // a fresh card (placed at the current map center) so you can set the spot.
   async function handleAddPhotos(files: FileList) {
     setBanner('Uploading photos…');
     let added = 0;
-    let noGps = 0;
+    const noLoc: File[] = [];
     for (const f of Array.from(files)) {
-      try {
-        const r = await uploadPhoto(f);
-        if (r.ok) added++;
-        else if (r.skipped === 'no_gps') noGps++;
-      } catch {
-        /* ignore per-file */
+      const gps = await readGps(f);
+      if (gps) {
+        try {
+          const r = await uploadPhoto(f);
+          if (r.ok) added++;
+        } catch {
+          /* ignore per-file */
+        }
+      } else {
+        noLoc.push(f);
       }
     }
+
+    // Photos with no location → one new card at the map center to place manually.
+    let newPlaceId: string | null = null;
+    if (noLoc.length > 0) {
+      const ctr = mapRef.current?.getCenter();
+      const lat = ctr?.lat ?? 39;
+      const lng = ctr?.lng ?? -77;
+      try {
+        const created = await createPlace({
+          name: 'New place',
+          country: null,
+          admin1: null,
+          lat,
+          lng,
+        });
+        newPlaceId = created.id;
+        for (const f of noLoc) {
+          await uploadPhoto(f, { placeId: created.id, lat, lng, override: true }).catch(
+            () => undefined,
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     if (added > 0) await triggerGeocode().catch(() => undefined);
     const rows = await fetchPlaces().catch(() => places);
     setPlaces(rows);
@@ -366,13 +397,15 @@ export default function MapView() {
       })
       .catch(() => undefined);
     setTrayNonce((n) => n + 1);
-    setBanner(
-      added > 0
-        ? `Added ${added} photo${added > 1 ? 's' : ''} to the map.`
-        : noGps > 0
-          ? 'Those photos have no GPS location, so they can’t be placed.'
-          : 'No photos added.',
-    );
+
+    if (newPlaceId) {
+      setBanner('Set this place’s location using the address box on the card.');
+      navigate(`/place/${newPlaceId}`);
+    } else {
+      setBanner(
+        added > 0 ? `Added ${added} photo${added > 1 ? 's' : ''} to the map.` : 'No photos added.',
+      );
+    }
   }
 
   // Add a place by typing an address / place name (no map click needed).
