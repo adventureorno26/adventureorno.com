@@ -52,6 +52,7 @@ export default function MapView() {
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
   const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → object URL cache
+  const prevSelRef = useRef<string | null>(null);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -60,6 +61,7 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
 
   const [trayNonce, setTrayNonce] = useState(0);
 
@@ -110,6 +112,7 @@ export default function MapView() {
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
+        promoteId: 'id', // enables feature-state for the selected-pin highlight
         cluster: true,
         clusterMaxZoom: 12,
         clusterRadius: 45,
@@ -163,21 +166,23 @@ export default function MapView() {
         map.addImage('pin-default', makePinImage('📍'), { pixelRatio: 2 });
       }
 
-      // Glow beneath each place.
+      // Highlight ring under the selected pin.
       map.addLayer({
-        id: 'point-glow',
+        id: 'pin-highlight',
         type: 'circle',
         source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
+        filter: ['==', ['get', 'id'], '__none__'],
         paint: {
-          'circle-color': '#22d3ee',
-          'circle-opacity': 0.22,
-          'circle-blur': 1,
-          'circle-radius': 16,
-          'circle-translate': [0, -8],
+          'circle-radius': 24,
+          'circle-color': '#3b82f6',
+          'circle-opacity': 0.3,
+          'circle-blur': 0.5,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#60a5fa',
+          'circle-translate': [0, -16],
         },
       });
-      // Category pin per place.
+      // Category pin per place (grows a touch when selected).
       map.addLayer({
         id: 'place-pins',
         type: 'symbol',
@@ -185,7 +190,7 @@ export default function MapView() {
         filter: ['!', ['has', 'point_count']],
         layout: {
           'icon-image': ['concat', 'pin-', ['get', 'primary']],
-          'icon-size': 0.9,
+          'icon-size': ['case', ['boolean', ['feature-state', 'selected'], false], 1.2, 0.9],
           'icon-anchor': 'bottom',
           'icon-allow-overlap': true,
         },
@@ -302,6 +307,21 @@ export default function MapView() {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);
 
+  // Highlight the selected pin (ring + enlarge via feature-state).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (map.getLayer('pin-highlight')) {
+      map.setFilter('pin-highlight', ['==', ['get', 'id'], selectedId ?? '__none__']);
+    }
+    const prev = prevSelRef.current;
+    if (prev && prev !== selectedId) {
+      map.setFeatureState({ source: SOURCE_ID, id: prev }, { selected: false });
+    }
+    if (selectedId) map.setFeatureState({ source: SOURCE_ID, id: selectedId }, { selected: true });
+    prevSelRef.current = selectedId ?? null;
+  }, [selectedId, ready, places]);
+
   async function handleAddAt(lng: number, lat: number) {
     setAddMode(false);
     if (isInHomeZone({ lng, lat })) {
@@ -388,26 +408,6 @@ export default function MapView() {
 
       <StatsBar places={places} addMode={addMode} onToggleAdd={() => setAddMode((v) => !v)} />
 
-      {availableCats.length > 0 && (
-        <div className="cat-filter">
-          <button
-            className={`cat-pill ${filterCat === null ? 'on' : ''}`}
-            onClick={() => setFilterCat(null)}
-          >
-            All
-          </button>
-          {availableCats.map((c) => (
-            <button
-              key={c.slug}
-              className={`cat-pill ${filterCat === c.slug ? 'on' : ''}`}
-              onClick={() => setFilterCat((cur) => (cur === c.slug ? null : c.slug))}
-            >
-              {categoryIcon(c.slug)} {c.label}
-            </button>
-          ))}
-        </div>
-      )}
-
       {addMode && (
         <div className="add-bar">
           <input
@@ -453,6 +453,46 @@ export default function MapView() {
           setTrayNonce((n) => n + 1);
         }}
       />
+
+      {/* Find button (bottom) → category sheet */}
+      {availableCats.length > 0 && !selectedPlace && (
+        <button className="find-btn" onClick={() => setFindOpen(true)}>
+          {filterCat ? `${categoryIcon(filterCat)} ${filterCat}` : '🔍 Find'}
+        </button>
+      )}
+      {findOpen && (
+        <div className="find-sheet-backdrop" onClick={() => setFindOpen(false)}>
+          <div className="find-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="find-sheet-head">Find by activity</div>
+            <div className="find-grid">
+              <button
+                className={`find-cat ${filterCat === null ? 'on' : ''}`}
+                onClick={() => {
+                  setFilterCat(null);
+                  setFindOpen(false);
+                }}
+              >
+                <span className="find-ico">🌐</span>
+                <span className="find-label">All</span>
+              </button>
+              {availableCats.map((c) => (
+                <button
+                  key={c.slug}
+                  className={`find-cat ${filterCat === c.slug ? 'on' : ''}`}
+                  title={c.label}
+                  onClick={() => {
+                    setFilterCat(c.slug);
+                    setFindOpen(false);
+                  }}
+                >
+                  <span className="find-ico">{c.icon}</span>
+                  <span className="find-label">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedPlace && (
         <PlacePanel

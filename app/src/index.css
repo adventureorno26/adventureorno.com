@@ -1247,3 +1247,73 @@ a {
   text-align: right;
   overflow: hidden;
 }
+
+/* ---------- Find button + category sheet ---------- */
+.add-bar {
+  top: calc(58px + env(safe-area-inset-top)); /* filter bar moved to bottom */
+}
+.find-btn {
+  position: absolute;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 11px 20px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: var(--grad);
+  color: #04121f;
+  border: none;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+}
+.find-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(4, 8, 18, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.find-sheet {
+  width: min(520px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px 20px 0 0;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+  animation: sheet-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.find-sheet-head {
+  font-weight: 600;
+  margin: 4px 4px 12px;
+}
+.find-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+}
+.find-cat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 6px;
+  border-radius: 14px;
+  background: rgba(19, 31, 54, 0.5);
+  border: 1px solid var(--border-soft);
+}
+.find-cat.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.find-ico {
+  font-size: 26px;
+  line-height: 1;
+}
+.find-label {
+  font-size: 12px;
+  color: var(--muted);
+}

@@ -41,7 +41,8 @@ export function effectiveCategories(
   return CATEGORIES.filter((c) => set.has(c.slug)).map((c) => c.slug);
 }
 
-/** The icon to show as the map marker — first effective category, else a pin. */
+/** The icon to show as the map marker — first effective category, else the
+ *  default pin (matches the 'pin-default' image added in MapView). */
 export function primaryCategory(place: Pick<Place, 'categories' | 'activity_categories'>): string {
-  return effectiveCategories(place)[0] ?? 'pin';
+  return effectiveCategories(place)[0] ?? 'default';
 }
