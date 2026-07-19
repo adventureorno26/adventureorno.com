@@ -781,3 +781,53 @@ a {
     display: none;
   }
 }
+
+/* ---------- Google sign-in button ---------- */
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #fff;
+  color: #1f2430;
+  border: none;
+  font-weight: 600;
+  padding: 11px 14px;
+  border-radius: 10px;
+}
+.google-btn:hover {
+  background: #f1f5ff;
+}
+.google-g {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from -45deg,
+    #ea4335 0 25%,
+    #fbbc05 0 50%,
+    #34a853 0 75%,
+    #4285f4 0 100%
+  );
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1;
+}
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 14px 0 2px;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}

@@ -24,6 +24,15 @@ export default function Login() {
 
   if (!loading && session && profile) return <Navigate to="/" replace />;
 
+  async function signInWithGoogle() {
+    setError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) setError(error.message);
+  }
+
   async function requestLink(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -65,22 +74,34 @@ export default function Login() {
             continue.
           </p>
         ) : (
-          <form onSubmit={requestLink}>
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-            {error && <div className="banner">{error}</div>}
-            <button className="primary" style={{ marginTop: 14, width: '100%' }} disabled={busy}>
-              {busy ? 'Sending…' : 'Send magic link'}
+          <>
+            <button
+              className="google-btn"
+              style={{ marginTop: 16, width: '100%' }}
+              onClick={() => void signInWithGoogle()}
+            >
+              <span className="google-g">G</span> Continue with Google
             </button>
-          </form>
+            <div className="or-divider">
+              <span>or</span>
+            </div>
+            <form onSubmit={requestLink}>
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+              {error && <div className="banner">{error}</div>}
+              <button className="primary" style={{ marginTop: 14, width: '100%' }} disabled={busy}>
+                {busy ? 'Sending…' : 'Send magic link'}
+              </button>
+            </form>
+          </>
         )}
       </div>
     </div>
