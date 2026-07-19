@@ -7,6 +7,7 @@ import {
 } from '../lib/photos';
 import type { Photo, Place } from '../lib/types';
 import { haversineMeters } from '../lib/geo';
+import { triggerGeocode } from '../lib/data';
 import AuthedImg from './AuthedImg';
 
 interface Props {
@@ -56,14 +57,19 @@ export default function UnassignedTray({ places, onChanged }: Props) {
   async function addFromDevice(files: FileList | null) {
     if (!files || files.length === 0) return;
     setBusy(true);
+    let added = 0;
     for (const f of Array.from(files)) {
       try {
-        await uploadPhoto(f); // no place — lands in the tray for assignment
+        const r = await uploadPhoto(f); // GPS auto-places it (worker), else tray
+        if (r.ok) added++;
       } catch {
         /* skip surfaced count below via refresh */
       }
     }
+    // Auto-name any place the photos just created (owner-only; ignored otherwise).
+    if (added > 0) await triggerGeocode().catch(() => undefined);
     await refresh();
+    onChanged(); // refresh the map so newly-placed photos appear
     setBusy(false);
   }
 

@@ -99,6 +99,19 @@ export async function hashIsDeleted(env: Env, sha256: string): Promise<boolean> 
   return ((await res.json()) as unknown[]).length > 0;
 }
 
+/** Nearest place within 30 km, else a new auto place at the point (RPC from
+ *  0004/0007). Used to auto-place a photo by its GPS when no place was given. */
+export async function assignPlace(env: Env, lat: number, lng: number): Promise<string | null> {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/assign_activity_place`, {
+    method: 'POST',
+    headers: restHeaders(env),
+    body: JSON.stringify({ p_lat: lat, p_lng: lng }),
+  });
+  if (!res.ok) return null;
+  const id = (await res.json()) as string | null;
+  return id;
+}
+
 export async function findPhotoByHash(env: Env, sha256: string): Promise<boolean> {
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/photos?select=id&sha256=eq.${sha256}&limit=1`,

@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { deletePlace, fetchPlaceDays, mergePlaces, updatePlace } from '../lib/data';
 import type { Place, PlaceDay } from '../lib/types';
+import {
+  MANUAL_CATEGORIES,
+  categoryIcon,
+  categoryLabel,
+  effectiveCategories,
+} from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { photosEnabled } from '../lib/photos';
 import AuthedImg from './AuthedImg';
@@ -86,6 +92,12 @@ export default function PlacePanel({
   async function saveHeader() {
     await patch({ name: name.trim() || place.name, country: country.trim() || null, auto: false });
     setEditingHeader(false);
+  }
+
+  async function toggleCat(slug: string) {
+    const cur = place.categories ?? [];
+    const next = cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug];
+    await patch({ categories: next });
   }
 
   async function mergeFrom(loserId: string) {
@@ -182,6 +194,37 @@ export default function PlacePanel({
         </div>
       ) : (
         place.review && <p className="body">{place.review}</p>
+      )}
+
+      {/* Category tags */}
+      <div className="cats">
+        {effectiveCategories(place).map((slug) => (
+          <span key={slug} className="cat-chip" title={categoryLabel(slug)}>
+            {categoryIcon(slug)} {categoryLabel(slug)}
+          </span>
+        ))}
+        {effectiveCategories(place).length === 0 && (
+          <span style={{ color: 'var(--muted)', fontSize: 12 }}>No tags yet</span>
+        )}
+      </div>
+      {canEdit && (
+        <details className="cat-edit">
+          <summary>Edit tags</summary>
+          <div className="cat-picker">
+            {MANUAL_CATEGORIES.map((c) => {
+              const on = (place.categories ?? []).includes(c.slug);
+              return (
+                <button
+                  key={c.slug}
+                  className={`cat-toggle ${on ? 'on' : ''}`}
+                  onClick={() => void toggleCat(c.slug)}
+                >
+                  {c.icon} {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </details>
       )}
 
       {canEdit &&

@@ -19,12 +19,13 @@ export interface PlaceCount {
   place_id: string;
   photo_count: number;
   route_count: number;
+  miles: number;
 }
 
 export async function fetchPlaceCounts(): Promise<Map<string, PlaceCount>> {
   const { data, error } = await supabase
     .from('place_counts')
-    .select('place_id, photo_count, route_count');
+    .select('place_id, photo_count, route_count, miles');
   if (error) throw error;
   const map = new Map<string, PlaceCount>();
   for (const r of (data ?? []) as PlaceCount[]) map.set(r.place_id, r);

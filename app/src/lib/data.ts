@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay } from './types';
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, categories, activity_categories, created_by, created_at';
 const ENTRY_COLS = 'id, place_id, kind, title, body, rating, url, date, created_by, created_at';
 
 export async function fetchPlaces(): Promise<Place[]> {
@@ -37,6 +37,7 @@ export async function updatePlace(
     cover_photo_id?: string | null;
     rating?: number | null;
     review?: string | null;
+    categories?: string[];
   },
 ): Promise<Place> {
   const { data, error } = await supabase

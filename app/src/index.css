@@ -1085,3 +1085,84 @@ a {
 .maplibregl-popup-content .popup-chips {
   margin: 4px 10px 10px;
 }
+
+/* ---------- Category filter bar (map) ---------- */
+.cat-filter {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  gap: 7px;
+  padding: 6px 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cat-filter::-webkit-scrollbar {
+  display: none;
+}
+.cat-pill {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-soft);
+}
+.cat-pill.on {
+  background: var(--grad);
+  color: #04121f;
+  border-color: transparent;
+  font-weight: 600;
+}
+/* Nudge the add-bar below the filter row */
+.add-bar {
+  top: calc(94px + env(safe-area-inset-top));
+}
+
+/* ---------- Category chips + editor (place card) ---------- */
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 6px;
+}
+.cat-chip {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border-soft);
+}
+.cat-edit summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+  margin: 4px 0;
+}
+.cat-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.cat-toggle {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  opacity: 0.6;
+}
+.cat-toggle.on {
+  opacity: 1;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.popup-stars {
+  color: #ffd23f;
+  font-size: 12px;
+  margin: 0 10px 2px;
+  letter-spacing: 1px;
+}

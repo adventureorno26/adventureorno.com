@@ -9,6 +9,7 @@
 // home-zone → resize 2400/400 (strips EXIF) → R2 write → photos row.
 
 import {
+  assignPlace,
   deletePhotoRow,
   findPhotoByHash,
   getHomeZone,
@@ -38,7 +39,11 @@ function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): num
 
 function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const allowed = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
-  const allow = origin && allowed.includes(origin) ? origin : allowed[0];
+  // Echo the caller's origin if it's an allowed domain OR any adventureorno
+  // Cloudflare Pages URL (the prod alias + preview deploys), so uploads work
+  // whether the app is opened from adventureorno.com or *.pages.dev.
+  const okPages = !!origin && /^https:\/\/([a-z0-9-]+\.)?adventureorno\.pages\.dev$/.test(origin);
+  const allow = origin && (allowed.includes(origin) || okPages) ? origin : allowed[0];
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Headers': 'authorization, content-type',
@@ -153,6 +158,10 @@ async function runPipeline(
     return { status: 200, body: { skipped: 'undecodable' } };
   }
 
+  // Auto-place the photo by its GPS when the caller didn't pick a place.
+  let finalPlaceId = placeId;
+  if (!finalPlaceId) finalPlaceId = await assignPlace(env, lat!, lng!);
+
   const uuid = crypto.randomUUID();
   const r2Key = `photos/${uuid}.jpg`;
   const thumbKey = `thumbs/${uuid}.jpg`;
@@ -164,7 +173,7 @@ async function runPipeline(
   });
 
   const id = await insertPhoto(env, {
-    place_id: placeId,
+    place_id: finalPlaceId,
     lat: lat!,
     lng: lng!,
     // Day-view uploads pin the photo to a chosen date; otherwise use EXIF.

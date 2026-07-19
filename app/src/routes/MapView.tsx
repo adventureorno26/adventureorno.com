@@ -7,6 +7,8 @@ import { createPlace, fetchPlaces } from '../lib/data';
 import { fetchPhotoObjectUrl } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
+import { CATEGORIES, categoryIcon, effectiveCategories, primaryCategory } from '../lib/categories';
+import { makePinImage } from '../lib/pins';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
@@ -33,7 +35,10 @@ function toFeatureCollection(
           last_visit: p.last_visit ?? '',
           photos: c?.photo_count ?? 0,
           routes: c?.route_count ?? 0,
+          miles: c?.miles ?? 0,
+          rating: p.rating ?? 0,
           cover: p.cover_photo_id ?? '',
+          primary: primaryCategory(p),
         },
       };
     }),
@@ -54,6 +59,7 @@ export default function MapView() {
   const [banner, setBanner] = useState<string | null>(null);
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
+  const [filterCat, setFilterCat] = useState<string | null>(null);
 
   const [trayNonce, setTrayNonce] = useState(0);
 
@@ -147,7 +153,17 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
-      // Glowing halo beneath each place, then the crisp beacon on top.
+      // Category pin images (one per category + a default).
+      for (const c of CATEGORIES) {
+        if (!map.hasImage(`pin-${c.slug}`)) {
+          map.addImage(`pin-${c.slug}`, makePinImage(c.icon), { pixelRatio: 2 });
+        }
+      }
+      if (!map.hasImage('pin-default')) {
+        map.addImage('pin-default', makePinImage('📍'), { pixelRatio: 2 });
+      }
+
+      // Glow beneath each place.
       map.addLayer({
         id: 'point-glow',
         type: 'circle',
@@ -155,21 +171,23 @@ export default function MapView() {
         filter: ['!', ['has', 'point_count']],
         paint: {
           'circle-color': '#22d3ee',
-          'circle-opacity': 0.35,
+          'circle-opacity': 0.22,
           'circle-blur': 1,
-          'circle-radius': 15,
+          'circle-radius': 16,
+          'circle-translate': [0, -8],
         },
       });
+      // Category pin per place.
       map.addLayer({
-        id: 'unclustered-point',
-        type: 'circle',
+        id: 'place-pins',
+        type: 'symbol',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': '#22d3ee',
-          'circle-radius': 6.5,
-          'circle-stroke-width': 2.5,
-          'circle-stroke-color': '#eaf7ff',
+        layout: {
+          'icon-image': ['concat', 'pin-', ['get', 'primary']],
+          'icon-size': 0.9,
+          'icon-anchor': 'bottom',
+          'icon-allow-overlap': true,
         },
       });
 
@@ -190,7 +208,7 @@ export default function MapView() {
     });
 
     // Select a place on click.
-    map.on('click', 'unclustered-point', (e) => {
+    map.on('click', 'place-pins', (e) => {
       const f = e.features?.[0] as MapGeoJSONFeature | undefined;
       const id = f?.properties?.id as string | undefined;
       if (id) navigate(`/place/${id}`);
@@ -200,7 +218,7 @@ export default function MapView() {
     map.on('click', (e) => {
       if (!addModeRef.current) return;
       const hit = map.queryRenderedFeatures(e.point, {
-        layers: ['clusters', 'unclustered-point'],
+        layers: ['clusters', 'place-pins'],
       });
       if (hit.length > 0) return; // clicked an existing feature, not empty map
       void handleAddAt(e.lngLat.lng, e.lngLat.lat);
@@ -210,7 +228,7 @@ export default function MapView() {
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
     popupRef.current = popup;
 
-    map.on('mouseenter', 'unclustered-point', (e) => {
+    map.on('mouseenter', 'place-pins', (e) => {
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
@@ -218,13 +236,23 @@ export default function MapView() {
       const dates = [p.first_visit, p.last_visit].filter(Boolean).join(' → ') || 'No dates yet';
       const coverId = p.cover as string | undefined;
       const at = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+      const rating = Number(p.rating) || 0;
+      const routes = Number(p.routes) || 0;
+      const miles = Number(p.miles) || 0;
+      const stars = rating
+        ? `<div class="popup-stars">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</div>`
+        : '';
+      const routeChip = routes
+        ? `<span class="chip">🥾 ${routes}${miles ? ` · ${miles} mi` : ''}</span>`
+        : '';
       const body = (photoHtml: string) => `
         ${photoHtml}
         <div class="popup-name">${escapeHtml(p.name)}</div>
+        ${stars}
         <div class="popup-meta">${escapeHtml(dates)}</div>
         <div class="popup-chips">
           <span class="chip">📷 ${Number(p.photos) || 0}</span>
-          <span class="chip">🥾 ${Number(p.routes) || 0}</span>
+          ${routeChip}
         </div>`;
       popup.setLngLat(at).setHTML(body('')).addTo(map);
 
@@ -245,7 +273,7 @@ export default function MapView() {
             .catch(() => undefined);
       }
     });
-    map.on('mouseleave', 'unclustered-point', () => {
+    map.on('mouseleave', 'place-pins', () => {
       map.getCanvas().style.cursor = '';
       popup.remove();
     });
@@ -259,10 +287,20 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Places matching the active category filter (or all).
+  const visiblePlaces = filterCat
+    ? places.filter((p) => effectiveCategories(p).includes(filterCat))
+    : places;
+
+  // Categories actually present in the data, for the filter bar.
+  const availableCats = CATEGORIES.filter((c) =>
+    places.some((p) => effectiveCategories(p).includes(c.slug)),
+  );
+
   // Keep the source in sync once both map and data are ready.
   useEffect(() => {
-    if (ready) syncSource(places);
-  }, [ready, places, syncSource]);
+    if (ready) syncSource(visiblePlaces);
+  }, [ready, visiblePlaces, syncSource]);
 
   async function handleAddAt(lng: number, lat: number) {
     setAddMode(false);
@@ -350,6 +388,26 @@ export default function MapView() {
 
       <StatsBar places={places} addMode={addMode} onToggleAdd={() => setAddMode((v) => !v)} />
 
+      {availableCats.length > 0 && (
+        <div className="cat-filter">
+          <button
+            className={`cat-pill ${filterCat === null ? 'on' : ''}`}
+            onClick={() => setFilterCat(null)}
+          >
+            All
+          </button>
+          {availableCats.map((c) => (
+            <button
+              key={c.slug}
+              className={`cat-pill ${filterCat === c.slug ? 'on' : ''}`}
+              onClick={() => setFilterCat((cur) => (cur === c.slug ? null : c.slug))}
+            >
+              {categoryIcon(c.slug)} {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {addMode && (
         <div className="add-bar">
           <input
@@ -382,7 +440,18 @@ export default function MapView() {
       <UnassignedTray
         key={trayNonce}
         places={places}
-        onChanged={() => setTrayNonce((n) => n + 1)}
+        onChanged={() => {
+          // A photo may have auto-created a place — refresh the map data.
+          fetchPlaces()
+            .then(setPlaces)
+            .catch(() => undefined);
+          fetchPlaceCounts()
+            .then((c) => {
+              countsRef.current = c;
+            })
+            .catch(() => undefined);
+          setTrayNonce((n) => n + 1);
+        }}
       />
 
       {selectedPlace && (

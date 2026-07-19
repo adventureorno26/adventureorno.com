@@ -31,6 +31,8 @@ export interface Place {
   rating: number | null; // 1..5 overall place rating
   review: string | null; // overall place review
   is_home: boolean;
+  categories: string[]; // manual tags
+  activity_categories: string[]; // auto tags from Strava
   created_by: string | null;
   created_at: string;
 }
