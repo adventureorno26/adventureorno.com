@@ -41,6 +41,7 @@ export interface PlaceDay {
   entries: number;
   photos: number;
   pings: number;
+  label: string | null; // Strava activity name for that day, if any
 }
 
 export type PhotoSource = 'shortcut' | 'manual';

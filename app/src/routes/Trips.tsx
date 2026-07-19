@@ -86,9 +86,9 @@ export default function Trips() {
 
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
-      <p>
-        <Link to="/">← Back to map</Link>
-      </p>
+      <Link className="back-bar" to="/">
+        <span>Map</span>
+      </Link>
       <h1>Trips</h1>
       <p style={{ color: 'var(--muted)' }}>
         A trip is a date range. Places automatically belong to it when their first visit falls

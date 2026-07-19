@@ -47,8 +47,26 @@ function HomeZoneCard() {
     <div className="card">
       <b>Home exclusion zone</b>
       <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 8px' }}>
-        Photos and pings within this radius are never stored (business rule #1). Strava
-        Hike/Walk/Run are the only exception.
+        A fixed spot — it does <b>not</b> follow you around. Photos and pings within this radius are
+        never stored (Strava Hike/Walk/Run are the only exception). Set it once from where you live.
+      </div>
+      <div className="btn-row" style={{ marginTop: 0, marginBottom: 4 }}>
+        <button
+          onClick={() => {
+            setMsg('Getting your location…');
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                setLat(pos.coords.latitude.toFixed(6));
+                setLng(pos.coords.longitude.toFixed(6));
+                setMsg('Filled in your current location — tap Save home zone to confirm.');
+              },
+              () => setMsg('Could not get your location. Allow location access and try again.'),
+              { enableHighAccuracy: true },
+            );
+          }}
+        >
+          📍 Use my current location
+        </button>
       </div>
       <div className="field-row">
         <div>
@@ -226,9 +244,9 @@ export default function Settings() {
 
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
-      <p>
-        <Link to="/">← Back to map</Link>
-      </p>
+      <Link className="back-bar" to="/">
+        <span>Map</span>
+      </Link>
       <h1>Settings</h1>
       <p style={{ color: 'var(--muted)' }}>
         Signed in as <b>{profile?.display_name ?? 'you'}</b> · role <b>{profile?.role}</b>
@@ -250,12 +268,6 @@ export default function Settings() {
           <StravaCard ownerId={profile.id} />
         </>
       )}
-
-      <h2 style={{ marginTop: 28 }}>Coming soon</h2>
-      <ul style={{ color: 'var(--muted)', lineHeight: 1.7 }}>
-        <li>Invites &amp; roles, trips (Phase 5)</li>
-        <li>Timeline import (Phase 6)</li>
-      </ul>
     </div>
   );
 }

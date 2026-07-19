@@ -997,3 +997,91 @@ a {
     }
   }
 }
+
+/* ---------- Visit row (activity name + date) ---------- */
+.visit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.visit-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.visit-date.sub {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.visit-row .visit-arrow {
+  margin-left: auto;
+}
+
+/* ---------- Modern back button (big tap target) ---------- */
+.back-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px 8px 10px;
+  margin: 0 0 8px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-soft);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  max-width: 100%;
+}
+.back-bar::before {
+  content: '‹';
+  font-size: 22px;
+  line-height: 1;
+  color: var(--accent);
+}
+.back-bar:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.back-bar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .panel .close {
+    width: 40px;
+    height: 40px;
+    font-size: 26px;
+  }
+}
+
+/* ---------- Map popup cover photo ---------- */
+.maplibregl-popup-content {
+  padding: 0 !important;
+  overflow: hidden;
+  border-radius: 12px !important;
+  width: 200px;
+}
+.maplibregl-popup-content .popup-photo {
+  width: 100%;
+  height: 116px;
+  object-fit: cover;
+  display: block;
+}
+.maplibregl-popup-content .popup-name {
+  margin: 8px 10px 0;
+}
+.maplibregl-popup-content .popup-meta {
+  margin: 0 10px;
+}
+.maplibregl-popup-content .popup-chips {
+  margin: 4px 10px 10px;
+}

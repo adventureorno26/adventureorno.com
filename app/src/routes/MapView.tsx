@@ -4,6 +4,7 @@ import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces } from '../lib/data';
+import { fetchPhotoObjectUrl } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import type { Place } from '../lib/types';
@@ -32,6 +33,7 @@ function toFeatureCollection(
           last_visit: p.last_visit ?? '',
           photos: c?.photo_count ?? 0,
           routes: c?.route_count ?? 0,
+          cover: p.cover_photo_id ?? '',
         },
       };
     }),
@@ -44,6 +46,7 @@ export default function MapView() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
+  const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → object URL cache
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -213,17 +216,34 @@ export default function MapView() {
       if (!f) return;
       const p = f.properties as Record<string, string>;
       const dates = [p.first_visit, p.last_visit].filter(Boolean).join(' → ') || 'No dates yet';
-      const html = `
+      const coverId = p.cover as string | undefined;
+      const at = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+      const body = (photoHtml: string) => `
+        ${photoHtml}
         <div class="popup-name">${escapeHtml(p.name)}</div>
         <div class="popup-meta">${escapeHtml(dates)}</div>
         <div class="popup-chips">
           <span class="chip">📷 ${Number(p.photos) || 0}</span>
           <span class="chip">🥾 ${Number(p.routes) || 0}</span>
         </div>`;
-      popup
-        .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
-        .setHTML(html)
-        .addTo(map);
+      popup.setLngLat(at).setHTML(body('')).addTo(map);
+
+      // Load the cover photo (cached) and slot it into the popup once ready.
+      if (coverId) {
+        const cached = coverUrlRef.current.get(coverId);
+        const show = (url: string) => {
+          if (popup.isOpen())
+            popup.setHTML(body(`<img class="popup-photo" src="${url}" alt="" />`));
+        };
+        if (cached) show(cached);
+        else
+          fetchPhotoObjectUrl(coverId, 'thumb')
+            .then((url) => {
+              coverUrlRef.current.set(coverId, url);
+              show(url);
+            })
+            .catch(() => undefined);
+      }
     });
     map.on('mouseleave', 'unclustered-point', () => {
       map.getCanvas().style.cursor = '';

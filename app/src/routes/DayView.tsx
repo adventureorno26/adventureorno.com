@@ -141,9 +141,9 @@ export default function DayView() {
     <div className="routes-root">
       <div ref={containerRef} className="map-canvas" />
       <aside className="routes-panel">
-        <p>
-          <Link to={`/place/${id}`}>← {place?.name ?? 'Place'}</Link>
-        </p>
+        <Link className="back-bar" to={`/place/${id}`}>
+          <span>{place?.name ?? 'Place'}</span>
+        </Link>
         <h2 style={{ margin: '4px 0' }}>{date ? dayLabel(date) : ''}</h2>
 
         {/* Strava routes this day */}

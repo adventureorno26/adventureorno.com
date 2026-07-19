@@ -59,9 +59,9 @@ export default function ImportTimeline() {
 
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
-      <p>
-        <Link to="/settings">← Back to settings</Link>
-      </p>
+      <Link className="back-bar" to="/settings">
+        <span>Settings</span>
+      </Link>
       <h1>Import Google Timeline</h1>
       <p style={{ color: 'var(--muted)', lineHeight: 1.6 }}>
         Optional. If you had Google Maps Timeline / Location History, export it (Google Takeout →

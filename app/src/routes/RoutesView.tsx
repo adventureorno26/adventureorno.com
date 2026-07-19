@@ -105,9 +105,9 @@ export default function RoutesView() {
     <div className="routes-root">
       <div ref={containerRef} className="map-canvas" />
       <aside className="routes-panel">
-        <p>
-          <Link to={`/place/${id}`}>← {place?.name ?? 'Place'}</Link>
-        </p>
+        <Link className="back-bar" to={`/place/${id}`}>
+          <span>{place?.name ?? 'Place'}</span>
+        </Link>
         <h2>
           Routes {activities.length > 0 && <span className="muted">({activities.length})</span>}
         </h2>

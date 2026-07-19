@@ -241,8 +241,19 @@ export default function PlacePanel({
         <div className="visits">
           {days.map((d) => (
             <Link key={d.day} className="visit-row" to={`/place/${place.id}/day/${d.day}`}>
-              <span className="visit-date">{dayLabel(d.day)}</span>
-              <span className="visit-sum">{daySummary(d)}</span>
+              <span className="visit-main">
+                {d.label ? (
+                  <>
+                    <span className="visit-name">{d.label}</span>
+                    <span className="visit-date sub">{dayLabel(d.day)}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="visit-date">{dayLabel(d.day)}</span>
+                    <span className="visit-date sub">{daySummary(d)}</span>
+                  </>
+                )}
+              </span>
               <span className="visit-arrow">›</span>
             </Link>
           ))}
