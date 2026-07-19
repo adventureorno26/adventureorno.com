@@ -154,8 +154,17 @@ export async function assignPhotoToPlace(photoId: string, placeId: string | null
 
 async function accessToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('Not signed in');
+  let session = data.session;
+  // Proactively refresh if the token is missing or within 2 min of expiry — a
+  // stale token makes the Worker reject the upload with 401 "unauthenticated"
+  // (common on mobile PWAs where background auto-refresh is suspended).
+  const expMs = session?.expires_at ? session.expires_at * 1000 : 0;
+  if (!session || expMs - Date.now() < 120_000) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    if (refreshed.session) session = refreshed.session;
+  }
+  const token = session?.access_token;
+  if (!token) throw new Error('Your session expired — please sign out and sign in again.');
   return token;
 }
 
@@ -216,6 +225,9 @@ export async function uploadPhoto(
     body: form,
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Your session expired — please sign out and sign in again.');
+    }
     const detail = await res.text().catch(() => '');
     throw new Error(`Upload failed (${res.status})${detail ? `: ${detail.slice(0, 120)}` : ''}`);
   }
