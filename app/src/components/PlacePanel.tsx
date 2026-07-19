@@ -53,20 +53,20 @@ export default function PlacePanel({
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   const [days, setDays] = useState<PlaceDay[] | null>(null);
-  const [editingHeader, setEditingHeader] = useState(false);
+  const [editingName, setEditingName] = useState(false);
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Header edit fields
   const [name, setName] = useState(place.name);
-  const [country, setCountry] = useState(place.country ?? '');
-  // Overall review (rating saves immediately; review has a Save button)
   const [review, setReview] = useState(place.review ?? '');
+  const [first, setFirst] = useState(place.first_visit ?? '');
+  const [last, setLast] = useState(place.last_visit ?? '');
 
   useEffect(() => {
     setName(place.name);
-    setCountry(place.country ?? '');
     setReview(place.review ?? '');
+    setFirst(place.first_visit ?? '');
+    setLast(place.last_visit ?? '');
   }, [place]);
 
   useEffect(() => {
@@ -89,9 +89,14 @@ export default function PlacePanel({
     }
   }
 
-  async function saveHeader() {
-    await patch({ name: name.trim() || place.name, country: country.trim() || null, auto: false });
-    setEditingHeader(false);
+  async function saveName() {
+    setEditingName(false);
+    if (name.trim() && name.trim() !== place.name) await patch({ name: name.trim(), auto: false });
+    else setName(place.name);
+  }
+
+  async function saveDates() {
+    await patch({ first_visit: first || null, last_visit: last || null });
   }
 
   async function toggleCat(slug: string) {
@@ -126,6 +131,33 @@ export default function PlacePanel({
 
   const hasHero = Boolean(place.cover_photo_id) && photosEnabled();
 
+  const titleEl =
+    editingName && canEdit ? (
+      <input
+        className="title-input"
+        value={name}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => void saveName()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void saveName();
+          if (e.key === 'Escape') {
+            setName(place.name);
+            setEditingName(false);
+          }
+        }}
+      />
+    ) : (
+      <span
+        className={canEdit ? 'title-editable' : undefined}
+        onClick={() => canEdit && setEditingName(true)}
+        title={canEdit ? 'Tap to rename' : undefined}
+      >
+        {place.name}
+        {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
+      </span>
+    );
+
   return (
     <aside className="panel">
       {hasHero ? (
@@ -135,22 +167,12 @@ export default function PlacePanel({
             ×
           </button>
           <div className="hero-title">
-            <h2>
-              {place.name}
-              {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
-            </h2>
+            <h2>{titleEl}</h2>
           </div>
         </div>
       ) : (
         <div className="panel-head">
-          <h2>
-            {place.name}
-            {place.auto && !place.is_home && (
-              <span className="auto-badge" title="Auto-created by clustering">
-                auto
-              </span>
-            )}
-          </h2>
+          <h2>{titleEl}</h2>
           <button className="close" onClick={onClose} aria-label="Close">
             ×
           </button>
@@ -161,6 +183,31 @@ export default function PlacePanel({
         {place.visit_count > 0 &&
           ` · ${place.visit_count} day${place.visit_count > 1 ? 's' : ''} here`}
       </div>
+
+      {/* Trip dates — editable so multi-day visits aren't cut to one activity */}
+      {canEdit ? (
+        <div className="date-edit">
+          <input
+            type="date"
+            value={first}
+            onChange={(e) => setFirst(e.target.value)}
+            onBlur={() => void saveDates()}
+          />
+          <span className="date-arrow">→</span>
+          <input
+            type="date"
+            value={last}
+            onChange={(e) => setLast(e.target.value)}
+            onBlur={() => void saveDates()}
+          />
+        </div>
+      ) : (
+        (place.first_visit || place.last_visit) && (
+          <div className="meta">
+            {[place.first_visit, place.last_visit].filter(Boolean).join(' → ')}
+          </div>
+        )
+      )}
 
       {error && <div className="banner">{error}</div>}
 
@@ -227,29 +274,14 @@ export default function PlacePanel({
         </details>
       )}
 
-      {canEdit &&
-        (editingHeader ? (
-          <div className="entry">
-            <label>Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} />
-            <label>Country</label>
-            <input value={country} onChange={(e) => setCountry(e.target.value)} />
-            <div className="btn-row">
-              <button className="primary" onClick={() => void saveHeader()}>
-                Save
-              </button>
-              <button onClick={() => setEditingHeader(false)}>Cancel</button>
-            </div>
-          </div>
-        ) : (
-          <div className="btn-row">
-            <button onClick={() => setEditingHeader(true)}>Edit</button>
-            <button onClick={() => setMerging((v) => !v)}>Merge…</button>
-            <button className="danger" onClick={() => void removePlace()}>
-              Delete
-            </button>
-          </div>
-        ))}
+      {canEdit && (
+        <div className="btn-row">
+          <button onClick={() => setMerging((v) => !v)}>Merge…</button>
+          <button className="danger" onClick={() => void removePlace()}>
+            Delete
+          </button>
+        </div>
+      )}
 
       {merging && (
         <div className="entry">

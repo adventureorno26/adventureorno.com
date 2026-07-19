@@ -112,6 +112,15 @@ export async function assignPlace(env: Env, lat: number, lng: number): Promise<s
   return id;
 }
 
+/** Recompute a place's visit dates / cover after adding a photo (RPC). */
+export async function recomputePlace(env: Env, placeId: string): Promise<void> {
+  await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/recompute_place_stats`, {
+    method: 'POST',
+    headers: restHeaders(env),
+    body: JSON.stringify({ p_place: placeId }),
+  }).catch(() => undefined);
+}
+
 export async function findPhotoByHash(env: Env, sha256: string): Promise<boolean> {
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/photos?select=id&sha256=eq.${sha256}&limit=1`,

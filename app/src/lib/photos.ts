@@ -3,8 +3,69 @@
 // so <img src> can't carry the session bearer — we fetch bytes with an
 // Authorization header and hand back an object URL.
 
+import exifr from 'exifr';
 import { supabase } from './supabase';
 import type { Photo } from './types';
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+interface Prepared {
+  blob: Blob;
+  name: string;
+  lat?: number;
+  lng?: number;
+  takenAt?: string;
+}
+
+/** iPhone photos are HEIC, which the Worker can't decode. Read GPS/date first,
+ *  then convert HEIC/PNG/etc. to JPEG in the browser (Safari decodes HEIC). */
+async function prepareUpload(file: File): Promise<Prepared> {
+  let lat: number | undefined;
+  let lng: number | undefined;
+  let takenAt: string | undefined;
+  try {
+    const meta = (await exifr.parse(file, {
+      gps: true,
+      pick: ['DateTimeOriginal', 'CreateDate'],
+    })) as Record<string, unknown> | undefined;
+    if (meta) {
+      if (typeof meta.latitude === 'number') lat = meta.latitude;
+      if (typeof meta.longitude === 'number') lng = meta.longitude;
+      const dt = (meta.DateTimeOriginal ?? meta.CreateDate) as Date | undefined;
+      if (dt instanceof Date && !isNaN(dt.getTime())) takenAt = dt.toISOString();
+    }
+  } catch {
+    /* no EXIF */
+  }
+
+  if (file.type === 'image/jpeg') return { blob: file, name: file.name, lat, lng, takenAt };
+
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await loadImage(url);
+    URL.revokeObjectURL(url);
+    const max = 2400;
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
+    if (blob) return { blob, name: 'photo.jpg', lat, lng, takenAt };
+  } catch {
+    /* fall back to the original bytes */
+  }
+  return { blob: file, name: file.name, lat, lng, takenAt };
+}
 
 const PHOTO_COLS =
   'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at';
@@ -98,13 +159,18 @@ export async function uploadPhoto(
 ): Promise<UploadResult> {
   if (!photosEnabled()) throw new Error('Photo uploads are not configured yet.');
   const token = await accessToken();
+  const prep = await prepareUpload(file);
+  const lat = opts.lat ?? prep.lat;
+  const lng = opts.lng ?? prep.lng;
+  const takenAt = opts.takenAt ?? prep.takenAt;
+
   const form = new FormData();
-  form.set('photo', file);
+  form.set('photo', new File([prep.blob], prep.name, { type: 'image/jpeg' }));
   if (opts.placeId) form.set('place_id', opts.placeId);
-  if (opts.lat != null) form.set('lat', String(opts.lat));
-  if (opts.lng != null) form.set('lng', String(opts.lng));
+  if (lat != null) form.set('lat', String(lat));
+  if (lng != null) form.set('lng', String(lng));
   if (opts.override) form.set('override', 'true');
-  if (opts.takenAt) form.set('taken_at', opts.takenAt);
+  if (takenAt) form.set('taken_at', takenAt);
 
   const res = await fetch(`${GATEWAY}/upload`, {
     method: 'POST',

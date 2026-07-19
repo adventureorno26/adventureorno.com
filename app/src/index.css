@@ -1367,3 +1367,102 @@ a {
   width: 100%;
   text-align: left;
 }
+
+/* ---------- Centered stats + gear nav ---------- */
+.stats-bar {
+  justify-content: center;
+}
+.stats-bar .spacer {
+  display: none;
+}
+.stats-bar .actions {
+  position: absolute;
+  right: 14px;
+  top: calc(10px + env(safe-area-inset-top));
+  pointer-events: auto;
+}
+.gear-btn {
+  font-size: 17px;
+  line-height: 1;
+  padding: 8px 11px;
+}
+@media (max-width: 560px) {
+  .stats-bar .actions {
+    position: static;
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .stats-bar {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+/* ---------- Tag filter (map) ---------- */
+.tag-filter {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  left: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+}
+.tag-filter select {
+  width: auto;
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.tag-filter select:focus {
+  box-shadow: none;
+}
+.tag-filter-ico {
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .tag-filter {
+    top: auto;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---------- Inline title + editable dates (card) ---------- */
+.title-editable {
+  cursor: text;
+  border-radius: 6px;
+  padding: 0 2px;
+}
+.title-editable:hover {
+  background: var(--accent-soft);
+}
+.title-input {
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+.date-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+.date-edit input {
+  width: auto;
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.date-arrow {
+  color: var(--muted);
+}

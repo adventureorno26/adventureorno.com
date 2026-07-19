@@ -12,6 +12,7 @@ import {
   assignPlace,
   deletePhotoRow,
   findPhotoByHash,
+  recomputePlace,
   getHomeZone,
   getPhoto,
   hashIsDeleted,
@@ -139,10 +140,13 @@ async function runPipeline(
 
   // Single ordered decision (rules #1, #5, #6). On /upload a deliberate override
   // clears screenshot/home-zone warnings; deletion is never overridable.
+  // Manual uploads are deliberate — only require coordinates (a converted iPhone
+  // photo has no camera EXIF, so we don't apply the screenshot/make-model gate).
+  // The automated Shortcut path keeps the full gate.
   const skip = ingestDecision({
     isDeleted,
     isDuplicate,
-    gate: screenshotGate(exif, hasCoords),
+    gate: allowOverride ? (hasCoords ? null : 'no_gps') : screenshotGate(exif, hasCoords),
     hasCoords,
     inZone,
     manual: allowOverride,
@@ -186,6 +190,10 @@ async function runPipeline(
     uploaded_by: uploadedBy,
     source,
   });
+
+  // Keep the place's visit dates + cover fresh (photos over several days extend
+  // the trip length).
+  if (finalPlaceId) await recomputePlace(env, finalPlaceId);
 
   return { status: 200, body: { ok: true, id } };
 }

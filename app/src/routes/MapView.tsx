@@ -7,6 +7,7 @@ import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
 import { uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
+import { CATEGORIES, effectiveCategories } from '../lib/categories';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
@@ -52,6 +53,7 @@ export default function MapView() {
   const [banner, setBanner] = useState<string | null>(null);
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
+  const [filterCat, setFilterCat] = useState<string | null>(null);
 
   const [trayNonce, setTrayNonce] = useState(0);
 
@@ -240,10 +242,18 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Filter the map by the selected tag (default: all places).
+  const visiblePlaces = filterCat
+    ? places.filter((p) => effectiveCategories(p).includes(filterCat))
+    : places;
+  const availableCats = CATEGORIES.filter((c) =>
+    places.some((p) => effectiveCategories(p).includes(c.slug)),
+  );
+
   // Keep the source in sync once both map and data are ready.
   useEffect(() => {
-    if (ready) syncSource(places);
-  }, [ready, places, syncSource]);
+    if (ready) syncSource(visiblePlaces);
+  }, [ready, visiblePlaces, syncSource]);
 
   async function handleAddAt(lng: number, lat: number) {
     setAddMode(false);
@@ -368,6 +378,20 @@ export default function MapView() {
         onToggleAdd={() => setAddMode((v) => !v)}
         onAddPhotos={handleAddPhotos}
       />
+
+      {availableCats.length > 0 && (
+        <div className="tag-filter">
+          <span className="tag-filter-ico">🔍</span>
+          <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
+            <option value="">All places</option>
+            {availableCats.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.icon} {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {addMode && (
         <div className="add-bar">

@@ -125,7 +125,9 @@ export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: 
           <button>Trips</button>
         </Link>
         <Link to="/settings">
-          <button>Settings</button>
+          <button className="gear-btn" aria-label="Settings" title="Settings">
+            ⚙
+          </button>
         </Link>
       </div>
     </div>

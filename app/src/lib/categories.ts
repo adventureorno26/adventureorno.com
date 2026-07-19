@@ -12,6 +12,7 @@ export interface Category {
 
 export const CATEGORIES: Category[] = [
   { slug: 'hiking', label: 'Hiking', icon: '🥾', auto: true },
+  { slug: 'walking', label: 'Walking', icon: '🚶', auto: true },
   { slug: 'running', label: 'Running', icon: '🏃', auto: true },
   { slug: 'biking', label: 'Biking', icon: '🚴', auto: true },
   { slug: 'jeeping', label: 'Jeeping', icon: '🚙' },
