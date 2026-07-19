@@ -617,7 +617,13 @@ export default function MapView() {
         onAddPhotos={handleAddPhotos}
       />
 
-      <MapSearch onPick={handleSearchPick} />
+      <MapSearch
+        onPick={handleSearchPick}
+        getProximity={() => {
+          const c = mapRef.current?.getCenter();
+          return c ? [c.lng, c.lat] : undefined;
+        }}
+      />
 
       <div className="tag-filter">
         <span className="tag-filter-ico">🔍</span>

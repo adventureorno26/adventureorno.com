@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { searchGeocode, type SearchResult } from '../lib/maptiler';
 
-/** Search box on the map: type a location → suggestions → pick to add a card. */
-export default function MapSearch({ onPick }: { onPick: (r: SearchResult) => void }) {
+/** Search box on the map: type a location → suggestions → pick to add a card.
+ *  getProximity biases results toward the current map view for accuracy. */
+export default function MapSearch({
+  onPick,
+  getProximity,
+}: {
+  onPick: (r: SearchResult) => void;
+  getProximity?: () => [number, number] | undefined;
+}) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -15,10 +22,11 @@ export default function MapSearch({ onPick }: { onPick: (r: SearchResult) => voi
       return;
     }
     timer.current = window.setTimeout(async () => {
-      setResults(await searchGeocode(q));
+      setResults(await searchGeocode(q, getProximity?.()));
       setOpen(true);
     }, 280);
     return () => window.clearTimeout(timer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
   function choose(r: SearchResult) {

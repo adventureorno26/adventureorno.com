@@ -58,12 +58,25 @@ export interface SearchResult extends ForwardResult {
   label: string; // full "place_name" for the dropdown
 }
 
-/** Autocomplete search → up to 5 location suggestions (map "search to add"). */
-export async function searchGeocode(query: string): Promise<SearchResult[]> {
+/** Autocomplete search → location suggestions (map "search to add"). Biases to
+ *  the current map view (proximity) for accuracy, allows typos, and returns more
+ *  options. */
+export async function searchGeocode(
+  query: string,
+  proximity?: [number, number],
+): Promise<SearchResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
   try {
-    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${KEY}&limit=5&autocomplete=true`;
+    const params = new URLSearchParams({
+      key: KEY,
+      limit: '10',
+      autocomplete: 'true',
+      fuzzyMatch: 'true',
+    });
+    // Rank results near where the user is looking on the map.
+    if (proximity) params.set('proximity', `${proximity[0]},${proximity[1]}`);
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?${params.toString()}`;
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = (await res.json()) as {
@@ -101,11 +114,16 @@ export async function searchGeocode(query: string): Promise<SearchResult[]> {
  * Forward-geocode a typed address / place name into coordinates + a name.
  * Powers "add a place manually" (no map click needed). Returns null on failure.
  */
-export async function forwardGeocode(query: string): Promise<ForwardResult | null> {
+export async function forwardGeocode(
+  query: string,
+  proximity?: [number, number],
+): Promise<ForwardResult | null> {
   const q = query.trim();
   if (!q) return null;
   try {
-    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?key=${KEY}&limit=1`;
+    const params = new URLSearchParams({ key: KEY, limit: '1', fuzzyMatch: 'true' });
+    if (proximity) params.set('proximity', `${proximity[0]},${proximity[1]}`);
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?${params.toString()}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = (await res.json()) as {
