@@ -352,7 +352,7 @@ export default function MapView() {
       const gps = await readGps(f);
       if (gps) {
         try {
-          const r = await uploadPhoto(f);
+          const r = await uploadPhoto(f, { lat: gps.lat, lng: gps.lng });
           if (r.ok) added++;
         } catch {
           /* ignore per-file */

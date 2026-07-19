@@ -94,7 +94,18 @@ export default function RoutesView() {
           paint: { 'line-color': ['get', 'color'], 'line-width': 3.5, 'line-opacity': 0.9 },
         });
       }
-      if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+      if (!bounds.isEmpty()) {
+        const mobile = window.innerWidth <= 640;
+        map.fitBounds(bounds, {
+          padding: {
+            top: 70,
+            left: 30,
+            right: mobile ? 30 : 380,
+            bottom: mobile ? Math.round(window.innerHeight * 0.46) : 40,
+          },
+          maxZoom: 14,
+        });
+      }
     };
 
     if (map.isStyleLoaded()) draw();

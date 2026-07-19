@@ -30,40 +30,29 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Never let EXIF/conversion hang the upload — bail after `ms` and move on. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
 interface Prepared {
   blob: Blob;
   name: string;
-  lat?: number;
-  lng?: number;
-  takenAt?: string;
 }
 
-/** iPhone photos are HEIC, which the Worker can't decode. Read GPS/date first,
- *  then convert HEIC/PNG/etc. to JPEG in the browser (Safari decodes HEIC). */
+/** Prepare a file for upload. JPEGs go straight through (the Worker reads GPS +
+ *  renders them). Only non-JPEG (HEIC/PNG) needs a browser-side convert to JPEG,
+ *  time-boxed so a slow/failed conversion can never block the upload. */
 async function prepareUpload(file: File): Promise<Prepared> {
-  let lat: number | undefined;
-  let lng: number | undefined;
-  let takenAt: string | undefined;
-  try {
-    const meta = (await exifr.parse(file, {
-      gps: true,
-      pick: ['DateTimeOriginal', 'CreateDate'],
-    })) as Record<string, unknown> | undefined;
-    if (meta) {
-      if (typeof meta.latitude === 'number') lat = meta.latitude;
-      if (typeof meta.longitude === 'number') lng = meta.longitude;
-      const dt = (meta.DateTimeOriginal ?? meta.CreateDate) as Date | undefined;
-      if (dt instanceof Date && !isNaN(dt.getTime())) takenAt = dt.toISOString();
-    }
-  } catch {
-    /* no EXIF */
-  }
-
-  if (file.type === 'image/jpeg') return { blob: file, name: file.name, lat, lng, takenAt };
+  const isJpeg = file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
+  if (isJpeg) return { blob: file, name: file.name || 'photo.jpg' };
 
   try {
     const url = URL.createObjectURL(file);
-    const img = await loadImage(url);
+    const img = await withTimeout(loadImage(url), 8000);
     URL.revokeObjectURL(url);
     const max = 2400;
     const scale = Math.min(1, max / Math.max(img.width, img.height));
@@ -73,12 +62,15 @@ async function prepareUpload(file: File): Promise<Prepared> {
     canvas.width = w;
     canvas.height = h;
     canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
-    if (blob) return { blob, name: 'photo.jpg', lat, lng, takenAt };
+    const blob = await withTimeout(
+      new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9)),
+      8000,
+    );
+    if (blob) return { blob, name: 'photo.jpg' };
   } catch {
-    /* fall back to the original bytes */
+    /* fall back to the original bytes below */
   }
-  return { blob: file, name: file.name, lat, lng, takenAt };
+  return { blob: file, name: file.name || 'photo' };
 }
 
 const PHOTO_COLS =
@@ -174,24 +166,24 @@ export async function uploadPhoto(
   if (!photosEnabled()) throw new Error('Photo uploads are not configured yet.');
   const token = await accessToken();
   const prep = await prepareUpload(file);
-  const lat = opts.lat ?? prep.lat;
-  const lng = opts.lng ?? prep.lng;
-  const takenAt = opts.takenAt ?? prep.takenAt;
 
   const form = new FormData();
   form.set('photo', new File([prep.blob], prep.name, { type: 'image/jpeg' }));
   if (opts.placeId) form.set('place_id', opts.placeId);
-  if (lat != null) form.set('lat', String(lat));
-  if (lng != null) form.set('lng', String(lng));
+  if (opts.lat != null) form.set('lat', String(opts.lat));
+  if (opts.lng != null) form.set('lng', String(opts.lng));
   if (opts.override) form.set('override', 'true');
-  if (takenAt) form.set('taken_at', takenAt);
+  if (opts.takenAt) form.set('taken_at', opts.takenAt);
 
   const res = await fetch(`${GATEWAY}/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
-  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Upload failed (${res.status})${detail ? `: ${detail.slice(0, 120)}` : ''}`);
+  }
   return (await res.json()) as UploadResult;
 }
 

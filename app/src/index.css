@@ -1508,3 +1508,51 @@ textarea {
   background: var(--panel-2);
   font-size: 22px;
 }
+
+/* ===== Layout fixes (later overrides win) ===== */
+/* Sticky card header must not overlap the region/country line */
+.panel .panel-head {
+  margin: 0 0 8px;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.panel .panel-head h2 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.panel .meta {
+  margin-top: 0;
+}
+
+/* Route/day panel shouldn't swallow the whole map on mobile */
+@media (max-width: 640px) {
+  .routes-panel {
+    height: 44vh;
+  }
+}
+
+/* "Add a spot" / entry form spacing */
+.entry {
+  padding: 12px 14px;
+}
+.entry label {
+  margin: 10px 0 4px;
+  font-size: 12px;
+}
+.entry > form > label:first-child,
+.entry.field-row:first-child {
+  margin-top: 0;
+}
+.entry .field-row {
+  gap: 10px;
+  margin-top: 2px;
+}
+.entry input,
+.entry select,
+.entry textarea {
+  padding: 9px 11px;
+}
+.entry .btn-row {
+  margin-top: 14px;
+}
