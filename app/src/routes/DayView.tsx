@@ -10,9 +10,9 @@ import {
   fetchEntriesForDay,
   fetchPlace,
   updateEntry,
-  updatePlace,
 } from '../lib/data';
 import { fetchActivitiesForDay } from '../lib/strava';
+import { categoryIcon, categoryLabel } from '../lib/categories';
 import type { Activity, Entry, NewEntry, Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import EntryEditor from '../components/EntryEditor';
@@ -135,23 +135,17 @@ export default function DayView() {
     else map.once('load', draw);
   }, [acts]);
 
-  async function applyTags(tags: string[]) {
-    if (!tags.length || !id) return;
-    const next = [...new Set([...(place?.categories ?? []), ...tags])];
-    const updated = await updatePlace(id, { categories: next }).catch(() => null);
-    if (updated) setPlace(updated);
-  }
-  async function addSpot(draft: NewEntry, tags: string[]) {
+  // The spot's Kind is a category slug; a DB trigger tags the place from it, so
+  // after saving we refetch the place to reflect any newly-added tag.
+  async function addSpot(draft: NewEntry) {
     await createEntry({ ...draft, place_id: id!, date: draft.date || date! });
-    await applyTags(tags);
     setAdding(false);
-    await loadEntries();
+    await Promise.all([loadEntries(), fetchPlace(id!).then(setPlace)]);
   }
-  async function saveSpot(entryId: string, draft: NewEntry, tags: string[]) {
+  async function saveSpot(entryId: string, draft: NewEntry) {
     await updateEntry(entryId, draft);
-    await applyTags(tags);
     setEditingId(null);
-    await loadEntries();
+    await Promise.all([loadEntries(), fetchPlace(id!).then(setPlace)]);
   }
   async function rate(e: Entry, n: number | null) {
     await updateEntry(e.id, { rating: n ?? undefined });
@@ -219,13 +213,17 @@ export default function DayView() {
               key={e.id}
               placeId={id!}
               existing={e}
-              onSave={(d, tags) => saveSpot(e.id, d, tags)}
+              onSave={(d) => saveSpot(e.id, d)}
               onCancel={() => setEditingId(null)}
             />
           ) : (
             <div className="entry" key={e.id}>
               <div className="entry-head">
-                <span className="kind">{e.kind}</span>
+                <span className="kind">
+                  {e.kind === 'note'
+                    ? '📝 Note'
+                    : `${categoryIcon(e.kind)} ${categoryLabel(e.kind)}`}
+                </span>
                 <StarRating
                   value={e.rating}
                   size={16}

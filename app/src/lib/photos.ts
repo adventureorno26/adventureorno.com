@@ -167,12 +167,18 @@ export async function uploadPhoto(
   const token = await accessToken();
   const prep = await prepareUpload(file);
 
+  // Every call here is a DELIBERATE manual pick in the UI — so by default we
+  // override the screenshot/make-model and home-zone backstops (those exist to
+  // filter the *automated* nightly Shortcut, not photos the user hand-picked).
+  // Duplicate/deleted are still enforced server-side and can't be overridden.
+  const override = opts.override ?? true;
+
   const form = new FormData();
   form.set('photo', new File([prep.blob], prep.name, { type: 'image/jpeg' }));
   if (opts.placeId) form.set('place_id', opts.placeId);
   if (opts.lat != null) form.set('lat', String(opts.lat));
   if (opts.lng != null) form.set('lng', String(opts.lng));
-  if (opts.override) form.set('override', 'true');
+  if (override) form.set('override', 'true');
   if (opts.takenAt) form.set('taken_at', opts.takenAt);
 
   const res = await fetch(`${GATEWAY}/upload`, {

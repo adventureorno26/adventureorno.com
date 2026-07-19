@@ -347,6 +347,7 @@ export default function MapView() {
   async function handleAddPhotos(files: FileList) {
     setBanner('Uploading photos…');
     let added = 0;
+    const skips: Record<string, number> = {};
     const noLoc: File[] = [];
     for (const f of Array.from(files)) {
       const gps = await readGps(f);
@@ -354,8 +355,9 @@ export default function MapView() {
         try {
           const r = await uploadPhoto(f, { lat: gps.lat, lng: gps.lng });
           if (r.ok) added++;
+          else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
         } catch {
-          /* ignore per-file */
+          skips.error = (skips.error ?? 0) + 1;
         }
       } else {
         noLoc.push(f);
@@ -401,10 +403,20 @@ export default function MapView() {
     if (newPlaceId) {
       setBanner('Set this place’s location using the address box on the card.');
       navigate(`/place/${newPlaceId}`);
+    } else if (added > 0) {
+      setBanner(`Added ${added} photo${added > 1 ? 's' : ''} to the map.`);
     } else {
-      setBanner(
-        added > 0 ? `Added ${added} photo${added > 1 ? 's' : ''} to the map.` : 'No photos added.',
-      );
+      // Nothing added — say exactly why so it's never a silent failure.
+      const labels: Record<string, string> = {
+        duplicate: 'already on the map',
+        deleted: 'previously deleted (can’t be re-added)',
+        error: 'upload error',
+        undecodable: 'couldn’t read the image',
+      };
+      const why = Object.entries(skips)
+        .map(([k, n]) => `${n} ${labels[k] ?? k}`)
+        .join(', ');
+      setBanner(why ? `No photos added — ${why}.` : 'No photos added.');
     }
   }
 

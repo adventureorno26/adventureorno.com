@@ -4,9 +4,8 @@
 
 export type Role = 'owner' | 'editor' | 'viewer';
 
-export type EntryKind = 'restaurant' | 'activity' | 'stay' | 'note';
-
-export const ENTRY_KINDS: EntryKind[] = ['restaurant', 'activity', 'stay', 'note'];
+// A spot's "kind" is now a category slug (dining, winery, …) or 'note'.
+export type EntryKind = string;
 
 export interface Profile {
   id: string;

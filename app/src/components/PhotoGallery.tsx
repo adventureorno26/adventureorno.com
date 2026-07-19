@@ -123,7 +123,7 @@ export default function PhotoGallery({ place, day }: Props) {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            void upload(Array.from(e.dataTransfer.files), false);
+            void upload(Array.from(e.dataTransfer.files), true);
           }}
           onClick={() => fileRef.current?.click()}
           role="button"
@@ -137,7 +137,7 @@ export default function PhotoGallery({ place, day }: Props) {
             multiple
             hidden
             onChange={(e) => {
-              void upload(Array.from(e.target.files ?? []), false);
+              void upload(Array.from(e.target.files ?? []), true);
               e.target.value = '';
             }}
           />

@@ -1,34 +1,26 @@
 import { useState } from 'react';
-import { ENTRY_KINDS, type Entry, type EntryKind, type NewEntry } from '../lib/types';
+import type { Entry, NewEntry } from '../lib/types';
 import { CATEGORIES } from '../lib/categories';
+import StarRating from './StarRating';
 
 interface Props {
   placeId: string;
   existing?: Entry;
-  onSave: (draft: NewEntry, tags: string[]) => Promise<void>;
+  onSave: (draft: NewEntry) => Promise<void>;
   onCancel: () => void;
 }
 
-/** Inline add/edit form for a single entry. */
+/** Inline add/edit form for a spot. Its "Kind" is a category tag (Dining,
+ *  Winery, …) which auto-tags the place; 'note' is a plain note. */
 export default function EntryEditor({ placeId, existing, onSave, onCancel }: Props) {
-  const [kind, setKind] = useState<EntryKind>(existing?.kind ?? 'restaurant');
+  const [kind, setKind] = useState<string>(existing?.kind ?? 'dining');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
-  const [rating, setRating] = useState<string>(existing?.rating ? String(existing.rating) : '');
+  const [rating, setRating] = useState<number | null>(existing?.rating ?? null);
   const [url, setUrl] = useState(existing?.url ?? '');
   const [date, setDate] = useState(existing?.date ?? '');
-  const [tags, setTags] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function toggleTag(slug: string) {
-    setTags((prev) => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,18 +31,15 @@ export default function EntryEditor({ placeId, existing, onSave, onCancel }: Pro
     setBusy(true);
     setError(null);
     try {
-      await onSave(
-        {
-          place_id: placeId,
-          kind,
-          title: title.trim(),
-          body: body.trim() || null,
-          rating: rating ? Number(rating) : null,
-          url: url.trim() || null,
-          date: date || null,
-        },
-        [...tags],
-      );
+      await onSave({
+        place_id: placeId,
+        kind,
+        title: title.trim(),
+        body: body.trim() || null,
+        rating,
+        url: url.trim() || null,
+        date: date || null,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save entry.');
       setBusy(false);
@@ -59,34 +48,23 @@ export default function EntryEditor({ placeId, existing, onSave, onCancel }: Pro
 
   return (
     <form className="entry" onSubmit={submit}>
-      <div className="field-row">
-        <div>
-          <label>Kind</label>
-          <select value={kind} onChange={(e) => setKind(e.target.value as EntryKind)}>
-            {ENTRY_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label>Rating</label>
-          <select value={rating} onChange={(e) => setRating(e.target.value)}>
-            <option value="">—</option>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {'★'.repeat(n)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <label>Kind (tags this place so it shows in the tag search)</label>
+      <select value={kind} onChange={(e) => setKind(e.target.value)}>
+        {CATEGORIES.map((c) => (
+          <option key={c.slug} value={c.slug}>
+            {c.icon} {c.label}
+          </option>
+        ))}
+        <option value="note">📝 Note</option>
+      </select>
 
       <label>Title</label>
       <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
 
-      <label>Notes (markdown)</label>
+      <label>Rating</label>
+      <StarRating value={rating} onChange={setRating} />
+
+      <label>Notes</label>
       <textarea value={body} onChange={(e) => setBody(e.target.value)} />
 
       <div className="field-row">
@@ -105,25 +83,11 @@ export default function EntryEditor({ placeId, existing, onSave, onCancel }: Pro
         </div>
       </div>
 
-      <label>Tags (so it shows when you search by tag)</label>
-      <div className="cat-picker">
-        {CATEGORIES.filter((c) => !c.auto).map((c) => (
-          <button
-            key={c.slug}
-            type="button"
-            className={`cat-toggle ${tags.has(c.slug) ? 'on' : ''}`}
-            onClick={() => toggleTag(c.slug)}
-          >
-            {c.icon} {c.label}
-          </button>
-        ))}
-      </div>
-
       {error && <div className="banner">{error}</div>}
 
       <div className="btn-row">
         <button className="primary" disabled={busy}>
-          {busy ? 'Saving…' : existing ? 'Save changes' : 'Add entry'}
+          {busy ? 'Saving…' : existing ? 'Save changes' : 'Add spot'}
         </button>
         <button type="button" onClick={onCancel} disabled={busy}>
           Cancel
