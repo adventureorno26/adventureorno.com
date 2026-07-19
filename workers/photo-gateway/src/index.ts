@@ -68,6 +68,9 @@ function bearer(req: Request): string | null {
 
 async function readImageBytes(req: Request): Promise<{
   bytes: Uint8Array;
+  thumbBytes: Uint8Array | null; // client-rendered thumbnail (manual UI path)
+  w: number | null;
+  h: number | null;
   lat: number | null;
   lng: number | null;
   placeId: string | null;
@@ -79,12 +82,16 @@ async function readImageBytes(req: Request): Promise<{
     const form = await req.formData();
     const file = (form.get('photo') ?? form.get('file')) as File | null;
     if (!file) throw new Error('no photo field');
+    const thumb = form.get('thumb') as File | null;
     const num = (k: string): number | null => {
       const v = form.get(k);
       return v != null && v !== '' ? Number(v) : null;
     };
     return {
       bytes: new Uint8Array(await file.arrayBuffer()),
+      thumbBytes: thumb ? new Uint8Array(await thumb.arrayBuffer()) : null,
+      w: num('w'),
+      h: num('h'),
       lat: num('lat'),
       lng: num('lng'),
       placeId: (form.get('place_id') as string | null) || null,
@@ -101,6 +108,9 @@ async function readImageBytes(req: Request): Promise<{
   };
   return {
     bytes: buf,
+    thumbBytes: null,
+    w: null,
+    h: null,
     lat: qnum('lat'),
     lng: qnum('lng'),
     placeId: url.searchParams.get('place_id'),
@@ -121,7 +131,7 @@ async function runPipeline(
   uploadedBy: string | null,
   allowOverride: boolean,
 ): Promise<IngestOutcome> {
-  const { bytes, lat: formLat, lng: formLng, placeId, override, takenAt } =
+  const { bytes, thumbBytes, w: formW, h: formH, lat: formLat, lng: formLng, placeId, override, takenAt } =
     await readImageBytes(req);
   if (bytes.byteLength === 0) return { status: 400, body: { error: 'empty body' } };
 
@@ -155,11 +165,18 @@ async function runPipeline(
   if (skip) return { status: 200, body: { skipped: skip } };
   // Past the gate: coordinates are guaranteed present.
 
-  let variants;
-  try {
-    variants = renderVariants(bytes, Number(env.MAX_EDGE), Number(env.THUMB_EDGE));
-  } catch {
-    return { status: 200, body: { skipped: 'undecodable' } };
+  // Manual UI uploads arrive pre-rendered (web + thumb) from the browser, so we
+  // store them directly and NEVER run the WASM decoder (which crashed on
+  // full-res photos). Only the raw-body Shortcut path decodes server-side.
+  let variants: { web: { bytes: Uint8Array; width: number; height: number }; thumb: { bytes: Uint8Array } };
+  if (thumbBytes) {
+    variants = { web: { bytes, width: formW ?? 0, height: formH ?? 0 }, thumb: { bytes: thumbBytes } };
+  } else {
+    try {
+      variants = renderVariants(bytes, Number(env.MAX_EDGE), Number(env.THUMB_EDGE));
+    } catch {
+      return { status: 200, body: { skipped: 'undecodable' } };
+    }
   }
 
   // Auto-place the photo by its GPS when the caller didn't pick a place.

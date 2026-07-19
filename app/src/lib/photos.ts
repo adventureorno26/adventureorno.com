@@ -53,39 +53,72 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 interface Prepared {
-  blob: Blob;
+  web: Blob; // ≤2400px JPEG (the stored image)
+  thumb: Blob | null; // ≤400px JPEG; null only if the browser couldn't decode
+  width: number;
+  height: number;
   name: string;
 }
 
-/** Prepare a file for upload by ALWAYS downscaling to ≤2400px on the client.
- *  This is critical: the Worker decodes images in WASM and dies (connection
- *  reset → "Failed to fetch") on full-resolution 12MP iPhone photos. Resizing
- *  here means the Worker only ever sees a small image. Also converts HEIC/PNG to
- *  JPEG. Time-boxed so a slow/failed decode can never block the upload; falls
- *  back to the original bytes only when the browser can't decode the file.
- *  NOTE: this strips EXIF — callers must pass GPS/date separately (see uploadPhoto). */
+/** Draw an image scaled so its longest edge ≤ maxEdge, return the canvas + dims. */
+function drawScaled(img: HTMLImageElement, maxEdge: number): { canvas: HTMLCanvasElement; w: number; h: number } {
+  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+  return { canvas, w, h };
+}
+
+const toBlob = (c: HTMLCanvasElement, q: number): Promise<Blob | null> =>
+  new Promise((r) => c.toBlob(r, 'image/jpeg', q));
+
+/** Prepare a file for upload entirely on the client: produce BOTH the web-size
+ *  (≤2400px) and thumbnail (≤400px) JPEGs here, so the Worker never decodes an
+ *  image (server-side WASM decode was crashing on full-res iPhone photos →
+ *  "Load failed"). Also converts HEIC/PNG → JPEG and strips EXIF (callers pass
+ *  GPS/date separately). Time-boxed; falls back to sending the original only if
+ *  the browser genuinely can't decode the file. */
 async function prepareUpload(file: File): Promise<Prepared> {
   try {
     const url = URL.createObjectURL(file);
-    const img = await withTimeout(loadImage(url), 12000);
+    const img = await withTimeout(loadImage(url), 15000);
     URL.revokeObjectURL(url);
-    const max = 2400;
-    const scale = Math.min(1, max / Math.max(img.width, img.height));
-    const w = Math.max(1, Math.round(img.width * scale));
-    const h = Math.max(1, Math.round(img.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-    const blob = await withTimeout(
-      new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9)),
-      12000,
-    );
-    if (blob && blob.size > 0) return { blob, name: 'photo.jpg' };
+    const web = drawScaled(img, 2400);
+    const thumb = drawScaled(img, 400);
+    const [webBlob, thumbBlob] = await Promise.all([
+      withTimeout(toBlob(web.canvas, 0.85), 15000),
+      withTimeout(toBlob(thumb.canvas, 0.8), 15000),
+    ]);
+    if (webBlob && webBlob.size > 0) {
+      return { web: webBlob, thumb: thumbBlob, width: web.w, height: web.h, name: 'photo.jpg' };
+    }
   } catch {
-    /* fall back to the original bytes below */
+    /* fall back to the original bytes below (Worker will decode) */
   }
-  return { blob: file, name: file.name || 'photo.jpg' };
+  return { web: file, thumb: null, width: 0, height: 0, name: file.name || 'photo.jpg' };
+}
+
+/** POST with an abort timeout + retries — mobile networks drop requests, which
+ *  surface as "Load failed"/"Failed to fetch". Retrying makes uploads reliable. */
+async function postWithRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      return await fetch(url, { ...init, signal: ctrl.signal });
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  console.warn('upload retries exhausted', lastErr);
+  throw new Error('Upload failed — network error. Check your connection and try again.');
 }
 
 const PHOTO_COLS =
@@ -212,14 +245,21 @@ export async function uploadPhoto(
   const override = opts.override ?? true;
 
   const form = new FormData();
-  form.set('photo', new File([prep.blob], prep.name, { type: 'image/jpeg' }));
+  form.set('photo', new File([prep.web], prep.name, { type: 'image/jpeg' }));
+  // Client-rendered thumbnail → the Worker stores it directly and skips its own
+  // (crash-prone) image decode entirely.
+  if (prep.thumb) {
+    form.set('thumb', new File([prep.thumb], 'thumb.jpg', { type: 'image/jpeg' }));
+    form.set('w', String(prep.width));
+    form.set('h', String(prep.height));
+  }
   if (opts.placeId) form.set('place_id', opts.placeId);
   if (lat != null) form.set('lat', String(lat));
   if (lng != null) form.set('lng', String(lng));
   if (override) form.set('override', 'true');
   if (takenAt) form.set('taken_at', takenAt);
 
-  const res = await fetch(`${GATEWAY}/upload`, {
+  const res = await postWithRetry(`${GATEWAY}/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
