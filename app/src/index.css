@@ -1466,3 +1466,27 @@ a {
 .date-arrow {
   color: var(--muted);
 }
+
+/* ---------- Form spacing fixes (flex children + date inputs must shrink) ---------- */
+input,
+select,
+textarea {
+  min-width: 0;
+}
+.field-row {
+  align-items: flex-start;
+}
+.field-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.entry label,
+.card label {
+  margin: 8px 0 3px;
+}
+.entry > .field-row:first-child label {
+  margin-top: 2px;
+}
+.card > b + label {
+  margin-top: 6px;
+}

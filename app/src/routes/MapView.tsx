@@ -7,7 +7,8 @@ import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
 import { uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
-import { CATEGORIES, effectiveCategories } from '../lib/categories';
+import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
+import { makePinImage } from '../lib/pins';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
@@ -34,6 +35,7 @@ function toFeatureCollection(
           last_visit: p.last_visit ?? '',
           photos: c?.photo_count ?? 0,
           routes: c?.route_count ?? 0,
+          primary: primaryCategory(p),
         },
       };
     }),
@@ -46,6 +48,7 @@ export default function MapView() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
+  const prevSelRef = useRef<string | null>(null);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -104,6 +107,7 @@ export default function MapView() {
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
+        promoteId: 'id',
         cluster: true,
         clusterMaxZoom: 12,
         clusterRadius: 45,
@@ -147,29 +151,59 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
-      // Glowing halo beneath each place, then the crisp beacon on top.
+      // Colored category pin images (+ a neutral default).
+      for (const c of CATEGORIES) {
+        if (!map.hasImage(`pin-${c.slug}`)) {
+          map.addImage(`pin-${c.slug}`, makePinImage(c.slug, c.color), { pixelRatio: 2 });
+        }
+      }
+      if (!map.hasImage('pin-default')) {
+        map.addImage('pin-default', makePinImage('default', categoryColor('default')), {
+          pixelRatio: 2,
+        });
+      }
+
+      // Highlight ring under the selected pin.
       map.addLayer({
-        id: 'point-glow',
+        id: 'pin-highlight',
         type: 'circle',
         source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
+        filter: ['==', ['get', 'id'], '__none__'],
         paint: {
-          'circle-color': '#22d3ee',
-          'circle-opacity': 0.35,
-          'circle-blur': 1,
-          'circle-radius': 15,
+          'circle-radius': 24,
+          'circle-color': '#3b82f6',
+          'circle-opacity': 0.3,
+          'circle-blur': 0.5,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#60a5fa',
+          'circle-translate': [0, -18],
         },
       });
+      // The colored pins (grow when selected).
       map.addLayer({
-        id: 'unclustered-point',
+        id: 'place-pins',
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'icon-image': ['concat', 'pin-', ['get', 'primary']],
+          'icon-size': ['case', ['boolean', ['feature-state', 'selected'], false], 1.2, 0.9],
+          'icon-anchor': 'bottom',
+          'icon-allow-overlap': true,
+        },
+      });
+      // Transparent hit target on top so taps always land, even if an icon
+      // fails to render (this was the earlier click bug).
+      map.addLayer({
+        id: 'place-hit',
         type: 'circle',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-color': '#22d3ee',
-          'circle-radius': 6.5,
-          'circle-stroke-width': 2.5,
-          'circle-stroke-color': '#eaf7ff',
+          'circle-radius': 20,
+          'circle-color': '#000',
+          'circle-opacity': 0,
+          'circle-translate': [0, -16],
         },
       });
 
@@ -190,19 +224,37 @@ export default function MapView() {
     });
 
     // Select a place on click.
-    map.on('click', 'unclustered-point', (e) => {
+    map.on('click', 'place-hit', (e) => {
       const f = e.features?.[0] as MapGeoJSONFeature | undefined;
       const id = f?.properties?.id as string | undefined;
       if (id) navigate(`/place/${id}`);
     });
 
-    // Add-place: click empty map while in add mode.
+    // Click handling: our pins are handled above. Otherwise, if you clicked a
+    // city / POI label on the basemap, make a place there (prefilled with its
+    // name); an empty-map click only adds a place while in add mode.
     map.on('click', (e) => {
-      if (!addModeRef.current) return;
-      const hit = map.queryRenderedFeatures(e.point, {
-        layers: ['clusters', 'unclustered-point'],
+      const ours = map.queryRenderedFeatures(e.point, { layers: ['clusters', 'place-hit'] });
+      if (ours.length > 0) return;
+
+      const label = map.queryRenderedFeatures(e.point).find((f) => {
+        const lid = f.layer.id;
+        return (
+          f.geometry.type === 'Point' &&
+          f.properties &&
+          (f.properties.name || f.properties['name:en'] || f.properties.name_en) &&
+          !['cluster-count', 'place-pins', 'place-hit'].includes(lid)
+        );
       });
-      if (hit.length > 0) return; // clicked an existing feature, not empty map
+      if (label) {
+        const nm = (label.properties!.name ||
+          label.properties!['name:en'] ||
+          label.properties!.name_en) as string;
+        void handleAddAt(e.lngLat.lng, e.lngLat.lat, nm);
+        return;
+      }
+
+      if (!addModeRef.current) return;
       void handleAddAt(e.lngLat.lng, e.lngLat.lat);
     });
 
@@ -210,7 +262,7 @@ export default function MapView() {
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
     popupRef.current = popup;
 
-    map.on('mouseenter', 'unclustered-point', (e) => {
+    map.on('mouseenter', 'place-hit', (e) => {
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
@@ -228,7 +280,7 @@ export default function MapView() {
         .setHTML(html)
         .addTo(map);
     });
-    map.on('mouseleave', 'unclustered-point', () => {
+    map.on('mouseleave', 'place-hit', () => {
       map.getCanvas().style.cursor = '';
       popup.remove();
     });
@@ -246,26 +298,39 @@ export default function MapView() {
   const visiblePlaces = filterCat
     ? places.filter((p) => effectiveCategories(p).includes(filterCat))
     : places;
-  const availableCats = CATEGORIES.filter((c) =>
-    places.some((p) => effectiveCategories(p).includes(c.slug)),
-  );
 
   // Keep the source in sync once both map and data are ready.
   useEffect(() => {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);
 
-  async function handleAddAt(lng: number, lat: number) {
+  // Highlight the selected pin (ring + enlarge via feature-state).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (map.getLayer('pin-highlight')) {
+      map.setFilter('pin-highlight', ['==', ['get', 'id'], selectedId ?? '__none__']);
+    }
+    const prev = prevSelRef.current;
+    if (prev && prev !== selectedId) {
+      map.setFeatureState({ source: SOURCE_ID, id: prev }, { selected: false });
+    }
+    if (selectedId) map.setFeatureState({ source: SOURCE_ID, id: selectedId }, { selected: true });
+    prevSelRef.current = selectedId ?? null;
+  }, [selectedId, ready, places]);
+
+  async function handleAddAt(lng: number, lat: number, presetName?: string) {
     setAddMode(false);
     if (isInHomeZone({ lng, lat })) {
       setBanner('That spot is inside the 15-mile home zone — places there are not tracked.');
       return;
     }
-    setBanner('Looking up that location…');
-    const geo = await reverseGeocode(lng, lat);
+    setBanner('Adding that place…');
+    // Use the clicked label's name if we have it; otherwise reverse-geocode.
+    const geo = presetName ? null : await reverseGeocode(lng, lat);
     try {
       const created = await createPlace({
-        name: geo?.name ?? 'New place',
+        name: presetName ?? geo?.name ?? 'New place',
         country: geo?.country ?? null,
         admin1: geo?.admin1 ?? null,
         lng,
@@ -379,19 +444,17 @@ export default function MapView() {
         onAddPhotos={handleAddPhotos}
       />
 
-      {availableCats.length > 0 && (
-        <div className="tag-filter">
-          <span className="tag-filter-ico">🔍</span>
-          <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
-            <option value="">All places</option>
-            {availableCats.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.icon} {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      <div className="tag-filter">
+        <span className="tag-filter-ico">🔍</span>
+        <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
+          <option value="">All places</option>
+          {CATEGORIES.map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.icon} {c.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {addMode && (
         <div className="add-bar">

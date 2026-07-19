@@ -6,26 +6,30 @@ import type { Place } from './types';
 export interface Category {
   slug: string;
   label: string;
-  icon: string;
+  icon: string; // emoji, used in menus/chips/legend
+  color: string; // pin color (map)
   auto?: boolean; // derived from activities, not manually toggled
 }
 
 export const CATEGORIES: Category[] = [
-  { slug: 'hiking', label: 'Hiking', icon: '🥾', auto: true },
-  { slug: 'walking', label: 'Walking', icon: '🚶', auto: true },
-  { slug: 'running', label: 'Running', icon: '🏃', auto: true },
-  { slug: 'biking', label: 'Biking', icon: '🚴', auto: true },
-  { slug: 'jeeping', label: 'Jeeping', icon: '🚙' },
-  { slug: 'camping', label: 'Camping', icon: '🏕️' },
-  { slug: 'beach', label: 'Beach', icon: '🏖️' },
-  { slug: 'sunrise', label: 'Sunrise', icon: '🌅' },
-  { slug: 'sunset', label: 'Sunset', icon: '🌇' },
-  { slug: 'dining', label: 'Dining', icon: '🍽️' },
-  { slug: 'winery', label: 'Winery', icon: '🍷' },
-  { slug: 'brewery', label: 'Brewery', icon: '🍺' },
-  { slug: 'viewpoint', label: 'Viewpoint', icon: '⛰️' },
-  { slug: 'stay', label: 'Stay', icon: '🏨' },
+  { slug: 'hiking', label: 'Hiking', icon: '🥾', color: '#22c55e', auto: true },
+  { slug: 'walking', label: 'Walking', icon: '🚶', color: '#4ade80', auto: true },
+  { slug: 'running', label: 'Running', icon: '🏃', color: '#f97316', auto: true },
+  { slug: 'biking', label: 'Biking', icon: '🚴', color: '#3b82f6', auto: true },
+  { slug: 'jeeping', label: 'Jeeping', icon: '🚙', color: '#b45309' },
+  { slug: 'camping', label: 'Camping', icon: '🏕️', color: '#10b981' },
+  { slug: 'beach', label: 'Beach', icon: '🏖️', color: '#06b6d4' },
+  { slug: 'sunrise', label: 'Sunrise', icon: '🌅', color: '#fbbf24' },
+  { slug: 'sunset', label: 'Sunset', icon: '🌇', color: '#fb7185' },
+  { slug: 'dining', label: 'Dining', icon: '🍽️', color: '#f59e0b' },
+  { slug: 'winery', label: 'Winery', icon: '🍷', color: '#a855f7' },
+  { slug: 'brewery', label: 'Brewery', icon: '🍺', color: '#ca8a04' },
+  { slug: 'viewpoint', label: 'Viewpoint', icon: '⛰️', color: '#64748b' },
+  { slug: 'stay', label: 'Stay', icon: '🏨', color: '#6366f1' },
 ];
+
+export const categoryColor = (slug: string): string =>
+  CATEGORIES.find((c) => c.slug === slug)?.color ?? '#38bdf8';
 
 const BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
 export const categoryIcon = (slug: string): string => BY_SLUG.get(slug)?.icon ?? '📍';
