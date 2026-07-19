@@ -831,3 +831,78 @@ a {
   height: 1px;
   background: var(--border);
 }
+
+/* ---------- Mobile safe area (don't hide under the iPhone clock) ---------- */
+.stats-bar {
+  padding-top: calc(10px + env(safe-area-inset-top));
+}
+.add-bar {
+  top: calc(54px + env(safe-area-inset-top));
+}
+@media (max-width: 640px) {
+  .panel,
+  .routes-panel {
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---------- Overall rating + review ---------- */
+.rating-row {
+  margin: 10px 0 8px;
+}
+.star-rating .star {
+  background: none;
+  border: none;
+  padding: 0 1px;
+  color: #46608f;
+  line-height: 1;
+}
+.star-rating .star.on {
+  color: #ffd23f;
+}
+.star-rating .star:not(.ro):hover {
+  color: #ffd23f;
+  transform: scale(1.1);
+}
+.star-rating .star.ro {
+  cursor: default;
+}
+
+/* ---------- Visits list ---------- */
+.visits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.visit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: rgba(19, 31, 54, 0.55);
+  border: 1px solid var(--border-soft);
+  text-decoration: none;
+  color: var(--text);
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.visit-row:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.visit-date {
+  font-weight: 600;
+  font-size: 14px;
+}
+.visit-sum {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: auto;
+}
+.visit-arrow {
+  color: var(--muted);
+  font-size: 18px;
+}

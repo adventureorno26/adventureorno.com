@@ -28,8 +28,19 @@ export interface Place {
   auto: boolean; // created by the clustering job; badge until first edited
   needs_geocode: boolean;
   visit_count: number;
+  rating: number | null; // 1..5 overall place rating
+  review: string | null; // overall place review
+  is_home: boolean;
   created_by: string | null;
   created_at: string;
+}
+
+export interface PlaceDay {
+  day: string; // date
+  activities: number;
+  entries: number;
+  photos: number;
+  pings: number;
 }
 
 export type PhotoSource = 'shortcut' | 'manual';

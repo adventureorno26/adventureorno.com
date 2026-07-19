@@ -7,6 +7,7 @@ import MapView from './routes/MapView';
 // Non-landing routes are code-split so their JS (and @mapbox/polyline in the
 // routes view) stays out of the initial map bundle.
 const RoutesView = lazy(() => import('./routes/RoutesView'));
+const DayView = lazy(() => import('./routes/DayView'));
 const Settings = lazy(() => import('./routes/Settings'));
 const Trips = lazy(() => import('./routes/Trips'));
 const ImportTimeline = lazy(() => import('./routes/ImportTimeline'));
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <RequireAuth>
               <RoutesView />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/place/:id/day/:date"
+          element={
+            <RequireAuth>
+              <DayView />
             </RequireAuth>
           }
         />

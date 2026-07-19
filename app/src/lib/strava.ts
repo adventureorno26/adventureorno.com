@@ -41,6 +41,22 @@ export async function fetchActivitiesForPlace(placeId: string): Promise<Activity
   return (data ?? []) as Activity[];
 }
 
+/** Activities for a place on a specific day (start_date within [day, day+1)). */
+export async function fetchActivitiesForDay(placeId: string, day: string): Promise<Activity[]> {
+  const next = new Date(day + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + 1);
+  const dayEnd = next.toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('activities')
+    .select(ACTIVITY_COLS)
+    .eq('place_id', placeId)
+    .gte('start_date', day)
+    .lt('start_date', dayEnd)
+    .order('start_date');
+  if (error) throw error;
+  return (data ?? []) as Activity[];
+}
+
 export async function isStravaConnected(): Promise<boolean> {
   const { data, error } = await supabase.rpc('strava_connected');
   if (error) return false;

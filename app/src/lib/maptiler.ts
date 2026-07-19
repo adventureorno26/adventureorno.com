@@ -2,7 +2,8 @@
 
 const KEY = import.meta.env.VITE_MAPTILER_KEY;
 
-export const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/streets-v2/style.json?key=${KEY}`;
+// Dark style to match the app's blue theme (sleeker than the default light streets).
+export const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${KEY}`;
 
 export interface ReverseGeocodeResult {
   name: string; // best-guess place name

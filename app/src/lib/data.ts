@@ -1,11 +1,11 @@
 import { supabase } from './supabase';
-import type { Entry, NewEntry, NewPlace, Place } from './types';
+import type { Entry, NewEntry, NewPlace, Place, PlaceDay } from './types';
 
 // All reads/writes go through RLS; the client never sees rows it isn't allowed
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, created_by, created_at';
 const ENTRY_COLS = 'id, place_id, kind, title, body, rating, url, date, created_by, created_at';
 
 export async function fetchPlaces(): Promise<Place[]> {
@@ -32,7 +32,12 @@ export async function createPlace(p: NewPlace): Promise<Place> {
 
 export async function updatePlace(
   id: string,
-  patch: Partial<NewPlace> & { auto?: boolean; cover_photo_id?: string | null },
+  patch: Partial<NewPlace> & {
+    auto?: boolean;
+    cover_photo_id?: string | null;
+    rating?: number | null;
+    review?: string | null;
+  },
 ): Promise<Place> {
   const { data, error } = await supabase
     .from('places')
@@ -57,6 +62,24 @@ export async function fetchEntries(placeId: string): Promise<Entry[]> {
     .order('date', { ascending: false, nullsFirst: false });
   if (error) throw error;
   return (data ?? []) as Entry[];
+}
+
+/** Entries for a place on a specific date (the day view). */
+export async function fetchEntriesForDay(placeId: string, day: string): Promise<Entry[]> {
+  const { data, error } = await supabase
+    .from('entries')
+    .select(ENTRY_COLS)
+    .eq('place_id', placeId)
+    .eq('date', day);
+  if (error) throw error;
+  return (data ?? []) as Entry[];
+}
+
+/** Distinct dates you were at a place, with per-day counts (Visits list). */
+export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
+  const { data, error } = await supabase.rpc('place_days', { p_place: placeId });
+  if (error) throw error;
+  return (data ?? []) as PlaceDay[];
 }
 
 export async function createEntry(e: NewEntry): Promise<Entry> {
