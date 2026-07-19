@@ -21,6 +21,20 @@ export async function readGps(file: File): Promise<{ lat: number; lng: number } 
   return null;
 }
 
+/** Read the photo's capture time from EXIF (before any resize strips it). */
+export async function readTakenAt(file: File): Promise<string | undefined> {
+  try {
+    const d = (await exifr.parse(file, ['DateTimeOriginal', 'CreateDate'])) as
+      | { DateTimeOriginal?: Date; CreateDate?: Date }
+      | undefined;
+    const dt = d?.DateTimeOriginal ?? d?.CreateDate;
+    if (dt instanceof Date && !Number.isNaN(dt.getTime())) return dt.toISOString();
+  } catch {
+    /* no date */
+  }
+  return undefined;
+}
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -43,16 +57,17 @@ interface Prepared {
   name: string;
 }
 
-/** Prepare a file for upload. JPEGs go straight through (the Worker reads GPS +
- *  renders them). Only non-JPEG (HEIC/PNG) needs a browser-side convert to JPEG,
- *  time-boxed so a slow/failed conversion can never block the upload. */
+/** Prepare a file for upload by ALWAYS downscaling to ≤2400px on the client.
+ *  This is critical: the Worker decodes images in WASM and dies (connection
+ *  reset → "Failed to fetch") on full-resolution 12MP iPhone photos. Resizing
+ *  here means the Worker only ever sees a small image. Also converts HEIC/PNG to
+ *  JPEG. Time-boxed so a slow/failed decode can never block the upload; falls
+ *  back to the original bytes only when the browser can't decode the file.
+ *  NOTE: this strips EXIF — callers must pass GPS/date separately (see uploadPhoto). */
 async function prepareUpload(file: File): Promise<Prepared> {
-  const isJpeg = file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
-  if (isJpeg) return { blob: file, name: file.name || 'photo.jpg' };
-
   try {
     const url = URL.createObjectURL(file);
-    const img = await withTimeout(loadImage(url), 8000);
+    const img = await withTimeout(loadImage(url), 12000);
     URL.revokeObjectURL(url);
     const max = 2400;
     const scale = Math.min(1, max / Math.max(img.width, img.height));
@@ -64,13 +79,13 @@ async function prepareUpload(file: File): Promise<Prepared> {
     canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
     const blob = await withTimeout(
       new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9)),
-      8000,
+      12000,
     );
-    if (blob) return { blob, name: 'photo.jpg' };
+    if (blob && blob.size > 0) return { blob, name: 'photo.jpg' };
   } catch {
     /* fall back to the original bytes below */
   }
-  return { blob: file, name: file.name || 'photo' };
+  return { blob: file, name: file.name || 'photo.jpg' };
 }
 
 const PHOTO_COLS =
@@ -165,6 +180,20 @@ export async function uploadPhoto(
 ): Promise<UploadResult> {
   if (!photosEnabled()) throw new Error('Photo uploads are not configured yet.');
   const token = await accessToken();
+
+  // Read GPS + capture date from the ORIGINAL bytes first — prepareUpload resizes
+  // via canvas, which strips EXIF, so we must carry these through ourselves.
+  let lat = opts.lat;
+  let lng = opts.lng;
+  if (lat == null || lng == null) {
+    const g = await readGps(file).catch(() => null);
+    if (g) {
+      lat = lat ?? g.lat;
+      lng = lng ?? g.lng;
+    }
+  }
+  const takenAt = opts.takenAt ?? (await readTakenAt(file).catch(() => undefined));
+
   const prep = await prepareUpload(file);
 
   // Every call here is a DELIBERATE manual pick in the UI — so by default we
@@ -176,10 +205,10 @@ export async function uploadPhoto(
   const form = new FormData();
   form.set('photo', new File([prep.blob], prep.name, { type: 'image/jpeg' }));
   if (opts.placeId) form.set('place_id', opts.placeId);
-  if (opts.lat != null) form.set('lat', String(opts.lat));
-  if (opts.lng != null) form.set('lng', String(opts.lng));
+  if (lat != null) form.set('lat', String(lat));
+  if (lng != null) form.set('lng', String(lng));
   if (override) form.set('override', 'true');
-  if (opts.takenAt) form.set('taken_at', opts.takenAt);
+  if (takenAt) form.set('taken_at', takenAt);
 
   const res = await fetch(`${GATEWAY}/upload`, {
     method: 'POST',

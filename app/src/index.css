@@ -1556,3 +1556,44 @@ textarea {
 .entry .btn-row {
   margin-top: 14px;
 }
+
+/* Photo markers — cover photo as a circular map pin, ringed by category color */
+.photo-marker {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid var(--ring, #38bdf8);
+  background: #0b1a2b;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.55);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.photo-marker img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-marker-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  filter: saturate(1.1);
+}
+.photo-marker:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.photo-marker.selected {
+  transform: scale(1.2);
+  border-color: #fff;
+  box-shadow: 0 0 0 3px var(--ring, #38bdf8), 0 5px 16px rgba(0, 0, 0, 0.6);
+  z-index: 3;
+}

@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre-gl';
+import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
-import { readGps, uploadPhoto } from '../lib/photos';
+import { fetchPhotoObjectUrl, readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
-import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
+import {
+  CATEGORIES,
+  categoryColor,
+  categoryIcon,
+  effectiveCategories,
+  primaryCategory,
+} from '../lib/categories';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
@@ -15,30 +21,22 @@ import UnassignedTray from '../components/UnassignedTray';
 
 const SOURCE_ID = 'places';
 
-function toFeatureCollection(
-  places: Place[],
-  counts: Map<string, PlaceCount>,
-): GeoJSON.FeatureCollection<GeoJSON.Point> {
+function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: 'FeatureCollection',
-    features: places.map((p) => {
-      const c = counts.get(p.id);
-      return {
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: {
-          id: p.id,
-          name: p.name,
-          country: p.country ?? '',
-          first_visit: p.first_visit ?? '',
-          last_visit: p.last_visit ?? '',
-          photos: c?.photo_count ?? 0,
-          routes: c?.route_count ?? 0,
-          color: categoryColor(primaryCategory(p)),
-        },
-      };
-    }),
+    features: places.map((p) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+      properties: { id: p.id },
+    })),
   };
+}
+
+interface MarkerEntry {
+  marker: maplibregl.Marker;
+  el: HTMLElement;
+  coverId: string | null;
+  cat: string;
 }
 
 export default function MapView() {
@@ -47,7 +45,16 @@ export default function MapView() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
-  const prevSelRef = useRef<string | null>(null);
+
+  // Photo-marker plumbing: one DOM marker per unclustered place, the cover photo
+  // fetched as an authed object URL (photos are private, so <img src> can't just
+  // point at the Worker). Markers are created/removed as clustering changes.
+  const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
+  const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → objectURL
+  const placesRef = useRef<Place[]>([]);
+  const selectedIdRef = useRef<string | null>(null);
+  const navigateRef = useRef<(to: string) => void>(() => undefined);
+  const syncMarkersRef = useRef<() => void>(() => undefined);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -64,17 +71,124 @@ export default function MapView() {
   const selectedPlace = places.find((p) => p.id === selectedId) ?? null;
 
   addModeRef.current = addMode;
+  navigateRef.current = navigate;
+  placesRef.current = places;
 
-  // Push new source data whenever the places list changes.
   const syncSource = useCallback((rows: Place[]) => {
     const map = mapRef.current;
     if (!map || !map.getSource(SOURCE_ID)) return;
-    (map.getSource(SOURCE_ID) as GeoJSONSource).setData(
-      toFeatureCollection(rows, countsRef.current),
-    );
+    (map.getSource(SOURCE_ID) as GeoJSONSource).setData(toFeatureCollection(rows));
   }, []);
 
-  // Initial data load — places, plus per-place photo/route counts for popups.
+  // Load a place's cover thumbnail into an <img>, caching the object URL.
+  const loadCover = useCallback((photoId: string, img: HTMLImageElement) => {
+    const cached = coverUrlRef.current.get(photoId);
+    if (cached) {
+      img.src = cached;
+      return;
+    }
+    void fetchPhotoObjectUrl(photoId, 'thumb')
+      .then((url) => {
+        coverUrlRef.current.set(photoId, url);
+        img.src = url;
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const showPopup = useCallback((place: Place, coords: [number, number]) => {
+    const map = mapRef.current;
+    const popup = popupRef.current;
+    if (!map || !popup) return;
+    const c = countsRef.current.get(place.id);
+    const dates =
+      [place.first_visit, place.last_visit].filter(Boolean).join(' → ') || 'No dates yet';
+    popup
+      .setLngLat(coords)
+      .setHTML(
+        `<div class="popup-name">${escapeHtml(place.name)}</div>
+         <div class="popup-meta">${escapeHtml(dates)}</div>
+         <div class="popup-chips">
+           <span class="chip">📷 ${c?.photo_count ?? 0}</span>
+           <span class="chip">🥾 ${c?.route_count ?? 0}</span>
+         </div>`,
+      )
+      .addTo(map);
+  }, []);
+
+  // Build one photo-marker element for a place.
+  const buildMarkerEl = useCallback(
+    (place: Place, cat: string, coords: [number, number]): HTMLElement => {
+      const el = document.createElement('div');
+      el.className = 'photo-marker';
+      el.style.setProperty('--ring', categoryColor(cat));
+      if (place.cover_photo_id) {
+        el.style.background = categoryColor(cat);
+        const img = document.createElement('img');
+        img.alt = '';
+        img.decoding = 'async';
+        el.appendChild(img);
+        loadCover(place.cover_photo_id, img);
+      } else {
+        const fb = document.createElement('div');
+        fb.className = 'photo-marker-fallback';
+        fb.style.background = categoryColor(cat);
+        fb.textContent = categoryIcon(cat);
+        el.appendChild(fb);
+      }
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        navigateRef.current(`/place/${place.id}`);
+      });
+      el.addEventListener('mouseenter', () => showPopup(place, coords));
+      el.addEventListener('mouseleave', () => popupRef.current?.remove());
+      return el;
+    },
+    [loadCover, showPopup],
+  );
+
+  // Reconcile DOM markers with the currently-visible (unclustered) places.
+  const syncMarkers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.getLayer('place-src')) return;
+    const feats = map.queryRenderedFeatures({ layers: ['place-src'] });
+    const seen = new Set<string>();
+    for (const f of feats) {
+      const pid = String(f.id ?? (f.properties?.id as string));
+      if (!pid || seen.has(pid)) continue;
+      seen.add(pid);
+      const place = placesRef.current.find((p) => p.id === pid);
+      if (!place) continue;
+      const cat = primaryCategory(place);
+      const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+      const cover = place.cover_photo_id ?? null;
+      let entry = markersRef.current.get(pid);
+      if (entry && (entry.coverId !== cover || entry.cat !== cat)) {
+        entry.marker.remove();
+        markersRef.current.delete(pid);
+        entry = undefined;
+      }
+      if (!entry) {
+        const el = buildMarkerEl(place, cat, coords);
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat(coords)
+          .addTo(map);
+        entry = { marker, el, coverId: cover, cat };
+        markersRef.current.set(pid, entry);
+      } else {
+        entry.marker.setLngLat(coords);
+      }
+      entry.el.classList.toggle('selected', pid === selectedIdRef.current);
+    }
+    for (const [pid, entry] of markersRef.current) {
+      if (!seen.has(pid)) {
+        entry.marker.remove();
+        markersRef.current.delete(pid);
+      }
+    }
+  }, [buildMarkerEl]);
+  syncMarkersRef.current = syncMarkers;
+
+  // Initial data load — places + per-place photo/route counts for popups.
   useEffect(() => {
     fetchPlaces()
       .then(setPlaces)
@@ -82,7 +196,6 @@ export default function MapView() {
     fetchPlaceCounts()
       .then((c) => {
         countsRef.current = c;
-        syncSource(places);
       })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,59 +263,14 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
-      // Highlight ring under the selected pin.
+      // Invisible anchor layer for unclustered places — drives clustering math and
+      // tells us which places to draw a DOM photo-marker for (via queryRenderedFeatures).
       map.addLayer({
-        id: 'pin-highlight',
-        type: 'circle',
-        source: SOURCE_ID,
-        filter: ['==', ['get', 'id'], '__none__'],
-        paint: {
-          'circle-radius': 24,
-          'circle-color': '#3b82f6',
-          'circle-opacity': 0.3,
-          'circle-blur': 0.5,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#60a5fa',
-        },
-      });
-      // Soft category-colored glow under each place.
-      map.addLayer({
-        id: 'place-glow',
+        id: 'place-src',
         type: 'circle',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-radius': 15,
-          'circle-color': ['get', 'color'],
-          'circle-opacity': 0.28,
-          'circle-blur': 1,
-        },
-      });
-      // Color-coded place markers (grow when selected). Reliable circles — no
-      // fragile icon images.
-      map.addLayer({
-        id: 'place-pins',
-        type: 'circle',
-        source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['case', ['boolean', ['feature-state', 'selected'], false], 9, 7],
-          'circle-stroke-width': 2.5,
-          'circle-stroke-color': '#ffffff',
-        },
-      });
-      // Transparent hit target on top so taps ALWAYS land on a place.
-      map.addLayer({
-        id: 'place-hit',
-        type: 'circle',
-        source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-radius': 20,
-          'circle-color': '#000',
-          'circle-opacity': 0,
-        },
+        paint: { 'circle-radius': 12, 'circle-opacity': 0, 'circle-color': '#000' },
       });
 
       setReady(true);
@@ -221,19 +289,12 @@ export default function MapView() {
       });
     });
 
-    // Select a place on click.
-    map.on('click', 'place-hit', (e) => {
-      const f = e.features?.[0] as MapGeoJSONFeature | undefined;
-      const id = f?.properties?.id as string | undefined;
-      if (id) navigate(`/place/${id}`);
-    });
-
-    // Click handling: our pins are handled above. Otherwise, if you clicked a
-    // city / POI label on the basemap, make a place there (prefilled with its
-    // name); an empty-map click only adds a place while in add mode.
+    // Individual places are DOM markers (they handle their own clicks). A canvas
+    // click that isn't on a cluster: create a place at a clicked city/POI label,
+    // or (in add mode) at an empty spot.
     map.on('click', (e) => {
-      const ours = map.queryRenderedFeatures(e.point, { layers: ['clusters', 'place-hit'] });
-      if (ours.length > 0) return;
+      const onCluster = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+      if (onCluster.length > 0) return;
 
       const label = map.queryRenderedFeatures(e.point).find((f) => {
         const lid = f.layer.id;
@@ -241,7 +302,7 @@ export default function MapView() {
           f.geometry.type === 'Point' &&
           f.properties &&
           (f.properties.name || f.properties['name:en'] || f.properties.name_en) &&
-          !['cluster-count', 'place-pins', 'place-hit'].includes(lid)
+          !['cluster-count', 'place-src'].includes(lid)
         );
       });
       if (label) {
@@ -256,36 +317,23 @@ export default function MapView() {
       void handleAddAt(e.lngLat.lng, e.lngLat.lat);
     });
 
-    // Hover popup on points.
-    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
-    popupRef.current = popup;
+    popupRef.current = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 26,
+    });
 
-    map.on('mouseenter', 'place-hit', (e) => {
-      map.getCanvas().style.cursor = 'pointer';
-      const f = e.features?.[0];
-      if (!f) return;
-      const p = f.properties as Record<string, string>;
-      const dates = [p.first_visit, p.last_visit].filter(Boolean).join(' → ') || 'No dates yet';
-      const html = `
-        <div class="popup-name">${escapeHtml(p.name)}</div>
-        <div class="popup-meta">${escapeHtml(dates)}</div>
-        <div class="popup-chips">
-          <span class="chip">📷 ${Number(p.photos) || 0}</span>
-          <span class="chip">🥾 ${Number(p.routes) || 0}</span>
-        </div>`;
-      popup
-        .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
-        .setHTML(html)
-        .addTo(map);
-    });
-    map.on('mouseleave', 'place-hit', () => {
-      map.getCanvas().style.cursor = '';
-      popup.remove();
-    });
     map.on('mouseenter', 'clusters', () => (map.getCanvas().style.cursor = 'pointer'));
     map.on('mouseleave', 'clusters', () => (map.getCanvas().style.cursor = ''));
 
+    // Re-sync photo markers whenever the map settles (pan/zoom/cluster/data change).
+    map.on('idle', () => syncMarkersRef.current());
+
     return () => {
+      for (const entry of markersRef.current.values()) entry.marker.remove();
+      markersRef.current.clear();
+      for (const url of coverUrlRef.current.values()) URL.revokeObjectURL(url);
+      coverUrlRef.current.clear();
       map.remove();
       mapRef.current = null;
     };
@@ -297,25 +345,18 @@ export default function MapView() {
     ? places.filter((p) => effectiveCategories(p).includes(filterCat))
     : places;
 
-  // Keep the source in sync once both map and data are ready.
+  // Keep the source in sync once both map and data are ready (idle → syncMarkers).
   useEffect(() => {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);
 
-  // Highlight the selected pin (ring + enlarge via feature-state).
+  // Selected place: toggle the highlight class on its marker directly.
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready) return;
-    if (map.getLayer('pin-highlight')) {
-      map.setFilter('pin-highlight', ['==', ['get', 'id'], selectedId ?? '__none__']);
+    selectedIdRef.current = selectedId ?? null;
+    for (const [pid, entry] of markersRef.current) {
+      entry.el.classList.toggle('selected', pid === selectedId);
     }
-    const prev = prevSelRef.current;
-    if (prev && prev !== selectedId) {
-      map.setFeatureState({ source: SOURCE_ID, id: prev }, { selected: false });
-    }
-    if (selectedId) map.setFeatureState({ source: SOURCE_ID, id: selectedId }, { selected: true });
-    prevSelRef.current = selectedId ?? null;
-  }, [selectedId, ready, places]);
+  }, [selectedId]);
 
   async function handleAddAt(lng: number, lat: number, presetName?: string) {
     setAddMode(false);
@@ -324,7 +365,6 @@ export default function MapView() {
       return;
     }
     setBanner('Adding that place…');
-    // Use the clicked label's name if we have it; otherwise reverse-geocode.
     const geo = presetName ? null : await reverseGeocode(lng, lat);
     try {
       const created = await createPlace({
@@ -528,11 +568,7 @@ export default function MapView() {
         </div>
       )}
 
-      <UnassignedTray
-        key={trayNonce}
-        places={places}
-        onChanged={() => setTrayNonce((n) => n + 1)}
-      />
+      <UnassignedTray key={trayNonce} places={places} onChanged={() => setTrayNonce((n) => n + 1)} />
 
       {selectedPlace && (
         <PlacePanel
