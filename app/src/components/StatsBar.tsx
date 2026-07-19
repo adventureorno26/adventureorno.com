@@ -59,41 +59,32 @@ export default function StatsBar({ places, addMode, onToggleAdd }: Props) {
 
   return (
     <div className="stats-bar">
-      <div className="stat-hero">
-        <div className="stat">
-          <span className="stat-ico">📍</span>
-          <b>{places.length}</b> <span className="label">places</span>
-        </div>
-        <div className="stat">
-          <span className="stat-ico">🌍</span>
-          <b>{countries}</b> <span className="label">countries</span>
-        </div>
-        <div className="stat hide-sm">
-          <span className="stat-ico">🗺️</span>
-          <b>{states}</b> <span className="label">states</span>
-        </div>
-        <div className="stat" title={breakdown || 'No Strava activities yet'}>
-          <span className="stat-ico">🥾</span>
-          <b>{animated.toFixed(1)}</b> <span className="label">mi</span>
-        </div>
+      <div className="stat">
+        <b>{places.length}</b> <span className="label">places</span>
+      </div>
+      <div className="stat">
+        <b>{countries}</b> <span className="label">countries</span>
+      </div>
+      <div className="stat">
+        <b>{states}</b> <span className="label">states</span>
+      </div>
+      <div className="stat" title={breakdown || 'No Strava activities yet'}>
+        <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
       </div>
 
       <div className="spacer" />
 
       <div className="actions">
         {canEdit && (
-          <button className={addMode ? 'primary' : ''} onClick={onToggleAdd} title="Add a place">
-            {addMode ? 'Click map…' : '+ Add'}
+          <button className={addMode ? 'primary' : ''} onClick={onToggleAdd}>
+            {addMode ? 'Click map to place…' : '+ Add place'}
           </button>
         )}
-        <Link to="/places" title="All places">
-          <button aria-label="Places">📋</button>
+        <Link to="/trips">
+          <button>Trips</button>
         </Link>
-        <Link to="/trips" title="Trips">
-          <button aria-label="Trips">🧳</button>
-        </Link>
-        <Link to="/settings" title="Settings">
-          <button aria-label="Settings">⚙︎</button>
+        <Link to="/settings">
+          <button>Settings</button>
         </Link>
       </div>
     </div>

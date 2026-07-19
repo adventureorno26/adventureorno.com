@@ -4,11 +4,8 @@ import maplibregl, { type GeoJSONSource, type MapGeoJSONFeature } from 'maplibre
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces } from '../lib/data';
-import { fetchPhotoObjectUrl } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
-import { CATEGORIES, categoryIcon, effectiveCategories, primaryCategory } from '../lib/categories';
-import { makePinImage } from '../lib/pins';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
@@ -35,10 +32,6 @@ function toFeatureCollection(
           last_visit: p.last_visit ?? '',
           photos: c?.photo_count ?? 0,
           routes: c?.route_count ?? 0,
-          miles: c?.miles ?? 0,
-          rating: p.rating ?? 0,
-          cover: p.cover_photo_id ?? '',
-          primary: primaryCategory(p),
         },
       };
     }),
@@ -51,8 +44,6 @@ export default function MapView() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
-  const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → object URL cache
-  const prevSelRef = useRef<string | null>(null);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -60,8 +51,6 @@ export default function MapView() {
   const [banner, setBanner] = useState<string | null>(null);
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
-  const [filterCat, setFilterCat] = useState<string | null>(null);
-  const [findOpen, setFindOpen] = useState(false);
 
   const [trayNonce, setTrayNonce] = useState(0);
 
@@ -112,7 +101,6 @@ export default function MapView() {
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
-        promoteId: 'id', // enables feature-state for the selected-pin highlight
         cluster: true,
         clusterMaxZoom: 12,
         clusterRadius: 45,
@@ -156,43 +144,29 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
-      // Category pin images (one per category + a default).
-      for (const c of CATEGORIES) {
-        if (!map.hasImage(`pin-${c.slug}`)) {
-          map.addImage(`pin-${c.slug}`, makePinImage(c.icon), { pixelRatio: 2 });
-        }
-      }
-      if (!map.hasImage('pin-default')) {
-        map.addImage('pin-default', makePinImage('📍'), { pixelRatio: 2 });
-      }
-
-      // Highlight ring under the selected pin.
+      // Glowing halo beneath each place, then the crisp beacon on top.
       map.addLayer({
-        id: 'pin-highlight',
+        id: 'point-glow',
         type: 'circle',
         source: SOURCE_ID,
-        filter: ['==', ['get', 'id'], '__none__'],
+        filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-radius': 24,
-          'circle-color': '#3b82f6',
-          'circle-opacity': 0.3,
-          'circle-blur': 0.5,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#60a5fa',
-          'circle-translate': [0, -16],
+          'circle-color': '#22d3ee',
+          'circle-opacity': 0.35,
+          'circle-blur': 1,
+          'circle-radius': 15,
         },
       });
-      // Category pin per place (grows a touch when selected).
       map.addLayer({
-        id: 'place-pins',
-        type: 'symbol',
+        id: 'unclustered-point',
+        type: 'circle',
         source: SOURCE_ID,
         filter: ['!', ['has', 'point_count']],
-        layout: {
-          'icon-image': ['concat', 'pin-', ['get', 'primary']],
-          'icon-size': ['case', ['boolean', ['feature-state', 'selected'], false], 1.2, 0.9],
-          'icon-anchor': 'bottom',
-          'icon-allow-overlap': true,
+        paint: {
+          'circle-color': '#22d3ee',
+          'circle-radius': 6.5,
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#eaf7ff',
         },
       });
 
@@ -213,7 +187,7 @@ export default function MapView() {
     });
 
     // Select a place on click.
-    map.on('click', 'place-pins', (e) => {
+    map.on('click', 'unclustered-point', (e) => {
       const f = e.features?.[0] as MapGeoJSONFeature | undefined;
       const id = f?.properties?.id as string | undefined;
       if (id) navigate(`/place/${id}`);
@@ -223,7 +197,7 @@ export default function MapView() {
     map.on('click', (e) => {
       if (!addModeRef.current) return;
       const hit = map.queryRenderedFeatures(e.point, {
-        layers: ['clusters', 'place-pins'],
+        layers: ['clusters', 'unclustered-point'],
       });
       if (hit.length > 0) return; // clicked an existing feature, not empty map
       void handleAddAt(e.lngLat.lng, e.lngLat.lat);
@@ -233,52 +207,25 @@ export default function MapView() {
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
     popupRef.current = popup;
 
-    map.on('mouseenter', 'place-pins', (e) => {
+    map.on('mouseenter', 'unclustered-point', (e) => {
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
       const p = f.properties as Record<string, string>;
       const dates = [p.first_visit, p.last_visit].filter(Boolean).join(' → ') || 'No dates yet';
-      const coverId = p.cover as string | undefined;
-      const at = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-      const rating = Number(p.rating) || 0;
-      const routes = Number(p.routes) || 0;
-      const miles = Number(p.miles) || 0;
-      const stars = rating
-        ? `<div class="popup-stars">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</div>`
-        : '';
-      const routeChip = routes
-        ? `<span class="chip">🥾 ${routes}${miles ? ` · ${miles} mi` : ''}</span>`
-        : '';
-      const body = (photoHtml: string) => `
-        ${photoHtml}
+      const html = `
         <div class="popup-name">${escapeHtml(p.name)}</div>
-        ${stars}
         <div class="popup-meta">${escapeHtml(dates)}</div>
         <div class="popup-chips">
           <span class="chip">📷 ${Number(p.photos) || 0}</span>
-          ${routeChip}
+          <span class="chip">🥾 ${Number(p.routes) || 0}</span>
         </div>`;
-      popup.setLngLat(at).setHTML(body('')).addTo(map);
-
-      // Load the cover photo (cached) and slot it into the popup once ready.
-      if (coverId) {
-        const cached = coverUrlRef.current.get(coverId);
-        const show = (url: string) => {
-          if (popup.isOpen())
-            popup.setHTML(body(`<img class="popup-photo" src="${url}" alt="" />`));
-        };
-        if (cached) show(cached);
-        else
-          fetchPhotoObjectUrl(coverId, 'thumb')
-            .then((url) => {
-              coverUrlRef.current.set(coverId, url);
-              show(url);
-            })
-            .catch(() => undefined);
-      }
+      popup
+        .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+        .setHTML(html)
+        .addTo(map);
     });
-    map.on('mouseleave', 'place-pins', () => {
+    map.on('mouseleave', 'unclustered-point', () => {
       map.getCanvas().style.cursor = '';
       popup.remove();
     });
@@ -292,35 +239,10 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Places matching the active category filter (or all).
-  const visiblePlaces = filterCat
-    ? places.filter((p) => effectiveCategories(p).includes(filterCat))
-    : places;
-
-  // Categories actually present in the data, for the filter bar.
-  const availableCats = CATEGORIES.filter((c) =>
-    places.some((p) => effectiveCategories(p).includes(c.slug)),
-  );
-
   // Keep the source in sync once both map and data are ready.
   useEffect(() => {
-    if (ready) syncSource(visiblePlaces);
-  }, [ready, visiblePlaces, syncSource]);
-
-  // Highlight the selected pin (ring + enlarge via feature-state).
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready) return;
-    if (map.getLayer('pin-highlight')) {
-      map.setFilter('pin-highlight', ['==', ['get', 'id'], selectedId ?? '__none__']);
-    }
-    const prev = prevSelRef.current;
-    if (prev && prev !== selectedId) {
-      map.setFeatureState({ source: SOURCE_ID, id: prev }, { selected: false });
-    }
-    if (selectedId) map.setFeatureState({ source: SOURCE_ID, id: selectedId }, { selected: true });
-    prevSelRef.current = selectedId ?? null;
-  }, [selectedId, ready, places]);
+    if (ready) syncSource(places);
+  }, [ready, places, syncSource]);
 
   async function handleAddAt(lng: number, lat: number) {
     setAddMode(false);
@@ -440,59 +362,8 @@ export default function MapView() {
       <UnassignedTray
         key={trayNonce}
         places={places}
-        onChanged={() => {
-          // A photo may have auto-created a place — refresh the map data.
-          fetchPlaces()
-            .then(setPlaces)
-            .catch(() => undefined);
-          fetchPlaceCounts()
-            .then((c) => {
-              countsRef.current = c;
-            })
-            .catch(() => undefined);
-          setTrayNonce((n) => n + 1);
-        }}
+        onChanged={() => setTrayNonce((n) => n + 1)}
       />
-
-      {/* Find button (bottom) → category sheet */}
-      {availableCats.length > 0 && !selectedPlace && (
-        <button className="find-btn" onClick={() => setFindOpen(true)}>
-          {filterCat ? `${categoryIcon(filterCat)} ${filterCat}` : '🔍 Find'}
-        </button>
-      )}
-      {findOpen && (
-        <div className="find-sheet-backdrop" onClick={() => setFindOpen(false)}>
-          <div className="find-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="find-sheet-head">Find by activity</div>
-            <div className="find-grid">
-              <button
-                className={`find-cat ${filterCat === null ? 'on' : ''}`}
-                onClick={() => {
-                  setFilterCat(null);
-                  setFindOpen(false);
-                }}
-              >
-                <span className="find-ico">🌐</span>
-                <span className="find-label">All</span>
-              </button>
-              {availableCats.map((c) => (
-                <button
-                  key={c.slug}
-                  className={`find-cat ${filterCat === c.slug ? 'on' : ''}`}
-                  title={c.label}
-                  onClick={() => {
-                    setFilterCat(c.slug);
-                    setFindOpen(false);
-                  }}
-                >
-                  <span className="find-ico">{c.icon}</span>
-                  <span className="find-label">{c.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {selectedPlace && (
         <PlacePanel
