@@ -4,7 +4,7 @@ import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAPTILER_STYLE_URL, forwardGeocode, reverseGeocode } from '../lib/maptiler';
 import { createPlace, fetchPlaces, triggerGeocode } from '../lib/data';
-import { readGps, uploadPhoto } from '../lib/photos';
+import { fetchPhotoObjectUrl, readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
@@ -30,6 +30,7 @@ interface MarkerEntry {
   marker: maplibregl.Marker;
   el: HTMLElement;
   cat: string;
+  coverId: string | null; // rebuild the marker when a place gains/changes its cover photo
 }
 
 // A clean modern map pin (SVG teardrop), colored by category, white center dot.
@@ -44,8 +45,11 @@ export default function MapView() {
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
 
-  // One DOM pin-marker per unclustered place; created/removed as clustering changes.
+  // One DOM marker per unclustered place; created/removed as clustering changes.
+  // Places with a cover photo show it as a circular thumbnail; the rest show a
+  // clean teardrop pin.
   const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
+  const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → objectURL
   const placesRef = useRef<Place[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const navigateRef = useRef<(to: string) => void>(() => undefined);
@@ -95,25 +99,54 @@ export default function MapView() {
       .addTo(map);
   }, []);
 
-  // Build one modern pin-marker (SVG teardrop, category-colored) for a place.
+  // Load a place's cover thumbnail into an <img>, caching the object URL.
+  const loadCover = useCallback((photoId: string, img: HTMLImageElement) => {
+    const cached = coverUrlRef.current.get(photoId);
+    if (cached) {
+      img.src = cached;
+      return;
+    }
+    void fetchPhotoObjectUrl(photoId, 'thumb')
+      .then((url) => {
+        coverUrlRef.current.set(photoId, url);
+        img.src = url;
+      })
+      .catch(() => undefined);
+  }, []);
+
+  // Build a marker element for a place: circular cover-photo thumbnail if it has
+  // one, else a clean teardrop pin. Returns the element + its map anchor.
   const buildMarkerEl = useCallback(
-    (place: Place, cat: string, coords: [number, number]): HTMLElement => {
+    (place: Place, cat: string, coords: [number, number]): { el: HTMLElement; anchor: 'center' | 'bottom' } => {
       const color = categoryColor(cat);
       const el = document.createElement('div');
-      el.className = 'geo-marker';
-      el.innerHTML =
-        `<svg class="geo-pin" width="30" height="40" viewBox="0 0 24 32" aria-hidden="true">` +
-        `<path d="${PIN_SVG}" fill="${color}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>` +
-        `<circle cx="12" cy="12" r="4.3" fill="#fff"/></svg>`;
+      let anchor: 'center' | 'bottom';
+      if (place.cover_photo_id) {
+        el.className = 'photo-marker';
+        el.style.setProperty('--ring', color);
+        const img = document.createElement('img');
+        img.alt = '';
+        img.decoding = 'async';
+        el.appendChild(img);
+        loadCover(place.cover_photo_id, img);
+        anchor = 'center';
+      } else {
+        el.className = 'geo-marker';
+        el.innerHTML =
+          `<svg class="geo-pin" width="30" height="40" viewBox="0 0 24 32" aria-hidden="true">` +
+          `<path d="${PIN_SVG}" fill="${color}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>` +
+          `<circle cx="12" cy="12" r="4.3" fill="#fff"/></svg>`;
+        anchor = 'bottom';
+      }
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
         navigateRef.current(`/place/${place.id}`);
       });
       el.addEventListener('mouseenter', () => showPopup(place, coords));
       el.addEventListener('mouseleave', () => popupRef.current?.remove());
-      return el;
+      return { el, anchor };
     },
-    [showPopup],
+    [loadCover, showPopup],
   );
 
   // Reconcile DOM markers with the currently-visible (unclustered) places.
@@ -129,19 +162,20 @@ export default function MapView() {
       const place = placesRef.current.find((p) => p.id === pid);
       if (!place) continue;
       const cat = primaryCategory(place);
+      const cover = place.cover_photo_id ?? null;
       const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
       let entry = markersRef.current.get(pid);
-      if (entry && entry.cat !== cat) {
+      if (entry && (entry.cat !== cat || entry.coverId !== cover)) {
         entry.marker.remove();
         markersRef.current.delete(pid);
         entry = undefined;
       }
       if (!entry) {
-        const el = buildMarkerEl(place, cat, coords);
-        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        const { el, anchor } = buildMarkerEl(place, cat, coords);
+        const marker = new maplibregl.Marker({ element: el, anchor })
           .setLngLat(coords)
           .addTo(map);
-        entry = { marker, el, cat };
+        entry = { marker, el, cat, coverId: cover };
         markersRef.current.set(pid, entry);
       } else {
         entry.marker.setLngLat(coords);
@@ -301,6 +335,8 @@ export default function MapView() {
     return () => {
       for (const entry of markersRef.current.values()) entry.marker.remove();
       markersRef.current.clear();
+      for (const url of coverUrlRef.current.values()) URL.revokeObjectURL(url);
+      coverUrlRef.current.clear();
       map.remove();
       mapRef.current = null;
     };

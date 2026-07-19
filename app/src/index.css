@@ -1610,3 +1610,32 @@ textarea {
   font-size: 12px;
   padding: 5px 9px;
 }
+
+/* Cover-photo markers — circular thumbnail ringed by category color */
+.photo-marker {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--ring, #38bdf8);
+  background: #0b1a2b;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 2px 7px rgba(2, 8, 23, 0.55);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.photo-marker img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-marker:hover {
+  transform: scale(1.1);
+  z-index: 2;
+}
+.photo-marker.selected {
+  transform: scale(1.22);
+  border-color: #fff;
+  box-shadow: 0 0 0 3px var(--ring, #38bdf8), 0 5px 16px rgba(2, 8, 23, 0.6);
+  z-index: 3;
+}
