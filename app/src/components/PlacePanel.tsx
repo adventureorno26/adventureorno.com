@@ -4,12 +4,13 @@ import {
   addVisit,
   deletePlace,
   deleteVisit,
+  fetchEntries,
   fetchPlace,
   fetchVisits,
   mergePlaces,
   updatePlace,
 } from '../lib/data';
-import type { Place, Visit } from '../lib/types';
+import type { Entry, Place, Visit } from '../lib/types';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { forwardGeocode } from '../lib/maptiler';
@@ -52,6 +53,7 @@ export default function PlacePanel({
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [spots, setSpots] = useState<Entry[] | null>(null);
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
@@ -63,10 +65,13 @@ export default function PlacePanel({
   const [name, setName] = useState(place.name);
   const [review, setReview] = useState(place.review ?? '');
   const [loc, setLoc] = useState('');
+  const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
+  const [adjustCover, setAdjustCover] = useState(false);
 
   useEffect(() => {
     setName(place.name);
     setReview(place.review ?? '');
+    setCoverPos(place.cover_pos_y ?? 50);
   }, [place]);
 
   async function reloadVisits() {
@@ -75,13 +80,40 @@ export default function PlacePanel({
   useEffect(() => {
     let active = true;
     setVisits(null);
+    setSpots(null);
     fetchVisits(place.id)
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
+    fetchEntries(place.id)
+      .then((rows) => active && setSpots(rows))
+      .catch(() => active && setSpots([]));
     return () => {
       active = false;
     };
   }, [place.id]);
+
+  // Group spots by their tag (category), in CATEGORIES order, notes last.
+  const spotGroups: { key: string; label: string; icon: string; items: Entry[] }[] = [];
+  if (spots && spots.length) {
+    const order = [...CATEGORIES.map((c) => c.slug), 'note'];
+    const byKind = new Map<string, Entry[]>();
+    for (const e of spots) {
+      const k = e.kind || 'note';
+      if (!byKind.has(k)) byKind.set(k, []);
+      byKind.get(k)!.push(e);
+    }
+    for (const k of order) {
+      const items = byKind.get(k);
+      if (items && items.length) {
+        spotGroups.push({
+          key: k,
+          label: k === 'note' ? 'Notes' : categoryLabel(k),
+          icon: k === 'note' ? '📝' : categoryIcon(k),
+          items,
+        });
+      }
+    }
+  }
 
   async function submitVisit() {
     const start = vStart;
@@ -210,11 +242,32 @@ export default function PlacePanel({
   return (
     <aside className="panel">
       {hasHero ? (
-        <div className="panel-hero">
+        <div className="panel-hero" style={{ ['--pos' as string]: `${coverPos}%` }}>
           <AuthedImg photoId={place.cover_photo_id!} size="full" className="panel-hero-img" />
           <button className="close hero-close" onClick={onClose} aria-label="Close">
             ×
           </button>
+          {canEdit && (
+            <button
+              className="hero-adjust"
+              title="Adjust cover framing"
+              onClick={() => setAdjustCover((v) => !v)}
+            >
+              ⤢
+            </button>
+          )}
+          {canEdit && adjustCover && (
+            <input
+              className="hero-pos"
+              type="range"
+              min={0}
+              max={100}
+              value={coverPos}
+              onChange={(e) => setCoverPos(Number(e.target.value))}
+              onPointerUp={() => void patch({ cover_pos_y: coverPos })}
+              onKeyUp={() => void patch({ cover_pos_y: coverPos })}
+            />
+          )}
           <div className="hero-title">
             <h2>{titleEl}</h2>
           </div>
@@ -407,8 +460,34 @@ export default function PlacePanel({
         </div>
       )}
 
-      <h3 style={{ marginTop: 22 }}>Photos</h3>
+      <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
+
+      {/* All spots at this place, grouped by tag */}
+      {spotGroups.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 22 }}>Spots</h3>
+          <div className="spot-groups">
+            {spotGroups.map((g) => (
+              <div className="spot-group" key={g.key}>
+                <div className="spot-group-head">
+                  {g.icon} {g.label} <span className="label">({g.items.length})</span>
+                </div>
+                {g.items.map((e) => (
+                  <Link
+                    key={e.id}
+                    className="spot-item"
+                    to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
+                  >
+                    <span className="spot-title">{e.title}</span>
+                    {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
+                  </Link>
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {canEdit && (
         <div className="btn-row" style={{ marginTop: 22 }}>

@@ -256,7 +256,7 @@ export default function DayView() {
         {/* Photos from this day */}
         {place && (
           <>
-            <h3 style={{ marginTop: 18 }}>Photos this day</h3>
+            <h3 style={{ marginTop: 18 }}>Photos and Videos this day</h3>
             <PhotoGallery place={place} day={date} />
           </>
         )}

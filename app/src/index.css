@@ -983,7 +983,29 @@ a {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 50% var(--pos, 50%);
   display: block;
+}
+.hero-adjust {
+  position: absolute;
+  top: 10px;
+  right: 48px;
+  z-index: 3;
+  padding: 3px 8px;
+  font-size: 14px;
+  background: rgba(6, 10, 20, 0.55);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+}
+.hero-pos {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 44px;
+  width: auto;
+  z-index: 3;
+  accent-color: var(--accent);
 }
 .panel-hero::after {
   content: '';
@@ -1864,4 +1886,133 @@ textarea {
 }
 .lightbox-count {
   white-space: nowrap;
+}
+
+/* Stat drill-down dropdown */
+.stats-bar .stat {
+  cursor: pointer;
+  font: inherit;
+}
+.stats-bar .stat.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.stat-detail {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 28px));
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 8;
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+}
+.stat-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.stat-detail-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.stat-detail-list {
+  display: flex;
+  flex-direction: column;
+}
+.stat-detail-list > a,
+.stat-detail-list > span {
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+.stat-detail-list > a:hover {
+  background: var(--accent-soft);
+}
+
+/* Spots grouped by tag on the card */
+.spot-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+}
+.spot-group-head {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.spot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.spot-item:hover {
+  background: var(--accent-soft);
+}
+.spot-rating {
+  color: #ffcc4d;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* --- Card spacing polish --- */
+.entry {
+  padding: 12px 14px;
+}
+.entry label:first-child {
+  margin-top: 0;
+}
+.entry .field-row {
+  gap: 12px;
+}
+.entry .btn-row {
+  margin-top: 16px;
+}
+.panel h3 {
+  margin-bottom: 6px;
+}
+.date-edit input,
+.entry input,
+.entry select,
+.entry textarea {
+  min-width: 0;
+}
+
+/* Photos grouped by date */
+.photo-date-group {
+  margin-top: 6px;
+}
+.photo-date {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+.photo-date-group .gallery {
+  margin-top: 0;
 }

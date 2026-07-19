@@ -199,6 +199,33 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
       : d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
+  // Group photos by the date they were taken (keeping each one's flat index so
+  // the carousel still works), so the gallery reads chronologically.
+  const photoDateGroups: { date: string; label: string; items: { photo: Photo; idx: number }[] }[] =
+    [];
+  if (photos && photos.length) {
+    const byDate = new Map<string, { photo: Photo; idx: number }[]>();
+    photos.forEach((p, idx) => {
+      const key = (p.taken_at ?? '').slice(0, 10) || 'undated';
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key)!.push({ photo: p, idx });
+    });
+    for (const [date, items] of byDate) {
+      photoDateGroups.push({
+        date,
+        label:
+          date === 'undated'
+            ? 'Undated'
+            : new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              }),
+        items,
+      });
+    }
+  }
+
   return (
     <div>
       {canUpload && (
@@ -253,37 +280,64 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
       ) : photos.length === 0 && videos.length === 0 ? (
         <p style={{ color: 'var(--muted)', fontSize: 13 }}>No photos or videos yet.</p>
       ) : (
-        <div className="gallery">
-          {photos.map((p, i) => (
-            <div className={`thumb ${place.cover_photo_id === p.id ? 'is-cover' : ''}`} key={p.id}>
-              <AuthedImg photoId={p.id} size="thumb" onClick={() => setLightIdx(i)} />
-              {canUpload && (
-                <button
-                  className="thumb-cover"
-                  title={place.cover_photo_id === p.id ? 'Cover photo' : 'Set as cover (map marker)'}
-                  onClick={() => void setCover(p)}
-                >
-                  {place.cover_photo_id === p.id ? '★' : '☆'}
-                </button>
-              )}
-              {canDelete(p) && (
-                <button className="thumb-del" title="Delete photo" onClick={() => void remove(p)}>
-                  🗑
-                </button>
-              )}
+        <>
+          {photoDateGroups.map((g) => (
+            <div className="photo-date-group" key={g.date}>
+              <div className="photo-date">{g.label}</div>
+              <div className="gallery">
+                {g.items.map(({ photo: p, idx }) => (
+                  <div
+                    className={`thumb ${place.cover_photo_id === p.id ? 'is-cover' : ''}`}
+                    key={p.id}
+                  >
+                    <AuthedImg photoId={p.id} size="thumb" onClick={() => setLightIdx(idx)} />
+                    {canUpload && (
+                      <button
+                        className="thumb-cover"
+                        title={
+                          place.cover_photo_id === p.id ? 'Cover photo' : 'Set as cover (map marker)'
+                        }
+                        onClick={() => void setCover(p)}
+                      >
+                        {place.cover_photo_id === p.id ? '★' : '☆'}
+                      </button>
+                    )}
+                    {canDelete(p) && (
+                      <button
+                        className="thumb-del"
+                        title="Delete photo"
+                        onClick={() => void remove(p)}
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
-          {videos.map((v) => (
-            <div className="thumb-wrap" key={v.id}>
-              <VideoTile id={v.id} onClick={() => setPlaying(v)} />
-              {canUpload && (
-                <button className="thumb-del" title="Delete video" onClick={() => void removeVideo(v)}>
-                  🗑
-                </button>
-              )}
+          {videos.length > 0 && (
+            <div className="photo-date-group">
+              <div className="photo-date">Videos</div>
+              <div className="gallery">
+                {videos.map((v) => (
+                  <div className="thumb-wrap" key={v.id}>
+                    <VideoTile id={v.id} onClick={() => setPlaying(v)} />
+                    {canUpload && (
+                      <button
+                        className="thumb-del"
+                        title="Delete video"
+                        onClick={() => void removeVideo(v)}
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {playing && <VideoPlayer video={playing} onClose={() => setPlaying(null)} />}

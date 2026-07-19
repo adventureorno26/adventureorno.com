@@ -43,7 +43,13 @@ export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: 
   const countries = uniqueCount(places.map((p) => p.country));
   const states = uniqueCount(places.map((p) => p.admin1));
   const [addMenu, setAddMenu] = useState(false);
+  const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const placeList = [...places].sort((a, b) => a.name.localeCompare(b.name));
+  const countryList = [...new Set(places.map((p) => p.country).filter(Boolean))].sort() as string[];
+  const stateList = [...new Set(places.map((p) => p.admin1).filter(Boolean))].sort() as string[];
+  const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
@@ -54,28 +60,69 @@ export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: 
 
   const totalMiles = mileage.reduce((sum, r) => sum + Number(r.miles), 0);
   const animated = useCountUp(totalMiles);
-  const breakdown = [...mileage]
-    .filter((r) => Number(r.miles) > 0)
-    .sort((a, b) => Number(b.miles) - Number(a.miles))
-    .map((r) => `${r.type} ${Number(r.miles).toFixed(1)}`)
-    .join(' · ');
 
   return (
     <div className="stats-bar">
       <div className="stat-row">
-        <div className="stat">
+        <button className={`stat ${detail === 'places' ? 'on' : ''}`} onClick={() => toggle('places')}>
           <b>{places.length}</b> <span className="label">places</span>
-        </div>
-        <div className="stat">
+        </button>
+        <button
+          className={`stat ${detail === 'countries' ? 'on' : ''}`}
+          onClick={() => toggle('countries')}
+        >
           <b>{countries}</b> <span className="label">countries</span>
-        </div>
-        <div className="stat">
+        </button>
+        <button className={`stat ${detail === 'states' ? 'on' : ''}`} onClick={() => toggle('states')}>
           <b>{states}</b> <span className="label">states</span>
-        </div>
-        <div className="stat" title={breakdown || 'No Strava activities yet'}>
+        </button>
+        <button className={`stat ${detail === 'miles' ? 'on' : ''}`} onClick={() => toggle('miles')}>
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
-        </div>
+        </button>
       </div>
+
+      {detail && (
+        <div className="stat-detail">
+          <div className="stat-detail-head">
+            <b>
+              {detail === 'places'
+                ? 'All places'
+                : detail === 'countries'
+                  ? 'Countries'
+                  : detail === 'states'
+                    ? 'States / regions'
+                    : 'Miles by activity'}
+            </b>
+            <button className="stat-detail-x" onClick={() => setDetail(null)}>
+              ×
+            </button>
+          </div>
+          <div className="stat-detail-list">
+            {detail === 'places' &&
+              placeList.map((p) => (
+                <Link key={p.id} to={`/place/${p.id}`} onClick={() => setDetail(null)}>
+                  {p.name}
+                  {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
+                </Link>
+              ))}
+            {detail === 'countries' && countryList.map((c) => <span key={c}>{c}</span>)}
+            {detail === 'states' && stateList.map((s) => <span key={s}>{s}</span>)}
+            {detail === 'miles' &&
+              (mileage.filter((r) => Number(r.miles) > 0).length === 0 ? (
+                <span className="label">No Strava activities yet</span>
+              ) : (
+                [...mileage]
+                  .filter((r) => Number(r.miles) > 0)
+                  .sort((a, b) => Number(b.miles) - Number(a.miles))
+                  .map((r) => (
+                    <span key={r.type}>
+                      <b>{Number(r.miles).toFixed(1)}</b> <span className="label">mi</span> · {r.type}
+                    </span>
+                  ))
+              ))}
+          </div>
+        </div>
+      )}
 
       <div className="spacer" />
 
