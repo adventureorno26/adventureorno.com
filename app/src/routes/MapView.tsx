@@ -629,7 +629,7 @@ export default function MapView() {
       <div className="tag-filter">
         <span className="tag-filter-ico">🔍</span>
         <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
-          <option value="">All places</option>
+          <option value="">Activities</option>
           {CATEGORIES.map((c) => (
             <option key={c.slug} value={c.slug}>
               {c.icon} {c.label}

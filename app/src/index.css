@@ -1468,9 +1468,17 @@ a {
   pointer-events: auto;
 }
 .gear-btn {
-  font-size: 17px;
+  font-size: 26px;
   line-height: 1;
-  padding: 8px 11px;
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.gear-btn:hover {
+  background: transparent;
+  border: none;
+  transform: rotate(30deg);
 }
 @media (max-width: 560px) {
   .stats-bar .actions {
@@ -2167,4 +2175,10 @@ textarea {
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Native select dropdown options: readable dark text on white (was white-on-white) */
+select option {
+  color: #111827;
+  background: #ffffff;
 }
