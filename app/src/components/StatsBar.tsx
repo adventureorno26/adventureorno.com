@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthProvider';
+import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
 import { fetchMileage } from '../lib/strava';
 
 interface Props {
   places: Place[];
-  onAddPhotos: (files: FileList) => void;
   onFilterCategory: (slug: string | null) => void;
-  onDrawTrail: () => void;
 }
 
 // Strava activity type → map filter category.
@@ -58,11 +55,7 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDrawTrail }: Props) {
-  const { profile } = useAuth();
-  const navigate = useNavigate();
-  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
-  const [addMenu, setAddMenu] = useState(false);
+export default function StatsBar({ places, onFilterCategory }: Props) {
   // Only saved, non-bucket places count toward stats.
   const visited = places.filter((p) => !p.bucket && p.saved);
   const countries = uniqueCount(visited.map((p) => p.country));
@@ -70,7 +63,6 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
   const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
   // Drill-down: a country or state selected → shows its cities/places.
   const [sub, setSub] = useState<{ kind: 'country' | 'state'; value: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
   const countryList = [...new Set(visited.map((p) => p.country).filter(Boolean))].sort() as string[];
@@ -213,58 +205,6 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
       <div className="spacer" />
 
       <div className="actions">
-        {canEdit && (
-          <div className="add-wrap">
-            <button onClick={() => setAddMenu((v) => !v)}>+ Add</button>
-            {addMenu && (
-              <div className="add-menu">
-                <button
-                  onClick={() => {
-                    setAddMenu(false);
-                    onDrawTrail();
-                  }}
-                >
-                  Activity
-                </button>
-                <button
-                  onClick={() => {
-                    setAddMenu(false);
-                    navigate('/trips');
-                  }}
-                >
-                  Trip
-                </button>
-                <button
-                  onClick={() => {
-                    setAddMenu(false);
-                    navigate('/bucket');
-                  }}
-                >
-                  Bucket List
-                </button>
-                <button
-                  onClick={() => {
-                    setAddMenu(false);
-                    fileRef.current?.click();
-                  }}
-                >
-                  Photo
-                </button>
-              </div>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/heic,image/heif"
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length) onAddPhotos(e.target.files);
-                e.target.value = '';
-              }}
-            />
-          </div>
-        )}
         <Link to="/settings">
           <button className="gear-btn" aria-label="Settings" title="Settings">
             ⚙

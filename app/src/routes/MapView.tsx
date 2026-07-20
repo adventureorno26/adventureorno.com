@@ -21,6 +21,7 @@ import {
 import { haversineMeters } from '../lib/geo';
 import { categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
 import type { Place } from '../lib/types';
+import { useAuth } from '../auth/AuthProvider';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
@@ -29,32 +30,73 @@ import MemoryBanner from '../components/MemoryBanner';
 
 const SOURCE_ID = 'places';
 
+// A place's effective cover photo — its own, or (for a trail) a trailhead's.
+function effectiveCover(p: Place, all: Place[]): string | null {
+  if (p.cover_photo_id) return p.cover_photo_id;
+  if (p.is_trail)
+    return all.find((x) => x.trail_id === p.id && x.cover_photo_id)?.cover_photo_id ?? null;
+  return null;
+}
+
 function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: 'FeatureCollection',
-    features: places.map((p) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-      properties: { id: p.id },
-    })),
+    features: places.map((p) => {
+      const cover = effectiveCover(p, places);
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+        properties: {
+          id: p.id,
+          photo: cover ? 1 : 0,
+          icon: cover ? `ph-${cover}` : '',
+          color: categoryColor(primaryCategory(p)),
+        },
+      };
+    }),
   };
 }
 
-interface MarkerEntry {
-  marker: maplibregl.Marker;
-  el: HTMLElement;
-  cat: string;
-  coverId: string | null; // rebuild the marker when a place gains/changes its cover photo
-  bucket: boolean; // rebuild when a place moves on/off the bucket list
+// Cache of thumbnail object URLs, keyed by photo id (shared across the module).
+const coverUrlCache = new Map<string, string>();
+async function coverUrl(photoId: string): Promise<string> {
+  const cached = coverUrlCache.get(photoId);
+  if (cached) return cached;
+  const url = await fetchPhotoObjectUrl(photoId, 'thumb');
+  coverUrlCache.set(photoId, url);
+  return url;
 }
 
-// Distinct wishlist pin: an amber teardrop with a bookmark cut-out.
-const BUCKET_COLOR = '#f59e0b';
-
-// A clean modern map pin (SVG teardrop), colored by category, white center dot.
-const PIN_SVG =
-  'M12 0.5C5.6 0.5 0.5 5.6 0.5 12c0 7.9 8.4 16.6 10.9 19.1a0.85 0.85 0 0 0 1.2 0' +
-  'C15.1 28.6 23.5 19.9 23.5 12 23.5 5.6 18.4 0.5 12 0.5Z';
+// Render a place's cover thumbnail into a circular map icon (white ring).
+async function circleIcon(photoId: string): Promise<ImageData | null> {
+  try {
+    const url = await coverUrl(photoId);
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const S = 100;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = S;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, S, S);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(S / 2, S / 2, S / 2 - 5, 0, Math.PI * 2);
+    ctx.clip();
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 4, 4, S - 8, S - 8);
+    ctx.restore();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(S / 2, S / 2, S / 2 - 3, 0, Math.PI * 2);
+    ctx.stroke();
+    return ctx.getImageData(0, 0, S, S);
+  } catch {
+    return null;
+  }
+}
 
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -63,18 +105,10 @@ export default function MapView() {
   const addModeRef = useRef(false);
   const countsRef = useRef<Map<string, PlaceCount>>(new Map());
 
-  // One DOM marker per unclustered place; created/removed as clustering changes.
-  // Places with a cover photo show it as a circular thumbnail; the rest show a
-  // clean teardrop pin.
-  const markersRef = useRef<Map<string, MarkerEntry>>(new Map());
-  const coverUrlRef = useRef<Map<string, string>>(new Map()); // photoId → objectURL
-  const failedCoverRef = useRef<Set<string>>(new Set()); // covers that wouldn't load → show a pin
   const placesRef = useRef<Place[]>([]);
-  const selectedIdRef = useRef<string | null>(null);
   // Placeholder pins created by a map tap — auto-removed on close if left empty.
   const pendingRef = useRef<Set<string>>(new Set());
   const navigateRef = useRef<(to: string) => void>(() => undefined);
-  const syncMarkersRef = useRef<() => void>(() => undefined);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -83,6 +117,10 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addFileRef = useRef<HTMLInputElement | null>(null);
 
   // Draw-a-trail mode: tap the map to add waypoints; segments snap to walking paths.
   const [drawMode, setDrawMode] = useState(false);
@@ -136,144 +174,6 @@ export default function MapView() {
       .addTo(map);
   }, []);
 
-  // Load a place's cover thumbnail into an <img>, caching the object URL.
-  // onFail fires if the photo can't be fetched/decoded → caller shows a pin.
-  const loadCover = useCallback(
-    (photoId: string, img: HTMLImageElement, onFail: () => void) => {
-      const cached = coverUrlRef.current.get(photoId);
-      if (cached) {
-        img.src = cached;
-        return;
-      }
-      void fetchPhotoObjectUrl(photoId, 'thumb')
-        .then((url) => {
-          coverUrlRef.current.set(photoId, url);
-          img.src = url;
-        })
-        .catch(() => onFail());
-    },
-    [],
-  );
-
-  // Build a marker element for a place: circular cover-photo thumbnail if it has
-  // one, else a clean teardrop pin. Returns the element + its map anchor.
-  const buildMarkerEl = useCallback(
-    (place: Place, cat: string, coords: [number, number]): { el: HTMLElement; anchor: 'center' | 'bottom' } => {
-      const color = categoryColor(cat);
-      const el = document.createElement('div');
-      let anchor: 'center' | 'bottom';
-      // Bucket-list (want-to-go) places always use a distinct amber bookmark pin,
-      // never a cover photo — they haven't been visited yet.
-      if (place.bucket) {
-        // Small modern wishlist marker: a compact amber dot with a white ring.
-        el.className = 'bucket-dot';
-        el.innerHTML =
-          `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">` +
-          `<circle cx="8" cy="8" r="6" fill="${BUCKET_COLOR}" stroke="#fff" stroke-width="2"/></svg>`;
-        el.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          navigateRef.current(`/place/${place.id}`);
-        });
-        el.addEventListener('mouseenter', () => showPopup(place, coords));
-        el.addEventListener('mouseleave', () => popupRef.current?.remove());
-        return { el, anchor: 'center' };
-      }
-      // A trail with no photo of its own borrows a trailhead's cover, so it
-      // shows a photo marker instead of a bare pin.
-      const cover =
-        place.cover_photo_id ??
-        (place.is_trail
-          ? placesRef.current.find((p) => p.trail_id === place.id && p.cover_photo_id)
-              ?.cover_photo_id ?? null
-          : null);
-      if (cover && !failedCoverRef.current.has(cover)) {
-        el.className = 'photo-marker';
-        el.style.setProperty('--ring', color);
-        const thumb = document.createElement('div');
-        thumb.className = 'photo-marker-thumb';
-        thumb.style.background = color; // colored fill while the photo loads
-        const img = document.createElement('img');
-        img.alt = '';
-        img.decoding = 'async';
-        // If the cover can't load, fall back to a clean pin (never an empty tile).
-        const onFail = () => {
-          failedCoverRef.current.add(cover);
-          const e = markersRef.current.get(place.id);
-          if (e) {
-            e.marker.remove();
-            markersRef.current.delete(place.id);
-          }
-          syncMarkersRef.current();
-        };
-        img.onerror = onFail;
-        thumb.appendChild(img);
-        el.appendChild(thumb);
-        loadCover(cover, img, onFail);
-        anchor = 'center';
-      } else {
-        el.className = 'geo-marker';
-        el.innerHTML =
-          `<svg class="geo-pin" width="30" height="40" viewBox="0 0 24 32" aria-hidden="true">` +
-          `<path d="${PIN_SVG}" fill="${color}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>` +
-          `<circle cx="12" cy="12" r="4.3" fill="#fff"/></svg>`;
-        anchor = 'bottom';
-      }
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        navigateRef.current(`/place/${place.id}`);
-      });
-      el.addEventListener('mouseenter', () => showPopup(place, coords));
-      el.addEventListener('mouseleave', () => popupRef.current?.remove());
-      return { el, anchor };
-    },
-    [loadCover, showPopup],
-  );
-
-  // Reconcile DOM markers with the currently-visible (unclustered) places.
-  const syncMarkers = useCallback(() => {
-    const map = mapRef.current;
-    if (!map || !map.getLayer('place-src')) return;
-    const feats = map.queryRenderedFeatures({ layers: ['place-src'] });
-    const seen = new Set<string>();
-    for (const f of feats) {
-      const pid = String(f.id ?? (f.properties?.id as string));
-      if (!pid || seen.has(pid)) continue;
-      seen.add(pid);
-      const place = placesRef.current.find((p) => p.id === pid);
-      if (!place) continue;
-      const cat = primaryCategory(place);
-      const cover =
-        place.cover_photo_id ??
-        (place.is_trail
-          ? placesRef.current.find((p) => p.trail_id === place.id && p.cover_photo_id)
-              ?.cover_photo_id ?? null
-          : null);
-      const bucket = place.bucket;
-      const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-      let entry = markersRef.current.get(pid);
-      if (entry && (entry.cat !== cat || entry.coverId !== cover || entry.bucket !== bucket)) {
-        entry.marker.remove();
-        markersRef.current.delete(pid);
-        entry = undefined;
-      }
-      if (!entry) {
-        const { el, anchor } = buildMarkerEl(place, cat, coords);
-        const marker = new maplibregl.Marker({ element: el, anchor }).setLngLat(coords).addTo(map);
-        entry = { marker, el, cat, coverId: cover, bucket };
-        markersRef.current.set(pid, entry);
-      } else {
-        entry.marker.setLngLat(coords);
-      }
-      entry.el.classList.toggle('selected', pid === selectedIdRef.current);
-    }
-    for (const [pid, entry] of markersRef.current) {
-      if (!seen.has(pid)) {
-        entry.marker.remove();
-        markersRef.current.delete(pid);
-      }
-    }
-  }, [buildMarkerEl]);
-  syncMarkersRef.current = syncMarkers;
 
   // Initial data load — places + per-place photo/route counts for popups.
   useEffect(() => {
@@ -414,15 +314,61 @@ export default function MapView() {
         },
         paint: { 'text-color': '#05121f' },
       });
-      // Invisible anchor layer for unclustered places — drives clustering math and
-      // tells us which places to draw a DOM photo-marker for (via queryRenderedFeatures).
+      // Unclustered places WITHOUT a photo → a colored dot (GPU-rendered, so it
+      // never drifts on zoom).
       map.addLayer({
-        id: 'place-src',
+        id: 'place-dots',
         type: 'circle',
         source: SOURCE_ID,
-        filter: ['!', ['has', 'point_count']],
-        paint: { 'circle-radius': 12, 'circle-opacity': 0, 'circle-color': '#000' },
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'photo'], 0]],
+        paint: {
+          'circle-radius': ['case', ['boolean', ['feature-state', 'selected'], false], 11, 8],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 2,
+        },
       });
+      // Unclustered places WITH a photo → the cover as a circular symbol icon,
+      // lazily generated in `styleimagemissing`. Symbols are part of the map, so
+      // they stay anchored to their exact coordinates through any zoom.
+      map.addLayer({
+        id: 'place-photos',
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'photo'], 1]],
+        layout: {
+          'icon-image': ['get', 'icon'],
+          'icon-size': 1,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      });
+      map.on('styleimagemissing', (e) => {
+        const iid = e.id;
+        if (!iid || !iid.startsWith('ph-') || map.hasImage(iid)) return;
+        // Reserve the id with a transparent placeholder so it doesn't refire,
+        // then fill in the real circular thumbnail once it decodes.
+        map.addImage(iid, { width: 100, height: 100, data: new Uint8Array(100 * 100 * 4) }, { pixelRatio: 2 });
+        void circleIcon(iid.slice(3)).then((data) => {
+          if (data && map.hasImage(iid)) map.updateImage(iid, data);
+        });
+      });
+      for (const layer of ['place-dots', 'place-photos'] as const) {
+        map.on('click', layer, (e) => {
+          const pid = e.features?.[0]?.properties?.id as string | undefined;
+          if (pid) navigateRef.current(`/place/${pid}`);
+        });
+        map.on('mouseenter', layer, (e) => {
+          map.getCanvas().style.cursor = 'pointer';
+          const pid = e.features?.[0]?.properties?.id as string | undefined;
+          const place = placesRef.current.find((p) => p.id === pid);
+          if (place) showPopup(place, [place.lng, place.lat]);
+        });
+        map.on('mouseleave', layer, () => {
+          map.getCanvas().style.cursor = '';
+          popupRef.current?.remove();
+        });
+      }
 
       // Draw-a-trail overlay (waypoints + snapped line).
       map.addSource('draw', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -474,6 +420,9 @@ export default function MapView() {
       }
       const onCluster = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
       if (onCluster.length > 0) return;
+      // Tapped an existing place marker → its layer handler opens the card.
+      if (map.queryRenderedFeatures(e.point, { layers: ['place-dots', 'place-photos'] }).length > 0)
+        return;
 
       const label = map.queryRenderedFeatures(e.point).find((f) => {
         const lid = f.layer.id;
@@ -481,7 +430,7 @@ export default function MapView() {
           f.geometry.type === 'Point' &&
           f.properties &&
           (f.properties.name || f.properties['name:en'] || f.properties.name_en) &&
-          !['cluster-count', 'place-src'].includes(lid)
+          !['cluster-count', 'place-dots', 'place-photos'].includes(lid)
         );
       });
       if (label) {
@@ -505,14 +454,7 @@ export default function MapView() {
     map.on('mouseenter', 'clusters', () => (map.getCanvas().style.cursor = 'pointer'));
     map.on('mouseleave', 'clusters', () => (map.getCanvas().style.cursor = ''));
 
-    // Re-sync photo markers whenever the map settles (pan/zoom/cluster/data change).
-    map.on('idle', () => syncMarkersRef.current());
-
     return () => {
-      for (const entry of markersRef.current.values()) entry.marker.remove();
-      markersRef.current.clear();
-      for (const url of coverUrlRef.current.values()) URL.revokeObjectURL(url);
-      coverUrlRef.current.clear();
       map.remove();
       mapRef.current = null;
     };
@@ -548,13 +490,19 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, ready, places]);
 
-  // Selected place: toggle the highlight class on its marker directly.
+  // Selected place: highlight its symbol/dot via feature-state.
+  const prevSelectedRef = useRef<string | null>(null);
   useEffect(() => {
-    selectedIdRef.current = selectedId ?? null;
-    for (const [pid, entry] of markersRef.current) {
-      entry.el.classList.toggle('selected', pid === selectedId);
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (prevSelectedRef.current) {
+      map.setFeatureState({ source: SOURCE_ID, id: prevSelectedRef.current }, { selected: false });
     }
-  }, [selectedId]);
+    if (selectedId) {
+      map.setFeatureState({ source: SOURCE_ID, id: selectedId }, { selected: true });
+    }
+    prevSelectedRef.current = selectedId ?? null;
+  }, [selectedId, ready]);
 
   // Opening a place (e.g. from the stats list) flies the map to its marker if it
   // isn't already on screen, so you always see the pin behind the card.
@@ -909,23 +857,72 @@ export default function MapView() {
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
 
-      <StatsBar
-        places={places}
-        onAddPhotos={handleAddPhotos}
-        onFilterCategory={setFilterCat}
-        onDrawTrail={() => {
-          setDrawMode(true);
-          setBanner(null);
-        }}
-      />
+      <StatsBar places={places} onFilterCategory={setFilterCat} />
 
-      <MapSearch
-        onPick={handleSearchPick}
-        getProximity={() => {
-          const c = mapRef.current?.getCenter();
-          return c ? [c.lng, c.lat] : undefined;
-        }}
-      />
+      <div className="map-top-row">
+        {canEdit && (
+          <div className="add-wrap">
+            <button className="add-btn" onClick={() => setAddMenuOpen((v) => !v)}>
+              + Add
+            </button>
+            {addMenuOpen && (
+              <div className="add-menu">
+                <button
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    setDrawMode(true);
+                    setBanner(null);
+                  }}
+                >
+                  Activity
+                </button>
+                <button
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    navigate('/trips');
+                  }}
+                >
+                  Trip
+                </button>
+                <button
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    navigate('/bucket');
+                  }}
+                >
+                  Bucket List
+                </button>
+                <button
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    addFileRef.current?.click();
+                  }}
+                >
+                  Photo
+                </button>
+              </div>
+            )}
+            <input
+              ref={addFileRef}
+              type="file"
+              accept="image/jpeg,image/heic,image/heif"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length) handleAddPhotos(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        )}
+        <MapSearch
+          onPick={handleSearchPick}
+          getProximity={() => {
+            const c = mapRef.current?.getCenter();
+            return c ? [c.lng, c.lat] : undefined;
+          }}
+        />
+      </div>
 
       {!selectedPlace && !addMode && !drawMode && <MemoryBanner />}
 

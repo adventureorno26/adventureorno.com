@@ -80,7 +80,7 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
         const { lng, lat } = e.lngLat;
         try {
           const geo = await reverseGeocode(lng, lat).catch(() => null);
-          const created = await createPlace({
+          await createPlace({
             name,
             country: geo?.country ?? null,
             admin1: geo?.admin1 ?? null,
@@ -89,8 +89,7 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
             bucket: true,
             saved: true,
           });
-          onAdded();
-          navigate(`/place/${created.id}`);
+          onAdded(); // refresh the bucket map/list; stay on this page (no jump to main map)
         } catch {
           /* ignore */
         }

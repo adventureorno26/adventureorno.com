@@ -149,6 +149,14 @@ export default function PlacePanel({
   const [website, setWebsite] = useState(place.website ?? '');
   const [trailSel, setTrailSel] = useState('');
   const [trailheadName, setTrailheadName] = useState('');
+  const [editingRegion, setEditingRegion] = useState(false);
+  const [eAdmin1, setEAdmin1] = useState(place.admin1 ?? '');
+  const [eCountry, setECountry] = useState(place.country ?? '');
+
+  async function saveRegion() {
+    setEditingRegion(false);
+    await patch({ admin1: eAdmin1.trim() || null, country: eCountry.trim() || null });
+  }
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
 
@@ -157,6 +165,8 @@ export default function PlacePanel({
     setReview(place.review ?? '');
     setWebsite(place.website ?? '');
     setCoverPos(place.cover_pos_y ?? 50);
+    setEAdmin1(place.admin1 ?? '');
+    setECountry(place.country ?? '');
   }, [place]);
 
   async function reloadVisits() {
@@ -481,15 +491,40 @@ export default function PlacePanel({
           </button>
         </div>
       )}
-      {canEdit && (
-        <div className="loc-search bucket-search">
-          <MapSearch onPick={setLocationFromSearch} />
-        </div>
-      )}
       <div className={`meta ${place.is_trail ? 'meta-trail' : ''}`}>
         <span>
-          {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
-          {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+          {editingRegion && canEdit ? (
+            <span className="region-edit">
+              <input
+                placeholder="State / region"
+                value={eAdmin1}
+                autoFocus
+                onChange={(e) => setEAdmin1(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
+              />
+              <input
+                placeholder="Country"
+                value={eCountry}
+                onChange={(e) => setECountry(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
+              />
+              <button className="primary" style={{ flex: 'none' }} onClick={() => void saveRegion()}>
+                Save
+              </button>
+            </span>
+          ) : (
+            <span
+              className={canEdit ? 'region-editable' : undefined}
+              title={canEdit ? 'Tap to edit the state / region' : undefined}
+              onClick={() => canEdit && setEditingRegion(true)}
+            >
+              {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
+            </span>
+          )}
+          {!editingRegion &&
+            visits &&
+            visits.length > 0 &&
+            ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
           {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
         </span>
         {place.is_trail && trailMilesSummary(trailMiles) && (
@@ -820,6 +855,18 @@ export default function PlacePanel({
               ))}
             </div>
           )}
+        </>
+      )}
+
+      {canEdit && (
+        <>
+          <h3 style={{ marginTop: 22 }}>Set / fix this place’s location</h3>
+          <p className="loc-hint">
+            Search a place or address to reposition the pin and update the state &amp; address.
+          </p>
+          <div className="loc-search bucket-search">
+            <MapSearch onPick={setLocationFromSearch} />
+          </div>
         </>
       )}
 
