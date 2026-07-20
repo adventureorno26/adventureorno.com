@@ -7,7 +7,7 @@ import { categoryIcon, categoryLabel, effectiveCategories } from '../lib/categor
 import type { Place } from '../lib/types';
 import { BucketIcon, PinIcon } from '../components/Icons';
 import MapSearch from '../components/MapSearch';
-import BucketMiniMap from '../components/BucketMiniMap';
+import BucketMap from '../components/BucketMap';
 
 export default function BucketList() {
   const { profile } = useAuth();
@@ -78,15 +78,11 @@ export default function BucketList() {
         </span>
         Bucket List
       </h1>
-      <p style={{ color: 'var(--muted)' }}>
-        Places you want to go. Each shows a distinct amber pin on the map. Open one to tag it, add a
-        website, or get directions — and tap <b>Add to map</b> once you've been to make it a normal
-        visited place.
-      </p>
+
+      <BucketMap places={places ?? []} onAdded={load} />
 
       {canEdit && (
         <div className="card" style={{ margin: '14px 0 20px' }}>
-          <b>Add a place to your bucket list</b>
           <div className="bucket-search">
             <MapSearch onPick={addFromSearch} />
           </div>
@@ -96,14 +92,10 @@ export default function BucketList() {
 
       {msg && <div className="banner">{msg}</div>}
 
-      {places && places.length > 0 && <BucketMiniMap places={places} />}
-
       {places === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
       ) : places.length === 0 ? (
-        <p style={{ color: 'var(--muted)' }}>
-          Nothing here yet. Search above to add somewhere you want to go.
-        </p>
+        <p style={{ color: 'var(--muted)' }}>Nothing here yet.</p>
       ) : (
         groups.map((g) => (
           <section key={g.label} style={{ marginTop: 18 }}>

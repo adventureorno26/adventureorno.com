@@ -159,13 +159,21 @@ a {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 12; /* above the open place panel (z-10) so top-bar dropdowns show in front */
+  z-index: 5; /* below the place panel on desktop so the card sits in front of the actions */
   display: flex;
   gap: 8px;
   align-items: center;
   padding: 10px 14px;
   background: linear-gradient(180deg, rgba(15, 17, 21, 0.92), rgba(15, 17, 21, 0));
   pointer-events: none;
+}
+/* On mobile the card is full-screen, so lift the top bar above it (its container
+   is pointer-events:none, so only the buttons/dropdowns capture) — this keeps the
+   +Add / stats dropdowns in front of an open card. */
+@media (max-width: 640px) {
+  .stats-bar {
+    z-index: 12;
+  }
 }
 .stats-bar .stat {
   pointer-events: auto;
@@ -209,6 +217,8 @@ a {
 }
 .panel h2 {
   margin: 6px 0 2px;
+  color: #f4f8ff;
+  text-shadow: 0 0 14px rgba(130, 175, 255, 0.4);
 }
 .panel .panel-head {
   display: flex;
@@ -1100,7 +1110,8 @@ a {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--muted);
+  color: #e8effc;
+  text-shadow: 0 0 10px rgba(130, 175, 255, 0.35);
   padding-left: 10px;
   position: relative;
 }
@@ -1586,21 +1597,16 @@ a {
   }
 }
 
-/* "Bucket List" toggle on the map — same glass pill as the Activities filter. */
-.bucket-controls {
+/* "Bucket List" button on the map — opens the bucket-list page. */
+.bucket-btn {
   position: absolute;
   top: calc(52px + env(safe-area-inset-top));
   left: 190px;
   z-index: 6;
   display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-.bucket-btn,
-.bucket-open {
-  display: flex;
   align-items: center;
   gap: 6px;
+  padding: 7px 14px;
   border-radius: 999px;
   background: var(--panel-glass);
   backdrop-filter: blur(14px);
@@ -1611,37 +1617,16 @@ a {
   font-size: 13px;
   cursor: pointer;
 }
-.bucket-btn {
-  padding: 7px 14px;
-}
-.bucket-btn:hover,
-.bucket-open:hover {
+.bucket-btn:hover {
   background: var(--accent-soft);
-}
-.bucket-btn.on {
-  background: rgba(245, 158, 11, 0.22);
-  border-color: #f59e0b;
 }
 .bucket-btn-ico {
   display: inline-flex;
   align-items: center;
   color: #f59e0b;
 }
-.bucket-btn-state {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  padding-left: 2px;
-}
-.bucket-btn.on .bucket-btn-state {
-  color: #f59e0b;
-}
-.bucket-open {
-  padding: 7px 11px;
-  font-size: 15px;
-}
 @media (max-width: 560px) {
-  .bucket-controls {
+  .bucket-btn {
     top: auto;
     bottom: calc(16px + env(safe-area-inset-bottom));
     left: auto;
@@ -1669,6 +1654,34 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+/* Interactive bucket-page map: tap a city/place to add, tap a pin to open it. */
+.bucket-map {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  margin: 14px 0 4px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.bucket-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+.bucket-map-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(2, 8, 23, 0.62);
+  pointer-events: none;
+}
+
 /* Bucket page mini-map — compact by default, grows on hover/click */
 .bucket-mini {
   position: relative;
@@ -2584,6 +2597,16 @@ textarea {
 }
 .add-to-map-btn {
   flex: none;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+/* Compact, sleek buttons inside the "This is a Trail" card */
+.trail-assign .primary,
+.trail-assign button {
+  padding: 5px 11px;
+  font-size: 12.5px;
+  border-radius: 8px;
 }
 .bucket-flag {
   color: #f59e0b;

@@ -85,7 +85,6 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
-  const [showBucket, setShowBucket] = useState(false); // bucket pins hidden by default
 
   // Draw-a-trail mode: tap the map to add waypoints; segments snap to walking paths.
   const [drawMode, setDrawMode] = useState(false);
@@ -546,7 +545,7 @@ export default function MapView() {
   // Filter the map: bucket-list places are hidden unless their toggle is on;
   // visited places follow the selected activity tag.
   const visiblePlaces = places.filter((p) => {
-    if (p.bucket) return showBucket;
+    if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 
@@ -954,26 +953,12 @@ export default function MapView() {
         </select>
       </div>
 
-      <div className="bucket-controls">
-        <button
-          className={`bucket-btn ${showBucket ? 'on' : ''}`}
-          onClick={() => setShowBucket((v) => !v)}
-          title={showBucket ? 'Hide bucket-list pins' : 'Show bucket-list pins'}
-        >
-          <span className="bucket-btn-ico">
-            <BucketIcon size={15} />
-          </span>
-          Bucket List
-        </button>
-        <button
-          className="bucket-open"
-          onClick={() => navigate('/bucket')}
-          aria-label="Open bucket list page"
-          title="Open the full list"
-        >
-          ↗
-        </button>
-      </div>
+      <button className="bucket-btn" onClick={() => navigate('/bucket')} title="Open your bucket list">
+        <span className="bucket-btn-ico">
+          <BucketIcon size={15} />
+        </span>
+        Bucket List
+      </button>
 
       {!selectedPlace && !addMode && !drawMode && <MemoryBanner />}
 

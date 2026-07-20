@@ -69,6 +69,15 @@ function groupCountLabel(runs: Activity[]): string {
   return `${runs.length} ${activityNoun(type, runs.length)}`;
 }
 
+/** Plural noun for a trail's "Logged ___" heading: "hikes" if all hikes, else
+ *  "runs"/"walks"/… when uniform, "activities" when mixed or empty. */
+function trailActivityNoun(acts: Activity[] | null): string {
+  if (!acts || acts.length === 0) return 'activities';
+  const types = new Set(acts.map((a) => a.type));
+  const type = types.size === 1 ? [...types][0] : 'activity';
+  return activityNoun(type, 2);
+}
+
 // Past-tense verb for a "miles hiked/run/walked/biked" summary.
 const ACTIVITY_VERB: Record<string, string> = {
   Run: 'run',
@@ -659,7 +668,8 @@ export default function PlacePanel({
 
           <div className="visits-head">
             <h3 style={{ margin: '22px 0 0' }}>
-              Logged runs{trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
+              Logged {trailActivityNoun(trailActs)}
+              {trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
             </h3>
             {canEdit && onAddRoute && (
               <button className="link-btn" onClick={() => onAddRoute(place.id, place.name)}>
@@ -671,8 +681,8 @@ export default function PlacePanel({
             <p style={{ color: 'var(--muted)' }}>Loading…</p>
           ) : trailActs.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-              No runs on this trail yet. Tap <b>＋ Add a route</b> to trace one on the map, or log it
-              to Strava.
+              Nothing logged on this trail yet. Tap <b>＋ Add a route</b> to trace one on the map, or
+              log it to Strava.
             </p>
           ) : (
             <div className="trailheads">
