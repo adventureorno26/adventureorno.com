@@ -408,16 +408,23 @@ export default function PlacePanel({
       </span>
     );
 
-  // Small Directions button, pinned to the card's top-right corner.
+  // Small Directions button, pinned to the card's top-right corner. Route to the
+  // NAMED place/city (address, or "name, region, country") so Maps drops you at
+  // the city rather than a bare lat/lng that can land off in a field. Coordinates
+  // ride along as a fallback for Maps to disambiguate.
+  const dirDest =
+    place.address?.trim() ||
+    [place.name, place.admin1, place.country].filter(Boolean).join(', ') ||
+    `${place.lat},${place.lng}`;
   const directionsBtn = (
     <a
       className="directions-btn sm"
-      href={`https://maps.apple.com/?daddr=${place.lat},${place.lng}&q=${encodeURIComponent(
-        place.name,
-      )}&dirflg=d`}
+      href={`https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${
+        place.lng
+      }&dirflg=d`}
       target="_blank"
       rel="noreferrer"
-      title="Directions"
+      title={`Directions to ${dirDest}`}
     >
       Directions
     </a>
@@ -553,6 +560,27 @@ export default function PlacePanel({
 
       {error && <div className="banner">{error}</div>}
 
+      {/* Edit tags — sits ABOVE the tag chips. */}
+      {canEdit && (
+        <details className="cat-edit">
+          <summary>Edit tags</summary>
+          <div className="cat-picker">
+            {CATEGORIES.map((c) => {
+              const on = (place.categories ?? []).includes(c.slug);
+              return (
+                <button
+                  key={c.slug}
+                  className={`cat-toggle ${on ? 'on' : ''}`}
+                  onClick={() => void toggleCat(c.slug)}
+                >
+                  {c.icon} {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </details>
+      )}
+
       {/* Category tags — above the review box. Tap × to remove a tag you added. */}
       <div className="cats">
         {effectiveCategories(place).map((slug) => {
@@ -578,25 +606,6 @@ export default function PlacePanel({
           <span style={{ color: 'var(--muted)', fontSize: 12 }}>No tags yet</span>
         )}
       </div>
-      {canEdit && (
-        <details className="cat-edit">
-          <summary>Edit tags</summary>
-          <div className="cat-picker">
-            {CATEGORIES.map((c) => {
-              const on = (place.categories ?? []).includes(c.slug);
-              return (
-                <button
-                  key={c.slug}
-                  className={`cat-toggle ${on ? 'on' : ''}`}
-                  onClick={() => void toggleCat(c.slug)}
-                >
-                  {c.icon} {c.label}
-                </button>
-              );
-            })}
-          </div>
-        </details>
-      )}
 
       {/* Overall review (rating lives next to the title; tags are above). */}
       {canEdit ? (

@@ -948,8 +948,9 @@ a {
 }
 
 /* ---------- Mobile safe area (don't hide under the iPhone clock) ---------- */
+/* Nudged down a few rows so the stats + Add/search clear the very top edge. */
 .stats-bar {
-  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-top: calc(56px + env(safe-area-inset-top));
 }
 .add-bar {
   top: calc(54px + env(safe-area-inset-top));
@@ -1509,23 +1510,32 @@ a {
   position: relative;
 }
 
-/* +Add sits to the LEFT of the search, both centered under the stats bar. */
+/* +Add sits to the LEFT of the search, both centered under the stats bar and
+ * framed to roughly the width of the stat blocks above them. */
 .map-top-row {
   position: absolute;
-  top: calc(52px + env(safe-area-inset-top));
+  top: calc(104px + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: stretch;
   gap: 8px;
-  width: min(520px, calc(100vw - 28px));
+  width: min(420px, calc(100vw - 32px));
   z-index: 7;
 }
 .map-top-row .map-search {
-  position: static;
+  position: relative;
+  top: auto;
+  left: auto;
   transform: none;
   width: auto;
   flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+}
+.map-top-row .map-search-box {
+  flex: 1;
+  height: 100%;
 }
 /* +Add hugs its own text; menu drops beneath it. */
 .map-top-row .add-wrap {

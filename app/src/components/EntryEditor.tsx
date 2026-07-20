@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { Entry, NewEntry } from '../lib/types';
 import { CATEGORIES } from '../lib/categories';
+import { retrieveResult, type SearchResult } from '../lib/maptiler';
+import MapSearch from './MapSearch';
 import StarRating from './StarRating';
 
 interface Props {
@@ -29,6 +31,15 @@ export default function EntryEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Search a place/address → add it as a spot under this city (no new pin). Fills
+  // the title with the place name and drops its address into the notes.
+  async function pickPlace(r: SearchResult) {
+    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
+    if (full.name) setTitle(full.name);
+    const addr = full.address || [full.admin1, full.country].filter(Boolean).join(', ');
+    if (addr) setBody((b) => (b.trim() ? b : addr));
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) {
@@ -55,6 +66,11 @@ export default function EntryEditor({
 
   return (
     <form className="entry" onSubmit={submit}>
+      <label>Search for a place or address to add (optional)</label>
+      <div className="spot-search bucket-search">
+        <MapSearch onPick={pickPlace} />
+      </div>
+
       <label>Kind (tags this place so it shows in the tag search)</label>
       <select value={kind} onChange={(e) => setKind(e.target.value)}>
         {CATEGORIES.map((c) => (

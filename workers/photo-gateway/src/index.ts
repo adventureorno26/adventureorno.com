@@ -229,7 +229,11 @@ async function handlePhoto(env: Env, req: Request, id: string, caller: Caller | 
   if (!photo) return json({ error: 'not found' }, 404, cors);
   const size = new URL(req.url).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
   const key = size === 'thumb' ? photo.thumb_key : photo.r2_key;
-  const obj = await env.PHOTOS.get(key);
+  // Older/restored photos may have no separate thumbnail stored (thumb_key null
+  // or its object missing). Fall back to the full-size image instead of 404ing —
+  // a caution sign on the card is worse than a slightly larger download.
+  let obj = key ? await env.PHOTOS.get(key) : null;
+  if (!obj && size === 'thumb') obj = await env.PHOTOS.get(photo.r2_key);
   if (!obj) return json({ error: 'object missing' }, 404, cors);
   return new Response(obj.body, {
     status: 200,

@@ -20,7 +20,11 @@ export default function AuthedImg({ photoId, size, alt = '', className, onClick 
     let created: string | null = null;
     setUrl(null);
     setFailed(false);
+    // If the thumbnail is missing (older/restored photos were stored without a
+    // separate thumb), fall back to the full-size image before giving up — a
+    // real photo beats a caution sign.
     fetchPhotoObjectUrl(photoId, size)
+      .catch(() => (size === 'thumb' ? fetchPhotoObjectUrl(photoId, 'full') : Promise.reject()))
       .then((u) => {
         if (!active) {
           URL.revokeObjectURL(u);
