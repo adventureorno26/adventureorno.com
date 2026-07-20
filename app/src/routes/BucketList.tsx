@@ -80,7 +80,7 @@ export default function BucketList() {
         Bucket List
       </h1>
 
-      <BucketMap places={places ?? []} />
+      <BucketMap places={places ?? []} onAdded={load} />
 
       {canEdit && (
         <div className="card" style={{ margin: '14px 0 20px' }}>

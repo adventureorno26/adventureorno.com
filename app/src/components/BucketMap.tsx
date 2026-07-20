@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
-import { MAPTILER_STYLE_URL } from '../lib/maptiler';
+import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
+import { createPlace } from '../lib/data';
 import type { Place } from '../lib/types';
 
-/** Map on the bucket page: pan/zoom your want-to-go pins and tap one to open its
- *  card. Adding places is done from the search box (not by clicking the map). */
-export default function BucketMap({ places }: { places: Place[] }) {
+/** Map on the bucket page: pan/zoom your want-to-go pins, tap one to open its
+ *  card, and tap a city/place NAME on the map to add it (empty clicks do nothing,
+ *  so you can pan without accidental adds). */
+export default function BucketMap({ places, onAdded }: { places: Place[]; onAdded: () => void }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const navigate = useNavigate();
@@ -58,11 +60,40 @@ export default function BucketMap({ places }: { places: Place[] }) {
       map.on('mouseenter', 'bpins', () => (map.getCanvas().style.cursor = 'pointer'));
       map.on('mouseleave', 'bpins', () => (map.getCanvas().style.cursor = ''));
 
-      // Only an existing pin opens its card. Clicking the map does NOT add a
-      // place — use the search box for that (avoids accidental additions).
-      map.on('click', 'bpins', (e) => {
-        const id = e.features?.[0]?.properties?.id as string | undefined;
-        if (id) navigate(`/place/${id}`);
+      // Tapping an existing pin opens its card. Tapping a city/place NAME adds it
+      // (empty map clicks do nothing → no accidental adds while panning).
+      map.on('click', async (e) => {
+        const onPin = map.queryRenderedFeatures(e.point, { layers: ['bpins'] });
+        if (onPin.length > 0) {
+          const id = onPin[0].properties?.id as string | undefined;
+          if (id) navigate(`/place/${id}`);
+          return;
+        }
+        const label = map.queryRenderedFeatures(e.point).find((f) => {
+          const nm = f.properties?.name || f.properties?.['name:en'] || f.properties?.name_en;
+          return f.geometry.type === 'Point' && nm && f.layer.id !== 'bpins';
+        });
+        if (!label) return; // empty click → nothing
+        const name = (label.properties!.name ||
+          label.properties!['name:en'] ||
+          label.properties!.name_en) as string;
+        const { lng, lat } = e.lngLat;
+        try {
+          const geo = await reverseGeocode(lng, lat).catch(() => null);
+          const created = await createPlace({
+            name,
+            country: geo?.country ?? null,
+            admin1: geo?.admin1 ?? null,
+            lng,
+            lat,
+            bucket: true,
+            saved: true,
+          });
+          onAdded();
+          navigate(`/place/${created.id}`);
+        } catch {
+          /* ignore */
+        }
       });
     });
 
@@ -83,7 +114,7 @@ export default function BucketMap({ places }: { places: Place[] }) {
   return (
     <div className="bucket-map">
       <div ref={ref} className="bucket-map-canvas" />
-      <span className="bucket-map-hint">Tap a pin to open it</span>
+      <span className="bucket-map-hint">Tap a place name to add it</span>
     </div>
   );
 }
