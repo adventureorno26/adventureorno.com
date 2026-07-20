@@ -11,7 +11,6 @@ import {
   type SearchResult,
 } from '../lib/maptiler';
 import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
-import { useAuth } from '../auth/AuthProvider';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
 import {
   createManualActivity,
@@ -106,8 +105,6 @@ export default function MapView() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: selectedId } = useParams();
-  const { profile } = useAuth();
-  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const selectedPlace = places.find((p) => p.id === selectedId) ?? null;
 
   addModeRef.current = addMode;
@@ -911,7 +908,15 @@ export default function MapView() {
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
 
-      <StatsBar places={places} onAddPhotos={handleAddPhotos} onFilterCategory={setFilterCat} />
+      <StatsBar
+        places={places}
+        onAddPhotos={handleAddPhotos}
+        onFilterCategory={setFilterCat}
+        onDrawTrail={() => {
+          setDrawMode(true);
+          setBanner(null);
+        }}
+      />
 
       <MapSearch
         onPick={handleSearchPick}
@@ -925,24 +930,13 @@ export default function MapView() {
         <span className="tag-filter-ico">
           <SearchIcon size={15} />
         </span>
-        <select
-          value={filterCat ?? ''}
-          onChange={(e) => {
-            if (e.target.value === '__add') {
-              setDrawMode(true);
-              setBanner(null);
-              return; // keep the current filter; don't select the action row
-            }
-            setFilterCat(e.target.value || null);
-          }}
-        >
+        <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
           <option value="">Activities</option>
           {CATEGORIES.map((c) => (
             <option key={c.slug} value={c.slug}>
               {c.icon} {c.label}
             </option>
           ))}
-          {canEdit && <option value="__add">＋ Add activity…</option>}
         </select>
       </div>
 
