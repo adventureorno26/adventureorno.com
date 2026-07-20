@@ -216,9 +216,16 @@ a {
   box-shadow: -8px 0 30px rgba(0, 0, 0, 0.4);
 }
 .panel h2 {
-  margin: 6px 0 2px;
+  margin: 2px 0;
   color: #f4f8ff;
   text-shadow: 0 0 14px rgba(130, 175, 255, 0.4);
+}
+/* Cohesive darker header band across the top of a place card */
+.panel-head {
+  padding: 6px 12px 12px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(9, 15, 28, 0.5), rgba(9, 15, 28, 0));
 }
 .panel .panel-head {
   display: flex;
@@ -1343,6 +1350,9 @@ a {
 .stats-bar .actions button {
   min-width: 40px;
 }
+.stats-bar .actions .navpill {
+  min-width: 138px;
+}
 @media (max-width: 520px) {
   .hide-sm {
     display: none !important;
@@ -1559,28 +1569,43 @@ a {
 }
 
 /* ---------- Tag filter (map) ---------- */
-.tag-filter {
-  position: absolute;
-  top: calc(52px + env(safe-area-inset-top));
-  left: 14px;
-  z-index: 6;
+/* Activities / Bucket List / My Trips — one shared glass-pill look + size. */
+.tag-filter,
+.bucket-btn,
+.navpill {
+  height: 36px;
+  min-width: 138px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 5px 10px;
+  padding: 0 14px;
   border-radius: 999px;
   background: var(--panel-glass);
   backdrop-filter: blur(14px);
   border: 1px solid var(--border-soft);
   box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tag-filter {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  left: 14px;
+  z-index: 6;
 }
 .tag-filter select {
-  width: auto;
+  width: 100%;
   background: transparent;
   border: none;
   padding: 2px 4px;
   font-weight: 600;
   font-size: 13px;
+  text-align: center;
+  cursor: pointer;
 }
 .tag-filter select:focus {
   box-shadow: none;
@@ -1601,23 +1626,12 @@ a {
 .bucket-btn {
   position: absolute;
   top: calc(52px + env(safe-area-inset-top));
-  left: 190px;
+  left: 164px;
   z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: var(--panel-glass);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--border-soft);
-  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
-  color: var(--text);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
 }
-.bucket-btn:hover {
+.tag-filter:hover,
+.bucket-btn:hover,
+.navpill:hover {
   background: var(--accent-soft);
 }
 .bucket-btn-ico {
@@ -1629,8 +1643,7 @@ a {
   .bucket-btn {
     top: auto;
     bottom: calc(16px + env(safe-area-inset-bottom));
-    left: auto;
-    right: 14px;
+    left: calc(50% + 6px);
   }
 }
 
@@ -1852,6 +1865,7 @@ textarea {
    pan/zoom reposition and the pins visibly drift. Animate a CHILD instead. */
 .geo-marker {
   cursor: pointer;
+  will-change: transform; /* keep on its own compositor layer so it tracks the map on zoom */
 }
 .geo-marker .geo-pin {
   display: block;
@@ -1876,10 +1890,11 @@ textarea {
 /* Small modern wishlist dot */
 .bucket-dot {
   cursor: pointer;
-  filter: drop-shadow(0 1px 3px rgba(2, 8, 23, 0.5));
+  will-change: transform;
 }
 .bucket-dot svg {
   display: block;
+  filter: drop-shadow(0 1px 3px rgba(2, 8, 23, 0.5));
   transition: transform 0.12s ease;
 }
 .bucket-dot:hover {
@@ -1926,7 +1941,7 @@ textarea {
 .photo-marker {
   position: relative;
   cursor: pointer;
-  filter: drop-shadow(0 4px 6px rgba(2, 8, 23, 0.5));
+  will-change: transform;
 }
 .photo-marker-thumb {
   width: 46px;
@@ -1936,6 +1951,7 @@ textarea {
   background: #0b1a2b;
   overflow: hidden;
   box-sizing: border-box;
+  box-shadow: 0 4px 8px rgba(2, 8, 23, 0.5);
   transition: transform 0.12s ease;
   transform-origin: bottom center;
 }
@@ -2607,6 +2623,14 @@ textarea {
   padding: 5px 11px;
   font-size: 12.5px;
   border-radius: 8px;
+}
+.loc-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0 6px;
+}
+.loc-edit .bucket-search {
+  margin-top: 2px;
 }
 .bucket-flag {
   color: #f59e0b;

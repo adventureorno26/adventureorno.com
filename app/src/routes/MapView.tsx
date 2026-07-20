@@ -10,7 +10,7 @@ import {
   snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
-import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode, updatePlace } from '../lib/data';
+import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
 import {
@@ -108,9 +108,6 @@ export default function MapView() {
   const { id: selectedId } = useParams();
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
-  const canEditRef = useRef(canEdit);
-  canEditRef.current = canEdit;
-  const draggingRef = useRef(false);
   const selectedPlace = places.find((p) => p.id === selectedId) ?? null;
 
   addModeRef.current = addMode;
@@ -227,7 +224,6 @@ export default function MapView() {
       }
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        if (draggingRef.current) return; // ignore the click that ends a drag
         navigateRef.current(`/place/${place.id}`);
       });
       el.addEventListener('mouseenter', () => showPopup(place, coords));
@@ -266,22 +262,7 @@ export default function MapView() {
       }
       if (!entry) {
         const { el, anchor } = buildMarkerEl(place, cat, coords);
-        const marker = new maplibregl.Marker({ element: el, anchor, draggable: canEditRef.current })
-          .setLngLat(coords)
-          .addTo(map);
-        // Drag a pin to relocate it → persist the new coordinates.
-        marker.on('dragstart', () => {
-          draggingRef.current = true;
-        });
-        marker.on('dragend', () => {
-          const ll = marker.getLngLat();
-          setTimeout(() => (draggingRef.current = false), 60);
-          void updatePlace(pid, { lat: ll.lat, lng: ll.lng })
-            .then((updated) => {
-              setPlaces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-            })
-            .catch(() => setBanner('Could not move that pin.'));
-        });
+        const marker = new maplibregl.Marker({ element: el, anchor }).setLngLat(coords).addTo(map);
         entry = { marker, el, cat, coverId: cover, bucket };
         markersRef.current.set(pid, entry);
       } else {
@@ -577,6 +558,18 @@ export default function MapView() {
       entry.el.classList.toggle('selected', pid === selectedId);
     }
   }, [selectedId]);
+
+  // Opening a place (e.g. from the stats list) flies the map to its marker if it
+  // isn't already on screen, so you always see the pin behind the card.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !selectedPlace) return;
+    const pt: [number, number] = [selectedPlace.lng, selectedPlace.lat];
+    if (!map.getBounds().contains(pt)) {
+      map.flyTo({ center: pt, zoom: Math.max(map.getZoom(), 11), duration: 800 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, ready]);
 
   // ---- Draw-a-trail mode -------------------------------------------------
   async function refreshDrawGeometry() {
@@ -918,18 +911,7 @@ export default function MapView() {
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
 
-      <StatsBar
-        places={places}
-        addMode={addMode}
-        onToggleAdd={() => setAddMode((v) => !v)}
-        onAddPhotos={handleAddPhotos}
-        onFilterCategory={setFilterCat}
-        onDrawTrail={() => {
-          setAddMode(false);
-          setDrawMode(true);
-          setBanner(null);
-        }}
-      />
+      <StatsBar places={places} onAddPhotos={handleAddPhotos} onFilterCategory={setFilterCat} />
 
       <MapSearch
         onPick={handleSearchPick}
@@ -943,13 +925,24 @@ export default function MapView() {
         <span className="tag-filter-ico">
           <SearchIcon size={15} />
         </span>
-        <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
+        <select
+          value={filterCat ?? ''}
+          onChange={(e) => {
+            if (e.target.value === '__add') {
+              setDrawMode(true);
+              setBanner(null);
+              return; // keep the current filter; don't select the action row
+            }
+            setFilterCat(e.target.value || null);
+          }}
+        >
           <option value="">Activities</option>
           {CATEGORIES.map((c) => (
             <option key={c.slug} value={c.slug}>
               {c.icon} {c.label}
             </option>
           ))}
+          {canEdit && <option value="__add">＋ Add activity…</option>}
         </select>
       </div>
 

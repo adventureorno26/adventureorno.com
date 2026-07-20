@@ -23,9 +23,11 @@ import {
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlace, fetchMileageForPlaces } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
+import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import AuthedImg from './AuthedImg';
 import { PinIcon } from './Icons';
 import EntryEditor from './EntryEditor';
+import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import RouteMiniMap from './RouteMiniMap';
 import StarRating from './StarRating';
@@ -306,6 +308,23 @@ export default function PlacePanel({
     await patch({ website: w || null });
   }
 
+  // Look up a place/address and set this pin's location + region + address.
+  async function setLocationFromSearch(r: SearchResult) {
+    setError(null);
+    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
+    if (full.lat === 0 && full.lng === 0) {
+      setError("Couldn't resolve that location — try another.");
+      return;
+    }
+    await patch({
+      lat: full.lat,
+      lng: full.lng,
+      admin1: full.admin1 ?? place.admin1,
+      country: full.country ?? place.country,
+      address: full.address ?? place.address,
+    });
+  }
+
   // Trail assignment: either make this place its own trail, or attach it as a
   // trailhead of an existing trail (keeps its photos/marker).
   async function addToExistingTrail() {
@@ -465,6 +484,21 @@ export default function PlacePanel({
         )}
       </div>
       {place.address && <div className="place-address">📍 {place.address}</div>}
+
+      {canEdit && (
+        <details className="cat-edit loc-edit">
+          <summary>
+            📍 {place.admin1 || place.country ? 'Fix location / region' : 'Set location / region'}
+          </summary>
+          <p className="loc-hint">
+            Search the place or address — this repositions the pin and updates the region &amp;
+            address.
+          </p>
+          <div className="bucket-search">
+            <MapSearch onPick={setLocationFromSearch} />
+          </div>
+        </details>
+      )}
 
       {(place.website || (canEdit && place.bucket)) && (
         <div className="card-actions">

@@ -6,11 +6,8 @@ import { fetchMileage } from '../lib/strava';
 
 interface Props {
   places: Place[];
-  addMode: boolean;
-  onToggleAdd: () => void;
   onAddPhotos: (files: FileList) => void;
   onFilterCategory: (slug: string | null) => void;
-  onDrawTrail: () => void;
 }
 
 // Strava activity type → map filter category.
@@ -60,21 +57,13 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({
-  places,
-  addMode,
-  onToggleAdd,
-  onAddPhotos,
-  onFilterCategory,
-  onDrawTrail,
-}: Props) {
+export default function StatsBar({ places, onAddPhotos, onFilterCategory }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   // Bucket-list places aren't "visited" yet, so they don't count toward stats.
   const visited = places.filter((p) => !p.bucket);
   const countries = uniqueCount(visited.map((p) => p.country));
   const states = uniqueCount(visited.map((p) => p.admin1));
-  const [addMenu, setAddMenu] = useState(false);
   const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
   // Drill-down: a country or state selected → shows its cities/places.
   const [sub, setSub] = useState<{ kind: 'country' | 'state'; value: string } | null>(null);
@@ -221,57 +210,26 @@ export default function StatsBar({
       <div className="spacer" />
 
       <div className="actions">
-        {canEdit &&
-          (addMode ? (
-            <button className="primary" onClick={onToggleAdd}>
-              Click map to place…
+        {canEdit && (
+          <>
+            <button className="add-btn" onClick={() => fileRef.current?.click()} title="Add a photo">
+              + Add
             </button>
-          ) : (
-            <div className="add-wrap">
-              <button onClick={() => setAddMenu((v) => !v)}>+ Add</button>
-              {addMenu && (
-                <div className="add-menu">
-                  <button
-                    onClick={() => {
-                      setAddMenu(false);
-                      onToggleAdd();
-                    }}
-                  >
-                    📍 Place
-                  </button>
-                  <button
-                    onClick={() => {
-                      setAddMenu(false);
-                      fileRef.current?.click();
-                    }}
-                  >
-                    📷 Photo
-                  </button>
-                  <button
-                    onClick={() => {
-                      setAddMenu(false);
-                      onDrawTrail();
-                    }}
-                  >
-                    🥾 Activity
-                  </button>
-                </div>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/heic,image/heif"
-                multiple
-                hidden
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length) onAddPhotos(e.target.files);
-                  e.target.value = '';
-                }}
-              />
-            </div>
-          ))}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/heic,image/heif"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length) onAddPhotos(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          </>
+        )}
         <Link to="/trips">
-          <button>My Trips</button>
+          <button className="navpill">My Trips</button>
         </Link>
         <Link to="/settings">
           <button className="gear-btn" aria-label="Settings" title="Settings">
