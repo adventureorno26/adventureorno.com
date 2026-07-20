@@ -19,14 +19,13 @@ import {
   type PlaceCount,
 } from '../lib/strava';
 import { haversineMeters } from '../lib/geo';
-import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
+import { categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import MemoryBanner from '../components/MemoryBanner';
-import { BucketIcon, SearchIcon } from '../components/Icons';
 
 const SOURCE_ID = 'places';
 
@@ -210,7 +209,7 @@ export default function MapView() {
         thumb.appendChild(img);
         el.appendChild(thumb);
         loadCover(cover, img, onFail);
-        anchor = 'bottom';
+        anchor = 'center';
       } else {
         el.className = 'geo-marker';
         el.innerHTML =
@@ -524,6 +523,7 @@ export default function MapView() {
   // visited places follow the selected activity tag.
   const visiblePlaces = places.filter((p) => {
     if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
+    if (!p.saved) return false; // only saved places appear on the map
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 
@@ -677,6 +677,7 @@ export default function MapView() {
           lng: startLng,
           lat: startLat,
           is_trail: true,
+          saved: true,
         });
         placeId = created.id;
       }
@@ -925,27 +926,6 @@ export default function MapView() {
           return c ? [c.lng, c.lat] : undefined;
         }}
       />
-
-      <div className="tag-filter">
-        <span className="tag-filter-ico">
-          <SearchIcon size={15} />
-        </span>
-        <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
-          <option value="">Activities</option>
-          {CATEGORIES.map((c) => (
-            <option key={c.slug} value={c.slug}>
-              {c.icon} {c.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <button className="bucket-btn" onClick={() => navigate('/bucket')} title="Open your bucket list">
-        <span className="bucket-btn-ico">
-          <BucketIcon size={15} />
-        </span>
-        Bucket List
-      </button>
 
       {!selectedPlace && !addMode && !drawMode && <MemoryBanner />}
 

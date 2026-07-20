@@ -32,6 +32,7 @@ export interface Place {
   rating: number | null; // 1..5 overall place rating
   review: string | null; // overall place review
   is_home: boolean;
+  saved: boolean; // must be explicitly saved to show on the map / count in stats
   is_trail: boolean; // a linear trail (W&OD, AT, …); runs/hikes group by trailhead
   trail_id: string | null; // if set, this place is a trailhead of that trail
   bucket: boolean; // want-to-go wishlist place (not yet visited)
@@ -150,7 +151,9 @@ export interface MileageRow {
 
 // Draft shapes for inserts (server fills id / created_at / created_by).
 export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'> &
-  Partial<Pick<Place, 'first_visit' | 'last_visit' | 'address' | 'bucket' | 'website' | 'is_trail'>>;
+  Partial<
+    Pick<Place, 'first_visit' | 'last_visit' | 'address' | 'bucket' | 'website' | 'is_trail' | 'saved'>
+  >;
 
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
   Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date'>>;

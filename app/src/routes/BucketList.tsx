@@ -58,6 +58,7 @@ export default function BucketList() {
         lat: full.lat,
         lng: full.lng,
         bucket: true,
+        saved: true,
       });
       load();
     } catch (e) {

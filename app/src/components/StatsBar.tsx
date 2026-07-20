@@ -63,8 +63,8 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
   const navigate = useNavigate();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenu, setAddMenu] = useState(false);
-  // Bucket-list places aren't "visited" yet, so they don't count toward stats.
-  const visited = places.filter((p) => !p.bucket);
+  // Only saved, non-bucket places count toward stats.
+  const visited = places.filter((p) => !p.bucket && p.saved);
   const countries = uniqueCount(visited.map((p) => p.country));
   const states = uniqueCount(visited.map((p) => p.admin1));
   const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
@@ -224,7 +224,7 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
                     onDrawTrail();
                   }}
                 >
-                  🥾 Activity
+                  Activity
                 </button>
                 <button
                   onClick={() => {
@@ -232,7 +232,7 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
                     navigate('/trips');
                   }}
                 >
-                  🧳 Trip
+                  Trip
                 </button>
                 <button
                   onClick={() => {
@@ -240,7 +240,7 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
                     navigate('/bucket');
                   }}
                 >
-                  🔖 Bucket List
+                  Bucket List
                 </button>
                 <button
                   onClick={() => {
@@ -248,7 +248,7 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
                     fileRef.current?.click();
                   }}
                 >
-                  📷 Photo
+                  Photo
                 </button>
               </div>
             )}
@@ -265,9 +265,6 @@ export default function StatsBar({ places, onAddPhotos, onFilterCategory, onDraw
             />
           </div>
         )}
-        <Link to="/trips">
-          <button className="navpill">My Trips</button>
-        </Link>
         <Link to="/settings">
           <button className="gear-btn" aria-label="Settings" title="Settings">
             ⚙

@@ -52,6 +52,7 @@ export default function DayView() {
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const [place, setPlace] = useState<Place | null>(null);
   const [acts, setActs] = useState<Activity[]>([]);
@@ -107,72 +108,74 @@ export default function DayView() {
     navigate(`/place/${created.id}`);
   }
 
-  // Map init + draw the day's routes.
+  // Create the map ONCE (don't recreate on data load, or the drawn route is lost).
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAPTILER_STYLE_URL,
-      center: place ? [place.lng, place.lat] : [0, 20],
-      zoom: 11,
+      center: [-98, 39],
+      zoom: 3,
       attributionControl: { compact: true },
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    map.on('load', () => setMapReady(true));
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
-  }, [place]);
+  }, []);
 
+  // Draw the day's Strava route(s) whenever the map is ready and the data loads.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || acts.length === 0) return;
-    const draw = () => {
-      const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-      const bounds = new maplibregl.LngLatBounds();
-      for (const a of acts) {
-        if (!a.summary_polyline) continue;
-        const coords = polyline.decode(a.summary_polyline).map(([lat, lng]) => {
-          bounds.extend([lng, lat]);
-          return [lng, lat] as [number, number];
-        });
-        if (coords.length < 2) continue;
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: colorFor(a.type) },
-        });
-      }
-      const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features };
-      const src = map.getSource('day') as maplibregl.GeoJSONSource | undefined;
-      if (src) src.setData(data);
-      else {
-        map.addSource('day', { type: 'geojson', data });
-        map.addLayer({
-          id: 'day-line',
-          type: 'line',
-          source: 'day',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.9 },
-        });
-      }
-      if (!bounds.isEmpty()) {
-        const mobile = window.innerWidth <= 640;
-        map.fitBounds(bounds, {
-          padding: {
-            top: 70,
-            left: 30,
-            right: mobile ? 30 : 380,
-            bottom: mobile ? Math.round(window.innerHeight * 0.46) : 40,
-          },
-          maxZoom: 15,
-        });
-      }
-    };
-    if (map.isStyleLoaded()) draw();
-    else map.once('load', draw);
-  }, [acts]);
+    if (!map || !mapReady) return;
+    const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+    const bounds = new maplibregl.LngLatBounds();
+    for (const a of acts) {
+      if (!a.summary_polyline) continue;
+      const coords = polyline.decode(a.summary_polyline).map(([lat, lng]) => {
+        bounds.extend([lng, lat]);
+        return [lng, lat] as [number, number];
+      });
+      if (coords.length < 2) continue;
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords },
+        properties: { color: colorFor(a.type) },
+      });
+    }
+    const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features };
+    const src = map.getSource('day') as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(data);
+    else {
+      map.addSource('day', { type: 'geojson', data });
+      map.addLayer({
+        id: 'day-line',
+        type: 'line',
+        source: 'day',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.9 },
+      });
+    }
+    const mobile = window.innerWidth <= 640;
+    if (!bounds.isEmpty()) {
+      map.fitBounds(bounds, {
+        padding: {
+          top: 70,
+          left: 30,
+          right: mobile ? 30 : 380,
+          bottom: mobile ? Math.round(window.innerHeight * 0.46) : 40,
+        },
+        maxZoom: 15,
+      });
+    } else if (place) {
+      // No route that day → at least center on the place.
+      map.easeTo({ center: [place.lng, place.lat], zoom: 12, duration: 0 });
+    }
+  }, [acts, mapReady, place]);
 
   // The spot's Kind is a category slug; a DB trigger tags the place from it, so
   // after saving we refetch the place to reflect any newly-added tag.

@@ -118,6 +118,7 @@ export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> 
     address: geo.address,
     lat: geo.lat,
     lng: geo.lng,
+    saved: true,
   });
   // Date it into the trip so it belongs + shows a visit on its card.
   await updatePlace(place.id, { first_visit: start, last_visit: end });

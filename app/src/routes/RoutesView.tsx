@@ -37,6 +37,7 @@ export default function RoutesView() {
   const [place, setPlace] = useState<Place | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [walks, setWalks] = useState<[number, number][][]>([]);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -52,22 +53,24 @@ export default function RoutesView() {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAPTILER_STYLE_URL,
-      center: place ? [place.lng, place.lat] : [0, 20],
-      zoom: 10,
+      center: [-98, 39],
+      zoom: 3,
       attributionControl: { compact: true },
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    map.on('load', () => setMapReady(true));
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
-  }, [place]);
+  }, []);
 
-  // Draw the decoded polylines once map + activities are ready.
+  // Draw the decoded polylines once the map is ready and data has loaded.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || (activities.length === 0 && walks.length === 0)) return;
+    if (!map || !mapReady) return;
 
     const draw = () => {
       const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
@@ -136,9 +139,8 @@ export default function RoutesView() {
       }
     };
 
-    if (map.isStyleLoaded()) draw();
-    else map.once('load', draw);
-  }, [activities, walks]);
+    draw();
+  }, [activities, walks, mapReady]);
 
   return (
     <div className="routes-root">

@@ -473,6 +473,19 @@ export default function PlacePanel({
           </div>
         </div>
       )}
+      {canEdit && !place.saved && !place.bucket && (
+        <div className="save-place">
+          <span>Not saved — it won’t show on the map or count until you save.</span>
+          <button className="primary" onClick={() => void patch({ saved: true })}>
+            Save to map
+          </button>
+        </div>
+      )}
+      {canEdit && (
+        <div className="loc-search bucket-search">
+          <MapSearch onPick={setLocationFromSearch} />
+        </div>
+      )}
       <div className={`meta ${place.is_trail ? 'meta-trail' : ''}`}>
         <span>
           {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
@@ -485,21 +498,6 @@ export default function PlacePanel({
       </div>
       {place.address && <div className="place-address">📍 {place.address}</div>}
 
-      {canEdit && (
-        <details className="cat-edit loc-edit">
-          <summary>
-            📍 {place.admin1 || place.country ? 'Fix location / region' : 'Set location / region'}
-          </summary>
-          <p className="loc-hint">
-            Search the place or address — this repositions the pin and updates the region &amp;
-            address.
-          </p>
-          <div className="bucket-search">
-            <MapSearch onPick={setLocationFromSearch} />
-          </div>
-        </details>
-      )}
-
       {(place.website || (canEdit && place.bucket)) && (
         <div className="card-actions">
           {place.website && (
@@ -508,8 +506,11 @@ export default function PlacePanel({
             </a>
           )}
           {canEdit && place.bucket && (
-            <button className="primary add-to-map-btn" onClick={() => void patch({ bucket: false })}>
-              ✓ Add to map
+            <button
+              className="primary add-to-map-btn"
+              onClick={() => void patch({ bucket: false, saved: true })}
+            >
+              Add to map
             </button>
           )}
         </div>
