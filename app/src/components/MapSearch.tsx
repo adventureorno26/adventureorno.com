@@ -7,9 +7,11 @@ import { PinIcon, SearchIcon } from './Icons';
 export default function MapSearch({
   onPick,
   getProximity,
+  placeholder = 'Search a place to add…',
 }: {
   onPick: (r: SearchResult) => void;
   getProximity?: () => [number, number] | undefined;
+  placeholder?: string;
 }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -48,7 +50,7 @@ export default function MapSearch({
         </span>
         <input
           value={q}
-          placeholder="Search a place to add…"
+          placeholder={placeholder}
           onChange={(e) => {
             setQ(e.target.value);
             setOpen(true);

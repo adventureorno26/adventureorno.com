@@ -1623,15 +1623,44 @@ a {
   transform: rotate(30deg);
 }
 @media (max-width: 560px) {
+  /* Settings gear floats at the BOTTOM-RIGHT, clear of the top bars. */
   .stats-bar .actions {
-    position: static;
-    width: 100%;
-    justify-content: center;
-    margin-top: 8px;
+    position: fixed;
+    right: 12px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    top: auto;
+    left: auto;
+    width: auto;
+    margin: 0;
+    justify-content: flex-end;
+    z-index: 30;
+    pointer-events: auto;
+  }
+  .stats-bar .actions .gear-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 28px;
+    border-radius: 50%;
+    background: var(--panel-glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 6px 18px rgba(2, 8, 23, 0.5);
+  }
+
+  /* Push the Add/search row + stats DOWN from the notch, and make the search
+     read crisply instead of muddy over the moving map. */
+  .map-top-row {
+    top: calc(80px + env(safe-area-inset-top));
   }
   .stats-bar {
     flex-direction: column;
     align-items: center;
+    padding-top: calc(132px + env(safe-area-inset-top));
+  }
+  .map-search-box,
+  .add-btn {
+    background: rgba(12, 16, 26, 0.94);
+    backdrop-filter: blur(6px);
   }
 }
 
@@ -2516,6 +2545,111 @@ textarea {
   color: var(--accent);
   margin-bottom: 4px;
 }
+/* "On this day" memory card — map bottom-left, dismissible. */
+.on-this-day {
+  position: absolute;
+  left: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 8;
+  display: flex;
+  align-items: stretch;
+  max-width: min(320px, calc(100vw - 24px));
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(2, 8, 23, 0.45);
+  overflow: hidden;
+}
+.otd-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  text-decoration: none;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+.otd-thumb,
+.otd-thumb.img-skeleton,
+.otd-thumb.img-fallback {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex: none;
+}
+.otd-thumb.img-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.otd-text {
+  min-width: 0;
+}
+.otd-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.otd-place {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.otd-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+/* Place card: the location search that replaces the title, and the identity row
+ * (region + edit-tags on the left, rating + Directions centred on the right). */
+.place-locate {
+  margin: 12px 0 10px;
+}
+.place-locate .locate-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.place-id-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 2px;
+}
+.place-id-left {
+  flex: 1;
+  min-width: 0;
+}
+.place-id-left .meta {
+  margin: 0;
+}
+.place-id-left .cat-edit {
+  margin-top: 6px;
+}
+.place-id-right {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.place-id-right .id-rating {
+  display: inline-flex;
+}
+
 .spot-row {
   display: flex;
   align-items: center;

@@ -339,6 +339,20 @@ export async function fetchPhotoObjectUrl(
   return URL.createObjectURL(await res.blob());
 }
 
+export interface OnThisDayItem {
+  photo_id: string;
+  place_id: string;
+  place_name: string;
+  taken_at: string;
+}
+
+/** Photos taken on today's month/day in a prior year — the "On this day" card. */
+export async function fetchOnThisDay(): Promise<OnThisDayItem[]> {
+  const { data, error } = await supabase.rpc('on_this_day');
+  if (error) return [];
+  return (data ?? []) as OnThisDayItem[];
+}
+
 /** "Last automated upload" timestamp for the /settings health card. */
 export async function lastAutomatedUpload(): Promise<string | null> {
   const { data, error } = await supabase.rpc('last_automated_upload');

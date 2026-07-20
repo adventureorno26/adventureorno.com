@@ -26,6 +26,7 @@ import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
+import OnThisDay from '../components/OnThisDay';
 import MemoryBanner from '../components/MemoryBanner';
 
 const SOURCE_ID = 'places';
@@ -856,6 +857,8 @@ export default function MapView() {
   return (
     <div className="map-root">
       <div ref={containerRef} className="map-canvas" />
+
+      <OnThisDay />
 
       <StatsBar places={places} onFilterCategory={setFilterCat} />
 

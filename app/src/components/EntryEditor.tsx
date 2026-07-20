@@ -107,6 +107,19 @@ export default function EntryEditor({
           setLng(null);
         }}
       />
+      {(address.trim() || (lat != null && lng != null)) && (
+        <a
+          className="directions-btn sm"
+          style={{ alignSelf: 'flex-start', marginTop: 4 }}
+          href={`https://maps.apple.com/?daddr=${encodeURIComponent(
+            address.trim() || `${lat},${lng}`,
+          )}${lat != null && lng != null ? `&sll=${lat},${lng}` : ''}&dirflg=d`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Directions to this spot
+        </a>
+      )}
 
       <label>Rating</label>
       <StarRating value={rating} onChange={setRating} />
