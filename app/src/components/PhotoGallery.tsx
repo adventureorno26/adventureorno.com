@@ -6,6 +6,7 @@ import {
   fetchPhotoObjectUrl,
   fetchPhotosForPlace,
   fetchPhotosForPlaceOnDay,
+  mapPool,
   photosEnabled,
   uploadPhoto,
 } from '../lib/photos';
@@ -44,6 +45,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [overridable, setOverridable] = useState<File[]>([]);
+  const [pending, setPending] = useState<{ id: string; url: string }[]>([]); // optimistic previews
   const [lightIdx, setLightIdx] = useState<number | null>(null); // carousel position
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -86,34 +88,54 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     if (files.length === 0) return;
     setBusy(true);
     setNote(null);
+    const isVid = (f: File) => f.type.startsWith('video/') || /\.(mov|mp4|m4v|webm)$/i.test(f.name);
+    const imgFiles = files.filter((f) => !isVid(f));
+    const vidFiles = files.filter(isVid);
+
+    // Optimistic preview — show local thumbnails instantly while they upload.
+    const previews = imgFiles.map((f) => ({ id: `pending-${Math.random()}`, url: URL.createObjectURL(f) }));
+    setPending(previews);
+
     let added = 0;
     let vids = 0;
     const skips: string[] = [];
     const retryable: File[] = [];
-    for (const file of files) {
-      const isVideo = file.type.startsWith('video/') || /\.(mov|mp4|m4v|webm)$/i.test(file.name);
-      try {
-        if (isVideo) {
-          const r = await uploadVideo(file, { placeId: place.id, lat: place.lat, lng: place.lng });
-          if (r.ok) vids++;
-          continue;
-        }
-        const r = await uploadPhoto(file, {
+
+    // Photos upload in parallel (4 at a time) — the big speed win for albums.
+    const photoResults = await mapPool(
+      imgFiles,
+      (file) =>
+        uploadPhoto(file, {
           placeId: place.id,
           lat: place.lat,
           lng: place.lng,
           override,
           takenAt: day ? `${day}T12:00:00Z` : undefined,
-        });
-        if (r.ok) added++;
-        else if (r.skipped) {
-          skips.push(`${file.name} ${SKIP_LABELS[r.skipped] ?? r.skipped}`);
-          if (!override && OVERRIDABLE.has(r.skipped)) retryable.push(file);
-        }
-      } catch (e) {
-        skips.push(`${file.name} failed: ${e instanceof Error ? e.message : 'error'}`);
+        }),
+      4,
+    );
+    photoResults.forEach((r, i) => {
+      if (!r) {
+        skips.push(`${imgFiles[i].name} failed`);
+        return;
       }
-    }
+      if (r.ok) added++;
+      else if (r.skipped) {
+        skips.push(`${imgFiles[i].name} ${SKIP_LABELS[r.skipped] ?? r.skipped}`);
+        if (!override && OVERRIDABLE.has(r.skipped)) retryable.push(imgFiles[i]);
+      }
+    });
+
+    // Videos are large — upload 2 at a time.
+    const vidResults = await mapPool(
+      vidFiles,
+      (file) => uploadVideo(file, { placeId: place.id, lat: place.lat, lng: place.lng }),
+      2,
+    );
+    vidResults.forEach((r) => r?.ok && vids++);
+
+    previews.forEach((p) => URL.revokeObjectURL(p.url));
+    setPending([]);
     if (added > 0) setPhotos(await load());
     if (vids > 0) await loadVideos();
     if (added > 0 || vids > 0) onUploaded?.();
@@ -283,9 +305,23 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
         </div>
       )}
 
+      {pending.length > 0 && (
+        <div className="photo-date-group">
+          <div className="photo-date">Uploading…</div>
+          <div className="gallery">
+            {pending.map((p) => (
+              <div className="thumb uploading" key={p.id}>
+                <img src={p.url} alt="" />
+                <span className="thumb-spinner" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {photos === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading photos…</p>
-      ) : photos.length === 0 && videos.length === 0 ? (
+      ) : photos.length === 0 && videos.length === 0 && pending.length === 0 ? (
         <p style={{ color: 'var(--muted)', fontSize: 13 }}>No photos or videos yet.</p>
       ) : (
         <>

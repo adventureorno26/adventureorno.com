@@ -192,6 +192,29 @@ export async function assignPhotoToPlace(photoId: string, placeId: string | null
 // One shared in-flight refresh fixes that.
 let refreshInFlight: Promise<string | null> | null = null;
 
+/** Run an async worker over items with limited concurrency (parallel uploads).
+ *  Returns results in the original order; a worker that throws yields undefined. */
+export async function mapPool<T, R>(
+  items: T[],
+  worker: (item: T, index: number) => Promise<R>,
+  concurrency = 4,
+): Promise<(R | undefined)[]> {
+  const results: (R | undefined)[] = new Array(items.length);
+  let next = 0;
+  async function run(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = await worker(items[i], i);
+      } catch {
+        results[i] = undefined;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+  return results;
+}
+
 export async function accessToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const session = data.session;

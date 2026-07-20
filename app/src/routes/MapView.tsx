@@ -9,7 +9,7 @@ import {
   type SearchResult,
 } from '../lib/maptiler';
 import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
-import { fetchPhotoObjectUrl, readGps, uploadPhoto } from '../lib/photos';
+import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
 import { isInHomeZone } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
@@ -468,23 +468,22 @@ export default function MapView() {
     let added = 0;
     let geoPlaceId: string | null = null; // place the (first) geotagged photo landed on
     const skips: Record<string, number> = {};
-    const noLoc: File[] = [];
-    for (const f of Array.from(files)) {
-      const gps = await readGps(f);
-      if (gps) {
-        try {
-          const r = await uploadPhoto(f, { lat: gps.lat, lng: gps.lng });
-          if (r.ok) {
-            added++;
-            if (!geoPlaceId && r.place_id) geoPlaceId = r.place_id;
-          } else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
-        } catch {
-          skips.error = (skips.error ?? 0) + 1;
-        }
-      } else {
-        noLoc.push(f);
-      }
-    }
+
+    // Read GPS for all files first, then upload the geotagged ones in parallel (4×).
+    const withGps = await mapPool(Array.from(files), async (f) => ({ f, gps: await readGps(f) }), 6);
+    const geo = withGps.filter(
+      (x): x is { f: File; gps: { lat: number; lng: number } } => !!x && !!x.gps,
+    );
+    const noLoc = withGps.filter((x) => x && !x.gps).map((x) => x!.f);
+
+    const results = await mapPool(geo, ({ f, gps }) => uploadPhoto(f, { lat: gps.lat, lng: gps.lng }), 4);
+    results.forEach((r) => {
+      if (!r) skips.error = (skips.error ?? 0) + 1;
+      else if (r.ok) {
+        added++;
+        if (!geoPlaceId && r.place_id) geoPlaceId = r.place_id;
+      } else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
+    });
 
     // Photos with no location → one new card at the map center to place manually.
     let newPlaceId: string | null = null;
