@@ -60,7 +60,8 @@ async function mapboxSuggest(query: string, proximity?: [number, number]): Promi
     .map((s) => ({
       id: s.mapbox_id!,
       mapbox_id: s.mapbox_id,
-      label: s.full_address ?? [s.name, s.place_formatted].filter(Boolean).join(', ') ?? s.name!,
+      // Lead with the business/place name, then a short locality/address.
+      label: [s.name, s.place_formatted ?? s.full_address].filter(Boolean).join(' · '),
       name: s.name!,
       country: null,
       admin1: null,
