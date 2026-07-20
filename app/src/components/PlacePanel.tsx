@@ -25,6 +25,7 @@ import { photosEnabled } from '../lib/photos';
 import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
 import PhotoGallery from './PhotoGallery';
+import RouteMiniMap from './RouteMiniMap';
 import StarRating from './StarRating';
 
 interface Props {
@@ -452,8 +453,10 @@ export default function PlacePanel({
         {effectiveCategories(place).map((slug) => {
           const removable = canEdit && (place.categories ?? []).includes(slug);
           return (
-            <span key={slug} className="cat-chip" title={categoryLabel(slug)}>
-              {categoryIcon(slug)} {categoryLabel(slug)}
+            <span key={slug} className="cat-chip" title={`Show all ${categoryLabel(slug)} on the map`}>
+              <Link className="cat-chip-link" to={`/?cat=${slug}`}>
+                {categoryIcon(slug)} {categoryLabel(slug)}
+              </Link>
               {removable && (
                 <button
                   className="cat-chip-x"
@@ -623,6 +626,8 @@ export default function PlacePanel({
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
+
+      <RouteMiniMap place={place} />
 
       {/* Spots & reviews — grouped by tag; each category label only appears once
           you've added a review of that kind, so the card stays uncluttered. */}

@@ -67,6 +67,31 @@ export async function reassignActivity(activityId: string, placeId: string): Pro
   if (error) throw error;
 }
 
+/** Save a hand-drawn trail as a manual activity (SECURITY DEFINER RPC). */
+export async function createManualActivity(args: {
+  name: string;
+  type: string; // Hike / Walk / Run
+  placeId: string | null;
+  polyline: string;
+  distance: number;
+  lat: number;
+  lng: number;
+  date: string; // ISO
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('create_manual_activity', {
+    p_name: args.name,
+    p_type: args.type,
+    p_place: args.placeId,
+    p_polyline: args.polyline,
+    p_distance: args.distance,
+    p_lat: args.lat,
+    p_lng: args.lng,
+    p_date: args.date,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function isStravaConnected(): Promise<boolean> {
   const { data, error } = await supabase.rpc('strava_connected');
   if (error) return false;

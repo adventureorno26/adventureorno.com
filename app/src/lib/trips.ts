@@ -2,11 +2,11 @@
 // falls in the range (computed, not stored). Stats come from the trip_stats RPC.
 
 import { supabase } from './supabase';
-import type { Place, Trip, TripStats } from './types';
+import type { Place, Trip, TripStats, TripStatus } from './types';
 import { createPlace, updatePlace, addVisit } from './data';
 import { forwardGeocode } from './maptiler';
 
-const TRIP_COLS = 'id, name, start_date, end_date, created_at';
+const TRIP_COLS = 'id, name, start_date, end_date, status, created_at';
 const PLACE_COLS =
   'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, cover_pos_y, address, created_by, created_at';
 
@@ -19,14 +19,65 @@ export async function fetchTrips(): Promise<Trip[]> {
   return (data ?? []) as Trip[];
 }
 
-export async function createTrip(name: string, start: string, end: string): Promise<Trip> {
+export async function createTrip(
+  name: string,
+  start: string,
+  end: string,
+  status: TripStatus = 'taken',
+): Promise<Trip> {
   const { data, error } = await supabase
     .from('trips')
-    .insert({ name, start_date: start, end_date: end })
+    .insert({ name, start_date: start, end_date: end, status })
     .select(TRIP_COLS)
     .single();
   if (error) throw error;
   return data as Trip;
+}
+
+/** Move a trip between Trips Taken and Upcoming Trips. */
+export async function setTripStatus(id: string, status: TripStatus): Promise<Trip> {
+  const { data, error } = await supabase
+    .from('trips')
+    .update({ status })
+    .eq('id', id)
+    .select(TRIP_COLS)
+    .single();
+  if (error) throw error;
+  return data as Trip;
+}
+
+/** Rename a trip. */
+export async function renameTrip(id: string, name: string): Promise<Trip> {
+  const { data, error } = await supabase
+    .from('trips')
+    .update({ name })
+    .eq('id', id)
+    .select(TRIP_COLS)
+    .single();
+  if (error) throw error;
+  return data as Trip;
+}
+
+/** Merge several day-by-day trips into the first: it spans the full min→max date
+ *  range; the others are deleted. Places attach by date, so nothing is lost. */
+export async function mergeTrips(ids: string[]): Promise<void> {
+  if (ids.length < 2) return;
+  const { data, error } = await supabase.from('trips').select(TRIP_COLS).in('id', ids);
+  if (error) throw error;
+  const rows = (data ?? []) as Trip[];
+  const starts = rows.map((t) => t.start_date).filter(Boolean) as string[];
+  const ends = rows.map((t) => t.end_date ?? t.start_date).filter(Boolean) as string[];
+  const minStart = starts.sort()[0];
+  const maxEnd = ends.sort()[ends.length - 1];
+  const keep = rows.reduce((a, b) => ((a.start_date ?? '') <= (b.start_date ?? '') ? a : b));
+  const { error: upErr } = await supabase
+    .from('trips')
+    .update({ start_date: minStart, end_date: maxEnd })
+    .eq('id', keep.id);
+  if (upErr) throw upErr;
+  const drop = ids.filter((id) => id !== keep.id);
+  const { error: delErr } = await supabase.from('trips').delete().in('id', drop);
+  if (delErr) throw delErr;
 }
 
 export async function deleteTrip(id: string): Promise<void> {

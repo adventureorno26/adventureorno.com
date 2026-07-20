@@ -5,8 +5,82 @@ import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '..
 import { backfillPage, isStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 import PeopleCard from '../components/PeopleCard';
 import { runClusteringNow } from '../lib/timeline';
+import {
+  approveJoinRequest,
+  denyJoinRequest,
+  fetchPendingJoinRequests,
+  type JoinRequest,
+} from '../lib/join';
 
 const METERS_PER_MILE = 1609.344;
+
+function JoinRequestsCard() {
+  const [reqs, setReqs] = useState<JoinRequest[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function load() {
+    fetchPendingJoinRequests()
+      .then(setReqs)
+      .catch(() => setReqs([]));
+  }
+  useEffect(load, []);
+
+  async function act(r: JoinRequest, action: 'viewer' | 'editor' | 'deny') {
+    setBusy(r.id);
+    setMsg(null);
+    try {
+      if (action === 'deny') await denyJoinRequest(r.id);
+      else await approveJoinRequest(r.id, action);
+      setMsg(
+        action === 'deny'
+          ? `Denied ${r.email ?? 'request'}.`
+          : `Approved ${r.email ?? 'request'} as ${action === 'editor' ? 'contributor' : 'viewer'}.`,
+      );
+      load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Could not update request');
+    }
+    setBusy(null);
+  }
+
+  if (reqs === null) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
+  return (
+    <div className="card">
+      {reqs.length === 0 ? (
+        <p style={{ color: 'var(--muted)', margin: 0 }}>No pending requests.</p>
+      ) : (
+        reqs.map((r) => (
+          <div key={r.id} className="join-req">
+            <div>
+              <b>{r.display_name ?? r.email ?? 'Someone'}</b>
+              {r.email && r.display_name ? (
+                <span className="muted"> · {r.email}</span>
+              ) : null}
+              {r.note ? <div className="muted" style={{ fontSize: 13 }}>“{r.note}”</div> : null}
+            </div>
+            <div className="join-req-actions">
+              <button
+                className="primary"
+                disabled={busy === r.id}
+                onClick={() => void act(r, 'editor')}
+              >
+                Approve · Contributor
+              </button>
+              <button disabled={busy === r.id} onClick={() => void act(r, 'viewer')}>
+                Viewer
+              </button>
+              <button className="danger" disabled={busy === r.id} onClick={() => void act(r, 'deny')}>
+                Deny
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+      {msg && <div className="banner" style={{ marginTop: 10 }}>{msg}</div>}
+    </div>
+  );
+}
 
 function HomeZoneCard() {
   const [zone, setZone] = useState<HomeZone | null>(null);
@@ -257,6 +331,9 @@ export default function Settings() {
 
       {profile?.role === 'owner' && (
         <>
+          <h2 style={{ marginTop: 28 }}>Join requests</h2>
+          <JoinRequestsCard />
+
           <h2 style={{ marginTop: 28 }}>People</h2>
           <PeopleCard meId={profile.id} />
 

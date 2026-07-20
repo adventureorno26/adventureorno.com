@@ -6,6 +6,7 @@ import polyline from '@mapbox/polyline';
 import { MAPTILER_STYLE_URL } from '../lib/maptiler';
 import { fetchPlace } from '../lib/data';
 import { fetchActivitiesForPlace } from '../lib/strava';
+import { fetchPlacePings, walkSegments } from '../lib/walks';
 import type { Activity, Place } from '../lib/types';
 
 // Color by activity type (business rule: color by type).
@@ -35,11 +36,15 @@ export default function RoutesView() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [place, setPlace] = useState<Place | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [walks, setWalks] = useState<[number, number][][]>([]);
 
   useEffect(() => {
     if (!id) return;
     void fetchPlace(id).then(setPlace);
     void fetchActivitiesForPlace(id).then(setActivities);
+    void fetchPlacePings(id)
+      .then((pings) => setWalks(walkSegments(pings)))
+      .catch(() => setWalks([]));
   }, [id]);
 
   useEffect(() => {
@@ -62,7 +67,7 @@ export default function RoutesView() {
   // Draw the decoded polylines once map + activities are ready.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || activities.length === 0) return;
+    if (!map || (activities.length === 0 && walks.length === 0)) return;
 
     const draw = () => {
       const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
@@ -77,7 +82,16 @@ export default function RoutesView() {
         features.push({
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { color: colorFor(a.type), id: a.id },
+          properties: { color: colorFor(a.type), dash: 0 },
+        });
+      }
+      // Passive walks (from location pings, driving/flying excluded) — dashed blue.
+      for (const seg of walks) {
+        for (const c of seg) bounds.extend(c);
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: seg },
+          properties: { color: '#4f9dff', dash: 1 },
         });
       }
       const data: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features };
@@ -90,8 +104,22 @@ export default function RoutesView() {
           id: 'routes-line',
           type: 'line',
           source: 'routes',
+          filter: ['==', ['get', 'dash'], 0],
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: { 'line-color': ['get', 'color'], 'line-width': 3.5, 'line-opacity': 0.9 },
+        });
+        map.addLayer({
+          id: 'routes-walks',
+          type: 'line',
+          source: 'routes',
+          filter: ['==', ['get', 'dash'], 1],
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': 3,
+            'line-opacity': 0.85,
+            'line-dasharray': [2, 2],
+          },
         });
       }
       if (!bounds.isEmpty()) {
@@ -110,7 +138,7 @@ export default function RoutesView() {
 
     if (map.isStyleLoaded()) draw();
     else map.once('load', draw);
-  }, [activities]);
+  }, [activities, walks]);
 
   return (
     <div className="routes-root">

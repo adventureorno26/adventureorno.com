@@ -94,11 +94,14 @@ export interface Invite {
   expires_at: string;
 }
 
+export type TripStatus = 'taken' | 'upcoming';
+
 export interface Trip {
   id: string;
   name: string;
   start_date: string | null;
   end_date: string | null;
+  status: TripStatus;
   created_at: string;
 }
 

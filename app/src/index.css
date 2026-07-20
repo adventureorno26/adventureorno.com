@@ -840,6 +840,40 @@ a {
   white-space: nowrap;
   padding-right: 4px;
 }
+
+/* Draw-a-trail toolbar */
+.draw-bar {
+  position: absolute;
+  top: 54px;
+  left: 14px;
+  right: 14px;
+  z-index: 7;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.draw-bar-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.draw-bar-row input {
+  flex: 1;
+}
+.draw-bar-row select {
+  width: auto;
+}
+.draw-bar .add-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
 @media (max-width: 640px) {
   .add-bar .add-hint {
     display: none;
@@ -1773,32 +1807,54 @@ textarea {
 }
 
 /* Cover-photo markers — circular thumbnail ringed by category color */
+/* Modern photo pin: rounded-square cover thumbnail with a white frame and a
+   small pointer tail, anchored to its point (like current map apps). */
 .photo-marker {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 3px solid var(--ring, #38bdf8);
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 4px 6px rgba(2, 8, 23, 0.5));
+}
+.photo-marker-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  border: 3px solid #fff;
   background: #0b1a2b;
   overflow: hidden;
-  cursor: pointer;
-  box-shadow: 0 2px 7px rgba(2, 8, 23, 0.55);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  box-sizing: border-box;
 }
-.photo-marker img {
+.photo-marker-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
+/* pointer tail — a white diamond peeking below the frame */
+.photo-marker::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 3px;
+  transform: translateX(-50%) rotate(45deg);
+  z-index: -1;
+}
 .photo-marker:hover {
-  transform: scale(1.1);
+  transform: translateY(-2px) scale(1.08);
   z-index: 2;
 }
 .photo-marker.selected {
-  transform: scale(1.22);
-  border-color: #fff;
-  box-shadow: 0 0 0 3px var(--ring, #38bdf8), 0 5px 16px rgba(2, 8, 23, 0.6);
+  transform: scale(1.16);
   z-index: 3;
+}
+.photo-marker.selected .photo-marker-thumb {
+  border-color: var(--ring, #38bdf8);
+  box-shadow: 0 0 0 2px #fff;
 }
 
 /* Remove-tag × on card chips */
@@ -1806,6 +1862,14 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+}
+.cat-chip-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cat-chip-link:hover {
+  text-decoration: underline;
 }
 .cat-chip-x {
   border: none;
@@ -1969,6 +2033,118 @@ textarea {
 }
 .trip-place .muted {
   color: var(--muted);
+}
+.trips-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 10px;
+}
+.trips-section-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* "On this day" memory banner on the map */
+.memory-banner {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 6;
+  display: flex;
+  align-items: stretch;
+  max-width: min(520px, calc(100vw - 28px));
+  background: var(--panel-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+  overflow: hidden;
+}
+.memory-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  background: none;
+  color: var(--text);
+  padding: 10px 8px 10px 16px;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.memory-main:hover {
+  background: var(--accent-soft);
+}
+.memory-spark {
+  font-size: 15px;
+}
+.memory-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 14px;
+  cursor: pointer;
+}
+.memory-x:hover {
+  color: var(--text);
+}
+
+/* Join request rows in Settings */
+.join-req {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.join-req:last-child {
+  border-bottom: none;
+}
+.join-req-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.join-req .muted {
+  color: var(--muted);
+}
+
+/* Routes mini-map at the bottom of a place card */
+.route-mini-map {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 180px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--panel-2);
+}
+.route-mini-canvas {
+  position: absolute;
+  inset: 0;
+}
+.route-mini-hint {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(2, 8, 23, 0.6);
+  pointer-events: none;
 }
 
 /* Video tiles in the gallery */

@@ -288,3 +288,33 @@ export async function forwardGeocode(
     return null;
   }
 }
+
+/**
+ * Snap a sequence of tapped waypoints to real walking paths (Mapbox Directions,
+ * walking profile) so a hand-drawn trail follows the trail between clicks.
+ * Returns an encoded polyline (precision 5, like Strava) + total meters, or null.
+ */
+export async function snapWalkingRoute(
+  points: [number, number][],
+): Promise<{ polyline: string; distance: number } | null> {
+  if (!MAPBOX_TOKEN || points.length < 2) return null;
+  const coords = points.map(([lng, lat]) => `${lng},${lat}`).join(';');
+  const params = new URLSearchParams({
+    geometries: 'polyline',
+    overview: 'full',
+    access_token: MAPBOX_TOKEN,
+  });
+  try {
+    const res = await fetch(
+      `https://api.mapbox.com/directions/v5/mapbox/walking/${coords}?${params.toString()}`,
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      routes?: Array<{ geometry: string; distance: number }>;
+    };
+    const r = data.routes?.[0];
+    return r ? { polyline: r.geometry, distance: r.distance } : null;
+  } catch {
+    return null;
+  }
+}

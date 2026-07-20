@@ -10,6 +10,7 @@ interface Props {
   onToggleAdd: () => void;
   onAddPhotos: (files: FileList) => void;
   onFilterCategory: (slug: string | null) => void;
+  onDrawTrail: () => void;
 }
 
 // Strava activity type → map filter category.
@@ -65,6 +66,7 @@ export default function StatsBar({
   onToggleAdd,
   onAddPhotos,
   onFilterCategory,
+  onDrawTrail,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -244,6 +246,14 @@ export default function StatsBar({
                   >
                     📷 Photo
                   </button>
+                  <button
+                    onClick={() => {
+                      setAddMenu(false);
+                      onDrawTrail();
+                    }}
+                  >
+                    🥾 Activity
+                  </button>
                 </div>
               )}
               <input
@@ -260,7 +270,7 @@ export default function StatsBar({
             </div>
           ))}
         <Link to="/trips">
-          <button>Trips</button>
+          <button>My Trips</button>
         </Link>
         <Link to="/settings">
           <button className="gear-btn" aria-label="Settings" title="Settings">

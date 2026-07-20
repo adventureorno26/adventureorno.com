@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import polyline from '@mapbox/polyline';
 import {
   MAPTILER_STYLE_URL,
   forwardGeocode,
   reverseGeocode,
+  snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
 import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
-import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
+import { createManualActivity, fetchPlaceCounts, type PlaceCount } from '../lib/strava';
+import { haversineMeters } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
+import MemoryBanner from '../components/MemoryBanner';
 import { BucketIcon, SearchIcon } from '../components/Icons';
 
 const SOURCE_ID = 'places';
@@ -76,9 +80,24 @@ export default function MapView() {
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
 
+  // Draw-a-trail mode: tap the map to add waypoints; segments snap to walking paths.
+  const [drawMode, setDrawMode] = useState(false);
+  const [drawName, setDrawName] = useState('');
+  const [drawType, setDrawType] = useState('Hike');
+  const [drawDist, setDrawDist] = useState(0);
+  const [drawCount, setDrawCount] = useState(0);
+  const [drawBusy, setDrawBusy] = useState(false);
+  const drawModeRef = useRef(false);
+  const drawPtsRef = useRef<[number, number][]>([]);
+  const drawLineRef = useRef<[number, number][]>([]);
+  const drawEncodedRef = useRef<string | null>(null);
+  const addDrawPointRef = useRef<(lng: number, lat: number) => void>(() => undefined);
+  drawModeRef.current = drawMode;
+
   const [trayNonce, setTrayNonce] = useState(0);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { id: selectedId } = useParams();
   const selectedPlace = places.find((p) => p.id === selectedId) ?? null;
 
@@ -158,11 +177,13 @@ export default function MapView() {
       if (cover && !failedCoverRef.current.has(cover)) {
         el.className = 'photo-marker';
         el.style.setProperty('--ring', color);
-        el.style.background = color; // colored disc while the photo loads
+        const thumb = document.createElement('div');
+        thumb.className = 'photo-marker-thumb';
+        thumb.style.background = color; // colored fill while the photo loads
         const img = document.createElement('img');
         img.alt = '';
         img.decoding = 'async';
-        // If the cover can't load, fall back to a clean pin (never an empty circle).
+        // If the cover can't load, fall back to a clean pin (never an empty tile).
         const onFail = () => {
           failedCoverRef.current.add(cover);
           const e = markersRef.current.get(place.id);
@@ -173,9 +194,10 @@ export default function MapView() {
           syncMarkersRef.current();
         };
         img.onerror = onFail;
-        el.appendChild(img);
+        thumb.appendChild(img);
+        el.appendChild(thumb);
         loadCover(cover, img, onFail);
-        anchor = 'center';
+        anchor = 'bottom';
       } else {
         el.className = 'geo-marker';
         el.innerHTML =
@@ -327,6 +349,29 @@ export default function MapView() {
         paint: { 'circle-radius': 12, 'circle-opacity': 0, 'circle-color': '#000' },
       });
 
+      // Draw-a-trail overlay (waypoints + snapped line).
+      map.addSource('draw', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'draw-line',
+        type: 'line',
+        source: 'draw',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#f43f5e', 'line-width': 4, 'line-opacity': 0.9 },
+      });
+      map.addLayer({
+        id: 'draw-pts',
+        type: 'circle',
+        source: 'draw',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 5,
+          'circle-color': '#fff',
+          'circle-stroke-color': '#f43f5e',
+          'circle-stroke-width': 2,
+        },
+      });
+
       setReady(true);
     });
 
@@ -347,6 +392,11 @@ export default function MapView() {
     // click that isn't on a cluster: create a place at a clicked city/POI label,
     // or (in add mode) at an empty spot.
     map.on('click', (e) => {
+      // Draw-a-trail: every tap drops a waypoint (segments snap to walking paths).
+      if (drawModeRef.current) {
+        addDrawPointRef.current(e.lngLat.lng, e.lngLat.lat);
+        return;
+      }
       const onCluster = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
       if (onCluster.length > 0) return;
 
@@ -404,6 +454,22 @@ export default function MapView() {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);
 
+  // Deep link: /?cat=dining (tapping a category on a card) → filter the map to
+  // that category and zoom to fit those photo-pins.
+  useEffect(() => {
+    const cat = searchParams.get('cat');
+    if (!cat) return;
+    setFilterCat(cat);
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const pts = places.filter((p) => effectiveCategories(p).includes(cat));
+    if (pts.length === 0) return;
+    const b = new maplibregl.LngLatBounds();
+    for (const p of pts) b.extend([p.lng, p.lat]);
+    map.fitBounds(b, { padding: 80, maxZoom: 13, duration: 700 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, ready, places]);
+
   // Selected place: toggle the highlight class on its marker directly.
   useEffect(() => {
     selectedIdRef.current = selectedId ?? null;
@@ -411,6 +477,137 @@ export default function MapView() {
       entry.el.classList.toggle('selected', pid === selectedId);
     }
   }, [selectedId]);
+
+  // ---- Draw-a-trail mode -------------------------------------------------
+  async function refreshDrawGeometry() {
+    const map = mapRef.current;
+    const pts = drawPtsRef.current;
+    let lineCoords: [number, number][] = pts;
+    let dist = 0;
+    drawEncodedRef.current = null;
+    if (pts.length >= 2) {
+      const snapped = await snapWalkingRoute(pts);
+      if (snapped) {
+        lineCoords = polyline.decode(snapped.polyline).map(([la, ln]) => [ln, la] as [number, number]);
+        dist = snapped.distance;
+        drawEncodedRef.current = snapped.polyline;
+      } else {
+        for (let i = 1; i < pts.length; i++) {
+          dist += haversineMeters(
+            { lng: pts[i - 1][0], lat: pts[i - 1][1] },
+            { lng: pts[i][0], lat: pts[i][1] },
+          );
+        }
+      }
+    }
+    drawLineRef.current = lineCoords;
+    setDrawDist(dist);
+    const feats: GeoJSON.Feature[] = pts.map((p) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: p },
+      properties: {},
+    }));
+    if (lineCoords.length >= 2) {
+      feats.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: lineCoords },
+        properties: {},
+      });
+    }
+    (map?.getSource('draw') as GeoJSONSource | undefined)?.setData({
+      type: 'FeatureCollection',
+      features: feats,
+    });
+  }
+
+  async function addDrawPoint(lng: number, lat: number) {
+    drawPtsRef.current = [...drawPtsRef.current, [lng, lat]];
+    setDrawCount(drawPtsRef.current.length);
+    await refreshDrawGeometry();
+  }
+  addDrawPointRef.current = addDrawPoint;
+
+  function undoDrawPoint() {
+    drawPtsRef.current = drawPtsRef.current.slice(0, -1);
+    setDrawCount(drawPtsRef.current.length);
+    void refreshDrawGeometry();
+  }
+
+  function exitDraw() {
+    setDrawMode(false);
+    drawPtsRef.current = [];
+    drawLineRef.current = [];
+    drawEncodedRef.current = null;
+    setDrawCount(0);
+    setDrawDist(0);
+    setDrawName('');
+    (mapRef.current?.getSource('draw') as GeoJSONSource | undefined)?.setData({
+      type: 'FeatureCollection',
+      features: [],
+    });
+  }
+
+  function nearestPlaceId(lng: number, lat: number, maxM: number): string | null {
+    let best: string | null = null;
+    let bestD = maxM;
+    for (const p of placesRef.current) {
+      const d = haversineMeters({ lng, lat }, { lng: p.lng, lat: p.lat });
+      if (d < bestD) {
+        bestD = d;
+        best = p.id;
+      }
+    }
+    return best;
+  }
+
+  async function saveDrawnTrail() {
+    const pts = drawPtsRef.current;
+    if (pts.length < 2) {
+      setBanner('Tap at least two points to draw a trail.');
+      return;
+    }
+    if (!drawName.trim()) {
+      setBanner('Give the trail a name first.');
+      return;
+    }
+    setDrawBusy(true);
+    try {
+      const encoded =
+        drawEncodedRef.current ??
+        polyline.encode(drawLineRef.current.map(([ln, la]) => [la, ln] as [number, number]));
+      const [startLng, startLat] = pts[0];
+      let placeId = nearestPlaceId(startLng, startLat, 2000);
+      if (!placeId) {
+        const created = await createPlace({
+          name: drawName.trim(),
+          country: null,
+          admin1: null,
+          lng: startLng,
+          lat: startLat,
+          is_trail: true,
+        });
+        placeId = created.id;
+      }
+      await createManualActivity({
+        name: drawName.trim(),
+        type: drawType,
+        placeId,
+        polyline: encoded,
+        distance: drawDist,
+        lat: startLat,
+        lng: startLng,
+        date: new Date().toISOString(),
+      });
+      const targetId = placeId;
+      exitDraw();
+      const rows = await fetchPlaces();
+      setPlaces(rows);
+      navigate(`/place/${targetId}/routes`);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Could not save trail');
+    }
+    setDrawBusy(false);
+  }
 
   async function handleAddAt(lng: number, lat: number, presetName?: string) {
     setAddMode(false);
@@ -625,6 +822,11 @@ export default function MapView() {
         onToggleAdd={() => setAddMode((v) => !v)}
         onAddPhotos={handleAddPhotos}
         onFilterCategory={setFilterCat}
+        onDrawTrail={() => {
+          setAddMode(false);
+          setDrawMode(true);
+          setBanner(null);
+        }}
       />
 
       <MapSearch
@@ -656,6 +858,8 @@ export default function MapView() {
         Bucket List
       </button>
 
+      {!selectedPlace && !addMode && !drawMode && <MemoryBanner />}
+
       {addMode && (
         <div className="add-bar">
           <input
@@ -673,6 +877,42 @@ export default function MapView() {
             {searching ? 'Finding…' : 'Add'}
           </button>
           <span className="add-hint">or click the map</span>
+        </div>
+      )}
+
+      {drawMode && (
+        <div className="draw-bar">
+          <div className="draw-bar-row">
+            <input
+              autoFocus
+              placeholder="Trail name (e.g. W&OD — Leesburg segment)"
+              value={drawName}
+              onChange={(e) => setDrawName(e.target.value)}
+            />
+            <select value={drawType} onChange={(e) => setDrawType(e.target.value)}>
+              <option value="Hike">🥾 Hiking</option>
+              <option value="Walk">🚶 Walking</option>
+              <option value="Run">🏃 Running</option>
+            </select>
+          </div>
+          <div className="draw-bar-row">
+            <span className="add-hint">
+              Tap the map to add points · {drawCount} point{drawCount === 1 ? '' : 's'}
+              {drawDist > 0 ? ` · ${(drawDist / 1609.344).toFixed(2)} mi` : ''}
+            </span>
+            <div className="spacer" style={{ flex: 1 }} />
+            <button disabled={drawCount === 0} onClick={undoDrawPoint}>
+              Undo
+            </button>
+            <button onClick={exitDraw}>Cancel</button>
+            <button
+              className="primary"
+              disabled={drawBusy || drawCount < 2 || !drawName.trim()}
+              onClick={() => void saveDrawnTrail()}
+            >
+              {drawBusy ? 'Saving…' : 'Save trail'}
+            </button>
+          </div>
         </div>
       )}
 

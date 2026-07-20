@@ -2,24 +2,26 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../lib/supabase';
+import { fetchMyJoinRequest, submitJoinRequest, type JoinRequest } from '../lib/join';
 
 /**
- * Invite-only login. Signups are disabled in Supabase Auth, so
- * `signInWithOtp` only delivers a link to addresses that already exist (created
- * by the `invite` Edge Function). Unknown addresses silently succeed here but
- * never receive an email — we don't reveal which is which.
+ * Sign in with Google. If the signed-in account has no profile yet, the user can
+ * request to join; the owner approves them (viewer or contributor) from Settings.
  */
 export default function Login() {
   const { session, profile, loading } = useAuth();
-  const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [myReq, setMyReq] = useState<JoinRequest | null>(null);
 
-  // Signed in via magic link but no profile → invited email mismatch / revoked.
+  // Signed in but no profile → let them ask to join.
   useEffect(() => {
-    if (!loading && session && !profile) setNoAccess(true);
+    if (!loading && session && !profile) {
+      setNoAccess(true);
+      void fetchMyJoinRequest().then(setMyReq);
+    }
   }, [loading, session, profile]);
 
   if (!loading && session && profile) return <Navigate to="/" replace />;
@@ -33,23 +35,16 @@ export default function Login() {
     if (error) setError(error.message);
   }
 
-  async function requestLink(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
+  async function requestToJoin() {
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: window.location.origin + '/login',
-        shouldCreateUser: false, // invite-only: never create accounts here
-      },
-    });
-    setBusy(false);
-    if (error) {
-      setError(error.message);
-      return;
+    setError(null);
+    try {
+      await submitJoinRequest(note);
+      setMyReq(await fetchMyJoinRequest());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send request');
     }
-    setSent(true);
+    setBusy(false);
   }
 
   return (
@@ -60,19 +55,42 @@ export default function Login() {
 
         {noAccess ? (
           <>
-            <div className="banner">
-              You’re signed in, but this account has no access yet. Ask the owner for an invite to
-              this email, then use the link they send.
-            </div>
-            <button onClick={() => void supabase.auth.signOut().then(() => setNoAccess(false))}>
+            {myReq && myReq.status === 'pending' ? (
+              <div className="banner">
+                Your request to join is in — the owner will approve it soon. Check back later.
+              </div>
+            ) : myReq && myReq.status === 'denied' ? (
+              <div className="banner">This account wasn’t approved for access.</div>
+            ) : (
+              <>
+                <p style={{ marginTop: 6 }}>
+                  You’re signed in as <b>{session?.user.email}</b>, but don’t have access yet. Ask
+                  the owner to let you in:
+                </p>
+                <textarea
+                  placeholder="Add a note (optional) — e.g. “It’s me, Josh!”"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  style={{ minHeight: 60, marginTop: 8 }}
+                />
+                {error && <div className="banner">{error}</div>}
+                <button
+                  className="primary"
+                  style={{ marginTop: 12, width: '100%' }}
+                  disabled={busy}
+                  onClick={() => void requestToJoin()}
+                >
+                  {busy ? 'Sending…' : 'Request to join'}
+                </button>
+              </>
+            )}
+            <button
+              style={{ marginTop: 12 }}
+              onClick={() => void supabase.auth.signOut().then(() => setNoAccess(false))}
+            >
               Sign out
             </button>
           </>
-        ) : sent ? (
-          <p>
-            If that address was invited, a sign-in link is on its way. Open it on this device to
-            continue.
-          </p>
         ) : (
           <>
             <button
@@ -82,25 +100,10 @@ export default function Login() {
             >
               <span className="google-g">G</span> Continue with Google
             </button>
-            <div className="or-divider">
-              <span>or</span>
-            </div>
-            <form onSubmit={requestLink}>
-              <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-              {error && <div className="banner">{error}</div>}
-              <button className="primary" style={{ marginTop: 14, width: '100%' }} disabled={busy}>
-                {busy ? 'Sending…' : 'Send magic link'}
-              </button>
-            </form>
+            {error && <div className="banner">{error}</div>}
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 14 }}>
+              New here? Sign in with Google and you’ll be able to request access.
+            </p>
           </>
         )}
       </div>
