@@ -2182,3 +2182,34 @@ select option {
   color: #111827;
   background: #ffffff;
 }
+
+/* Stat drill-down: sub-list buttons, back, chevrons */
+.stat-detail-list > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  padding: 9px 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+.stat-detail-list > button:hover {
+  background: var(--accent-soft);
+}
+.stat-chev {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stat-back {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 650;
+  padding: 0;
+  cursor: pointer;
+}

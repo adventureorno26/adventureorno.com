@@ -616,6 +616,7 @@ export default function MapView() {
         addMode={addMode}
         onToggleAdd={() => setAddMode((v) => !v)}
         onAddPhotos={handleAddPhotos}
+        onFilterCategory={setFilterCat}
       />
 
       <MapSearch

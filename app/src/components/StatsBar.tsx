@@ -9,7 +9,16 @@ interface Props {
   addMode: boolean;
   onToggleAdd: () => void;
   onAddPhotos: (files: FileList) => void;
+  onFilterCategory: (slug: string | null) => void;
 }
+
+// Strava activity type → map filter category.
+const STRAVA_CAT: Record<string, string> = {
+  Run: 'running',
+  Hike: 'hiking',
+  Walk: 'walking',
+  Ride: 'biking',
+};
 
 function uniqueCount(values: (string | null)[]): number {
   return new Set(values.filter((v): v is string => !!v && v.trim() !== '')).size;
@@ -37,19 +46,38 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: Props) {
+export default function StatsBar({
+  places,
+  addMode,
+  onToggleAdd,
+  onAddPhotos,
+  onFilterCategory,
+}: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const countries = uniqueCount(places.map((p) => p.country));
   const states = uniqueCount(places.map((p) => p.admin1));
   const [addMenu, setAddMenu] = useState(false);
   const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
+  // Drill-down: a country or state selected → shows its cities/places.
+  const [sub, setSub] = useState<{ kind: 'country' | 'state'; value: string } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const placeList = [...places].sort((a, b) => a.name.localeCompare(b.name));
   const countryList = [...new Set(places.map((p) => p.country).filter(Boolean))].sort() as string[];
   const stateList = [...new Set(places.map((p) => p.admin1).filter(Boolean))].sort() as string[];
-  const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
+  const toggle = (k: typeof detail) => {
+    setSub(null);
+    setDetail((cur) => (cur === k ? null : k));
+  };
+  const closeDetail = () => {
+    setSub(null);
+    setDetail(null);
+  };
+  // Places within the drilled-in country/state, alphabetical.
+  const subPlaces = sub
+    ? placeList.filter((p) => (sub.kind === 'country' ? p.country : p.admin1) === sub.value)
+    : [];
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
@@ -85,28 +113,50 @@ export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: 
         <div className="stat-detail">
           <div className="stat-detail-head">
             <b>
-              {detail === 'places'
-                ? 'All places'
-                : detail === 'countries'
-                  ? 'Countries'
-                  : detail === 'states'
-                    ? 'States / regions'
-                    : 'Miles by activity'}
+              {sub ? (
+                <button className="stat-back" onClick={() => setSub(null)}>
+                  ‹ {sub.value}
+                </button>
+              ) : detail === 'places' ? (
+                'All places'
+              ) : detail === 'countries' ? (
+                'Countries — tap for cities'
+              ) : detail === 'states' ? (
+                'States / regions — tap for cities'
+              ) : (
+                'Miles by activity — tap to map'
+              )}
             </b>
-            <button className="stat-detail-x" onClick={() => setDetail(null)}>
+            <button className="stat-detail-x" onClick={closeDetail}>
               ×
             </button>
           </div>
           <div className="stat-detail-list">
             {detail === 'places' &&
               placeList.map((p) => (
-                <Link key={p.id} to={`/place/${p.id}`} onClick={() => setDetail(null)}>
+                <Link key={p.id} to={`/place/${p.id}`} onClick={closeDetail}>
                   {p.name}
                   {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
                 </Link>
               ))}
-            {detail === 'countries' && countryList.map((c) => <span key={c}>{c}</span>)}
-            {detail === 'states' && stateList.map((s) => <span key={s}>{s}</span>)}
+            {/* country/state → drill into their cities (places), then to the card */}
+            {(detail === 'countries' || detail === 'states') &&
+              (sub ? (
+                subPlaces.map((p) => (
+                  <Link key={p.id} to={`/place/${p.id}`} onClick={closeDetail}>
+                    {p.name}
+                  </Link>
+                ))
+              ) : (detail === 'countries' ? countryList : stateList).map((v) => (
+                <button
+                  key={v}
+                  onClick={() =>
+                    setSub({ kind: detail === 'countries' ? 'country' : 'state', value: v })
+                  }
+                >
+                  {v} <span className="stat-chev">›</span>
+                </button>
+              )))}
             {detail === 'miles' &&
               (mileage.filter((r) => Number(r.miles) > 0).length === 0 ? (
                 <span className="label">No Strava activities yet</span>
@@ -114,11 +164,28 @@ export default function StatsBar({ places, addMode, onToggleAdd, onAddPhotos }: 
                 [...mileage]
                   .filter((r) => Number(r.miles) > 0)
                   .sort((a, b) => Number(b.miles) - Number(a.miles))
-                  .map((r) => (
-                    <span key={r.type}>
-                      <b>{Number(r.miles).toFixed(1)}</b> <span className="label">mi</span> · {r.type}
-                    </span>
-                  ))
+                  .map((r) => {
+                    const cat = STRAVA_CAT[r.type];
+                    const row = (
+                      <>
+                        <b>{Number(r.miles).toFixed(1)}</b> <span className="label">mi</span> · {r.type}
+                        {cat && <span className="stat-chev"> · show on map ›</span>}
+                      </>
+                    );
+                    return cat ? (
+                      <button
+                        key={r.type}
+                        onClick={() => {
+                          onFilterCategory(cat);
+                          closeDetail();
+                        }}
+                      >
+                        {row}
+                      </button>
+                    ) : (
+                      <span key={r.type}>{row}</span>
+                    );
+                  })
               ))}
           </div>
         </div>
