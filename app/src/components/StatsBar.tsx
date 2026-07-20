@@ -70,17 +70,19 @@ export default function StatsBar({
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
-  const countries = uniqueCount(places.map((p) => p.country));
-  const states = uniqueCount(places.map((p) => p.admin1));
+  // Bucket-list places aren't "visited" yet, so they don't count toward stats.
+  const visited = places.filter((p) => !p.bucket);
+  const countries = uniqueCount(visited.map((p) => p.country));
+  const states = uniqueCount(visited.map((p) => p.admin1));
   const [addMenu, setAddMenu] = useState(false);
   const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
   // Drill-down: a country or state selected → shows its cities/places.
   const [sub, setSub] = useState<{ kind: 'country' | 'state'; value: string } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const placeList = [...places].sort((a, b) => a.name.localeCompare(b.name));
-  const countryList = [...new Set(places.map((p) => p.country).filter(Boolean))].sort() as string[];
-  const stateList = [...new Set(places.map((p) => p.admin1).filter(Boolean))].sort() as string[];
+  const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
+  const countryList = [...new Set(visited.map((p) => p.country).filter(Boolean))].sort() as string[];
+  const stateList = [...new Set(visited.map((p) => p.admin1).filter(Boolean))].sort() as string[];
   const toggle = (k: typeof detail) => {
     setSub(null);
     setDetail((cur) => (cur === k ? null : k));
@@ -108,7 +110,7 @@ export default function StatsBar({
     <div className="stats-bar">
       <div className="stat-row">
         <button className={`stat ${detail === 'places' ? 'on' : ''}`} onClick={() => toggle('places')}>
-          <b>{places.length}</b> <span className="label">places</span>
+          <b>{visited.length}</b> <span className="label">places</span>
         </button>
         <button
           className={`stat ${detail === 'countries' ? 'on' : ''}`}
@@ -184,7 +186,6 @@ export default function StatsBar({
                     const n = Number(r.activity_count);
                     const row = (
                       <>
-                        <span className="mi-type">{r.type}</span>
                         <span className="mi-count">
                           {n} {activityNoun(r.type, n)}
                         </span>

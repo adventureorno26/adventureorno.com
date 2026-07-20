@@ -32,6 +32,42 @@ export async function fetchPlaceCounts(): Promise<Map<string, PlaceCount>> {
   return map;
 }
 
+export interface ActivityLine {
+  id: string;
+  place_id: string | null;
+  type: string;
+  summary_polyline: string;
+}
+
+/** All activity route geometries (for drawing trails on the main map). */
+export async function fetchActivityLines(): Promise<ActivityLine[]> {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('id, place_id, type, summary_polyline')
+    .not('summary_polyline', 'is', null);
+  if (error) return [];
+  return (data ?? []).filter(
+    (a): a is ActivityLine => !!(a as ActivityLine).summary_polyline,
+  ) as ActivityLine[];
+}
+
+/** Total meters by activity type across a set of places (trail + its trailheads). */
+export async function fetchMileageForPlaces(
+  placeIds: string[],
+): Promise<Record<string, number>> {
+  if (placeIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('activities')
+    .select('type, distance')
+    .in('place_id', placeIds);
+  if (error) return {};
+  const out: Record<string, number> = {};
+  for (const a of (data ?? []) as { type: string; distance: number }[]) {
+    out[a.type] = (out[a.type] ?? 0) + Number(a.distance);
+  }
+  return out;
+}
+
 export async function fetchActivitiesForPlace(placeId: string): Promise<Activity[]> {
   const { data, error } = await supabase
     .from('activities')
@@ -63,6 +99,16 @@ export async function reassignActivity(activityId: string, placeId: string): Pro
   const { error } = await supabase.rpc('reassign_activity', {
     p_activity: activityId,
     p_place: placeId,
+  });
+  if (error) throw error;
+}
+
+/** Rename an activity (and optionally fix its type). Owner/editor only. */
+export async function updateActivity(id: string, name: string, type?: string): Promise<void> {
+  const { error } = await supabase.rpc('update_activity', {
+    p_id: id,
+    p_name: name,
+    p_type: type ?? null,
   });
   if (error) throw error;
 }

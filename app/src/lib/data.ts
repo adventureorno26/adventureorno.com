@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types'
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, is_trail, bucket, website, categories, activity_categories, cover_pos_y, address, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, is_trail, trail_id, bucket, website, categories, activity_categories, cover_pos_y, address, created_by, created_at';
 const ENTRY_COLS = 'id, place_id, kind, title, body, rating, url, date, created_by, created_at';
 
 export async function fetchPlaces(): Promise<Place[]> {
@@ -43,6 +43,7 @@ export async function updatePlace(
     bucket?: boolean;
     website?: string | null;
     is_trail?: boolean;
+    trail_id?: string | null;
   },
 ): Promise<Place> {
   const { data, error } = await supabase
@@ -74,6 +75,20 @@ export async function fetchBucketPlaces(): Promise<Place[]> {
 /** Promote a wishlist place into a normal visited place (flip bucket off). */
 export async function promoteBucketPlace(id: string): Promise<Place> {
   return updatePlace(id, { bucket: false });
+}
+
+/** Fold a place into an existing trail as a trailhead (moves its activities). */
+export async function addPlaceToTrail(
+  placeId: string,
+  trailId: string,
+  trailhead: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('add_place_to_trail', {
+    p_place: placeId,
+    p_trail: trailId,
+    p_trailhead: trailhead,
+  });
+  if (error) throw error;
 }
 
 export async function fetchEntries(placeId: string): Promise<Entry[]> {

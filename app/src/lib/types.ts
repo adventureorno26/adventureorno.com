@@ -33,6 +33,7 @@ export interface Place {
   review: string | null; // overall place review
   is_home: boolean;
   is_trail: boolean; // a linear trail (W&OD, AT, …); runs/hikes group by trailhead
+  trail_id: string | null; // if set, this place is a trailhead of that trail
   bucket: boolean; // want-to-go wishlist place (not yet visited)
   website: string | null; // optional link for a bucket-list place
   categories: string[]; // manual tags

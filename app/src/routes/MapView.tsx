@@ -10,9 +10,15 @@ import {
   snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
-import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
+import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode, updatePlace } from '../lib/data';
+import { useAuth } from '../auth/AuthProvider';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
-import { createManualActivity, fetchPlaceCounts, type PlaceCount } from '../lib/strava';
+import {
+  createManualActivity,
+  fetchActivityLines,
+  fetchPlaceCounts,
+  type PlaceCount,
+} from '../lib/strava';
 import { haversineMeters } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
 import type { Place } from '../lib/types';
@@ -79,6 +85,7 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
+  const [showBucket, setShowBucket] = useState(false); // bucket pins hidden by default
 
   // Draw-a-trail mode: tap the map to add waypoints; segments snap to walking paths.
   const [drawMode, setDrawMode] = useState(false);
@@ -99,6 +106,11 @@ export default function MapView() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: selectedId } = useParams();
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
+  const canEditRef = useRef(canEdit);
+  canEditRef.current = canEdit;
+  const draggingRef = useRef(false);
   const selectedPlace = places.find((p) => p.id === selectedId) ?? null;
 
   addModeRef.current = addMode;
@@ -160,18 +172,18 @@ export default function MapView() {
       // Bucket-list (want-to-go) places always use a distinct amber bookmark pin,
       // never a cover photo — they haven't been visited yet.
       if (place.bucket) {
-        el.className = 'geo-marker bucket-marker';
+        // Small modern wishlist marker: a compact amber dot with a white ring.
+        el.className = 'bucket-dot';
         el.innerHTML =
-          `<svg class="geo-pin" width="30" height="40" viewBox="0 0 24 32" aria-hidden="true">` +
-          `<path d="${PIN_SVG}" fill="${BUCKET_COLOR}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>` +
-          `<path d="M8.5 6.2h7a1 1 0 0 1 1 1v10.4a.5.5 0 0 1-.8.4L12 15.3l-3.7 2.7a.5.5 0 0 1-.8-.4V7.2a1 1 0 0 1 1-1Z" fill="#fff"/></svg>`;
+          `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">` +
+          `<circle cx="8" cy="8" r="6" fill="${BUCKET_COLOR}" stroke="#fff" stroke-width="2"/></svg>`;
         el.addEventListener('click', (ev) => {
           ev.stopPropagation();
           navigateRef.current(`/place/${place.id}`);
         });
         el.addEventListener('mouseenter', () => showPopup(place, coords));
         el.addEventListener('mouseleave', () => popupRef.current?.remove());
-        return { el, anchor: 'bottom' };
+        return { el, anchor: 'center' };
       }
       const cover = place.cover_photo_id;
       if (cover && !failedCoverRef.current.has(cover)) {
@@ -208,6 +220,7 @@ export default function MapView() {
       }
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        if (draggingRef.current) return; // ignore the click that ends a drag
         navigateRef.current(`/place/${place.id}`);
       });
       el.addEventListener('mouseenter', () => showPopup(place, coords));
@@ -241,9 +254,22 @@ export default function MapView() {
       }
       if (!entry) {
         const { el, anchor } = buildMarkerEl(place, cat, coords);
-        const marker = new maplibregl.Marker({ element: el, anchor })
+        const marker = new maplibregl.Marker({ element: el, anchor, draggable: canEditRef.current })
           .setLngLat(coords)
           .addTo(map);
+        // Drag a pin to relocate it → persist the new coordinates.
+        marker.on('dragstart', () => {
+          draggingRef.current = true;
+        });
+        marker.on('dragend', () => {
+          const ll = marker.getLngLat();
+          setTimeout(() => (draggingRef.current = false), 60);
+          void updatePlace(pid, { lat: ll.lat, lng: ll.lng })
+            .then((updated) => {
+              setPlaces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+            })
+            .catch(() => setBanner('Could not move that pin.'));
+        });
         entry = { marker, el, cat, coverId: cover, bucket };
         markersRef.current.set(pid, entry);
       } else {
@@ -273,6 +299,42 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Draw every activity's route line on the main map (tap a line → its place card).
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const TYPE_COLOR: Record<string, string> = {
+      Hike: '#4dd07a',
+      Walk: '#22d3ee',
+      Run: '#ff8a3d',
+      Ride: '#c98bff',
+    };
+    void fetchActivityLines()
+      .then((lines) => {
+        const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+        for (const l of lines) {
+          let coords: [number, number][] = [];
+          try {
+            coords = polyline.decode(l.summary_polyline).map(([la, ln]) => [ln, la] as [number, number]);
+          } catch {
+            continue;
+          }
+          if (coords.length < 2) continue;
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: { place_id: l.place_id, color: TYPE_COLOR[l.type] ?? '#3b82f6' },
+          });
+        }
+        (map.getSource('trailroutes') as GeoJSONSource | undefined)?.setData({
+          type: 'FeatureCollection',
+          features,
+        });
+      })
+      .catch(() => undefined);
+  }, [ready, places.length]);
+
   // One-time map init.
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return;
@@ -292,6 +354,30 @@ export default function MapView() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
 
     map.on('load', () => {
+      // Trail/route lines render UNDER the place markers; tap a line to open its
+      // place card (rename / merge / reassign there).
+      map.addSource('trailroutes', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'trailroutes-line',
+        type: 'line',
+        source: 'trailroutes',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2, 14, 4],
+          'line-opacity': 0.85,
+        },
+      });
+      map.on('click', 'trailroutes-line', (e) => {
+        const pid = e.features?.[0]?.properties?.place_id as string | undefined;
+        if (pid) navigateRef.current(`/place/${pid}`);
+      });
+      map.on('mouseenter', 'trailroutes-line', () => (map.getCanvas().style.cursor = 'pointer'));
+      map.on('mouseleave', 'trailroutes-line', () => (map.getCanvas().style.cursor = ''));
+
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -444,10 +530,12 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Filter the map by the selected tag (default: all places).
-  const visiblePlaces = filterCat
-    ? places.filter((p) => effectiveCategories(p).includes(filterCat))
-    : places;
+  // Filter the map: bucket-list places are hidden unless their toggle is on;
+  // visited places follow the selected activity tag.
+  const visiblePlaces = places.filter((p) => {
+    if (p.bucket) return showBucket;
+    return !filterCat || effectiveCategories(p).includes(filterCat);
+  });
 
   // Keep the source in sync once both map and data are ready (idle → syncMarkers).
   useEffect(() => {
@@ -851,12 +939,26 @@ export default function MapView() {
         </select>
       </div>
 
-      <button className="bucket-btn" onClick={() => navigate('/bucket')}>
-        <span className="bucket-btn-ico">
-          <BucketIcon size={15} />
-        </span>
-        Bucket List
-      </button>
+      <div className="bucket-controls">
+        <button
+          className={`bucket-btn ${showBucket ? 'on' : ''}`}
+          onClick={() => setShowBucket((v) => !v)}
+          title={showBucket ? 'Hide bucket-list pins' : 'Show bucket-list pins'}
+        >
+          <span className="bucket-btn-ico">
+            <BucketIcon size={15} />
+          </span>
+          Bucket List
+        </button>
+        <button
+          className="bucket-open"
+          onClick={() => navigate('/bucket')}
+          aria-label="Open bucket list page"
+          title="Open the full list"
+        >
+          ↗
+        </button>
+      </div>
 
       {!selectedPlace && !addMode && !drawMode && <MemoryBanner />}
 

@@ -130,25 +130,40 @@ export async function ingestActivity(
   const [lat, lng] = ll;
   if (!shouldIngest(type, lat, lng, zone)) return 'skipped';
 
-  const { data: placeId } = await admin.rpc('assign_activity_place', { p_lat: lat, p_lng: lng });
+  // If this activity already exists, sync only the Strava-owned fields (name,
+  // type, distance…) and PRESERVE any manual place/trailhead assignment (e.g. a
+  // run moved onto the W&OD/AT). Only newly-seen activities get auto-placed.
+  const { data: existing } = await admin
+    .from('activities')
+    .select('id, place_id')
+    .eq('strava_id', a.id)
+    .maybeSingle();
 
-  const { error } = await admin.from('activities').upsert(
-    {
-      strava_id: a.id,
-      type,
-      name: a.name ?? null,
-      distance: a.distance ?? 0,
-      moving_time: a.moving_time ?? null,
-      elapsed_time: a.elapsed_time ?? null,
-      start_date: a.start_date ?? null,
-      lat,
-      lng,
-      summary_polyline: a.map?.summary_polyline ?? null,
-      place_id: placeId,
-    },
-    { onConflict: 'strava_id' },
-  );
-  if (error) throw new Error(`upsert activity failed: ${error.message}`);
+  const stravaFields = {
+    type,
+    name: a.name ?? null,
+    distance: a.distance ?? 0,
+    moving_time: a.moving_time ?? null,
+    elapsed_time: a.elapsed_time ?? null,
+    start_date: a.start_date ?? null,
+    lat,
+    lng,
+    summary_polyline: a.map?.summary_polyline ?? null,
+  };
+
+  let placeId: string | null = null;
+  if (existing) {
+    placeId = existing.place_id as string | null;
+    const { error } = await admin.from('activities').update(stravaFields).eq('id', existing.id);
+    if (error) throw new Error(`update activity failed: ${error.message}`);
+  } else {
+    const { data: assigned } = await admin.rpc('assign_activity_place', { p_lat: lat, p_lng: lng });
+    placeId = (assigned as string | null) ?? null;
+    const { error } = await admin
+      .from('activities')
+      .insert({ strava_id: a.id, place_id: placeId, ...stravaFields });
+    if (error) throw new Error(`insert activity failed: ${error.message}`);
+  }
   if (placeId) await admin.rpc('recompute_place_stats', { p_place: placeId });
   return 'stored';
 }

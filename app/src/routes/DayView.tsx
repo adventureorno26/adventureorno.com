@@ -13,7 +13,7 @@ import {
   fetchPlaces,
   updateEntry,
 } from '../lib/data';
-import { fetchActivitiesForDay, reassignActivity } from '../lib/strava';
+import { fetchActivitiesForDay, reassignActivity, updateActivity } from '../lib/strava';
 import { categoryIcon, categoryLabel } from '../lib/categories';
 import type { Activity, Entry, NewEntry, Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
@@ -60,6 +60,15 @@ export default function DayView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [editActId, setEditActId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState('Run');
+
+  async function saveActivity(a: Activity) {
+    await updateActivity(a.id, editName.trim() || a.name || a.type, editType);
+    setEditActId(null);
+    await fetchActivitiesForDay(id!, date!).then(setActs);
+  }
 
   async function loadEntries() {
     if (id && date) setEntries(await fetchEntriesForDay(id, date));
@@ -204,7 +213,49 @@ export default function DayView() {
               <div className="route-item" key={a.id}>
                 <span className="route-dot" style={{ background: colorFor(a.type) }} />
                 <div className="route-meta">
-                  <strong>{a.name ?? a.type}</strong>
+                  {editActId === a.id ? (
+                    <div className="field-row" style={{ marginBottom: 4 }}>
+                      <input
+                        value={editName}
+                        autoFocus
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void saveActivity(a);
+                          if (e.key === 'Escape') setEditActId(null);
+                        }}
+                      />
+                      <select
+                        value={editType}
+                        onChange={(e) => setEditType(e.target.value)}
+                        style={{ width: 'auto' }}
+                      >
+                        <option value="Run">Run</option>
+                        <option value="Hike">Hike</option>
+                        <option value="Walk">Walk</option>
+                        <option value="Ride">Ride</option>
+                      </select>
+                      <button className="primary" style={{ flex: 'none' }} onClick={() => void saveActivity(a)}>
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <strong>
+                      {a.name ?? a.type}
+                      {canEdit && (
+                        <button
+                          className="title-edit"
+                          title="Rename / fix type"
+                          onClick={() => {
+                            setEditName(a.name ?? '');
+                            setEditType(a.type);
+                            setEditActId(a.id);
+                          }}
+                        >
+                          ✏️
+                        </button>
+                      )}
+                    </strong>
+                  )}
                   <div className="muted">
                     {a.type} · {fmtDist(a.distance)}
                     {a.moving_time ? ` · ${fmtDur(a.moving_time)}` : ''}

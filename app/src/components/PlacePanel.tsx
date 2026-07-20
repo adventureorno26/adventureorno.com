@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  addPlaceToTrail,
   addVisit,
   createEntry,
   deletePlace,
@@ -20,9 +21,10 @@ import {
   effectiveCategories,
 } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchActivitiesForPlace } from '../lib/strava';
+import { fetchActivitiesForPlace, fetchMileageForPlaces } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
 import AuthedImg from './AuthedImg';
+import { PinIcon } from './Icons';
 import EntryEditor from './EntryEditor';
 import PhotoGallery from './PhotoGallery';
 import RouteMiniMap from './RouteMiniMap';
@@ -45,6 +47,41 @@ function normalizeUrl(url: string): string {
 /** Meters → "12.3 mi". */
 function miStr(meters: number): string {
   return `${(meters / 1609.344).toFixed(1)} mi`;
+}
+
+// Singular noun for a Strava activity type (Hike → "hike", Ride → "ride").
+const ACTIVITY_NOUN: Record<string, string> = {
+  Run: 'run',
+  Hike: 'hike',
+  Walk: 'walk',
+  Ride: 'ride',
+};
+function activityNoun(type: string, n: number): string {
+  const base = ACTIVITY_NOUN[type] ?? 'activity';
+  if (n === 1) return base;
+  return base === 'activity' ? 'activities' : `${base}s`;
+}
+/** "2 hikes" when a trailhead's activities share a type, else "3 activities". */
+function groupCountLabel(runs: Activity[]): string {
+  const types = new Set(runs.map((r) => r.type));
+  const type = types.size === 1 ? [...types][0] : 'activity';
+  return `${runs.length} ${activityNoun(type, runs.length)}`;
+}
+
+// Past-tense verb for a "miles hiked/run/walked/biked" summary.
+const ACTIVITY_VERB: Record<string, string> = {
+  Run: 'run',
+  Hike: 'hiked',
+  Walk: 'walked',
+  Ride: 'biked',
+};
+/** "12.3 mi hiked · 5.0 mi run" from meters-by-type. */
+function trailMilesSummary(miles: Record<string, number>): string {
+  return Object.entries(miles)
+    .filter(([, m]) => m > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, m]) => `${(m / 1609.344).toFixed(1)} mi ${ACTIVITY_VERB[type] ?? type.toLowerCase()}`)
+    .join(' · ');
 }
 
 /** ISO timestamp → "Mar 7, 2026". */
@@ -83,6 +120,7 @@ export default function PlacePanel({
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
+  const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
   const [spots, setSpots] = useState<Entry[] | null>(null);
   const [addingSpot, setAddingSpot] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
@@ -96,6 +134,8 @@ export default function PlacePanel({
   const [name, setName] = useState(place.name);
   const [review, setReview] = useState(place.review ?? '');
   const [website, setWebsite] = useState(place.website ?? '');
+  const [trailSel, setTrailSel] = useState('');
+  const [trailheadName, setTrailheadName] = useState('');
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
 
@@ -135,10 +175,12 @@ export default function PlacePanel({
     };
   }, [place.id]);
 
-  // Trail places group their runs/hikes by trailhead; load the place's activities.
+  // Trail places group their runs/hikes by trailhead; load the place's activities
+  // and the total mileage-by-type across the trail + its trailhead members.
   useEffect(() => {
     if (!place.is_trail) {
       setTrailActs(null);
+      setTrailMiles({});
       return;
     }
     let active = true;
@@ -146,10 +188,15 @@ export default function PlacePanel({
     fetchActivitiesForPlace(place.id)
       .then((rows) => active && setTrailActs(rows))
       .catch(() => active && setTrailActs([]));
+    const memberIds = allPlaces.filter((p) => p.trail_id === place.id).map((p) => p.id);
+    fetchMileageForPlaces([place.id, ...memberIds])
+      .then((m) => active && setTrailMiles(m))
+      .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [place.id, place.is_trail]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [place.id, place.is_trail, allPlaces]);
 
   // Group a trail's activities by trailhead (fallback: Strava name), each group's
   // runs newest-first, and groups ordered by their most-recent run.
@@ -248,6 +295,20 @@ export default function PlacePanel({
     await patch({ website: w || null });
   }
 
+  // Trail assignment: either make this place its own trail, or attach it as a
+  // trailhead of an existing trail (keeps its photos/marker).
+  async function addToExistingTrail() {
+    if (!trailSel) return;
+    setError(null);
+    try {
+      await addPlaceToTrail(place.id, trailSel, trailheadName.trim() || place.name);
+      const updated = await fetchPlace(place.id);
+      if (updated) onPlaceChanged(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add to trail');
+    }
+  }
+
   async function toggleCat(slug: string) {
     const cur = place.categories ?? [];
     const next = cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug];
@@ -304,21 +365,38 @@ export default function PlacePanel({
       >
         {place.name}
         {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
-        {canEdit && (
-          <button
-            className="title-edit"
-            aria-label="Rename"
-            title="Rename"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingName(true);
-            }}
-          >
-            ✏️
-          </button>
-        )}
       </span>
     );
+
+  // Small Directions button, pinned to the card's top-right corner.
+  const directionsBtn = (
+    <a
+      className="directions-btn sm"
+      href={`https://maps.apple.com/?daddr=${place.lat},${place.lng}&q=${encodeURIComponent(
+        place.name,
+      )}&dirflg=d`}
+      target="_blank"
+      rel="noreferrer"
+      title="Directions"
+    >
+      Directions
+    </a>
+  );
+
+  // Title + rating on one line (rating sits to the right of the name).
+  const titleRow = (
+    <>
+      {titleEl}
+      <span className="title-rating">
+        <StarRating
+          value={place.rating}
+          size={16}
+          readOnly={!canEdit}
+          onChange={(n) => void patch({ rating: n })}
+        />
+      </span>
+    </>
+  );
 
   return (
     <aside className="panel">
@@ -349,106 +427,52 @@ export default function PlacePanel({
               onKeyUp={() => void patch({ cover_pos_y: coverPos })}
             />
           )}
+          <div className="hero-directions">{directionsBtn}</div>
           <div className="hero-title">
-            <h2>{titleEl}</h2>
+            <h2 className="title-with-rating">{titleRow}</h2>
           </div>
         </div>
       ) : (
         <div className="panel-head">
-          <h2>{titleEl}</h2>
-          <button className="close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
+          <h2 className="title-with-rating">{titleRow}</h2>
+          <div className="head-actions">
+            {directionsBtn}
+            <button className="close" onClick={onClose} aria-label="Close">
+              ×
+            </button>
+          </div>
         </div>
       )}
-      <div className="meta">
-        {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
-        {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
-        {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
+      <div className={`meta ${place.is_trail ? 'meta-trail' : ''}`}>
+        <span>
+          {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
+          {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+          {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
+        </span>
+        {place.is_trail && trailMilesSummary(trailMiles) && (
+          <span className="trail-miles">{trailMilesSummary(trailMiles)}</span>
+        )}
       </div>
       {place.address && <div className="place-address">📍 {place.address}</div>}
 
-      <div className="card-actions">
-        <a
-          className="directions-btn"
-          // Navigate to the exact pin coordinates (always resolves); label it with
-          // the place name so Apple Maps shows a recognizable destination.
-          href={`https://maps.apple.com/?daddr=${place.lat},${place.lng}&q=${encodeURIComponent(
-            place.name,
-          )}&dirflg=d`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          🧭 Directions
-        </a>
-        {place.website && (
-          <a className="website-btn" href={normalizeUrl(place.website)} target="_blank" rel="noreferrer">
-            🔗 Website
-          </a>
-        )}
-        {canEdit && place.bucket && (
-          <button className="primary add-to-map-btn" onClick={() => void patch({ bucket: false })}>
-            ✓ Add to map
-          </button>
-        )}
-      </div>
-
-      {/* Optional website link for a place / bucket-list spot */}
-      {canEdit && (
-        <details className="cat-edit">
-          <summary>🔗 {place.website ? 'Edit website' : 'Add a website'}</summary>
-          <div className="field-row" style={{ marginTop: 4 }}>
-            <input
-              placeholder="https://…"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveWebsite();
-              }}
-            />
-            <button className="primary" style={{ flex: 'none' }} onClick={() => void saveWebsite()}>
-              Save
+      {(place.website || (canEdit && place.bucket)) && (
+        <div className="card-actions">
+          {place.website && (
+            <a className="website-btn" href={normalizeUrl(place.website)} target="_blank" rel="noreferrer">
+              Website
+            </a>
+          )}
+          {canEdit && place.bucket && (
+            <button className="primary add-to-map-btn" onClick={() => void patch({ bucket: false })}>
+              ✓ Add to map
             </button>
-          </div>
-        </details>
+          )}
+        </div>
       )}
 
       {error && <div className="banner">{error}</div>}
 
-      {/* Overall rating + review */}
-      <div className="rating-row">
-        <StarRating
-          value={place.rating}
-          readOnly={!canEdit}
-          onChange={(n) => void patch({ rating: n })}
-        />
-      </div>
-      {canEdit ? (
-        <div>
-          <textarea
-            placeholder="Add a review of this place…"
-            value={review}
-            onChange={(e) => setReview(e.target.value)}
-            style={{ minHeight: 60 }}
-          />
-          {review !== (place.review ?? '') && (
-            <div className="btn-row" style={{ marginTop: 6 }}>
-              <button
-                className="primary"
-                onClick={() => void patch({ review: review.trim() || null })}
-              >
-                Save review
-              </button>
-              <button onClick={() => setReview(place.review ?? '')}>Cancel</button>
-            </div>
-          )}
-        </div>
-      ) : (
-        place.review && <p className="body">{place.review}</p>
-      )}
-
-      {/* Category tags — tap × to remove a tag you added (tags derived from your
-          Strava activities can't be removed here since they reflect real routes). */}
+      {/* Category tags — above the review box. Tap × to remove a tag you added. */}
       <div className="cats">
         {effectiveCategories(place).map((slug) => {
           const removable = canEdit && (place.categories ?? []).includes(slug);
@@ -493,14 +517,105 @@ export default function PlacePanel({
         </details>
       )}
 
-      {canEdit && (
-        <label className="trail-toggle">
-          <input
-            type="checkbox"
-            checked={place.is_trail}
-            onChange={(e) => void patch({ is_trail: e.target.checked })}
+      {/* Overall review (rating lives next to the title; tags are above). */}
+      {canEdit ? (
+        <div>
+          <textarea
+            placeholder="Add a review of this place…"
+            value={review}
+            onChange={(e) => setReview(e.target.value)}
+            style={{ minHeight: 60, marginTop: 10 }}
           />
-          🥾 This is a trail (group runs by trailhead)
+          {review !== (place.review ?? '') && (
+            <div className="btn-row" style={{ marginTop: 6 }}>
+              <button className="primary" onClick={() => void patch({ review: review.trim() || null })}>
+                Save review
+              </button>
+              <button onClick={() => setReview(place.review ?? '')}>Cancel</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        place.review && <p className="body">{place.review}</p>
+      )}
+
+      {/* Add a website — under the review box */}
+      {canEdit && (
+        <details className="cat-edit">
+          <summary>{place.website ? 'Edit website' : 'Add a website'}</summary>
+          <div className="field-row" style={{ marginTop: 4 }}>
+            <input
+              placeholder="https://…"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveWebsite();
+              }}
+            />
+            <button className="primary" style={{ flex: 'none' }} onClick={() => void saveWebsite()}>
+              Save
+            </button>
+          </div>
+        </details>
+      )}
+
+      {canEdit && !place.is_trail && !place.trail_id && (
+        <details className="cat-edit trail-assign">
+          <summary>This is a Trail</summary>
+          <div style={{ marginTop: 8 }}>
+            <button className="primary" onClick={() => void patch({ is_trail: true })}>
+              Yes — make this its own trail
+            </button>
+            {allPlaces.some((p) => p.is_trail) && (
+              <>
+                <div className="trail-or">or add it as a trailhead on an existing trail:</div>
+                <div className="field-row">
+                  <select value={trailSel} onChange={(e) => setTrailSel(e.target.value)}>
+                    <option value="">Choose a trail…</option>
+                    {allPlaces
+                      .filter((p) => p.is_trail)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="field-row" style={{ marginTop: 6 }}>
+                  <input
+                    placeholder={`Trailhead name (default: ${place.name})`}
+                    value={trailheadName}
+                    onChange={(e) => setTrailheadName(e.target.value)}
+                  />
+                  <button
+                    className="primary"
+                    style={{ flex: 'none' }}
+                    disabled={!trailSel}
+                    onClick={() => void addToExistingTrail()}
+                  >
+                    Add to trail
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </details>
+      )}
+      {canEdit && place.trail_id && (
+        <div className="trail-member">
+          Trailhead of{' '}
+          <Link to={`/place/${place.trail_id}`}>
+            {allPlaces.find((p) => p.id === place.trail_id)?.name ?? 'a trail'}
+          </Link>
+          <button className="link-btn" onClick={() => void patch({ trail_id: null })}>
+            Remove from trail
+          </button>
+        </div>
+      )}
+      {canEdit && place.is_trail && (
+        <label className="trail-toggle">
+          <input type="checkbox" checked onChange={() => void patch({ is_trail: false })} />
+          This is a trail
         </label>
       )}
 
@@ -508,8 +623,41 @@ export default function PlacePanel({
         /* Trails — runs/hikes grouped by trailhead; tap a run for its map + miles. */
         <>
           <div className="visits-head">
+            <h3 style={{ margin: '22px 0 0' }}>Trailheads</h3>
+          </div>
+          {(() => {
+            const members = allPlaces.filter((p) => p.trail_id === place.id);
+            return members.length === 0 ? (
+              <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+                No trailheads linked yet. Open a place along this trail and use “This is a Trail →
+                add to an existing trail”.
+              </p>
+            ) : (
+              <div className="trailhead-cards">
+                {members.map((th) => (
+                  <Link key={th.id} className="trailhead-card" to={`/place/${th.id}`}>
+                    {th.cover_photo_id ? (
+                      <AuthedImg
+                        photoId={th.cover_photo_id}
+                        size="thumb"
+                        className="trailhead-thumb"
+                      />
+                    ) : (
+                      <span className="trailhead-thumb ph">
+                        <PinIcon size={18} />
+                      </span>
+                    )}
+                    <span className="trailhead-card-name">{th.name}</span>
+                    {th.admin1 && <span className="muted">{th.admin1}</span>}
+                  </Link>
+                ))}
+              </div>
+            );
+          })()}
+
+          <div className="visits-head">
             <h3 style={{ margin: '22px 0 0' }}>
-              Trails{trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
+              Logged runs{trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
             </h3>
           </div>
           {trailActs === null ? (
@@ -525,10 +673,7 @@ export default function PlacePanel({
                 <details key={g.label} className="trailhead-group" open={trailGroups.length <= 3}>
                   <summary>
                     <span className="trailhead-name">{g.label}</span>
-                    <span className="muted">
-                      {' '}
-                      · {g.runs.length} run{g.runs.length > 1 ? 's' : ''}
-                    </span>
+                    <span className="muted"> · {groupCountLabel(g.runs)}</span>
                   </summary>
                   <div className="trail-runs">
                     {g.runs.map((a) => (
@@ -538,7 +683,9 @@ export default function PlacePanel({
                         to={`/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`}
                       >
                         <span className="visit-date">{fmtRunDate(a.start_date)}</span>
-                        <span className="muted">{miStr(a.distance)}</span>
+                        <span className="muted">
+                          {a.type} · {miStr(a.distance)}
+                        </span>
                       </Link>
                     ))}
                   </div>

@@ -159,7 +159,7 @@ a {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 5;
+  z-index: 12; /* above the open place panel (z-10) so top-bar dropdowns show in front */
   display: flex;
   gap: 8px;
   align-items: center;
@@ -948,22 +948,42 @@ a {
 .rating-row {
   margin: 10px 0 8px;
 }
+.star-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
 .star-rating .star {
+  display: inline-flex;
   background: none;
   border: none;
   padding: 0 1px;
-  color: #46608f;
-  line-height: 1;
+  color: #3a4d6b;
+  line-height: 0;
+  cursor: pointer;
+  transition: transform 0.1s ease, color 0.1s ease;
 }
 .star-rating .star.on {
-  color: #ffd23f;
+  color: #ffc23d;
 }
 .star-rating .star:not(.ro):hover {
-  color: #ffd23f;
-  transform: scale(1.1);
+  color: #ffc23d;
+  transform: scale(1.15);
 }
 .star-rating .star.ro {
   cursor: default;
+}
+/* Title-row rating sits inline to the right of the place name */
+.title-with-rating {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+.title-rating {
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* ---------- Visits list ---------- */
@@ -1566,16 +1586,21 @@ a {
   }
 }
 
-/* "Bucket List" button on the map — same glass pill as the Activities filter. */
-.bucket-btn {
+/* "Bucket List" toggle on the map — same glass pill as the Activities filter. */
+.bucket-controls {
   position: absolute;
   top: calc(52px + env(safe-area-inset-top));
   left: 190px;
   z-index: 6;
   display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.bucket-btn,
+.bucket-open {
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
   border-radius: 999px;
   background: var(--panel-glass);
   backdrop-filter: blur(14px);
@@ -1586,16 +1611,37 @@ a {
   font-size: 13px;
   cursor: pointer;
 }
-.bucket-btn:hover {
+.bucket-btn {
+  padding: 7px 14px;
+}
+.bucket-btn:hover,
+.bucket-open:hover {
   background: var(--accent-soft);
+}
+.bucket-btn.on {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: #f59e0b;
 }
 .bucket-btn-ico {
   display: inline-flex;
   align-items: center;
   color: #f59e0b;
 }
+.bucket-btn-state {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  padding-left: 2px;
+}
+.bucket-btn.on .bucket-btn-state {
+  color: #f59e0b;
+}
+.bucket-open {
+  padding: 7px 11px;
+  font-size: 15px;
+}
 @media (max-width: 560px) {
-  .bucket-btn {
+  .bucket-controls {
     top: auto;
     bottom: calc(16px + env(safe-area-inset-bottom));
     left: auto;
@@ -1615,6 +1661,45 @@ a {
 }
 .result-pin.bucket {
   color: #f59e0b;
+}
+.bucket-group-head {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Bucket page mini-map — compact by default, grows on hover/click */
+.bucket-mini {
+  position: relative;
+  width: 100%;
+  height: 96px;
+  margin: 14px 0 4px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: height 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bucket-mini.expanded {
+  height: 300px;
+}
+.bucket-mini-canvas {
+  position: absolute;
+  inset: 0;
+}
+.bucket-mini-hint {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(2, 8, 23, 0.6);
+  pointer-events: none;
 }
 /* Reuse the map search box inline inside the Bucket List card (kill its map overlay positioning) */
 .bucket-search {
@@ -1770,9 +1855,15 @@ textarea {
   filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85))
     drop-shadow(0 4px 6px rgba(2, 8, 23, 0.6));
 }
-/* Bucket-list (want-to-go) pins get an amber glow to stand apart from visited pins. */
-.geo-marker.bucket-marker .geo-pin {
-  filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.7)) drop-shadow(0 3px 4px rgba(2, 8, 23, 0.55));
+/* Small modern wishlist dot */
+.bucket-dot {
+  cursor: pointer;
+  transition: transform 0.12s ease;
+  filter: drop-shadow(0 1px 3px rgba(2, 8, 23, 0.5));
+}
+.bucket-dot:hover {
+  transform: scale(1.25);
+  z-index: 2;
 }
 
 /* Reassign a misgrouped activity to another place */
@@ -1994,6 +2085,73 @@ textarea {
 }
 .trail-run:hover {
   background: var(--accent-soft);
+}
+.trail-or {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 10px 0 6px;
+}
+.meta.meta-trail {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.trail-miles {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trail-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.trail-member a {
+  font-weight: 600;
+}
+/* Trailhead place cards on a trail (photo + name) */
+.trailhead-cards {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.trailhead-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 108px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 12.5px;
+}
+.trailhead-thumb {
+  width: 108px;
+  height: 78px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+  background: var(--panel-2);
+}
+.trailhead-thumb.ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.trailhead-card-name {
+  font-weight: 600;
+  line-height: 1.15;
+}
+.trailhead-card .muted {
+  color: var(--muted);
+  font-size: 11.5px;
 }
 .check-row {
   display: flex;
@@ -2367,6 +2525,23 @@ textarea {
 .directions-btn:hover {
   background: rgba(59, 130, 246, 0.24);
 }
+/* Small Directions button pinned to the card's top-right */
+.directions-btn.sm {
+  margin: 0;
+  padding: 5px 11px;
+  font-size: 12.5px;
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hero-directions {
+  position: absolute;
+  top: 12px;
+  right: 52px;
+  z-index: 3;
+}
 
 /* Row of card action buttons (Directions / Website / Add to map) */
 .card-actions {
@@ -2579,13 +2754,9 @@ button.mi-row {
 button.mi-row:hover {
   background: var(--accent-soft);
 }
-.mi-type {
+.mi-count {
   flex: 1;
   font-weight: 600;
-}
-.mi-count {
-  color: var(--muted);
-  font-size: 12.5px;
 }
 .mi-val {
   display: inline-flex;
