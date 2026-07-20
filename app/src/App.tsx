@@ -11,6 +11,7 @@ const DayView = lazy(() => import('./routes/DayView'));
 const PlacesList = lazy(() => import('./routes/PlacesList'));
 const Settings = lazy(() => import('./routes/Settings'));
 const Trips = lazy(() => import('./routes/Trips'));
+const BucketList = lazy(() => import('./routes/BucketList'));
 const ImportTimeline = lazy(() => import('./routes/ImportTimeline'));
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
@@ -80,6 +81,14 @@ export default function App() {
           element={
             <RequireAuth>
               <PlacesList />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/bucket"
+          element={
+            <RequireAuth>
+              <BucketList />
             </RequireAuth>
           }
         />

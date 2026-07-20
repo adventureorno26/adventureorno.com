@@ -5,7 +5,6 @@ import { supabase } from './supabase';
 import type { Place, Trip, TripStats } from './types';
 import { createPlace, updatePlace, addVisit } from './data';
 import { forwardGeocode } from './maptiler';
-import { isInHomeZone } from './geo';
 
 const TRIP_COLS = 'id, name, start_date, end_date, created_at';
 const PLACE_COLS =
@@ -35,6 +34,18 @@ export async function deleteTrip(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Change a trip's date range — e.g. extend a one-day trip into several days. */
+export async function updateTripDates(id: string, start: string, end: string): Promise<Trip> {
+  const { data, error } = await supabase
+    .from('trips')
+    .update({ start_date: start, end_date: end })
+    .eq('id', id)
+    .select(TRIP_COLS)
+    .single();
+  if (error) throw error;
+  return data as Trip;
+}
+
 export async function fetchTripStats(tripId: string): Promise<TripStats> {
   const { data, error } = await supabase.rpc('trip_stats', { p_trip: tripId });
   if (error) throw error;
@@ -49,9 +60,6 @@ export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> 
   if (!start || !end) throw new Error('This trip has no dates set.');
   const geo = await forwardGeocode(query.trim());
   if (!geo) throw new Error(`Couldn't find "${query}". Try a more specific name.`);
-  if (isInHomeZone({ lng: geo.lng, lat: geo.lat })) {
-    throw new Error('That location is inside the 15-mile home zone and is not tracked.');
-  }
   const place = await createPlace({
     name: geo.name,
     country: geo.country,

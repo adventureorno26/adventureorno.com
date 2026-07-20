@@ -11,13 +11,13 @@ import {
 import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
 import { fetchPlaceCounts, type PlaceCount } from '../lib/strava';
-import { isInHomeZone } from '../lib/geo';
 import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
 import type { Place } from '../lib/types';
 import StatsBar from '../components/StatsBar';
 import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
+import { BucketIcon, SearchIcon } from '../components/Icons';
 
 const SOURCE_ID = 'places';
 
@@ -37,7 +37,11 @@ interface MarkerEntry {
   el: HTMLElement;
   cat: string;
   coverId: string | null; // rebuild the marker when a place gains/changes its cover photo
+  bucket: boolean; // rebuild when a place moves on/off the bucket list
 }
+
+// Distinct wishlist pin: an amber teardrop with a bookmark cut-out.
+const BUCKET_COLOR = '#f59e0b';
 
 // A clean modern map pin (SVG teardrop), colored by category, white center dot.
 const PIN_SVG =
@@ -134,6 +138,22 @@ export default function MapView() {
       const color = categoryColor(cat);
       const el = document.createElement('div');
       let anchor: 'center' | 'bottom';
+      // Bucket-list (want-to-go) places always use a distinct amber bookmark pin,
+      // never a cover photo — they haven't been visited yet.
+      if (place.bucket) {
+        el.className = 'geo-marker bucket-marker';
+        el.innerHTML =
+          `<svg class="geo-pin" width="30" height="40" viewBox="0 0 24 32" aria-hidden="true">` +
+          `<path d="${PIN_SVG}" fill="${BUCKET_COLOR}" stroke="rgba(0,0,0,0.25)" stroke-width="0.5"/>` +
+          `<path d="M8.5 6.2h7a1 1 0 0 1 1 1v10.4a.5.5 0 0 1-.8.4L12 15.3l-3.7 2.7a.5.5 0 0 1-.8-.4V7.2a1 1 0 0 1 1-1Z" fill="#fff"/></svg>`;
+        el.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          navigateRef.current(`/place/${place.id}`);
+        });
+        el.addEventListener('mouseenter', () => showPopup(place, coords));
+        el.addEventListener('mouseleave', () => popupRef.current?.remove());
+        return { el, anchor: 'bottom' };
+      }
       const cover = place.cover_photo_id;
       if (cover && !failedCoverRef.current.has(cover)) {
         el.className = 'photo-marker';
@@ -189,9 +209,10 @@ export default function MapView() {
       if (!place) continue;
       const cat = primaryCategory(place);
       const cover = place.cover_photo_id ?? null;
+      const bucket = place.bucket;
       const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
       let entry = markersRef.current.get(pid);
-      if (entry && (entry.cat !== cat || entry.coverId !== cover)) {
+      if (entry && (entry.cat !== cat || entry.coverId !== cover || entry.bucket !== bucket)) {
         entry.marker.remove();
         markersRef.current.delete(pid);
         entry = undefined;
@@ -201,7 +222,7 @@ export default function MapView() {
         const marker = new maplibregl.Marker({ element: el, anchor })
           .setLngLat(coords)
           .addTo(map);
-        entry = { marker, el, cat, coverId: cover };
+        entry = { marker, el, cat, coverId: cover, bucket };
         markersRef.current.set(pid, entry);
       } else {
         entry.marker.setLngLat(coords);
@@ -393,10 +414,6 @@ export default function MapView() {
 
   async function handleAddAt(lng: number, lat: number, presetName?: string) {
     setAddMode(false);
-    if (isInHomeZone({ lng, lat })) {
-      setBanner('That spot is inside the 15-mile home zone — places there are not tracked.');
-      return;
-    }
     setBanner('Adding that place…');
     const geo = presetName ? null : await reverseGeocode(lng, lat);
     try {
@@ -438,10 +455,6 @@ export default function MapView() {
 
   // Search a location and drop a card there (auto-removes on close if left empty).
   async function handleSearchPick(r: SearchResult) {
-    if (isInHomeZone({ lng: r.lng, lat: r.lat })) {
-      setBanner('That location is inside the 15-mile home zone — places there are not tracked.');
-      return;
-    }
     try {
       const created = await createPlace({
         name: r.name,
@@ -560,11 +573,6 @@ export default function MapView() {
       setSearching(false);
       return;
     }
-    if (isInHomeZone({ lng: geo.lng, lat: geo.lat })) {
-      setBanner('That address is inside the 15-mile home zone — places there are not tracked.');
-      setSearching(false);
-      return;
-    }
     try {
       const created = await createPlace({
         name: geo.name,
@@ -628,7 +636,9 @@ export default function MapView() {
       />
 
       <div className="tag-filter">
-        <span className="tag-filter-ico">🔍</span>
+        <span className="tag-filter-ico">
+          <SearchIcon size={15} />
+        </span>
         <select value={filterCat ?? ''} onChange={(e) => setFilterCat(e.target.value || null)}>
           <option value="">Activities</option>
           {CATEGORIES.map((c) => (
@@ -638,6 +648,13 @@ export default function MapView() {
           ))}
         </select>
       </div>
+
+      <button className="bucket-btn" onClick={() => navigate('/bucket')}>
+        <span className="bucket-btn-ico">
+          <BucketIcon size={15} />
+        </span>
+        Bucket List
+      </button>
 
       {addMode && (
         <div className="add-bar">

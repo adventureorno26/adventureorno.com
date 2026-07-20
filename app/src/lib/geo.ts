@@ -13,13 +13,14 @@ export interface HomeZone {
   radiusMeters: number;
 }
 
-// Locked business rule: 15 statute miles around Leesburg, VA. This is a
-// client-side fallback default only — the server reads the live value from the
-// `settings` table.
+// Home-exclusion zone: 3 statute miles around the house in Leesburg, VA. This
+// is a client-side fallback default only — the server reads the live value from
+// the `settings` table (kept in sync there). Manual place-adds are NOT blocked
+// by this on the client anymore; it only informs the automated-ingest gate.
 export const DEFAULT_HOME_ZONE: HomeZone = {
-  lat: 39.1157,
-  lng: -77.5636,
-  radiusMeters: 24140,
+  lat: 39.110924,
+  lng: -77.509204,
+  radiusMeters: 4828, // 3 miles
 };
 
 const EARTH_RADIUS_M = 6371008.8; // mean Earth radius (IUGG)

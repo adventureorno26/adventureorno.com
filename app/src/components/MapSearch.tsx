@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { retrieveResult, searchGeocode, type SearchResult } from '../lib/maptiler';
+import { PinIcon, SearchIcon } from './Icons';
 
 /** Search box on the map: type a location → suggestions → pick to add a card.
  *  getProximity biases results toward the current map view for accuracy. */
@@ -42,7 +43,9 @@ export default function MapSearch({
   return (
     <div className="map-search">
       <div className="map-search-box">
-        <span className="map-search-ico">🔎</span>
+        <span className="map-search-ico">
+          <SearchIcon size={16} />
+        </span>
         <input
           value={q}
           placeholder="Search a place to add…"
@@ -76,7 +79,10 @@ export default function MapSearch({
         <div className="map-search-list">
           {results.map((r) => (
             <button key={r.id} onClick={() => choose(r)}>
-              📍 {r.label}
+              <span className="result-pin">
+                <PinIcon size={14} />
+              </span>
+              {r.label}
             </button>
           ))}
         </div>

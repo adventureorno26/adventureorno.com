@@ -22,9 +22,11 @@ describe('isInHomeZone', () => {
     expect(isInHomeZone({ lng: DEFAULT_HOME_ZONE.lng, lat: DEFAULT_HOME_ZONE.lat })).toBe(true);
   });
 
-  it('rejects a point just inside 15 miles', () => {
-    // ~14 miles north of center
-    expect(isInHomeZone({ lng: -77.5636, lat: 39.1157 + 0.2 })).toBe(true);
+  it('detects a point just inside 3 miles', () => {
+    // ~1.4 miles north of center
+    expect(
+      isInHomeZone({ lng: DEFAULT_HOME_ZONE.lng, lat: DEFAULT_HOME_ZONE.lat + 0.02 }),
+    ).toBe(true);
   });
 
   it('allows a point well outside the zone (Lisbon)', () => {
@@ -32,8 +34,11 @@ describe('isInHomeZone', () => {
   });
 
   it('treats the radius edge as inside (<=)', () => {
-    // A point almost exactly at the boundary distance stays excluded.
-    const edge = { lng: -77.5636, lat: 39.1157 + 24140 / 111_320 };
+    // A point almost exactly at the boundary distance stays inside.
+    const edge = {
+      lng: DEFAULT_HOME_ZONE.lng,
+      lat: DEFAULT_HOME_ZONE.lat + DEFAULT_HOME_ZONE.radiusMeters / 111_320,
+    };
     expect(isInHomeZone(edge)).toBe(true);
   });
 });

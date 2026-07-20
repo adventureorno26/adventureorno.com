@@ -20,6 +20,19 @@ const STRAVA_CAT: Record<string, string> = {
   Ride: 'biking',
 };
 
+// Human noun for an activity count, e.g. Run → "runs", Ride → "rides".
+const ACTIVITY_NOUN: Record<string, string> = {
+  Run: 'run',
+  Hike: 'hike',
+  Walk: 'walk',
+  Ride: 'ride',
+};
+function activityNoun(type: string, n: number): string {
+  const base = ACTIVITY_NOUN[type] ?? 'activity';
+  if (n === 1) return base;
+  return base === 'activity' ? 'activities' : `${base}s`;
+}
+
 function uniqueCount(values: (string | null)[]): number {
   return new Set(values.filter((v): v is string => !!v && v.trim() !== '')).size;
 }
@@ -124,7 +137,7 @@ export default function StatsBar({
               ) : detail === 'states' ? (
                 'States / regions — tap for cities'
               ) : (
-                'Miles by activity — tap to map'
+                'Activity totals — tap to show on map'
               )}
             </b>
             <button className="stat-detail-x" onClick={closeDetail}>
@@ -166,15 +179,24 @@ export default function StatsBar({
                   .sort((a, b) => Number(b.miles) - Number(a.miles))
                   .map((r) => {
                     const cat = STRAVA_CAT[r.type];
+                    const n = Number(r.activity_count);
                     const row = (
                       <>
-                        <b>{Number(r.miles).toFixed(1)}</b> <span className="label">mi</span> · {r.type}
-                        {cat && <span className="stat-chev"> · show on map ›</span>}
+                        <span className="mi-type">{r.type}</span>
+                        <span className="mi-count">
+                          {n} {activityNoun(r.type, n)}
+                        </span>
+                        <span className="mi-val">
+                          <b>{Number(r.miles).toFixed(1)}</b>
+                          <span className="mi-unit">mi</span>
+                        </span>
+                        {cat && <span className="stat-chev">›</span>}
                       </>
                     );
                     return cat ? (
                       <button
                         key={r.type}
+                        className="mi-row"
                         onClick={() => {
                           onFilterCategory(cat);
                           closeDetail();
@@ -183,7 +205,9 @@ export default function StatsBar({
                         {row}
                       </button>
                     ) : (
-                      <span key={r.type}>{row}</span>
+                      <span key={r.type} className="mi-row">
+                        {row}
+                      </span>
                     );
                   })
               ))}

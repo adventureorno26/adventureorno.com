@@ -32,6 +32,9 @@ export interface Place {
   rating: number | null; // 1..5 overall place rating
   review: string | null; // overall place review
   is_home: boolean;
+  is_trail: boolean; // a linear trail (W&OD, AT, …); runs/hikes group by trailhead
+  bucket: boolean; // want-to-go wishlist place (not yet visited)
+  website: string | null; // optional link for a bucket-list place
   categories: string[]; // manual tags
   activity_categories: string[]; // auto tags from Strava
   created_by: string | null;
@@ -131,6 +134,7 @@ export interface Activity {
   lng: number;
   summary_polyline: string | null;
   place_id: string | null;
+  trailhead: string | null; // where this run started on a trail (falls back to name)
 }
 
 export interface MileageRow {
@@ -142,7 +146,7 @@ export interface MileageRow {
 
 // Draft shapes for inserts (server fills id / created_at / created_by).
 export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'> &
-  Partial<Pick<Place, 'first_visit' | 'last_visit' | 'address'>>;
+  Partial<Pick<Place, 'first_visit' | 'last_visit' | 'address' | 'bucket' | 'website' | 'is_trail'>>;
 
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
   Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date'>>;

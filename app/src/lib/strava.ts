@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
-  'id, strava_id, type, name, distance, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id';
+  'id, strava_id, type, name, distance, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead';
 
 export async function fetchMileage(): Promise<MileageRow[]> {
   const { data, error } = await supabase

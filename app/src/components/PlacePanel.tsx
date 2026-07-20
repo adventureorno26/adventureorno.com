@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addVisit,
@@ -11,7 +11,7 @@ import {
   mergePlaces,
   updatePlace,
 } from '../lib/data';
-import type { Entry, NewEntry, Place, Visit } from '../lib/types';
+import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
 import {
   CATEGORIES,
   categoryIcon,
@@ -20,7 +20,7 @@ import {
   effectiveCategories,
 } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
-import { forwardGeocode } from '../lib/maptiler';
+import { fetchActivitiesForPlace } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
 import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
@@ -34,6 +34,26 @@ interface Props {
   onPlaceChanged: (place: Place) => void;
   onPlaceDeleted: (id: string) => void;
   onMerged: (loserId: string, winner: Place) => void;
+}
+
+/** Prepend https:// when the user typed a bare domain, so the link works. */
+function normalizeUrl(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+/** Meters → "12.3 mi". */
+function miStr(meters: number): string {
+  return `${(meters / 1609.344).toFixed(1)} mi`;
+}
+
+/** ISO timestamp → "Mar 7, 2026". */
+function fmtRunDate(iso: string | null): string {
+  if (!iso) return 'Undated';
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 /** A visit as one line: single day, or a compact date range. */
@@ -61,6 +81,7 @@ export default function PlacePanel({
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [spots, setSpots] = useState<Entry[] | null>(null);
   const [addingSpot, setAddingSpot] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
@@ -73,13 +94,14 @@ export default function PlacePanel({
 
   const [name, setName] = useState(place.name);
   const [review, setReview] = useState(place.review ?? '');
-  const [loc, setLoc] = useState('');
+  const [website, setWebsite] = useState(place.website ?? '');
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
 
   useEffect(() => {
     setName(place.name);
     setReview(place.review ?? '');
+    setWebsite(place.website ?? '');
     setCoverPos(place.cover_pos_y ?? 50);
   }, [place]);
 
@@ -111,6 +133,42 @@ export default function PlacePanel({
       active = false;
     };
   }, [place.id]);
+
+  // Trail places group their runs/hikes by trailhead; load the place's activities.
+  useEffect(() => {
+    if (!place.is_trail) {
+      setTrailActs(null);
+      return;
+    }
+    let active = true;
+    setTrailActs(null);
+    fetchActivitiesForPlace(place.id)
+      .then((rows) => active && setTrailActs(rows))
+      .catch(() => active && setTrailActs([]));
+    return () => {
+      active = false;
+    };
+  }, [place.id, place.is_trail]);
+
+  // Group a trail's activities by trailhead (fallback: Strava name), each group's
+  // runs newest-first, and groups ordered by their most-recent run.
+  const trailGroups = useMemo(() => {
+    if (!trailActs) return [];
+    const byHead = new Map<string, Activity[]>();
+    for (const a of trailActs) {
+      const label = a.trailhead?.trim() || a.name?.trim() || 'Run';
+      if (!byHead.has(label)) byHead.set(label, []);
+      byHead.get(label)!.push(a);
+    }
+    const groups = [...byHead.entries()].map(([label, runs]) => ({
+      label,
+      runs: [...runs].sort((x, y) => (y.start_date ?? '').localeCompare(x.start_date ?? '')),
+    }));
+    groups.sort((g, h) =>
+      (h.runs[0]?.start_date ?? '').localeCompare(g.runs[0]?.start_date ?? ''),
+    );
+    return groups;
+  }, [trailActs]);
 
   // Group spots by their tag (category), in CATEGORIES order, notes last.
   const spotGroups: { key: string; label: string; icon: string; items: Entry[] }[] = [];
@@ -183,22 +241,10 @@ export default function PlacePanel({
     else setName(place.name);
   }
 
-  async function setLocation(query: string) {
-    const q = query.trim();
-    if (!q) return;
-    setError(null);
-    const geo = await forwardGeocode(q);
-    if (!geo) {
-      setError(`Couldn't find "${q}".`);
-      return;
-    }
-    await patch({
-      lat: geo.lat,
-      lng: geo.lng,
-      admin1: geo.admin1 ?? place.admin1,
-      country: geo.country ?? place.country,
-      address: geo.address,
-    });
+  async function saveWebsite() {
+    const w = website.trim();
+    if (w === (place.website ?? '')) return;
+    await patch({ website: w || null });
   }
 
   async function toggleCat(slug: string) {
@@ -257,6 +303,19 @@ export default function PlacePanel({
       >
         {place.name}
         {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
+        {canEdit && (
+          <button
+            className="title-edit"
+            aria-label="Rename"
+            title="Rename"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingName(true);
+            }}
+          >
+            ✏️
+          </button>
+        )}
       </span>
     );
 
@@ -304,37 +363,50 @@ export default function PlacePanel({
       <div className="meta">
         {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
         {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+        {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
       </div>
       {place.address && <div className="place-address">📍 {place.address}</div>}
 
-      <a
-        className="directions-btn"
-        href={`https://maps.apple.com/?daddr=${place.lat},${place.lng}&dirflg=d`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        🧭 Directions
-      </a>
+      <div className="card-actions">
+        <a
+          className="directions-btn"
+          // Navigate to the exact pin coordinates (always resolves); label it with
+          // the place name so Apple Maps shows a recognizable destination.
+          href={`https://maps.apple.com/?daddr=${place.lat},${place.lng}&q=${encodeURIComponent(
+            place.name,
+          )}&dirflg=d`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          🧭 Directions
+        </a>
+        {place.website && (
+          <a className="website-btn" href={normalizeUrl(place.website)} target="_blank" rel="noreferrer">
+            🔗 Website
+          </a>
+        )}
+        {canEdit && place.bucket && (
+          <button className="primary add-to-map-btn" onClick={() => void patch({ bucket: false })}>
+            ✓ Add to map
+          </button>
+        )}
+      </div>
 
-      {/* Set the location / look up an address by business name or street number */}
+      {/* Optional website link for a place / bucket-list spot */}
       {canEdit && (
         <details className="cat-edit">
-          <summary>📍 Set location / look up address</summary>
+          <summary>🔗 {place.website ? 'Edit website' : 'Add a website'}</summary>
           <div className="field-row" style={{ marginTop: 4 }}>
             <input
-              placeholder="Business name, address, or street #…"
-              value={loc}
-              onChange={(e) => setLoc(e.target.value)}
+              placeholder="https://…"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void setLocation(loc).then(() => setLoc(''));
+                if (e.key === 'Enter') void saveWebsite();
               }}
             />
-            <button
-              className="primary"
-              style={{ flex: 'none' }}
-              onClick={() => void setLocation(loc).then(() => setLoc(''))}
-            >
-              Set
+            <button className="primary" style={{ flex: 'none' }} onClick={() => void saveWebsite()}>
+              Save
             </button>
           </div>
         </details>
@@ -418,77 +490,135 @@ export default function PlacePanel({
         </details>
       )}
 
-      {/* Visits — each trip; tap to open its day (map + photos + spots) */}
-      <div className="visits-head">
-        <h3 style={{ margin: '22px 0 0' }}>
-          Visits{visits && visits.length > 0 ? ` (${visits.length})` : ''}
-        </h3>
-        {canEdit && !addingVisit && (
-          <button
-            className="link-btn"
-            onClick={() => {
-              setAddingVisit(true);
-              setVStart(new Date().toISOString().slice(0, 10));
-            }}
-          >
-            ＋ Add a visit
-          </button>
-        )}
-      </div>
-
-      {canEdit && addingVisit && (
-        <div className="entry" style={{ marginTop: 8 }}>
-          <label>Date{vMulti ? ' — from' : ''}</label>
-          <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
-          {vMulti && (
-            <>
-              <label>to</label>
-              <input type="date" value={vEnd} onChange={(e) => setVEnd(e.target.value)} />
-            </>
-          )}
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={vMulti}
-              onChange={(e) => setVMulti(e.target.checked)}
-              style={{ width: 'auto' }}
-            />
-            Multiple days
-          </label>
-          <div className="btn-row">
-            <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
-              Add visit
-            </button>
-            <button onClick={() => setAddingVisit(false)}>Cancel</button>
-          </div>
-        </div>
+      {canEdit && (
+        <label className="trail-toggle">
+          <input
+            type="checkbox"
+            checked={place.is_trail}
+            onChange={(e) => void patch({ is_trail: e.target.checked })}
+          />
+          🥾 This is a trail (group runs by trailhead)
+        </label>
       )}
 
-      {visits === null ? (
-        <p style={{ color: 'var(--muted)' }}>Loading…</p>
-      ) : visits.length === 0 ? (
-        <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-          No visits logged yet. Add one, or upload a photo here.
-        </p>
-      ) : (
-        <div className="visits">
-          {visits.map((v) => (
-            <div key={v.id} className="visit-row">
-              <Link className="visit-main" to={`/place/${place.id}/day/${v.start_date}`}>
-                <span className="visit-date">{fmtVisit(v)}</span>
-              </Link>
-              {canEdit && (
-                <button
-                  className="visit-del"
-                  title="Delete visit"
-                  onClick={() => void removeVisit(v.id)}
-                >
-                  ×
-                </button>
-              )}
+      {place.is_trail ? (
+        /* Trails — runs/hikes grouped by trailhead; tap a run for its map + miles. */
+        <>
+          <div className="visits-head">
+            <h3 style={{ margin: '22px 0 0' }}>
+              Trails{trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
+            </h3>
+          </div>
+          {trailActs === null ? (
+            <p style={{ color: 'var(--muted)' }}>Loading…</p>
+          ) : trailActs.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+              No runs on this trail yet. Activities you log along it show up here, grouped by
+              trailhead.
+            </p>
+          ) : (
+            <div className="trailheads">
+              {trailGroups.map((g) => (
+                <details key={g.label} className="trailhead-group" open={trailGroups.length <= 3}>
+                  <summary>
+                    <span className="trailhead-name">{g.label}</span>
+                    <span className="muted">
+                      {' '}
+                      · {g.runs.length} run{g.runs.length > 1 ? 's' : ''}
+                    </span>
+                  </summary>
+                  <div className="trail-runs">
+                    {g.runs.map((a) => (
+                      <Link
+                        key={a.id}
+                        className="trail-run"
+                        to={`/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`}
+                      >
+                        <span className="visit-date">{fmtRunDate(a.start_date)}</span>
+                        <span className="muted">{miStr(a.distance)}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Visits — each trip; tap to open its day (map + photos + spots) */}
+          <div className="visits-head">
+            <h3 style={{ margin: '22px 0 0' }}>
+              Visits{visits && visits.length > 0 ? ` (${visits.length})` : ''}
+            </h3>
+            {canEdit && !addingVisit && (
+              <button
+                className="link-btn"
+                onClick={() => {
+                  setAddingVisit(true);
+                  setVStart(new Date().toISOString().slice(0, 10));
+                }}
+              >
+                ＋ Add a visit
+              </button>
+            )}
+          </div>
+
+          {canEdit && addingVisit && (
+            <div className="entry" style={{ marginTop: 8 }}>
+              <label>Date{vMulti ? ' — from' : ''}</label>
+              <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
+              {vMulti && (
+                <>
+                  <label>to</label>
+                  <input type="date" value={vEnd} onChange={(e) => setVEnd(e.target.value)} />
+                </>
+              )}
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={vMulti}
+                  onChange={(e) => setVMulti(e.target.checked)}
+                  style={{ width: 'auto' }}
+                />
+                Multiple days
+              </label>
+              <div className="btn-row">
+                <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
+                  Add visit
+                </button>
+                <button onClick={() => setAddingVisit(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {visits === null ? (
+            <p style={{ color: 'var(--muted)' }}>Loading…</p>
+          ) : visits.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+              No visits logged yet. Add one, or upload a photo here.
+            </p>
+          ) : (
+            <div className="visits">
+              {visits.map((v) => (
+                <div key={v.id} className="visit-row">
+                  <Link className="visit-main" to={`/place/${place.id}/day/${v.start_date}`}>
+                    <span className="visit-date">{fmtVisit(v)}</span>
+                  </Link>
+                  {canEdit && (
+                    <button
+                      className="visit-del"
+                      title="Delete visit"
+                      onClick={() => void removeVisit(v.id)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>

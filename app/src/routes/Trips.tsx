@@ -1,23 +1,50 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { addPlaceToTrip, createTrip, deleteTrip, fetchTripPlaces, fetchTripStats, fetchTrips } from '../lib/trips';
+import {
+  addPlaceToTrip,
+  createTrip,
+  deleteTrip,
+  fetchTripPlaces,
+  fetchTripStats,
+  fetchTrips,
+  updateTripDates,
+} from '../lib/trips';
 import type { Place, Trip, TripStats } from '../lib/types';
+import { PinIcon } from '../components/Icons';
 
 function TripCard({
   trip,
   canEdit,
   onDeleted,
+  onChanged,
 }: {
   trip: Trip;
   canEdit: boolean;
   onDeleted: () => void;
+  onChanged: () => void;
 }) {
   const [stats, setStats] = useState<TripStats | null>(null);
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [editingDates, setEditingDates] = useState(false);
+  const [eStart, setEStart] = useState(trip.start_date ?? '');
+  const [eEnd, setEEnd] = useState(trip.end_date ?? trip.start_date ?? '');
+
+  async function saveDates() {
+    if (!eStart) return;
+    const end = eEnd && eEnd >= eStart ? eEnd : eStart;
+    setErr(null);
+    try {
+      await updateTripDates(trip.id, eStart, end);
+      setEditingDates(false);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not update dates');
+    }
+  }
 
   useEffect(() => {
     fetchTripStats(trip.id)
@@ -64,9 +91,43 @@ function TripCard({
           </button>
         )}
       </div>
-      <div style={{ color: 'var(--muted)', fontSize: 13 }}>
-        {trip.start_date} → {trip.end_date}
-      </div>
+      {editingDates ? (
+        <div className="field-row" style={{ marginTop: 6 }}>
+          <div>
+            <label>Start</label>
+            <input type="date" value={eStart} onChange={(e) => setEStart(e.target.value)} />
+          </div>
+          <div>
+            <label>End</label>
+            <input type="date" value={eEnd} onChange={(e) => setEEnd(e.target.value)} />
+          </div>
+          <button className="primary" style={{ flex: 'none' }} onClick={() => void saveDates()}>
+            Save
+          </button>
+          <button style={{ flex: 'none' }} onClick={() => setEditingDates(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div style={{ color: 'var(--muted)', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span>
+            {trip.start_date} → {trip.end_date}
+          </span>
+          {canEdit && (
+            <button
+              className="link-btn"
+              style={{ marginTop: 0 }}
+              onClick={() => {
+                setEStart(trip.start_date ?? '');
+                setEEnd(trip.end_date ?? trip.start_date ?? '');
+                setEditingDates(true);
+              }}
+            >
+              Edit dates
+            </button>
+          )}
+        </div>
+      )}
       <div className="trip-stats">
         <span>
           <b>{stats?.places ?? '…'}</b> places
@@ -84,7 +145,10 @@ function TripCard({
         <div className="trip-places">
           {places.map((p) => (
             <Link key={p.id} className="trip-place" to={`/place/${p.id}`}>
-              📍 {p.name}
+              <span className="result-pin">
+                <PinIcon size={13} />
+              </span>{' '}
+              {p.name}
               {p.admin1 ? <span className="muted"> · {p.admin1}</span> : null}
             </Link>
           ))}
@@ -180,7 +244,9 @@ export default function Trips() {
       {trips.length === 0 ? (
         <p style={{ color: 'var(--muted)' }}>No trips yet.</p>
       ) : (
-        trips.map((t) => <TripCard key={t.id} trip={t} canEdit={canEdit} onDeleted={refresh} />)
+        trips.map((t) => (
+          <TripCard key={t.id} trip={t} canEdit={canEdit} onDeleted={refresh} onChanged={refresh} />
+        ))
       )}
     </div>
   );

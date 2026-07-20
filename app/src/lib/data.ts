@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types'
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, categories, activity_categories, cover_pos_y, address, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, is_trail, bucket, website, categories, activity_categories, cover_pos_y, address, created_by, created_at';
 const ENTRY_COLS = 'id, place_id, kind, title, body, rating, url, date, created_by, created_at';
 
 export async function fetchPlaces(): Promise<Place[]> {
@@ -40,6 +40,9 @@ export async function updatePlace(
     review?: string | null;
     categories?: string[];
     address?: string | null;
+    bucket?: boolean;
+    website?: string | null;
+    is_trail?: boolean;
   },
 ): Promise<Place> {
   const { data, error } = await supabase
@@ -55,6 +58,22 @@ export async function updatePlace(
 export async function deletePlace(id: string): Promise<void> {
   const { error } = await supabase.from('places').delete().eq('id', id);
   if (error) throw error;
+}
+
+/** Want-to-go places (the Bucket List page), newest first. */
+export async function fetchBucketPlaces(): Promise<Place[]> {
+  const { data, error } = await supabase
+    .from('places')
+    .select(PLACE_COLS)
+    .eq('bucket', true)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Place[];
+}
+
+/** Promote a wishlist place into a normal visited place (flip bucket off). */
+export async function promoteBucketPlace(id: string): Promise<Place> {
+  return updatePlace(id, { bucket: false });
 }
 
 export async function fetchEntries(placeId: string): Promise<Entry[]> {
