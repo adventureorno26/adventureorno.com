@@ -1,6 +1,129 @@
 // MapTiler helpers: basemap style URL + reverse geocoding for "add place".
+// Geocoding search prefers Mapbox (much better business/POI + trailhead coverage)
+// when a token is present, falling back to MapTiler.
 
 const KEY = import.meta.env.VITE_MAPTILER_KEY;
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+
+interface MbFeature {
+  id?: string;
+  properties?: {
+    mapbox_id?: string;
+    name?: string;
+    full_address?: string;
+    place_formatted?: string;
+    feature_type?: string;
+    coordinates?: { longitude: number; latitude: number };
+    context?: {
+      region?: { name?: string };
+      country?: { name?: string };
+    };
+  };
+  geometry?: { coordinates: [number, number] };
+}
+
+const MB_TYPES = 'poi,address,street,place,locality,neighborhood,region,country';
+
+// Mapbox Search Box billing session: suggest calls + the final retrieve share one
+// session_token; regenerate after each retrieve.
+let mbSession = '';
+const mbSessionToken = (): string => {
+  if (!mbSession) mbSession = crypto.randomUUID();
+  return mbSession;
+};
+
+interface MbSuggestion {
+  mapbox_id?: string;
+  name?: string;
+  full_address?: string;
+  place_formatted?: string;
+  feature_type?: string;
+}
+
+/** Mapbox Search Box suggest → autocomplete candidates (businesses, addresses,
+ *  places). Coordinates come later via retrieveResult(). */
+async function mapboxSuggest(query: string, proximity?: [number, number]): Promise<SearchResult[]> {
+  if (!MAPBOX_TOKEN) return [];
+  const p = new URLSearchParams({
+    q: query,
+    access_token: MAPBOX_TOKEN,
+    session_token: mbSessionToken(),
+    limit: '10',
+    types: MB_TYPES,
+  });
+  if (proximity) p.set('proximity', `${proximity[0]},${proximity[1]}`);
+  const res = await fetch(`https://api.mapbox.com/search/searchbox/v1/suggest?${p.toString()}`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { suggestions?: MbSuggestion[] };
+  return (data.suggestions ?? [])
+    .filter((s) => s.mapbox_id && s.name)
+    .map((s) => ({
+      id: s.mapbox_id!,
+      mapbox_id: s.mapbox_id,
+      label: s.full_address ?? [s.name, s.place_formatted].filter(Boolean).join(', ') ?? s.name!,
+      name: s.name!,
+      country: null,
+      admin1: null,
+      address: s.full_address ?? s.place_formatted ?? null,
+      lat: 0,
+      lng: 0, // filled in by retrieveResult on pick
+    }));
+}
+
+/** Resolve a picked suggestion to full coordinates + address (Search Box retrieve). */
+export async function retrieveResult(r: SearchResult): Promise<SearchResult> {
+  if (!MAPBOX_TOKEN || !r.mapbox_id || (r.lat !== 0 && r.lng !== 0)) return r;
+  const p = new URLSearchParams({ access_token: MAPBOX_TOKEN, session_token: mbSessionToken() });
+  const res = await fetch(
+    `https://api.mapbox.com/search/searchbox/v1/retrieve/${r.mapbox_id}?${p.toString()}`,
+  );
+  mbSession = ''; // end the billing session after retrieve
+  if (!res.ok) return r;
+  const data = (await res.json()) as { features?: MbFeature[] };
+  const f = data.features?.[0];
+  const c = f?.geometry?.coordinates;
+  if (!f || !c) return r;
+  return {
+    ...r,
+    lat: c[1],
+    lng: c[0],
+    address: f.properties?.full_address ?? r.address,
+    admin1: f.properties?.context?.region?.name ?? r.admin1,
+    country: f.properties?.context?.country?.name ?? r.country,
+  };
+}
+
+/** Single-shot Mapbox forward (Search Box) → best match with coordinates. */
+async function mapboxForward(query: string, proximity?: [number, number]): Promise<SearchResult[]> {
+  if (!MAPBOX_TOKEN) return [];
+  const p = new URLSearchParams({
+    q: query,
+    access_token: MAPBOX_TOKEN,
+    limit: '10',
+    types: MB_TYPES,
+  });
+  if (proximity) p.set('proximity', `${proximity[0]},${proximity[1]}`);
+  const res = await fetch(`https://api.mapbox.com/search/searchbox/v1/forward?${p.toString()}`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { features?: MbFeature[] };
+  return (data.features ?? [])
+    .map((f, i): SearchResult | null => {
+      const coords = f.geometry?.coordinates;
+      if (!coords) return null;
+      const pr = f.properties;
+      return {
+        id: pr?.mapbox_id ?? f.id ?? `mb-${i}`,
+        label: pr?.full_address ?? [pr?.name, pr?.place_formatted].filter(Boolean).join(', ') ?? '',
+        name: pr?.name ?? query,
+        country: pr?.context?.country?.name ?? null,
+        admin1: pr?.context?.region?.name ?? null,
+        address: pr?.full_address ?? pr?.place_formatted ?? null,
+        lat: coords[1],
+        lng: coords[0],
+      };
+    })
+    .filter((x): x is SearchResult => x !== null);
+}
 
 // Dark style to match the app's blue theme (sleeker than the default light streets).
 export const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${KEY}`;
@@ -57,6 +180,7 @@ export interface ForwardResult extends ReverseGeocodeResult {
 export interface SearchResult extends ForwardResult {
   id: string;
   label: string; // full "place_name" for the dropdown
+  mapbox_id?: string; // Search Box suggestion id → retrieveResult() for coords
 }
 
 /** Autocomplete search → location suggestions (map "search to add"). Biases to
@@ -68,6 +192,11 @@ export async function searchGeocode(
 ): Promise<SearchResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
+  // Prefer Mapbox Search Box (best businesses/POIs); fall back to MapTiler.
+  if (MAPBOX_TOKEN) {
+    const mb = await mapboxSuggest(q, proximity).catch(() => []);
+    if (mb.length) return mb;
+  }
   try {
     const params = new URLSearchParams({
       key: KEY,
@@ -122,6 +251,11 @@ export async function forwardGeocode(
 ): Promise<ForwardResult | null> {
   const q = query.trim();
   if (!q) return null;
+  // Prefer Mapbox for accuracy; fall back to MapTiler.
+  if (MAPBOX_TOKEN) {
+    const mb = await mapboxForward(q, proximity).catch(() => []);
+    if (mb[0]) return mb[0];
+  }
   try {
     const params = new URLSearchParams({ key: KEY, limit: '1', fuzzyMatch: 'true' });
     if (proximity) params.set('proximity', `${proximity[0]},${proximity[1]}`);

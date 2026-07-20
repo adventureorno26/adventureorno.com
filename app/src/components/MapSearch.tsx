@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { searchGeocode, type SearchResult } from '../lib/maptiler';
+import { retrieveResult, searchGeocode, type SearchResult } from '../lib/maptiler';
 
 /** Search box on the map: type a location → suggestions → pick to add a card.
  *  getProximity biases results toward the current map view for accuracy. */
@@ -29,11 +29,14 @@ export default function MapSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  function choose(r: SearchResult) {
-    onPick(r);
+  async function choose(r: SearchResult) {
     setQ('');
     setResults([]);
     setOpen(false);
+    // Search Box suggestions have no coords until retrieved.
+    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
+    if (full.lat === 0 && full.lng === 0) return; // couldn't resolve
+    onPick(full);
   }
 
   return (
