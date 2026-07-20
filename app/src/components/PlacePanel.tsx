@@ -47,6 +47,16 @@ function normalizeUrl(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+/** Apple Maps directions link for a spot's OWN address/coords, or null if it has
+ *  neither (then it just shows as a plain entry with no Directions button). */
+function spotDirHref(e: Entry): string | null {
+  const hasCoords = e.lat != null && e.lng != null;
+  const dest = e.address?.trim() || (hasCoords ? `${e.lat},${e.lng}` : '');
+  if (!dest) return null;
+  const sll = hasCoords ? `&sll=${e.lat},${e.lng}` : '';
+  return `https://maps.apple.com/?daddr=${encodeURIComponent(dest)}${sll}&dirflg=d`;
+}
+
 /** Meters → "12.3 mi". */
 function miStr(meters: number): string {
   return `${(meters / 1609.344).toFixed(1)} mi`;
@@ -146,7 +156,6 @@ export default function PlacePanel({
 
   const [name, setName] = useState(place.name);
   const [review, setReview] = useState(place.review ?? '');
-  const [website, setWebsite] = useState(place.website ?? '');
   const [trailSel, setTrailSel] = useState('');
   const [trailheadName, setTrailheadName] = useState('');
   const [editingRegion, setEditingRegion] = useState(false);
@@ -163,7 +172,6 @@ export default function PlacePanel({
   useEffect(() => {
     setName(place.name);
     setReview(place.review ?? '');
-    setWebsite(place.website ?? '');
     setCoverPos(place.cover_pos_y ?? 50);
     setEAdmin1(place.admin1 ?? '');
     setECountry(place.country ?? '');
@@ -310,12 +318,6 @@ export default function PlacePanel({
     setEditingName(false);
     if (name.trim() && name.trim() !== place.name) await patch({ name: name.trim(), auto: false });
     else setName(place.name);
-  }
-
-  async function saveWebsite() {
-    const w = website.trim();
-    if (w === (place.website ?? '')) return;
-    await patch({ website: w || null });
   }
 
   // Look up a place/address and set this pin's location + region + address.
@@ -629,26 +631,6 @@ export default function PlacePanel({
         place.review && <p className="body">{place.review}</p>
       )}
 
-      {/* Add a website — under the review box */}
-      {canEdit && (
-        <details className="cat-edit">
-          <summary>{place.website ? 'Edit website' : 'Add a website'}</summary>
-          <div className="field-row" style={{ marginTop: 4 }}>
-            <input
-              placeholder="https://…"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveWebsite();
-              }}
-            />
-            <button className="primary" style={{ flex: 'none' }} onClick={() => void saveWebsite()}>
-              Save
-            </button>
-          </div>
-        </details>
-      )}
-
       {canEdit && !place.is_trail && !place.trail_id && (
         <details className="cat-edit trail-assign">
           <summary>This is a Trail</summary>
@@ -867,20 +849,30 @@ export default function PlacePanel({
         </>
       )}
 
-      {canEdit && (
-        <>
-          <h3 style={{ marginTop: 22 }}>Set / fix this place’s location</h3>
-          <p className="loc-hint">
-            Search a place or address to reposition the pin and update the state &amp; address.
-          </p>
-          <div className="loc-search bucket-search">
-            <MapSearch onPick={setLocationFromSearch} />
-          </div>
-        </>
-      )}
+      {canEdit &&
+        (() => {
+          // Trail places (a trail or one of its trailheads) label this section
+          // "Trailhead"; everything else keeps the generic location wording.
+          const isTrailPlace = place.is_trail || Boolean(place.trail_id);
+          return (
+            <>
+              <h3 style={{ marginTop: 22 }}>
+                {isTrailPlace ? 'Trailhead' : 'Set / fix this place’s location'}
+              </h3>
+              <p className="loc-hint">
+                {isTrailPlace
+                  ? 'Search a place or address to set this trailhead’s location.'
+                  : 'Search a place or address to reposition the pin and update the state & address.'}
+              </p>
+              <div className="loc-search bucket-search">
+                <MapSearch onPick={setLocationFromSearch} />
+              </div>
+            </>
+          );
+        })()}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
-      <PhotoGallery place={place} onUploaded={refreshPlace} />
+      <PhotoGallery place={place} visits={visits ?? undefined} onUploaded={refreshPlace} />
 
       <RouteMiniMap place={place} />
 
@@ -911,16 +903,31 @@ export default function PlacePanel({
               <div className="spot-group-head">
                 {g.icon} {g.label} <span className="label">({g.items.length})</span>
               </div>
-              {g.items.map((e) => (
-                <Link
-                  key={e.id}
-                  className="spot-item"
-                  to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
-                >
-                  <span className="spot-title">{e.title}</span>
-                  {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
-                </Link>
-              ))}
+              {g.items.map((e) => {
+                const dir = spotDirHref(e);
+                return (
+                  <div key={e.id} className="spot-row">
+                    <Link
+                      className="spot-item"
+                      to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
+                    >
+                      <span className="spot-title">{e.title}</span>
+                      {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
+                    </Link>
+                    {dir && (
+                      <a
+                        className="directions-btn sm spot-dir"
+                        href={dir}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Directions to ${e.address ?? e.title}`}
+                      >
+                        Directions
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>

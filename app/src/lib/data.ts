@@ -6,7 +6,8 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types'
 
 const PLACE_COLS =
   'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, trail_id, bucket, website, categories, activity_categories, cover_pos_y, address, created_by, created_at';
-const ENTRY_COLS = 'id, place_id, kind, title, body, rating, url, date, created_by, created_at';
+const ENTRY_COLS =
+  'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
 export async function fetchPlaces(): Promise<Place[]> {
   const { data, error } = await supabase.from('places').select(PLACE_COLS);

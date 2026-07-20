@@ -122,6 +122,9 @@ export interface Entry {
   rating: number | null; // 1..5
   url: string | null;
   date: string | null; // date
+  address: string | null; // spot's own street address (for its Directions button)
+  lat: number | null; // spot's own coordinates (optional; from geocoding)
+  lng: number | null;
   created_by: string | null;
   created_at: string;
 }
@@ -156,4 +159,4 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
   >;
 
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
-  Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date'>>;
+  Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date' | 'address' | 'lat' | 'lng'>>;

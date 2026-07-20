@@ -12,7 +12,7 @@ import {
 } from '../lib/photos';
 import { updatePlace } from '../lib/data';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
-import type { Photo, Place, Video } from '../lib/types';
+import type { Photo, Place, Video, Visit } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
@@ -21,6 +21,9 @@ interface Props {
   place: Place;
   // When set, the gallery shows only this date's photos and pins uploads to it.
   day?: string;
+  // The place's visits — on the place card, photos are bucketed by visit (a trip
+  // may span several days) and each visit shows as a horizontal carousel.
+  visits?: Visit[];
   // Fired after photos are added, so the parent can refresh the place (e.g. to
   // pick up the new cover photo and convert its map marker).
   onUploaded?: () => void;
@@ -37,7 +40,7 @@ const SKIP_LABELS: Record<string, string> = {
 // Skips a deliberate manual upload is allowed to override.
 const OVERRIDABLE = new Set(['screenshot', 'home_zone']);
 
-export default function PhotoGallery({ place, day, onUploaded }: Props) {
+export default function PhotoGallery({ place, day, visits, onUploaded }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -229,30 +232,66 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
       : d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
-  // Group photos by the date they were taken (keeping each one's flat index so
-  // the carousel still works), so the gallery reads chronologically.
-  const photoDateGroups: { date: string; label: string; items: { photo: Photo; idx: number }[] }[] =
-    [];
-  if (list.length) {
+  // Group photos for the gallery. On a place card we bucket by VISIT (a trip can
+  // span several days) so each visit is one horizontal carousel; on a single-day
+  // view we bucket by day. Every item keeps its flat `list` index so the
+  // full-screen carousel still lines up. Within a group photos read oldest→newest.
+  const dateOf = (p: Photo) => (p.taken_at ?? '').slice(0, 10);
+  const dayLabel = (d: string) =>
+    d === 'undated'
+      ? 'Undated'
+      : new Date(d + 'T00:00:00').toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+  const visitLabel = (v: Visit): string => {
+    const s = new Date(v.start_date + 'T00:00:00');
+    const e = new Date(v.end_date + 'T00:00:00');
+    const full: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+    if (v.start_date === v.end_date) return s.toLocaleDateString(undefined, full);
+    const sameYear = s.getFullYear() === e.getFullYear();
+    const so: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : full;
+    return `${s.toLocaleDateString(undefined, so)} – ${e.toLocaleDateString(undefined, full)}`;
+  };
+  const pushDayGroups = (items: { photo: Photo; idx: number }[], out: typeof photoGroups) => {
     const byDate = new Map<string, { photo: Photo; idx: number }[]>();
-    list.forEach((p, idx) => {
-      const key = (p.taken_at ?? '').slice(0, 10) || 'undated';
-      if (!byDate.has(key)) byDate.set(key, []);
-      byDate.get(key)!.push({ photo: p, idx });
-    });
-    for (const [date, items] of byDate) {
-      photoDateGroups.push({
-        date,
-        label:
-          date === 'undated'
-            ? 'Undated'
-            : new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              }),
-        items,
+    for (const it of items) {
+      const k = dateOf(it.photo) || 'undated';
+      if (!byDate.has(k)) byDate.set(k, []);
+      byDate.get(k)!.push(it);
+    }
+    [...byDate.keys()]
+      .sort((a, b) => b.localeCompare(a)) // newest day first
+      .forEach((k) => {
+        const its = byDate
+          .get(k)!
+          .sort((a, b) => (a.photo.taken_at ?? '').localeCompare(b.photo.taken_at ?? ''));
+        out.push({ key: `d-${k}`, label: dayLabel(k), items: its });
       });
+  };
+
+  const photoGroups: { key: string; label: string; items: { photo: Photo; idx: number }[] }[] = [];
+  if (list.length) {
+    const withIdx = list.map((photo, idx) => ({ photo, idx }));
+    if (!day && visits && visits.length) {
+      const sorted = [...visits].sort((a, b) => b.start_date.localeCompare(a.start_date));
+      const used = new Set<number>();
+      for (const v of sorted) {
+        const items = withIdx.filter(({ photo, idx }) => {
+          const d = dateOf(photo);
+          return d !== '' && d >= v.start_date && d <= v.end_date && !used.has(idx);
+        });
+        items.forEach(({ idx }) => used.add(idx));
+        if (items.length) {
+          items.sort((a, b) => (a.photo.taken_at ?? '').localeCompare(b.photo.taken_at ?? ''));
+          photoGroups.push({ key: `v-${v.id}`, label: visitLabel(v), items });
+        }
+      }
+      // Photos outside any recorded visit → grouped by day.
+      pushDayGroups(withIdx.filter(({ idx }) => !used.has(idx)), photoGroups);
+    } else {
+      pushDayGroups(withIdx, photoGroups);
     }
   }
 
@@ -325,10 +364,10 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
         <p style={{ color: 'var(--muted)', fontSize: 13 }}>No photos or videos yet.</p>
       ) : (
         <>
-          {photoDateGroups.map((g) => (
-            <div className="photo-date-group" key={g.date}>
+          {photoGroups.map((g) => (
+            <div className="photo-date-group" key={g.key}>
               <div className="photo-date">{g.label}</div>
-              <div className="gallery">
+              <div className="gallery carousel">
                 {g.items.map(({ photo: p, idx }) => (
                   <div
                     className={`thumb ${place.cover_photo_id === p.id ? 'is-cover' : ''}`}

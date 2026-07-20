@@ -355,6 +355,21 @@ a {
   border-radius: 8px;
   background: var(--panel-2);
 }
+/* One visit = one horizontally scrollable carousel (photos in date order). */
+.gallery.carousel {
+  display: flex;
+  grid-template-columns: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.gallery.carousel .thumb,
+.gallery.carousel .thumb-wrap {
+  flex: 0 0 auto;
+  width: min(44%, 150px);
+  scroll-snap-align: start;
+}
 .thumb img {
   width: 100%;
   height: 100%;
@@ -948,9 +963,9 @@ a {
 }
 
 /* ---------- Mobile safe area (don't hide under the iPhone clock) ---------- */
-/* Nudged down a few rows so the stats + Add/search clear the very top edge. */
+/* Stats sit BELOW the Add/search row (which is pinned near the top). */
 .stats-bar {
-  padding-top: calc(56px + env(safe-area-inset-top));
+  padding-top: calc(108px + env(safe-area-inset-top));
 }
 .add-bar {
   top: calc(54px + env(safe-area-inset-top));
@@ -1510,11 +1525,11 @@ a {
   position: relative;
 }
 
-/* +Add sits to the LEFT of the search, both centered under the stats bar and
- * framed to roughly the width of the stat blocks above them. */
+/* +Add sits to the LEFT of the search; this row is on TOP, the stats bar below
+ * it. Framed to roughly the width of the stat blocks. */
 .map-top-row {
   position: absolute;
-  top: calc(104px + env(safe-area-inset-top));
+  top: calc(52px + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1536,6 +1551,16 @@ a {
 .map-top-row .map-search-box {
   flex: 1;
   height: 100%;
+}
+/* Results float over the map instead of growing the row (which was stretching
+ * the +Add button vertically as you typed). */
+.map-top-row .map-search-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin-top: 0;
+  z-index: 20;
 }
 /* +Add hugs its own text; menu drops beneath it. */
 .map-top-row .add-wrap {
@@ -2490,6 +2515,19 @@ textarea {
   font-weight: 650;
   color: var(--accent);
   margin-bottom: 4px;
+}
+.spot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.spot-row .spot-item {
+  flex: 1;
+  margin-bottom: 0;
+}
+.spot-row .spot-dir {
+  flex: none;
 }
 .spot-item {
   display: flex;

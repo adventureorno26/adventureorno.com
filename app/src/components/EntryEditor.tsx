@@ -28,16 +28,24 @@ export default function EntryEditor({
   const [rating, setRating] = useState<number | null>(existing?.rating ?? null);
   const [url, setUrl] = useState(existing?.url ?? '');
   const [date, setDate] = useState(existing?.date ?? defaultDate ?? '');
+  const [address, setAddress] = useState(existing?.address ?? '');
+  const [lat, setLat] = useState<number | null>(existing?.lat ?? null);
+  const [lng, setLng] = useState<number | null>(existing?.lng ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Search a place/address → add it as a spot under this city (no new pin). Fills
-  // the title with the place name and drops its address into the notes.
+  // the title with the place name and captures the spot's own address +
+  // coordinates so it gets its own Directions button.
   async function pickPlace(r: SearchResult) {
     const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
     if (full.name) setTitle(full.name);
     const addr = full.address || [full.admin1, full.country].filter(Boolean).join(', ');
-    if (addr) setBody((b) => (b.trim() ? b : addr));
+    setAddress(addr);
+    if (full.lat || full.lng) {
+      setLat(full.lat);
+      setLng(full.lng);
+    }
   }
 
   async function submit(e: React.FormEvent) {
@@ -57,6 +65,9 @@ export default function EntryEditor({
         rating,
         url: url.trim() || null,
         date: date || null,
+        address: address.trim() || null,
+        lat,
+        lng,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save entry.');
@@ -83,6 +94,19 @@ export default function EntryEditor({
 
       <label>Title</label>
       <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+
+      <label>Address (gives this spot its own Directions button)</label>
+      <input
+        value={address}
+        placeholder="Street address"
+        onChange={(e) => {
+          setAddress(e.target.value);
+          // A hand-typed address no longer matches the searched coordinates;
+          // clear them so Directions routes by the address text instead.
+          setLat(null);
+          setLng(null);
+        }}
+      />
 
       <label>Rating</label>
       <StarRating value={rating} onChange={setRating} />
