@@ -8,24 +8,25 @@ export interface Category {
   label: string;
   icon: string; // emoji, used in menus/chips/legend
   color: string; // pin color (map)
+  review: string; // heading for that category's reviews section on a place card
   auto?: boolean; // derived from activities, not manually toggled
 }
 
 export const CATEGORIES: Category[] = [
-  { slug: 'hiking', label: 'Hiking', icon: '🥾', color: '#22c55e', auto: true },
-  { slug: 'walking', label: 'Walking', icon: '🚶', color: '#4ade80', auto: true },
-  { slug: 'running', label: 'Running', icon: '🏃', color: '#f97316', auto: true },
-  { slug: 'biking', label: 'Biking', icon: '🚴', color: '#3b82f6', auto: true },
-  { slug: 'jeeping', label: 'Jeeping', icon: '🚙', color: '#b45309' },
-  { slug: 'camping', label: 'Camping', icon: '🏕️', color: '#10b981' },
-  { slug: 'beach', label: 'Beach', icon: '🏖️', color: '#06b6d4' },
-  { slug: 'sunrise', label: 'Sunrise', icon: '🌅', color: '#fbbf24' },
-  { slug: 'sunset', label: 'Sunset', icon: '🌇', color: '#fb7185' },
-  { slug: 'dining', label: 'Dining', icon: '🍽️', color: '#f59e0b' },
-  { slug: 'winery', label: 'Winery', icon: '🍷', color: '#a855f7' },
-  { slug: 'brewery', label: 'Brewery', icon: '🍺', color: '#ca8a04' },
-  { slug: 'viewpoint', label: 'Viewpoint', icon: '⛰️', color: '#64748b' },
-  { slug: 'stay', label: 'Stay', icon: '🏨', color: '#6366f1' },
+  { slug: 'hiking', label: 'Hiking', icon: '🥾', color: '#22c55e', review: 'Hiking Trail Reviews', auto: true },
+  { slug: 'walking', label: 'Walking', icon: '🚶', color: '#4ade80', review: 'Walking Trail Reviews', auto: true },
+  { slug: 'running', label: 'Running', icon: '🏃', color: '#f97316', review: 'Running Trail Reviews', auto: true },
+  { slug: 'biking', label: 'Biking', icon: '🚴', color: '#3b82f6', review: 'Biking Trail Reviews', auto: true },
+  { slug: 'jeeping', label: 'Jeeping', icon: '🚙', color: '#b45309', review: 'Jeeping Trail Reviews' },
+  { slug: 'camping', label: 'Camping', icon: '🏕️', color: '#10b981', review: 'Campsite Reviews' },
+  { slug: 'beach', label: 'Beach', icon: '🏖️', color: '#06b6d4', review: 'Beach Reviews' },
+  { slug: 'sunrise', label: 'Sunrise', icon: '🌅', color: '#fbbf24', review: 'Sunrise Spot Reviews' },
+  { slug: 'sunset', label: 'Sunset', icon: '🌇', color: '#fb7185', review: 'Sunset Spot Reviews' },
+  { slug: 'dining', label: 'Dining', icon: '🍽️', color: '#f59e0b', review: 'Restaurant Reviews' },
+  { slug: 'winery', label: 'Winery', icon: '🍷', color: '#a855f7', review: 'Winery Reviews' },
+  { slug: 'brewery', label: 'Brewery', icon: '🍺', color: '#ca8a04', review: 'Brewery Reviews' },
+  { slug: 'viewpoint', label: 'Viewpoint', icon: '⛰️', color: '#64748b', review: 'Viewpoint Reviews' },
+  { slug: 'stay', label: 'Stay', icon: '🏨', color: '#6366f1', review: 'Stay Reviews' },
 ];
 
 export const categoryColor = (slug: string): string =>
@@ -34,6 +35,8 @@ export const categoryColor = (slug: string): string =>
 const BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
 export const categoryIcon = (slug: string): string => BY_SLUG.get(slug)?.icon ?? '📍';
 export const categoryLabel = (slug: string): string => BY_SLUG.get(slug)?.label ?? slug;
+export const categoryReviewLabel = (slug: string): string =>
+  BY_SLUG.get(slug)?.review ?? `${categoryLabel(slug)} Reviews`;
 
 // Categories that can be toggled by hand (everything that isn't auto-derived).
 export const MANUAL_CATEGORIES = CATEGORIES.filter((c) => !c.auto);

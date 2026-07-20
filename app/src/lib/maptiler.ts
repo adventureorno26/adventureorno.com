@@ -51,6 +51,7 @@ export async function reverseGeocode(
 export interface ForwardResult extends ReverseGeocodeResult {
   lat: number;
   lng: number;
+  address: string | null; // full "place_name" (street address / full label)
 }
 
 export interface SearchResult extends ForwardResult {
@@ -100,6 +101,7 @@ export async function searchGeocode(
           name: f.text ?? f.place_name ?? q,
           country: ctx('country'),
           admin1: ctx('region') ?? ctx('subregion'),
+          address: f.place_name ?? null,
           lat: center[1],
           lng: center[0],
         };
@@ -145,6 +147,7 @@ export async function forwardGeocode(
       name: f.text ?? f.place_name ?? q,
       country: contextText('country'),
       admin1: contextText('region') ?? contextText('subregion'),
+      address: f.place_name ?? null,
     };
   } catch {
     return null;

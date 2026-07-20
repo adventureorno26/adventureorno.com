@@ -6,19 +6,26 @@ import StarRating from './StarRating';
 interface Props {
   placeId: string;
   existing?: Entry;
+  defaultDate?: string; // pre-fill the date for a new spot (e.g. from the main card)
   onSave: (draft: NewEntry) => Promise<void>;
   onCancel: () => void;
 }
 
 /** Inline add/edit form for a spot. Its "Kind" is a category tag (Dining,
  *  Winery, …) which auto-tags the place; 'note' is a plain note. */
-export default function EntryEditor({ placeId, existing, onSave, onCancel }: Props) {
+export default function EntryEditor({
+  placeId,
+  existing,
+  defaultDate,
+  onSave,
+  onCancel,
+}: Props) {
   const [kind, setKind] = useState<string>(existing?.kind ?? 'dining');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
   const [rating, setRating] = useState<number | null>(existing?.rating ?? null);
   const [url, setUrl] = useState(existing?.url ?? '');
-  const [date, setDate] = useState(existing?.date ?? '');
+  const [date, setDate] = useState(existing?.date ?? defaultDate ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

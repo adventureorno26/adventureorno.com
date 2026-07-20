@@ -9,7 +9,7 @@ import { isInHomeZone } from './geo';
 
 const TRIP_COLS = 'id, name, start_date, end_date, created_at';
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, cover_pos_y, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, cover_pos_y, address, created_by, created_at';
 
 export async function fetchTrips(): Promise<Trip[]> {
   const { data, error } = await supabase
@@ -56,6 +56,7 @@ export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> 
     name: geo.name,
     country: geo.country,
     admin1: geo.admin1,
+    address: geo.address,
     lat: geo.lat,
     lng: geo.lng,
   });

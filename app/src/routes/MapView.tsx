@@ -447,6 +447,7 @@ export default function MapView() {
         name: r.name,
         country: r.country,
         admin1: r.admin1,
+        address: r.address,
         lng: r.lng,
         lat: r.lat,
       });
@@ -570,6 +571,7 @@ export default function MapView() {
         name: geo.name,
         country: geo.country,
         admin1: geo.admin1,
+        address: geo.address,
         lng: geo.lng,
         lat: geo.lat,
       });

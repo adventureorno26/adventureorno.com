@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addVisit,
+  createEntry,
   deletePlace,
   deleteVisit,
   fetchEntries,
@@ -10,12 +11,19 @@ import {
   mergePlaces,
   updatePlace,
 } from '../lib/data';
-import type { Entry, Place, Visit } from '../lib/types';
-import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
+import type { Entry, NewEntry, Place, Visit } from '../lib/types';
+import {
+  CATEGORIES,
+  categoryIcon,
+  categoryLabel,
+  categoryReviewLabel,
+  effectiveCategories,
+} from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { forwardGeocode } from '../lib/maptiler';
 import { photosEnabled } from '../lib/photos';
 import AuthedImg from './AuthedImg';
+import EntryEditor from './EntryEditor';
 import PhotoGallery from './PhotoGallery';
 import StarRating from './StarRating';
 
@@ -54,6 +62,7 @@ export default function PlacePanel({
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [spots, setSpots] = useState<Entry[] | null>(null);
+  const [addingSpot, setAddingSpot] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
@@ -76,6 +85,17 @@ export default function PlacePanel({
 
   async function reloadVisits() {
     setVisits(await fetchVisits(place.id).catch(() => []));
+  }
+  async function reloadSpots() {
+    setSpots(await fetchEntries(place.id).catch(() => []));
+  }
+  // Add a spot/review straight from the main card; its category tags the place
+  // and it shows under that category's review section here + on its day.
+  async function addSpot(draft: NewEntry) {
+    await createEntry({ ...draft, place_id: place.id });
+    setAddingSpot(false);
+    await reloadSpots();
+    await refreshPlace(); // pick up the tag the spot's kind added
   }
   useEffect(() => {
     let active = true;
@@ -107,7 +127,7 @@ export default function PlacePanel({
       if (items && items.length) {
         spotGroups.push({
           key: k,
-          label: k === 'note' ? 'Notes' : categoryLabel(k),
+          label: k === 'note' ? 'Notes' : categoryReviewLabel(k),
           icon: k === 'note' ? '📝' : categoryIcon(k),
           items,
         });
@@ -175,8 +195,9 @@ export default function PlacePanel({
     await patch({
       lat: geo.lat,
       lng: geo.lng,
-      admin1: place.admin1 ?? geo.admin1,
-      country: place.country ?? geo.country,
+      admin1: geo.admin1 ?? place.admin1,
+      country: geo.country ?? place.country,
+      address: geo.address,
     });
   }
 
@@ -284,6 +305,7 @@ export default function PlacePanel({
         {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
         {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
       </div>
+      {place.address && <div className="place-address">📍 {place.address}</div>}
 
       <a
         className="directions-btn"
@@ -294,13 +316,13 @@ export default function PlacePanel({
         🧭 Directions
       </a>
 
-      {/* Set / move the location by address (for photos added without GPS) */}
+      {/* Set the location / look up an address by business name or street number */}
       {canEdit && (
         <details className="cat-edit">
-          <summary>📍 Set / move location</summary>
+          <summary>📍 Set location / look up address</summary>
           <div className="field-row" style={{ marginTop: 4 }}>
             <input
-              placeholder="Type an address or place…"
+              placeholder="Business name, address, or street #…"
               value={loc}
               onChange={(e) => setLoc(e.target.value)}
               onKeyDown={(e) => {
@@ -472,30 +494,52 @@ export default function PlacePanel({
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
 
-      {/* All spots at this place, grouped by tag */}
-      {spotGroups.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 22 }}>Spots</h3>
-          <div className="spot-groups">
-            {spotGroups.map((g) => (
-              <div className="spot-group" key={g.key}>
-                <div className="spot-group-head">
-                  {g.icon} {g.label} <span className="label">({g.items.length})</span>
-                </div>
-                {g.items.map((e) => (
-                  <Link
-                    key={e.id}
-                    className="spot-item"
-                    to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
-                  >
-                    <span className="spot-title">{e.title}</span>
-                    {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
-                  </Link>
-                ))}
+      {/* Spots & reviews — grouped by tag; each category label only appears once
+          you've added a review of that kind, so the card stays uncluttered. */}
+      <div className="visits-head">
+        <h3 style={{ marginTop: 22 }}>Spots &amp; reviews</h3>
+        {canEdit && !addingSpot && (
+          <button className="link-btn" onClick={() => setAddingSpot(true)}>
+            ＋ Add a spot
+          </button>
+        )}
+      </div>
+
+      {canEdit && addingSpot && (
+        <EntryEditor
+          placeId={place.id}
+          defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
+          onSave={addSpot}
+          onCancel={() => setAddingSpot(false)}
+        />
+      )}
+
+      {spotGroups.length > 0 ? (
+        <div className="spot-groups">
+          {spotGroups.map((g) => (
+            <div className="spot-group" key={g.key}>
+              <div className="spot-group-head">
+                {g.icon} {g.label} <span className="label">({g.items.length})</span>
               </div>
-            ))}
-          </div>
-        </>
+              {g.items.map((e) => (
+                <Link
+                  key={e.id}
+                  className="spot-item"
+                  to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
+                >
+                  <span className="spot-title">{e.title}</span>
+                  {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        !addingSpot && (
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+            No spots yet. Add a restaurant, trail, winery… with a rating and review.
+          </p>
+        )
       )}
 
       {canEdit && (

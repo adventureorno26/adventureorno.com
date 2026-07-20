@@ -25,6 +25,7 @@ export interface Place {
   last_visit: string | null; // date
   cover_photo_id: string | null;
   cover_pos_y: number; // 0-100, vertical focal point for the cover crop
+  address: string | null; // full street address / label (from geocoding)
   auto: boolean; // created by the clustering job; badge until first edited
   needs_geocode: boolean;
   visit_count: number;
@@ -141,7 +142,7 @@ export interface MileageRow {
 
 // Draft shapes for inserts (server fills id / created_at / created_by).
 export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'> &
-  Partial<Pick<Place, 'first_visit' | 'last_visit'>>;
+  Partial<Pick<Place, 'first_visit' | 'last_visit' | 'address'>>;
 
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
   Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date'>>;

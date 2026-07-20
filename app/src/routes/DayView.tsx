@@ -299,7 +299,13 @@ export default function DayView() {
                   </a>
                 </p>
               )}
-              <EntryPhotos entryId={e.id} placeId={id!} canEdit={canEdit} />
+              <EntryPhotos
+                entryId={e.id}
+                placeId={id!}
+                lat={place?.lat ?? 0}
+                lng={place?.lng ?? 0}
+                canEdit={canEdit}
+              />
               {canEdit && (
                 <div className="row-actions">
                   <button onClick={() => setEditingId(e.id)}>Edit</button>

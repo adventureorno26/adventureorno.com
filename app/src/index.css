@@ -2133,3 +2133,17 @@ textarea {
 .stat-detail {
   z-index: 9;
 }
+
+/* Spot photo action buttons */
+.entry-photo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+/* Address line on the place card */
+.place-address {
+  color: var(--muted);
+  font-size: 13px;
+  margin: -8px 0 12px;
+}
