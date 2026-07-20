@@ -1834,36 +1834,46 @@ textarea {
 }
 
 /* Modern geo pins — SVG teardrop, category-colored, soft drop shadow */
+/* NOTE: never put transform/transition on the marker ROOT — MapLibre positions
+   markers by setting their transform, so a CSS transition there animates every
+   pan/zoom reposition and the pins visibly drift. Animate a CHILD instead. */
 .geo-marker {
   cursor: pointer;
-  will-change: transform;
-  transition: transform 0.12s ease;
 }
 .geo-marker .geo-pin {
   display: block;
   filter: drop-shadow(0 3px 4px rgba(2, 8, 23, 0.55));
+  transition: transform 0.12s ease;
+  transform-origin: bottom center;
 }
 .geo-marker:hover {
-  transform: translateY(-2px) scale(1.08);
   z-index: 2;
 }
+.geo-marker:hover .geo-pin {
+  transform: translateY(-2px) scale(1.08);
+}
 .geo-marker.selected {
-  transform: scale(1.28);
   z-index: 3;
 }
 .geo-marker.selected .geo-pin {
+  transform: scale(1.28);
   filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85))
     drop-shadow(0 4px 6px rgba(2, 8, 23, 0.6));
 }
 /* Small modern wishlist dot */
 .bucket-dot {
   cursor: pointer;
-  transition: transform 0.12s ease;
   filter: drop-shadow(0 1px 3px rgba(2, 8, 23, 0.5));
 }
+.bucket-dot svg {
+  display: block;
+  transition: transform 0.12s ease;
+}
 .bucket-dot:hover {
-  transform: scale(1.25);
   z-index: 2;
+}
+.bucket-dot:hover svg {
+  transform: scale(1.25);
 }
 
 /* Reassign a misgrouped activity to another place */
@@ -1903,8 +1913,6 @@ textarea {
 .photo-marker {
   position: relative;
   cursor: pointer;
-  transition: transform 0.12s ease;
-  transform-origin: bottom center;
   filter: drop-shadow(0 4px 6px rgba(2, 8, 23, 0.5));
 }
 .photo-marker-thumb {
@@ -1915,6 +1923,8 @@ textarea {
   background: #0b1a2b;
   overflow: hidden;
   box-sizing: border-box;
+  transition: transform 0.12s ease;
+  transform-origin: bottom center;
 }
 .photo-marker-thumb img {
   width: 100%;
@@ -1936,14 +1946,16 @@ textarea {
   z-index: -1;
 }
 .photo-marker:hover {
-  transform: translateY(-2px) scale(1.08);
   z-index: 2;
 }
+.photo-marker:hover .photo-marker-thumb {
+  transform: translateY(-2px) scale(1.08);
+}
 .photo-marker.selected {
-  transform: scale(1.16);
   z-index: 3;
 }
 .photo-marker.selected .photo-marker-thumb {
+  transform: scale(1.16);
   border-color: var(--ring, #38bdf8);
   box-shadow: 0 0 0 2px #fff;
 }

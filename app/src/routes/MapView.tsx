@@ -98,6 +98,7 @@ export default function MapView() {
   const drawPtsRef = useRef<[number, number][]>([]);
   const drawLineRef = useRef<[number, number][]>([]);
   const drawEncodedRef = useRef<string | null>(null);
+  const drawTargetRef = useRef<string | null>(null); // attach the drawn route to this place
   const addDrawPointRef = useRef<(lng: number, lat: number) => void>(() => undefined);
   drawModeRef.current = drawMode;
 
@@ -185,7 +186,14 @@ export default function MapView() {
         el.addEventListener('mouseleave', () => popupRef.current?.remove());
         return { el, anchor: 'center' };
       }
-      const cover = place.cover_photo_id;
+      // A trail with no photo of its own borrows a trailhead's cover, so it
+      // shows a photo marker instead of a bare pin.
+      const cover =
+        place.cover_photo_id ??
+        (place.is_trail
+          ? placesRef.current.find((p) => p.trail_id === place.id && p.cover_photo_id)
+              ?.cover_photo_id ?? null
+          : null);
       if (cover && !failedCoverRef.current.has(cover)) {
         el.className = 'photo-marker';
         el.style.setProperty('--ring', color);
@@ -243,7 +251,12 @@ export default function MapView() {
       const place = placesRef.current.find((p) => p.id === pid);
       if (!place) continue;
       const cat = primaryCategory(place);
-      const cover = place.cover_photo_id ?? null;
+      const cover =
+        place.cover_photo_id ??
+        (place.is_trail
+          ? placesRef.current.find((p) => p.trail_id === place.id && p.cover_photo_id)
+              ?.cover_photo_id ?? null
+          : null);
       const bucket = place.bucket;
       const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
       let entry = markersRef.current.get(pid);
@@ -626,6 +639,7 @@ export default function MapView() {
     drawPtsRef.current = [];
     drawLineRef.current = [];
     drawEncodedRef.current = null;
+    drawTargetRef.current = null;
     setDrawCount(0);
     setDrawDist(0);
     setDrawName('');
@@ -664,7 +678,8 @@ export default function MapView() {
         drawEncodedRef.current ??
         polyline.encode(drawLineRef.current.map(([ln, la]) => [la, ln] as [number, number]));
       const [startLng, startLat] = pts[0];
-      let placeId = nearestPlaceId(startLng, startLat, 2000);
+      // If launched from a trail card, attach to that trail; else nearest place.
+      let placeId = drawTargetRef.current ?? nearestPlaceId(startLng, startLat, 2000);
       if (!placeId) {
         const created = await createPlace({
           name: drawName.trim(),
@@ -1037,6 +1052,13 @@ export default function MapView() {
           onPlaceChanged={handlePlaceChanged}
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}
+          onAddRoute={(placeId, name) => {
+            drawTargetRef.current = placeId;
+            setDrawName(name);
+            setDrawMode(true);
+            setBanner('Tap the map to trace the route, then Save.');
+            navigate('/');
+          }}
         />
       )}
     </div>

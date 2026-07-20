@@ -37,6 +37,7 @@ interface Props {
   onPlaceChanged: (place: Place) => void;
   onPlaceDeleted: (id: string) => void;
   onMerged: (loserId: string, winner: Place) => void;
+  onAddRoute?: (placeId: string, name: string) => void;
 }
 
 /** Prepend https:// when the user typed a bare domain, so the link works. */
@@ -114,6 +115,7 @@ export default function PlacePanel({
   onPlaceChanged,
   onPlaceDeleted,
   onMerged,
+  onAddRoute,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -659,13 +661,18 @@ export default function PlacePanel({
             <h3 style={{ margin: '22px 0 0' }}>
               Logged runs{trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
             </h3>
+            {canEdit && onAddRoute && (
+              <button className="link-btn" onClick={() => onAddRoute(place.id, place.name)}>
+                ＋ Add a route
+              </button>
+            )}
           </div>
           {trailActs === null ? (
             <p style={{ color: 'var(--muted)' }}>Loading…</p>
           ) : trailActs.length === 0 ? (
             <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-              No runs on this trail yet. Activities you log along it show up here, grouped by
-              trailhead.
+              No runs on this trail yet. Tap <b>＋ Add a route</b> to trace one on the map, or log it
+              to Strava.
             </p>
           ) : (
             <div className="trailheads">
