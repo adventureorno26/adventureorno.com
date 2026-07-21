@@ -926,6 +926,18 @@ export default function MapView() {
 
       <SearchPalette places={places} />
 
+      {canEdit && (
+        <button
+          className="add-trail-btn"
+          onClick={() => {
+            setDrawMode(true);
+            setBanner(null);
+          }}
+        >
+          Add Trail on Map
+        </button>
+      )}
+
       <PersonFilter
         people={filterPeople}
         value={personFilter}
@@ -955,16 +967,6 @@ export default function MapView() {
                     ))}
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    setAddMenuOpen(false);
-                    setActivitySub(false);
-                    setDrawMode(true);
-                    setBanner(null);
-                  }}
-                >
-                  Trail
-                </button>
                 <button
                   onClick={() => {
                     setAddMenuOpen(false);

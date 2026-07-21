@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  addPlaceToTrail,
   addVisit,
   createEntry,
-  createPlace,
   deletePlace,
   deleteVisit,
   fetchEntries,
@@ -133,9 +131,6 @@ export default function PlacePanel({
   const [review, setReview] = useState(place.review ?? '');
   const [favorite, setFavorite] = useState(place.favorite ?? '');
   const [people, setPeople] = useState<MapPerson[]>([]);
-  const [trailSel, setTrailSel] = useState('');
-  const [trailheadName, setTrailheadName] = useState('');
-  const [newTrailName, setNewTrailName] = useState('');
   const [editingAddress, setEditingAddress] = useState(false);
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
@@ -295,55 +290,25 @@ export default function PlacePanel({
     });
   }
 
-  // Make this place a trailhead of a trail system — either an existing trail, or
-  // a brand-new one created on the spot (trailSel === '__new__'). The place keeps
-  // its own photos/marker and joins the trail.
-  async function attachToTrail() {
-    setError(null);
-    try {
-      let trailId = trailSel;
-      if (trailSel === '__new__') {
-        if (!newTrailName.trim()) {
-          setError('Name the new trail first.');
-          return;
-        }
-        const t = await createPlace({
-          name: newTrailName.trim(),
-          country: place.country,
-          admin1: place.admin1,
-          lat: place.lat,
-          lng: place.lng,
-          is_trail: true,
-          saved: true,
-        });
-        trailId = t.id;
-      }
-      if (!trailId) return;
-      await addPlaceToTrail(place.id, trailId, trailheadName.trim() || place.name);
-      const updated = await fetchPlace(place.id);
-      if (updated) onPlaceChanged(updated);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add to trail');
-    }
-  }
-
   async function toggleCat(slug: string) {
     const cur = place.categories ?? [];
     const next = cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug];
     await patch({ categories: next });
   }
 
-  async function mergeFrom(loserId: string) {
-    const loser = allPlaces.find((p) => p.id === loserId);
-    if (!loser) return;
-    if (!confirm(`Merge "${loser.name}" into "${place.name}"? "${loser.name}" will be deleted.`))
+  // Add THIS place into an existing one (this one's photos/visits/activities move
+  // over, then this place is removed) — the "add to existing place" action.
+  async function addToExisting(winnerId: string) {
+    const winner = allPlaces.find((p) => p.id === winnerId);
+    if (!winner) return;
+    if (!confirm(`Add "${place.name || 'this place'}" into "${winner.name}"? This place will be removed.`))
       return;
     try {
-      await mergePlaces(loserId, place.id);
-      onMerged(loserId, place);
+      await mergePlaces(place.id, winnerId);
       setMerging(false);
+      onMerged(place.id, winner);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not merge places');
+      setError(e instanceof Error ? e.message : 'Could not add to that place');
     }
   }
 
@@ -646,7 +611,8 @@ export default function PlacePanel({
           ? (trailActs ?? []).map((a) => ({
               key: a.id,
               date: fmtRunDate(a.start_date),
-              sub: `${a.type} · ${miStr(a.distance)}`,
+              // Each visit: date · name · type · miles.
+              sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
               to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
               del: null as string | null,
             }))
@@ -749,73 +715,72 @@ export default function PlacePanel({
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
 
-      <RouteMiniMap place={place} />
-
-      {/* Spots & reviews — grouped by tag; each category label only appears once
-          you've added a review of that kind, so the card stays uncluttered. */}
-      <div className="visits-head">
-        <h3 style={{ marginTop: 22 }}>Spots &amp; reviews</h3>
+      {/* Spots & reviews — grouped by tag, collapsed into a dropdown. */}
+      <details className="spots-details">
+        <summary className="visits-summary">
+          Spots &amp; reviews{spots && spots.length > 0 ? ` (${spots.length})` : ''}
+        </summary>
         {canEdit && !addingSpot && (
           <button className="link-btn" onClick={() => setAddingSpot(true)}>
             ＋ Add a spot
           </button>
         )}
-      </div>
-
-      {canEdit && addingSpot && (
-        <EntryEditor
-          placeId={place.id}
-          defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
-          onSave={addSpot}
-          onCancel={() => setAddingSpot(false)}
-        />
-      )}
-
-      {spotGroups.length > 0 ? (
-        <div className="spot-groups">
-          {spotGroups.map((g) => (
-            <div className="spot-group" key={g.key}>
-              <div className="spot-group-head">
-                {g.icon} {g.label} <span className="label">({g.items.length})</span>
-              </div>
-              {g.items.map((e) => {
-                const dir = spotDirHref(e);
-                return (
-                  <div key={e.id} className="spot-row">
-                    <Link
-                      className="spot-item"
-                      to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
-                    >
-                      <span className="spot-title">{e.title}</span>
-                      {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
-                    </Link>
-                    {dir && (
-                      <a
-                        className="directions-btn sm spot-dir"
-                        href={dir}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Directions to ${e.address ?? e.title}`}
+        {canEdit && addingSpot && (
+          <EntryEditor
+            placeId={place.id}
+            defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
+            onSave={addSpot}
+            onCancel={() => setAddingSpot(false)}
+          />
+        )}
+        {spotGroups.length > 0 ? (
+          <div className="spot-groups">
+            {spotGroups.map((g) => (
+              <div className="spot-group" key={g.key}>
+                <div className="spot-group-head">
+                  {g.label} <span className="label">({g.items.length})</span>
+                </div>
+                {g.items.map((e) => {
+                  const dir = spotDirHref(e);
+                  return (
+                    <div key={e.id} className="spot-row">
+                      <Link
+                        className="spot-item"
+                        to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
                       >
-                        Directions
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      ) : (
-        !addingSpot && (
-          <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-            No spots yet. Add a restaurant, trail, winery… with a rating and review.
-          </p>
-        )
-      )}
+                        <span className="spot-title">{e.title}</span>
+                        {e.rating ? (
+                          <span className="spot-rating">{'★'.repeat(e.rating)}</span>
+                        ) : null}
+                      </Link>
+                      {dir && (
+                        <a
+                          className="directions-btn sm spot-dir"
+                          href={dir}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Directions to ${e.address ?? e.title}`}
+                        >
+                          Directions
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          !addingSpot && (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
+          )
+        )}
+      </details>
 
-      {/* Bottom actions — attribution + Merge + Delete + This is a Trail, all in
-          one compact row. No "Whose is this?" label. */}
+      <h3 style={{ marginTop: 22 }}>Routes here</h3>
+      <RouteMiniMap place={place} />
+
+      {/* Bottom line: Both of us · Add to existing place · Delete · Save (green). */}
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
           {people.length >= 2 && (
@@ -832,89 +797,26 @@ export default function PlacePanel({
               ))}
             </select>
           )}
-          <button onClick={() => setMerging((v) => !v)}>Merge…</button>
+          <button onClick={() => setMerging((v) => !v)}>Add to existing place</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete
           </button>
-
-          {/* "This is a Trail" lives on the same line as Merge / Delete. */}
-          {!place.is_trail && !place.trail_id && (
-            <details className="cat-edit trail-assign inline-trail">
-              <summary>This is a Trail</summary>
-              <div className="trail-setup" style={{ marginTop: 8 }}>
-                <button className="primary" onClick={() => void patch({ is_trail: true })}>
-                  Make this its own trail
-                </button>
-                <div className="trail-or">or make it a trailhead of a bigger trail:</div>
-                <div className="field-row">
-                  <select value={trailSel} onChange={(e) => setTrailSel(e.target.value)}>
-                    <option value="">Choose a trail…</option>
-                    {allPlaces
-                      .filter((p) => p.is_trail)
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    <option value="__new__">＋ New trail…</option>
-                  </select>
-                </div>
-                {trailSel === '__new__' && (
-                  <div className="field-row" style={{ marginTop: 6 }}>
-                    <input
-                      placeholder="New trail name (e.g. Appalachian Trail)"
-                      value={newTrailName}
-                      onChange={(e) => setNewTrailName(e.target.value)}
-                    />
-                  </div>
-                )}
-                {trailSel && (
-                  <div className="field-row" style={{ marginTop: 6 }}>
-                    <input
-                      placeholder={`Trailhead name (default: ${place.name})`}
-                      value={trailheadName}
-                      onChange={(e) => setTrailheadName(e.target.value)}
-                    />
-                    <button
-                      className="primary"
-                      style={{ flex: 'none' }}
-                      onClick={() => void attachToTrail()}
-                    >
-                      Add
-                    </button>
-                  </div>
-                )}
-              </div>
-            </details>
-          )}
-          {place.trail_id && (
-            <span className="trail-member">
-              Trailhead of{' '}
-              <Link to={`/place/${place.trail_id}`}>
-                {allPlaces.find((p) => p.id === place.trail_id)?.name ?? 'a trail'}
-              </Link>
-              <button className="link-btn" onClick={() => void patch({ trail_id: null })}>
-                Remove from trail
+          {!place.bucket &&
+            (place.saved ? (
+              <span className="saved-note">Saved</span>
+            ) : (
+              <button className="save-btn-green" onClick={() => void patch({ saved: true })}>
+                Save
               </button>
-            </span>
-          )}
-          {place.is_trail && (
-            <label className="trail-toggle">
-              <input type="checkbox" checked onChange={() => void patch({ is_trail: false })} />
-              This is a trail
-            </label>
-          )}
+            ))}
         </div>
       )}
       {merging && (
         <div className="entry">
-          <label>Merge another place into this one (it will be deleted)</label>
-          <select
-            defaultValue=""
-            onChange={(e) => e.target.value && void mergeFrom(e.target.value)}
-          >
+          <label>Add this place into an existing one (this one will be removed)</label>
+          <select defaultValue="" onChange={(e) => e.target.value && void addToExisting(e.target.value)}>
             <option value="" disabled>
-              Choose a place to absorb…
+              Choose the place to add into…
             </option>
             {allPlaces
               .filter((p) => p.id !== place.id)
@@ -926,24 +828,6 @@ export default function PlacePanel({
                 </option>
               ))}
           </select>
-        </div>
-      )}
-
-      {/* Save at the very bottom — unsaved places don't stay on the map. */}
-      {canEdit && !place.bucket && (
-        <div className="save-bottom">
-          {place.saved ? (
-            <span className="saved-note">Saved — this place shows on the map.</span>
-          ) : (
-            <>
-              <button className="primary save-btn" onClick={() => void patch({ saved: true })}>
-                Save this place
-              </button>
-              <span className="unsaved-note">
-                Not saved yet — unsaved places disappear from the map.
-              </span>
-            </>
-          )}
         </div>
       )}
     </aside>

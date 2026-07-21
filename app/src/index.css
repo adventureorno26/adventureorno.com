@@ -1716,11 +1716,11 @@ a {
 .stats-bar .spacer {
   display: none;
 }
-/* Settings gear — top of the bottom-left stack (above Search your activities). */
+/* Settings gear — top of the bottom-left stack (above Add Trail on Map). */
 .stats-bar .actions {
   position: fixed;
   left: 12px;
-  bottom: calc(78px + env(safe-area-inset-bottom));
+  bottom: calc(110px + env(safe-area-inset-bottom));
   right: auto;
   top: auto;
   z-index: 30;
@@ -1775,6 +1775,7 @@ a {
   .map-root.card-open .map-top-row,
   .map-root.card-open .stats-bar,
   .map-root.card-open .places-search-btn,
+  .map-root.card-open .add-trail-btn,
   .map-root.card-open .person-filter,
   .map-root.card-open .on-this-day {
     display: none;
@@ -2775,7 +2776,41 @@ textarea {
   margin-top: 8px;
 }
 
-/* Compact bottom action row: attribution + Merge + Delete + This is a Trail. */
+/* Spots & reviews dropdown — same disclosure look as Visits. */
+.spots-details > summary {
+  margin-top: 22px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.spots-details > summary::-webkit-details-marker {
+  display: none;
+}
+.spots-details > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+  font-size: 13px;
+}
+.spots-details[open] > summary::before {
+  content: '▾ ';
+}
+
+/* Green Save button in the bottom action row. */
+.save-btn-green {
+  background: #16a34a;
+  border: 1px solid #15803d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 8px;
+}
+.save-btn-green:hover {
+  background: #15803d;
+}
+
+/* Compact bottom action row: attribution + Add-to-existing + Delete + Save. */
 .bottom-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2953,6 +2988,26 @@ textarea {
 
 /* Search-your-places button — bottom-left, on the same line as the settings gear
  * (which sits at left:12, ~50px wide). ⌘K also opens the palette. */
+/* Bottom-left stack (bottom → top): toggle · Search · Add Trail on Map · gear. */
+.add-trail-btn {
+  position: fixed;
+  left: 12px;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  top: auto;
+  z-index: 30;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #12131a;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.4);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
 .places-search-btn {
   position: fixed;
   left: 12px;
