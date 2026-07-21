@@ -6,7 +6,7 @@ adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventur
 (GitHub account: adventureorno26).
 
 ## Stack (do not substitute without asking)
-- Frontend: React 18 + Vite + TypeScript. MapLibre GL JS for all maps. Deployed to Cloudflare Pages.
+- Frontend: React 18 + Vite + TypeScript. MapLibre GL JS v5 for all maps. Deployed to Cloudflare Pages.
 - Basemap: MapTiler (key in env `VITE_MAPTILER_KEY`). Geocoding: MapTiler Geocoding API.
 - Backend: Supabase — Postgres 15 with PostGIS, Auth, Edge Functions (Deno), pg_cron.
 - Photo storage: Cloudflare R2, accessed only through the `photo-gateway` Worker (upload + signed reads).
