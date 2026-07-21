@@ -14,6 +14,7 @@ import {
   createPlace,
   deletePlace,
   fetchMapPeople,
+  fetchMapProjection,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
@@ -146,6 +147,13 @@ export default function MapView() {
   // Placeholder pins created by a map tap — auto-removed on close if left empty.
   const pendingRef = useRef<Set<string>>(new Set());
   const navigateRef = useRef<(to: string) => void>(() => undefined);
+  // Idle globe auto-rotate.
+  const spinRaf = useRef(0);
+  const spinning = useRef(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopSpinRef = useRef<() => void>(() => undefined);
+  const scheduleIdleRef = useRef<() => void>(() => undefined);
+  const selectedIdRef = useRef<string | undefined>(undefined);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [ready, setReady] = useState(false);
@@ -338,6 +346,13 @@ export default function MapView() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
 
     map.on('load', () => {
+      // Globe projection (with atmosphere) unless the owner switched to Mercator.
+      void fetchMapProjection()
+        .then((proj) => {
+          if (proj === 'globe') map.setProjection({ type: 'globe' });
+        })
+        .catch(() => undefined);
+
       // Trail/route lines render UNDER the place markers; tap a line to open its
       // place card (rename / merge / reassign there).
       map.addSource('trailroutes', {
@@ -674,10 +689,65 @@ export default function MapView() {
     if (!map || !ready || !selectedPlace) return;
     const pt: [number, number] = [selectedPlace.lng, selectedPlace.lat];
     if (!map.getBounds().contains(pt)) {
-      map.flyTo({ center: pt, zoom: Math.max(map.getZoom(), 11), duration: 800 });
+      // Gentle arc (curve/speed) — reads nicely on the globe.
+      map.flyTo({ center: pt, zoom: Math.max(map.getZoom(), 11), curve: 1.4, speed: 0.6 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, ready]);
+
+  // Idle auto-rotate: after 60s with no interaction and no open place, the globe
+  // spins slowly; any pointer/touch/wheel cancels it and restarts the idle clock.
+  selectedIdRef.current = selectedId;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    const spinFrame = () => {
+      if (!spinning.current) return;
+      const c = map.getCenter();
+      map.setCenter([c.lng - 0.12, c.lat]); // ~40s per rotation at 60fps
+      spinRaf.current = requestAnimationFrame(spinFrame);
+    };
+    const startSpin = () => {
+      if (spinning.current || selectedIdRef.current) return;
+      spinning.current = true;
+      spinFrame();
+    };
+    const stopSpin = () => {
+      spinning.current = false;
+      if (spinRaf.current) cancelAnimationFrame(spinRaf.current);
+    };
+    const scheduleIdle = () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(startSpin, 60_000);
+    };
+    const onInteract = () => {
+      stopSpin();
+      scheduleIdle();
+    };
+    stopSpinRef.current = stopSpin;
+    scheduleIdleRef.current = scheduleIdle;
+
+    const canvas = map.getCanvas();
+    canvas.addEventListener('mousedown', onInteract);
+    canvas.addEventListener('touchstart', onInteract, { passive: true });
+    canvas.addEventListener('wheel', onInteract, { passive: true });
+    scheduleIdle();
+
+    return () => {
+      stopSpin();
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      canvas.removeEventListener('mousedown', onInteract);
+      canvas.removeEventListener('touchstart', onInteract);
+      canvas.removeEventListener('wheel', onInteract);
+    };
+  }, [ready]);
+
+  // Opening a place cancels any spin and restarts the idle clock.
+  useEffect(() => {
+    if (selectedId) stopSpinRef.current();
+    else scheduleIdleRef.current();
+  }, [selectedId]);
 
   // ---- Draw-a-trail mode -------------------------------------------------
   async function refreshDrawGeometry() {

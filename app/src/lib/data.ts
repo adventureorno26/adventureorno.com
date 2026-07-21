@@ -277,6 +277,28 @@ export async function updateHomeZone(zone: HomeZone): Promise<void> {
   if (error) throw error;
 }
 
+export type MapProjection = 'globe' | 'mercator';
+
+/** The map projection flag (settings.map_projection). Defaults to globe. */
+export async function fetchMapProjection(): Promise<MapProjection> {
+  const { data } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'map_projection')
+    .maybeSingle();
+  const t = (data?.value as { type?: string } | null)?.type;
+  return t === 'mercator' ? 'mercator' : 'globe';
+}
+
+/** Owner-only (RLS). Switch the map projection without a deploy. */
+export async function setMapProjection(type: MapProjection): Promise<void> {
+  const { error } = await supabase
+    .from('settings')
+    .update({ value: { type }, updated_at: new Date().toISOString() })
+    .eq('key', 'map_projection');
+  if (error) throw error;
+}
+
 /** Ask the geocode-new-places Edge Function to name any pending auto places. */
 export async function triggerGeocode(): Promise<{ named: number; considered: number }> {
   const { data: sess } = await supabase.auth.getSession();

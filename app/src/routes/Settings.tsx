@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   fetchHomeZone,
+  fetchMapProjection,
   fetchPlaces,
   fetchSettingsStats,
+  setMapProjection,
   triggerGeocode,
   updateHomeZone,
   type HomeZone,
+  type MapProjection,
   type SettingsStats,
 } from '../lib/data';
 import type { Place } from '../lib/types';
@@ -392,6 +395,50 @@ function NationalParksCard() {
   );
 }
 
+/** Owner toggle: globe vs Mercator projection (falls back without a deploy). */
+function ProjectionCard() {
+  const [proj, setProj] = useState<MapProjection | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    fetchMapProjection()
+      .then(setProj)
+      .catch(() => setProj('globe'));
+  }, []);
+  async function choose(t: MapProjection) {
+    if (t === proj) return;
+    setBusy(true);
+    try {
+      await setMapProjection(t);
+      setProj(t);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="card">
+      <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+        Map projection — reload the map to see the change.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          disabled={busy}
+          className={proj === 'globe' ? 'primary' : ''}
+          onClick={() => void choose('globe')}
+        >
+          Globe
+        </button>
+        <button
+          disabled={busy}
+          className={proj === 'mercator' ? 'primary' : ''}
+          onClick={() => void choose('mercator')}
+        >
+          Flat (Mercator)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Export all our places as CSV / GPX / KML (generated in the browser). */
 function ExportCard() {
   const [places, setPlaces] = useState<Place[] | null>(null);
@@ -613,6 +660,13 @@ export default function Settings() {
 
       <h2 style={{ marginTop: 28 }}>Export our data</h2>
       <ExportCard />
+
+      {profile?.role === 'owner' && (
+        <>
+          <h2 style={{ marginTop: 28 }}>Map</h2>
+          <ProjectionCard />
+        </>
+      )}
 
       <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
       <SharedHub />
