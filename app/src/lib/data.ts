@@ -287,6 +287,12 @@ export async function fetchFog(): Promise<{
   return { crisp: d?.crisp ?? null, soft: d?.soft ?? null };
 }
 
+/** Gridded ping density (one RPC, ~0.005° cells with a count) for the heatmap. */
+export async function fetchPings(): Promise<{ lng: number; lat: number; weight: number }[]> {
+  const { data } = await supabase.rpc('pings_overview');
+  return (data ?? []) as { lng: number; lat: number; weight: number }[];
+}
+
 export type MapProjection = 'globe' | 'mercator';
 
 /** The map projection flag (settings.map_projection). Defaults to globe. */

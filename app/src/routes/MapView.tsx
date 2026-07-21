@@ -16,6 +16,7 @@ import {
   fetchFog,
   fetchMapPeople,
   fetchMapProjection,
+  fetchPings,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
@@ -187,6 +188,7 @@ export default function MapView() {
     () => (localStorage.getItem('aon_map_layer') as MapLayer) || 'none',
   );
   const fogLoaded = useRef(false);
+  const pingsLoaded = useRef(false);
   // "Just me / Just Josh / Both" filter (null = both).
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [people, setPeople] = useState<MapPerson[]>([]);
@@ -435,16 +437,22 @@ export default function MapView() {
         clusterRadius: 45,
       });
 
-      // Heatmap of everywhere we've been (hidden until toggled on).
+      // Ping-density heatmap (from pings_overview grid cells), hidden until the
+      // Heat layer is selected. Weighted by each cell's count.
+      map.addSource('pings', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       map.addLayer({
-        id: 'place-heat',
+        id: 'pings-heat',
         type: 'heatmap',
-        source: SOURCE_ID,
+        source: 'pings',
         layout: { visibility: 'none' },
         paint: {
-          'heatmap-radius': 28,
-          'heatmap-opacity': 0.7,
+          'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 0, 0, 300, 1],
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 12, 10, 30],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 3],
+          'heatmap-opacity': 0.7,
           'heatmap-color': [
             'interpolate',
             ['linear'],
@@ -458,6 +466,18 @@ export default function MapView() {
             1,
             'rgba(244,63,94,0.85)',
           ],
+        },
+      });
+      map.addLayer({
+        id: 'pings-dots',
+        type: 'circle',
+        source: 'pings',
+        layout: { visibility: 'none' },
+        minzoom: 9,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['get', 'weight'], 1, 2, 300, 8],
+          'circle-color': 'rgba(244,63,94,0.5)',
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0, 12, 0.6],
         },
       });
 
@@ -709,12 +729,28 @@ export default function MapView() {
         })
         .catch(() => undefined);
     }
+    if (mapLayer === 'heat' && !pingsLoaded.current) {
+      pingsLoaded.current = true;
+      void fetchPings()
+        .then((cells) => {
+          (map.getSource('pings') as GeoJSONSource | undefined)?.setData({
+            type: 'FeatureCollection',
+            features: cells.map((c) => ({
+              type: 'Feature',
+              properties: { weight: c.weight },
+              geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
+            })),
+          });
+        })
+        .catch(() => undefined);
+    }
 
     const vis = (id: string, on: boolean) =>
       map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     vis('fog-soft', mapLayer === 'fog');
     vis('fog-crisp', mapLayer === 'fog');
-    vis('place-heat', mapLayer === 'heat');
+    vis('pings-heat', mapLayer === 'heat');
+    vis('pings-dots', mapLayer === 'heat');
 
     const dim = mapLayer === 'heat' ? 0.2 : 1;
     const props: [string, string][] = [
