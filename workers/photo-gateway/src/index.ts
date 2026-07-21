@@ -31,6 +31,7 @@ import {
 import { readExif, screenshotGate } from './exif';
 import { ingestDecision } from './decide';
 import { renderVariants } from './images';
+import { photoCacheKey, purgePhotoCache } from './cache';
 
 const EARTH_RADIUS_M = 6371008.8;
 const toRad = (d: number): number => (d * Math.PI) / 180;
@@ -222,33 +223,63 @@ async function runPipeline(
   return { status: 200, body: { ok: true, id, place_id: finalPlaceId ?? null } };
 }
 
-async function handlePhoto(env: Env, req: Request, id: string, caller: Caller | null,
-  cors: Record<string, string>): Promise<Response> {
+async function handlePhoto(
+  env: Env,
+  req: Request,
+  id: string,
+  caller: Caller | null,
+  cors: Record<string, string>,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  // Auth runs on EVERY request — the cache only ever spares the R2 read.
   if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
   const photo = await getPhoto(env, id);
   if (!photo) return json({ error: 'not found' }, 404, cors);
   const size = new URL(req.url).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
+
+  const cache = caches.default;
+  const cacheKey = photoCacheKey(id, size);
+  const cached = await cache.match(cacheKey);
+  if (cached) {
+    const h = new Headers(cached.headers);
+    for (const [k, v] of Object.entries(cors)) h.set(k, v);
+    h.set('Cache-Control', 'private, max-age=86400');
+    h.set('X-Cache', 'HIT');
+    return new Response(cached.body, { status: 200, headers: h });
+  }
+
   const key = size === 'thumb' ? photo.thumb_key : photo.r2_key;
   // Older/restored photos may have no separate thumbnail stored (thumb_key null
-  // or its object missing). Fall back to the full-size image instead of 404ing —
-  // a caution sign on the card is worse than a slightly larger download.
+  // or its object missing). Fall back to the full-size image instead of 404ing.
   let obj = key ? await env.PHOTOS.get(key) : null;
   if (!obj && size === 'thumb') obj = await env.PHOTOS.get(photo.r2_key);
   if (!obj) return json({ error: 'object missing' }, 404, cors);
-  return new Response(obj.body, {
+
+  // Stored under the synthetic key WITHOUT `private` (cache.put rejects private);
+  // the client copy gets `private` so browsers don't share it.
+  const cacheable = new Response(obj.body, {
+    status: 200,
+    headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=86400', ETag: photo.sha256 },
+  });
+  ctx.waitUntil(cache.put(cacheKey, cacheable.clone()));
+  return new Response(cacheable.body, {
     status: 200,
     headers: {
       ...cors,
       'Content-Type': 'image/jpeg',
-      // Private: only ever fetched with a valid session bearer; never shared.
       'Cache-Control': 'private, max-age=86400',
       ETag: photo.sha256,
+      'X-Cache': 'MISS',
     },
   });
 }
 
-async function handleDelete(env: Env, id: string, caller: Caller | null,
-  cors: Record<string, string>): Promise<Response> {
+async function handleDelete(
+  env: Env,
+  id: string,
+  caller: Caller | null,
+  cors: Record<string, string>,
+): Promise<Response> {
   if (!caller) return json({ error: 'unauthenticated' }, 401, cors);
   const photo = await getPhoto(env, id);
   if (!photo) return json({ error: 'not found' }, 404, cors);
@@ -256,6 +287,9 @@ async function handleDelete(env: Env, id: string, caller: Caller | null,
   if (caller.role !== 'owner' && photo.uploaded_by !== caller.userId) {
     return json({ error: 'forbidden' }, 403, cors);
   }
+  // Purge BOTH edge-cache variants BEFORE returning — a deleted photo must never
+  // survive at the edge (rule #6).
+  await purgePhotoCache(caches.default, id);
   await env.PHOTOS.delete([photo.r2_key, photo.thumb_key]);
   await deletePhotoRow(env, photo, caller.userId);
   return json({ ok: true }, 200, cors);
@@ -388,7 +422,7 @@ async function handleVideoDelete(
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = req.headers.get('Origin');
     const cors = corsHeaders(env, origin);
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
@@ -420,7 +454,7 @@ export default {
       if (photoMatch && req.method === 'GET') {
         const jwt = bearer(req);
         const caller = jwt ? await resolveSession(env, jwt) : null;
-        return handlePhoto(env, req, photoMatch[1], caller, cors);
+        return handlePhoto(env, req, photoMatch[1], caller, cors, ctx);
       }
 
       // --- Deletion ---------------------------------------------------------
