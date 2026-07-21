@@ -93,6 +93,15 @@ export async function addPlaceToTrail(
   if (error) throw error;
 }
 
+/** Lightweight fetch of every spot/review across all places, for global search. */
+export async function fetchAllEntries(): Promise<
+  Pick<Entry, 'id' | 'place_id' | 'title' | 'body' | 'kind'>[]
+> {
+  const { data, error } = await supabase.from('entries').select('id, place_id, title, body, kind');
+  if (error) return [];
+  return (data ?? []) as Pick<Entry, 'id' | 'place_id' | 'title' | 'body' | 'kind'>[];
+}
+
 export async function fetchEntries(placeId: string): Promise<Entry[]> {
   const { data, error } = await supabase
     .from('entries')
