@@ -162,14 +162,7 @@ export default function PlacePanel({
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [trailSel, setTrailSel] = useState('');
   const [trailheadName, setTrailheadName] = useState('');
-  const [editingRegion, setEditingRegion] = useState(false);
-  const [eAdmin1, setEAdmin1] = useState(place.admin1 ?? '');
-  const [eCountry, setECountry] = useState(place.country ?? '');
-
-  async function saveRegion() {
-    setEditingRegion(false);
-    await patch({ admin1: eAdmin1.trim() || null, country: eCountry.trim() || null });
-  }
+  const [editingAddress, setEditingAddress] = useState(false);
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
 
@@ -182,8 +175,6 @@ export default function PlacePanel({
     setFavorite(place.favorite ?? '');
     setName(place.name);
     setCoverPos(place.cover_pos_y ?? 50);
-    setEAdmin1(place.admin1 ?? '');
-    setECountry(place.country ?? '');
   }, [place]);
 
   async function reloadVisits() {
@@ -329,23 +320,24 @@ export default function PlacePanel({
     else setName(place.name);
   }
 
-  // The search also fills the title: picking a result sets the name (Title), the
-  // state/country, the pin location, and — through those — the Directions link.
-  async function setLocationFromSearch(r: SearchResult) {
+  // "Edit address" search: sets the full address + pin + state/country (for the
+  // Directions link and the States/Countries stats). It does NOT touch the Title
+  // — the title is entered by hand and stays independent of the address.
+  async function setAddressFromSearch(r: SearchResult) {
     setError(null);
     const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
     if (full.lat === 0 && full.lng === 0) {
-      setError("Couldn't resolve that location — try another.");
+      setError("Couldn't resolve that address — try another.");
       return;
     }
+    setEditingAddress(false);
     await patch({
-      name: full.name?.trim() || place.name,
-      auto: false,
       lat: full.lat,
       lng: full.lng,
       admin1: full.admin1 ?? place.admin1,
       country: full.country ?? place.country,
-      address: full.address ?? place.address,
+      // Prefer the full address; fall back to the searched label if no street addr.
+      address: full.address ?? full.label ?? place.address,
     });
   }
 
@@ -394,8 +386,18 @@ export default function PlacePanel({
   }
 
   const hasHero = Boolean(place.cover_photo_id) && photosEnabled();
-  // A trail or one of its trailheads → the location search is labelled "Trailhead".
-  const isTrailPlace = place.is_trail || Boolean(place.trail_id);
+
+  // Example hint for the (manual) Title on a freshly-added category place.
+  const titlePlaceholder = (() => {
+    const cats = effectiveCategories(place);
+    if (cats.includes('winery')) return 'Winery Name';
+    if (cats.includes('stay')) return 'Hotel Name';
+    if (cats.includes('dining')) return 'Name of Restaurant';
+    if (cats.includes('brewery')) return 'Brewery Name';
+    if (cats.some((c) => ['hiking', 'walking', 'running', 'biking'].includes(c)))
+      return 'Trail or spot name';
+    return 'Add a title';
+  })();
 
   const ratingEl = (
     <StarRating
@@ -414,6 +416,7 @@ export default function PlacePanel({
         className="title-input"
         value={name}
         autoFocus
+        placeholder={titlePlaceholder}
         onChange={(e) => setName(e.target.value)}
         onBlur={() => void saveName()}
         onKeyDown={(e) => {
@@ -430,7 +433,7 @@ export default function PlacePanel({
         onClick={() => canEdit && setEditingName(true)}
         title={canEdit ? 'Tap to rename' : undefined}
       >
-        {place.name}
+        {place.name || <span className="title-empty">{titlePlaceholder}</span>}
         {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
       </span>
     );
@@ -444,24 +447,10 @@ export default function PlacePanel({
   const dirHref = `https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${place.lng}&dirflg=d`;
   const regionText = [place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region';
 
-  // The location search: find the city & state; it fills the Title, State, pin,
-  // and the Directions link. For a freshly-added category place with no name yet,
-  // the placeholder hints what to type ("Winery Name", "Name of Restaurant"…).
-  const searchExample = (): string => {
-    if (place.name) return `${place.name} — search to change`;
-    const cats = effectiveCategories(place);
-    if (cats.includes('winery')) return 'Winery Name';
-    if (cats.includes('stay')) return 'Hotel Name';
-    if (cats.includes('dining')) return 'Name of Restaurant';
-    if (cats.includes('brewery')) return 'Brewery Name';
-    if (cats.some((c) => ['hiking', 'walking', 'running', 'biking'].includes(c)))
-      return 'Trail or spot name';
-    return 'Search for a place…';
-  };
-  const locateSearch = canEdit && (
+  // "Edit address" → a search pill that sets the address/pin (not the title).
+  const addressSearch = (
     <div className="place-locate bucket-search">
-      {isTrailPlace && <div className="locate-label">Trailhead</div>}
-      <MapSearch onPick={setLocationFromSearch} placeholder={searchExample()} />
+      <MapSearch onPick={setAddressFromSearch} placeholder="Search an address or place…" />
     </div>
   );
 
@@ -469,31 +458,15 @@ export default function PlacePanel({
     <aside className="panel">
       {hasHero ? (
         <div className="panel-hero" style={{ ['--pos' as string]: `${coverPos}%` }}>
-          <AuthedImg photoId={place.cover_photo_id!} size="full" className="panel-hero-img" />
+          <AuthedImg
+            photoId={place.cover_photo_id!}
+            size="full"
+            className={`panel-hero-img${canEdit ? ' adjustable' : ''}`}
+            onClick={canEdit ? () => setAdjustCover((v) => !v) : undefined}
+          />
           <button className="close hero-close" onClick={onClose} aria-label="Close">
             ×
           </button>
-          {canEdit && (
-            <button
-              className="hero-adjust"
-              title="Adjust cover framing"
-              onClick={() => setAdjustCover((v) => !v)}
-            >
-              ⤢
-            </button>
-          )}
-          {canEdit && adjustCover && (
-            <input
-              className="hero-pos"
-              type="range"
-              min={0}
-              max={100}
-              value={coverPos}
-              onChange={(e) => setCoverPos(Number(e.target.value))}
-              onPointerUp={() => void patch({ cover_pos_y: coverPos })}
-              onKeyUp={() => void patch({ cover_pos_y: coverPos })}
-            />
-          )}
           {/* Stars above the title, bottom-left of the photo. */}
           <div className="hero-title">
             <div className="hero-rating">{ratingEl}</div>
@@ -522,52 +495,46 @@ export default function PlacePanel({
         </div>
       )}
 
-      {/* Search to change the title/state (also fills them in). */}
-      {locateSearch}
+      {/* Cover-photo framing slider — appears below the title when you tap the
+          photo. Sized/coloured like before, just repositioned. */}
+      {hasHero && canEdit && adjustCover && (
+        <input
+          className="cover-pos-slider"
+          type="range"
+          min={0}
+          max={100}
+          value={coverPos}
+          onChange={(e) => setCoverPos(Number(e.target.value))}
+          onPointerUp={() => void patch({ cover_pos_y: coverPos })}
+          onKeyUp={() => void patch({ cover_pos_y: coverPos })}
+        />
+      )}
 
-      {/* City, State — the text itself is the Directions link. */}
+      {/* Address line — the full address (tap for Directions) with an "edit" that
+          opens a search. Independent of the Title. */}
       <div className={`meta ${place.is_trail ? 'meta-trail' : ''}`}>
-        <span>
-          {editingRegion && canEdit ? (
-            <span className="region-edit">
-              <input
-                placeholder="State / region"
-                value={eAdmin1}
-                autoFocus
-                onChange={(e) => setEAdmin1(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
-              />
-              <input
-                placeholder="Country"
-                value={eCountry}
-                onChange={(e) => setECountry(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
-              />
-              <button className="primary" style={{ flex: 'none' }} onClick={() => void saveRegion()}>
-                Save
+        {editingAddress && canEdit ? (
+          addressSearch
+        ) : (
+          <span>
+            <a
+              className="region-directions"
+              href={dirHref}
+              target="_blank"
+              rel="noreferrer"
+              title={`Directions to ${dirDest}`}
+            >
+              {place.address || regionText}
+            </a>
+            {canEdit && (
+              <button className="link-btn region-edit-btn" onClick={() => setEditingAddress(true)}>
+                edit
               </button>
-            </span>
-          ) : (
-            <>
-              <a
-                className="region-directions"
-                href={dirHref}
-                target="_blank"
-                rel="noreferrer"
-                title={`Directions to ${dirDest}`}
-              >
-                {regionText}
-              </a>
-              {canEdit && (
-                <button className="link-btn region-edit-btn" onClick={() => setEditingRegion(true)}>
-                  edit
-                </button>
-              )}
-              {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
-              {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
-            </>
-          )}
-        </span>
+            )}
+            {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+            {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
+          </span>
+        )}
         {place.is_trail && trailMilesSummary(trailMiles) && (
           <span className="trail-miles">{trailMilesSummary(trailMiles)}</span>
         )}
@@ -593,7 +560,6 @@ export default function PlacePanel({
           </div>
         </details>
       )}
-      {place.address && <div className="place-address">📍 {place.address}</div>}
 
       {(place.website || (canEdit && place.bucket)) && (
         <div className="card-actions">

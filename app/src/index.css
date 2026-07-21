@@ -1174,6 +1174,20 @@ a {
   z-index: 3;
   accent-color: var(--accent);
 }
+/* Cover-framing slider — below the title (tap the photo to reveal it). */
+.cover-pos-slider {
+  display: block;
+  width: 100%;
+  margin: 12px 0 2px;
+  accent-color: var(--accent);
+}
+.panel-hero-img.adjustable {
+  cursor: pointer;
+}
+.title-empty {
+  color: var(--muted);
+  font-weight: 500;
+}
 .panel-hero::after {
   content: '';
   position: absolute;
@@ -1584,6 +1598,15 @@ a {
   gap: 6px;
   flex-wrap: nowrap;
   pointer-events: auto;
+}
+/* On web, line the stats up with the +Add / search row above them (same width,
+   left & right edges aligned) and spread the pills across it. */
+@media (min-width: 561px) {
+  .stat-row {
+    width: min(420px, calc(100vw - 32px));
+    margin: 0 auto;
+    justify-content: space-between;
+  }
 }
 @media (max-width: 560px) {
   .stat-row {
