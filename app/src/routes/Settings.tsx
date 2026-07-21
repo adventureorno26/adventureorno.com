@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   fetchHomeZone,
+  fetchPlaces,
   fetchSettingsStats,
   triggerGeocode,
   updateHomeZone,
   type HomeZone,
   type SettingsStats,
 } from '../lib/data';
+import type { Place } from '../lib/types';
 import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 import { importFileActivity, parseActivityFile } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
@@ -264,6 +266,66 @@ function OurStatsCard() {
   );
 }
 
+/** Cities & States — the geography count that used to sit in the map stats bar.
+ *  Each state/country is a dropdown listing the cities (places) within it. */
+function PlacesByStateCard() {
+  const [places, setPlaces] = useState<Place[] | null>(null);
+  useEffect(() => {
+    fetchPlaces()
+      .then(setPlaces)
+      .catch(() => setPlaces([]));
+  }, []);
+  if (!places) return null;
+
+  // Top-level, saved, non-bucket places grouped by state (US) or country.
+  const groups = new Map<string, { isState: boolean; cities: Place[] }>();
+  for (const p of places) {
+    if (p.bucket || !p.saved) continue;
+    const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
+    const key = isUS ? p.admin1 ?? 'United States' : p.country ?? 'Other';
+    if (!groups.has(key)) groups.set(key, { isState: Boolean(isUS), cities: [] });
+    groups.get(key)!.cities.push(p);
+  }
+  const ordered = [...groups.entries()].sort((a, b) => {
+    if (a[1].isState !== b[1].isState) return a[1].isState ? -1 : 1;
+    return a[0].localeCompare(b[0]);
+  });
+  const stateCount = ordered.filter((g) => g[1].isState).length;
+  const countryCount = ordered.filter((g) => !g[1].isState).length;
+
+  return (
+    <div className="card">
+      <details className="stats-dropdown">
+        <summary>Cities &amp; states</summary>
+        <div className="our-stats" style={{ marginBottom: 10 }}>
+          <div className="stat">
+            <b>{stateCount}</b> <span className="label">states</span>
+          </div>
+          <div className="stat">
+            <b>{countryCount}</b> <span className="label">countries</span>
+          </div>
+        </div>
+        {ordered.map(([label, g]) => (
+          <details key={label} className="spot-cat">
+            <summary>
+              {label} <span className="label">· {g.cities.length}</span>
+            </summary>
+            <div className="visit-list">
+              {g.cities
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((c) => (
+                  <Link key={c.id} className="visit-row" to={`/place/${c.id}`}>
+                    <span className="visit-main">{c.name}</span>
+                  </Link>
+                ))}
+            </div>
+          </details>
+        ))}
+      </details>
+    </div>
+  );
+}
+
 /** Upload Garmin (or any) GPX/TCX activity files — the Strava-limit workaround.
  *  Parses each client-side and imports it, attributed to whoever's signed in. */
 function GarminImportCard() {
@@ -438,6 +500,7 @@ export default function Settings() {
 
       <h2 style={{ marginTop: 28 }}>Our stats</h2>
       <OurStatsCard />
+      <PlacesByStateCard />
 
       <h2 style={{ marginTop: 28 }}>Trips</h2>
       <Link to="/trips">

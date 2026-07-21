@@ -31,10 +31,6 @@ function activityNoun(type: string, n: number): string {
   return base === 'activity' ? 'activities' : `${base}s`;
 }
 
-function uniqueCount(values: (string | null)[]): number {
-  return new Set(values.filter((v): v is string => !!v && v.trim() !== '')).size;
-}
-
 /** Count up to `target` over ~700ms with requestAnimationFrame. */
 function useCountUp(target: number): number {
   const [value, setValue] = useState(0);
@@ -66,27 +62,11 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       p.saved &&
       !(personFilter && p.solo_profile && p.solo_profile !== personFilter),
   );
-  const countries = uniqueCount(visited.map((p) => p.country));
-  const states = uniqueCount(visited.map((p) => p.admin1));
-  const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
-  // Drill-down: a country or state selected → shows its cities/places.
-  const [sub, setSub] = useState<{ kind: 'country' | 'state'; value: string } | null>(null);
-
+  // Main bar shows just Places + Miles. Cities/States moved to Settings.
+  const [detail, setDetail] = useState<null | 'places' | 'miles'>(null);
   const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
-  const countryList = [...new Set(visited.map((p) => p.country).filter(Boolean))].sort() as string[];
-  const stateList = [...new Set(visited.map((p) => p.admin1).filter(Boolean))].sort() as string[];
-  const toggle = (k: typeof detail) => {
-    setSub(null);
-    setDetail((cur) => (cur === k ? null : k));
-  };
-  const closeDetail = () => {
-    setSub(null);
-    setDetail(null);
-  };
-  // Places within the drilled-in country/state, alphabetical.
-  const subPlaces = sub
-    ? placeList.filter((p) => (sub.kind === 'country' ? p.country : p.admin1) === sub.value)
-    : [];
+  const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
+  const closeDetail = () => setDetail(null);
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
@@ -104,15 +84,6 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
         <button className={`stat ${detail === 'places' ? 'on' : ''}`} onClick={() => toggle('places')}>
           <b>{visited.length}</b> <span className="label">places</span>
         </button>
-        <button
-          className={`stat ${detail === 'countries' ? 'on' : ''}`}
-          onClick={() => toggle('countries')}
-        >
-          <b>{countries}</b> <span className="label">countries</span>
-        </button>
-        <button className={`stat ${detail === 'states' ? 'on' : ''}`} onClick={() => toggle('states')}>
-          <b>{states}</b> <span className="label">states</span>
-        </button>
         <button className={`stat ${detail === 'miles' ? 'on' : ''}`} onClick={() => toggle('miles')}>
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
         </button>
@@ -121,21 +92,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       {detail && (
         <div className="stat-detail">
           <div className="stat-detail-head">
-            <b>
-              {sub ? (
-                <button className="stat-back" onClick={() => setSub(null)}>
-                  ‹ {sub.value}
-                </button>
-              ) : detail === 'places' ? (
-                'All places'
-              ) : detail === 'countries' ? (
-                'Countries — tap for cities'
-              ) : detail === 'states' ? (
-                'States / regions — tap for cities'
-              ) : (
-                'Activity totals — tap to show on map'
-              )}
-            </b>
+            <b>{detail === 'places' ? 'All places' : 'Activity totals — tap to show on map'}</b>
             <button className="stat-detail-x" onClick={closeDetail}>
               ×
             </button>
@@ -148,24 +105,6 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
                   {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
                 </Link>
               ))}
-            {/* country/state → drill into their cities (places), then to the card */}
-            {(detail === 'countries' || detail === 'states') &&
-              (sub ? (
-                subPlaces.map((p) => (
-                  <Link key={p.id} to={`/place/${p.id}`} onClick={closeDetail}>
-                    {p.name}
-                  </Link>
-                ))
-              ) : (detail === 'countries' ? countryList : stateList).map((v) => (
-                <button
-                  key={v}
-                  onClick={() =>
-                    setSub({ kind: detail === 'countries' ? 'country' : 'state', value: v })
-                  }
-                >
-                  {v} <span className="stat-chev">›</span>
-                </button>
-              )))}
             {detail === 'miles' &&
               (mileage.filter((r) => Number(r.miles) > 0).length === 0 ? (
                 <span className="label">No Strava activities yet</span>

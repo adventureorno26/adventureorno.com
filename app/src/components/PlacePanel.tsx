@@ -297,14 +297,15 @@ export default function PlacePanel({
   // Add THIS place as a VISIT/stop of an existing place — NON-destructive: this
   // place is kept and linked to the chosen one (they can be different stops along
   // the same trail or trip). Full "shows under the parent" display is coming.
+  // Non-destructive: mark this place as "part of" the chosen one (or clear it).
+  // The place keeps its own marker; it just lists under the parent's visits.
   async function addToExisting(parentId: string) {
-    const parent = allPlaces.find((p) => p.id === parentId);
-    if (!parent) return;
+    if (parentId && !allPlaces.find((p) => p.id === parentId)) return;
     try {
-      await patch({ trail_id: parentId });
+      await patch({ trail_id: parentId || null });
       setMerging(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add to that place');
+      setError(e instanceof Error ? e.message : 'Could not update that place');
     }
   }
 
@@ -603,7 +604,26 @@ export default function PlacePanel({
           activity days here in the same style as places. */}
       {(() => {
         const isTrail = place.is_trail;
-        const rows = isTrail
+        // Member places: anything marked "part of" this place — a trip's stops,
+        // a trail's trailheads, a place's spots. Each keeps its own map marker;
+        // here they list as this place's visits.
+        const memberRows = allPlaces
+          .filter((p) => p.trail_id === place.id)
+          .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''))
+          .map((c) => ({
+            key: `m-${c.id}`,
+            date: c.first_visit
+              ? new Date(c.first_visit + 'T00:00:00').toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : '',
+            sub: c.name,
+            to: `/place/${c.id}`,
+            del: null as string | null,
+          }));
+        const ownRows = isTrail
           ? (trailActs ?? []).map((a) => ({
               key: a.id,
               date: fmtRunDate(a.start_date),
@@ -619,6 +639,7 @@ export default function PlacePanel({
               to: `/place/${place.id}/day/${v.start_date}`,
               del: v.id as string | null,
             }));
+        const rows = [...memberRows, ...ownRows];
         const loading = isTrail ? trailActs === null : visits === null;
         return (
           <>
@@ -772,7 +793,7 @@ export default function PlacePanel({
 
       <RouteMiniMap place={place} />
 
-      {/* Bottom line: Both of us · Add to existing place · Delete · Save (green). */}
+      {/* Bottom line: Both of us · Part of… · Delete · Save (green). */}
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
           {people.length >= 2 && (
@@ -789,7 +810,7 @@ export default function PlacePanel({
               ))}
             </select>
           )}
-          <button onClick={() => setMerging((v) => !v)}>Add to existing place</button>
+          <button onClick={() => setMerging((v) => !v)}>Part of…</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete
           </button>
@@ -805,11 +826,15 @@ export default function PlacePanel({
       )}
       {merging && (
         <div className="entry">
-          <label>Add this place into an existing one (this one will be removed)</label>
-          <select defaultValue="" onChange={(e) => e.target.value && void addToExisting(e.target.value)}>
-            <option value="" disabled>
-              Choose the place to add into…
-            </option>
+          <label>
+            Make this part of a trip or place — e.g. a San Diego trip, or a trail. It keeps its own
+            map marker and shows up under that place's visits.
+          </label>
+          <select
+            value={place.trail_id ?? ''}
+            onChange={(e) => void addToExisting(e.target.value)}
+          >
+            <option value="">Not part of anything</option>
             {allPlaces
               .filter((p) => p.id !== place.id)
               .sort((a, b) => a.name.localeCompare(b.name))
