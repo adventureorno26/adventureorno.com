@@ -120,6 +120,9 @@ export default function PlacePanel({
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [addingMembers, setAddingMembers] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(place.name);
   const [error, setError] = useState<string | null>(null);
@@ -196,51 +199,37 @@ export default function PlacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place.id, place.is_trail, allPlaces]);
 
-  // Group spots by their tag (category), in CATEGORIES order, notes last.
-  const spotGroups: { key: string; label: string; icon: string; items: Entry[] }[] = [];
-  if (spots && spots.length) {
-    const order = [...CATEGORIES.map((c) => c.slug), 'note'];
-    const byKind = new Map<string, Entry[]>();
-    for (const e of spots) {
-      const k = e.kind || 'note';
-      if (!byKind.has(k)) byKind.set(k, []);
-      byKind.get(k)!.push(e);
-    }
-    for (const k of order) {
-      const items = byKind.get(k);
-      if (items && items.length) {
-        spotGroups.push({
-          key: k,
-          label: k === 'note' ? 'Notes' : categoryReviewLabel(k),
-          icon: k === 'note' ? '📝' : categoryIcon(k),
-          items,
-        });
-      }
-    }
-  }
-
-  // Member places ("part of" this one) are spots too — a trip's stops, a trail's
-  // trailheads. Grouped by their tag and shown in SPOTS AND REVIEWS. Each keeps
-  // its own map marker and links to its own card.
-  const memberGroups: { key: string; label: string; items: Place[] }[] = [];
+  // SPOTS AND REVIEWS — ONE dropdown per category, holding BOTH member places
+  // ("part of" this one) and entry-spots of that category. So "dining" shows a
+  // single "Restaurant Reviews" section listing every reviewed restaurant,
+  // whether it's a linked place or an inline spot. In CATEGORIES order.
+  const reviewGroups: { key: string; label: string; places: Place[]; entries: Entry[] }[] = [];
   {
     const members = allPlaces
       .filter((p) => (p.part_of ?? []).includes(place.id))
       .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
-    const byKind = new Map<string, Place[]>();
+    const placeByKind = new Map<string, Place[]>();
     for (const m of members) {
       const k = (m.categories && m.categories[0]) || 'place';
-      if (!byKind.has(k)) byKind.set(k, []);
-      byKind.get(k)!.push(m);
+      if (!placeByKind.has(k)) placeByKind.set(k, []);
+      placeByKind.get(k)!.push(m);
     }
-    const order = [...CATEGORIES.map((c) => c.slug), 'place'];
+    const entryByKind = new Map<string, Entry[]>();
+    for (const e of spots ?? []) {
+      const k = e.kind || 'note';
+      if (!entryByKind.has(k)) entryByKind.set(k, []);
+      entryByKind.get(k)!.push(e);
+    }
+    const order = [...CATEGORIES.map((c) => c.slug), 'place', 'note'];
     for (const k of order) {
-      const items = byKind.get(k);
-      if (items && items.length) {
-        memberGroups.push({
-          key: `mg-${k}`,
-          label: k === 'place' ? 'Places' : categoryReviewLabel(k),
-          items,
+      const places = placeByKind.get(k) ?? [];
+      const entries = entryByKind.get(k) ?? [];
+      if (places.length || entries.length) {
+        reviewGroups.push({
+          key: k,
+          label: k === 'note' ? 'Notes' : k === 'place' ? 'Places' : categoryReviewLabel(k),
+          places,
+          entries,
         });
       }
     }
@@ -338,6 +327,26 @@ export default function PlacePanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update that place');
     }
+  }
+
+  // Add-from-the-container side: pick existing places and make them part of THIS
+  // one in bulk (the "add everything we did on this trip" flow). Non-destructive.
+  async function addMembers() {
+    const ids = [...selectedMembers];
+    for (const id of ids) {
+      const child = allPlaces.find((p) => p.id === id);
+      if (!child) continue;
+      const next = [...new Set([...(child.part_of ?? []), place.id])];
+      try {
+        const updated = await updatePlace(id, { part_of: next });
+        onPlaceChanged(updated);
+      } catch {
+        /* skip the ones that fail; keep going */
+      }
+    }
+    setSelectedMembers(new Set());
+    setAddingMembers(false);
+    setMemberSearch('');
   }
 
   async function removePlace() {
@@ -740,11 +749,86 @@ export default function PlacePanel({
       <div className="visits-head">
         <h3 style={{ marginTop: 22 }}>SPOTS AND REVIEWS</h3>
         {canEdit && !addingSpot && (
-          <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
-            + Add a spot
-          </button>
+          <span style={{ display: 'flex', gap: 12 }}>
+            <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
+              + Add a spot
+            </button>
+            <button
+              className="add-spot-link"
+              onClick={() => setAddingMembers((v) => !v)}
+            >
+              + Add existing places
+            </button>
+          </span>
         )}
       </div>
+
+      {canEdit && addingMembers && (
+        <div className="entry">
+          <label>Add places you've already saved to this one (a trip's stops, a trail's spots)</label>
+          <input
+            className="member-search"
+            placeholder="Search your places…"
+            value={memberSearch}
+            onChange={(e) => setMemberSearch(e.target.value)}
+          />
+          <div className="member-list">
+            {allPlaces
+              .filter(
+                (p) =>
+                  p.id !== place.id &&
+                  !p.bucket &&
+                  !(p.part_of ?? []).includes(place.id) &&
+                  (memberSearch.trim() === '' ||
+                    p.name.toLowerCase().includes(memberSearch.trim().toLowerCase())),
+              )
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .slice(0, 40)
+              .map((p) => {
+                const on = selectedMembers.has(p.id);
+                return (
+                  <label key={p.id} className="member-opt">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() =>
+                        setSelectedMembers((prev) => {
+                          const next = new Set(prev);
+                          if (on) next.delete(p.id);
+                          else next.add(p.id);
+                          return next;
+                        })
+                      }
+                    />
+                    <span>
+                      {p.name}
+                      {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
+                    </span>
+                  </label>
+                );
+              })}
+          </div>
+          <div className="btn-row" style={{ marginTop: 8 }}>
+            <button
+              className="save-btn-green"
+              disabled={selectedMembers.size === 0}
+              onClick={() => void addMembers()}
+            >
+              Add {selectedMembers.size || ''} {selectedMembers.size === 1 ? 'place' : 'places'}
+            </button>
+            <button
+              onClick={() => {
+                setAddingMembers(false);
+                setSelectedMembers(new Set());
+                setMemberSearch('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {canEdit && addingSpot && (
         <EntryEditor
           placeId={place.id}
@@ -753,14 +837,16 @@ export default function PlacePanel({
           onCancel={() => setAddingSpot(false)}
         />
       )}
-      {spotGroups.length > 0 || memberGroups.length > 0 ? (
+      {reviewGroups.length > 0 ? (
         <div className="spot-groups">
-          {memberGroups.map((g) => (
+          {reviewGroups.map((g) => (
             <details className="spot-cat" key={g.key}>
               <summary className="spot-cat-head">
-                {g.label} <span className="label">({g.items.length})</span>
+                {g.label}{' '}
+                <span className="label">({g.places.length + g.entries.length})</span>
               </summary>
-              {g.items.map((m) => {
+              {/* Linked member places of this category */}
+              {g.places.map((m) => {
                 const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
                 return (
                   <div key={m.id} className="spot-row">
@@ -784,14 +870,8 @@ export default function PlacePanel({
                   </div>
                 );
               })}
-            </details>
-          ))}
-          {spotGroups.map((g) => (
-            <details className="spot-cat" key={g.key}>
-              <summary className="spot-cat-head">
-                {g.label} <span className="label">({g.items.length})</span>
-              </summary>
-              {g.items.map((e) => {
+              {/* Inline entry-spots of this category */}
+              {g.entries.map((e) => {
                 const dir = spotDirHref(e);
                 return (
                   <div key={e.id} className="spot-row">

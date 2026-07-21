@@ -2854,6 +2854,29 @@ textarea {
   cursor: pointer;
   padding: 0;
 }
+.member-search {
+  width: 100%;
+  margin: 6px 0;
+}
+.member-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.member-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.member-opt input {
+  width: auto;
+  margin: 0;
+}
 .spot-cat > summary {
   cursor: pointer;
   list-style: none;
