@@ -1682,6 +1682,12 @@ a {
   padding: 4px 0 4px 12px;
   border-left: 2px solid var(--border);
   margin-left: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.add-submenu button {
+  text-align: left;
+  width: 100%;
 }
 .add-menu button {
   white-space: nowrap;
