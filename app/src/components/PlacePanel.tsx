@@ -174,11 +174,36 @@ export default function PlacePanel({
   }
   // Add a spot/review straight from the main card; its category tags the place
   // and it shows under that category's review section here + on its day.
+  // Unified model: a spot is a CHILD PLACE (its own marker, card, count) rather
+  // than a separate entry. Plain "notes" stay as entries (they aren't places).
   async function addSpot(draft: NewEntry) {
-    await createEntry({ ...draft, place_id: place.id });
+    if (draft.kind === 'note') {
+      await createEntry({ ...draft, place_id: place.id });
+    } else {
+      const spot = await createPlace({
+        name: draft.title,
+        country: place.country,
+        admin1: place.admin1,
+        lat: draft.lat ?? place.lat,
+        lng: draft.lng ?? place.lng,
+        address: draft.address ?? null,
+        city: parseCity(draft.address ?? null, place.admin1),
+        categories: [draft.kind],
+        saved: true,
+        part_of: [place.id], // grouped under this place
+      });
+      if (draft.rating != null || draft.body) {
+        await updatePlace(spot.id, {
+          rating: draft.rating ?? null,
+          review: draft.body ?? null,
+        });
+      }
+      if (draft.date) await addVisit(spot.id, draft.date, draft.date);
+      onPlaceChanged(spot); // add the new place to the map
+    }
     setAddingSpot(false);
     await reloadSpots();
-    await refreshPlace(); // pick up the tag the spot's kind added
+    await refreshPlace();
   }
   useEffect(() => {
     let active = true;
