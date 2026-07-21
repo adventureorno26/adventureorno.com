@@ -186,11 +186,13 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
       | 'first_visit'
       | 'last_visit'
       | 'address'
+      | 'city'
       | 'bucket'
       | 'website'
       | 'is_trail'
       | 'saved'
       | 'categories'
+      | 'part_of'
     >
   >;
 

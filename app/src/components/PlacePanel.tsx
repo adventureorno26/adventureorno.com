@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   addVisit,
   createEntry,
+  createPlace,
   deletePlace,
   deleteVisit,
   fetchEntries,
@@ -139,6 +140,7 @@ export default function PlacePanel({
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [movingVisit, setMovingVisit] = useState<string | null>(null);
   const [addingMembers, setAddingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
@@ -302,6 +304,39 @@ export default function PlacePanel({
       await reloadVisits();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete visit');
+    }
+  }
+
+  // Add a specific stop to a city/town visit: create that place with its OWN
+  // address (part of this one), and give it its own visit on the same date — so
+  // the city visit stays AND the stop shows in Spots & Reviews and counts as a
+  // visit. e.g. our Washington DC visit → add "The Pocket" with its own address.
+  async function addStopAtVisit(visitDate: string, r: SearchResult) {
+    setError(null);
+    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
+    if (full.lat === 0 && full.lng === 0) {
+      setError("Couldn't resolve that place — try another.");
+      return;
+    }
+    try {
+      const address = full.address ?? full.label ?? null;
+      const admin1 = full.admin1 ?? place.admin1;
+      const spot = await createPlace({
+        name: full.name || 'New stop',
+        country: full.country ?? place.country,
+        admin1,
+        lat: full.lat,
+        lng: full.lng,
+        address,
+        city: parseCity(address, admin1),
+        saved: true,
+        part_of: [place.id], // grouped under this city/town
+      });
+      if (visitDate) await addVisit(spot.id, visitDate, visitDate);
+      onPlaceChanged(spot); // add the new place to the map
+      setMovingVisit(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add that stop');
     }
   }
 
@@ -740,6 +775,7 @@ export default function PlacePanel({
               sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
               to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
               del: null as string | null,
+              start: '' as string,
             }))
           : (visits ?? []).map((v) => ({
               key: v.id,
@@ -747,6 +783,7 @@ export default function PlacePanel({
               sub: null as string | null,
               to: `/place/${place.id}/day/${v.start_date}`,
               del: v.id as string | null,
+              start: v.start_date as string,
             }));
         const loading = isTrail ? trailActs === null : visits === null;
         return (
@@ -764,19 +801,43 @@ export default function PlacePanel({
               ) : (
                 <div className="visits">
                   {rows.map((r) => (
-                    <div key={r.key} className="visit-row">
-                      <Link className="visit-main" to={r.to}>
-                        <span className="visit-date">{r.date}</span>
-                        {r.sub && <span className="muted">{r.sub}</span>}
-                      </Link>
-                      {canEdit && r.del && (
-                        <button
-                          className="visit-del"
-                          title="Delete visit"
-                          onClick={() => void removeVisit(r.del!)}
-                        >
-                          ×
-                        </button>
+                    <div key={r.key}>
+                      <div className="visit-row">
+                        <Link className="visit-main" to={r.to}>
+                          <span className="visit-date">{r.date}</span>
+                          {r.sub && <span className="muted">{r.sub}</span>}
+                        </Link>
+                        {canEdit && r.start && (
+                          <button
+                            className="visit-stop"
+                            title="Add a specific stop on this day"
+                            onClick={() =>
+                              setMovingVisit((cur) => (cur === r.key ? null : r.key))
+                            }
+                          >
+                            + stop
+                          </button>
+                        )}
+                        {canEdit && r.del && (
+                          <button
+                            className="visit-del"
+                            title="Delete visit"
+                            onClick={() => void removeVisit(r.del!)}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                      {canEdit && movingVisit === r.key && (
+                        <div className="entry" style={{ marginTop: 6 }}>
+                          <label>Add a stop on {r.date} — its own address, counts as a visit</label>
+                          <div className="spot-search bucket-search">
+                            <MapSearch
+                              onPick={(res) => void addStopAtVisit(r.start, res)}
+                              placeholder="Search the place you stopped…"
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
                   ))}

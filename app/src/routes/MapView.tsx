@@ -934,7 +934,13 @@ export default function MapView() {
 
   function handlePlaceChanged(updated: Place) {
     pendingRef.current.delete(updated.id); // it's been edited — no longer a throwaway
-    setPlaces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    // Upsert: update if present, else add (lets the card create new places, e.g.
+    // moving a visit to a specific location).
+    setPlaces((prev) =>
+      prev.some((p) => p.id === updated.id)
+        ? prev.map((p) => (p.id === updated.id ? updated : p))
+        : [...prev, updated],
+    );
   }
 
   function handlePlaceDeleted(id: string) {

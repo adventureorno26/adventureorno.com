@@ -212,6 +212,13 @@ export async function deleteVisit(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Reassign a visit to a different place (e.g. move a generic city visit to a
+ *  specific spot with its own address). */
+export async function moveVisit(id: string, newPlaceId: string): Promise<void> {
+  const { error } = await supabase.from('visits').update({ place_id: newPlaceId }).eq('id', id);
+  if (error) throw error;
+}
+
 export async function createEntry(e: NewEntry): Promise<Entry> {
   const { data, error } = await supabase.from('entries').insert(e).select(ENTRY_COLS).single();
   if (error) throw error;

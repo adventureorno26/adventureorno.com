@@ -70,11 +70,13 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
   const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
   const closeDetail = () => setDetail(null);
 
-  // Every spot + visit also counts toward the Places total.
+  // Trails + Spots + Places all count. Trails/places are already in `visited`;
+  // add the spots (entries). Visits are NOT counted (they're repeat trips to a
+  // place already counted).
   const [extra, setExtra] = useState(0);
   useEffect(() => {
     fetchItemCounts()
-      .then((c) => setExtra(c.entries + c.visits))
+      .then((c) => setExtra(c.entries))
       .catch(() => setExtra(0));
   }, [places.length]);
   const placesTotal = visited.length + extra;
