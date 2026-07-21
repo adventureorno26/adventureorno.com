@@ -11,6 +11,7 @@ import {
   type SettingsStats,
 } from '../lib/data';
 import type { Place } from '../lib/types';
+import { exportCsv, exportGpx, exportKml } from '../lib/exports';
 import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 import { importFileActivity, parseActivityFile } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
@@ -379,6 +380,35 @@ function NationalParksCard() {
   );
 }
 
+/** Export all our places as CSV / GPX / KML (generated in the browser). */
+function ExportCard() {
+  const [places, setPlaces] = useState<Place[] | null>(null);
+  useEffect(() => {
+    fetchPlaces()
+      .then(setPlaces)
+      .catch(() => setPlaces([]));
+  }, []);
+  const n = (places ?? []).filter((p) => p.saved && !p.bucket && p.name.trim()).length;
+  return (
+    <div className="card">
+      <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+        Download all {n} places — CSV for spreadsheets, GPX/KML for maps &amp; Google Earth.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button disabled={!places} onClick={() => places && exportCsv(places)}>
+          CSV
+        </button>
+        <button disabled={!places} onClick={() => places && exportGpx(places)}>
+          GPX
+        </button>
+        <button disabled={!places} onClick={() => places && exportKml(places)}>
+          KML
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Upload Garmin (or any) GPX/TCX activity files — the Strava-limit workaround.
  *  Parses each client-side and imports it, attributed to whoever's signed in. */
 function GarminImportCard() {
@@ -565,6 +595,9 @@ export default function Settings() {
           <button>Our Year in Travel</button>
         </Link>
       </div>
+
+      <h2 style={{ marginTop: 28 }}>Export our data</h2>
+      <ExportCard />
 
       <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
       <SharedHub />

@@ -144,6 +144,7 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
+  const [heatOn, setHeatOn] = useState(false);
   // "Just me / Just Josh / Both" filter (null = both).
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [people, setPeople] = useState<MapPerson[]>([]);
@@ -353,6 +354,28 @@ export default function MapView() {
         cluster: true,
         clusterMaxZoom: 12,
         clusterRadius: 45,
+      });
+
+      // Heatmap of everywhere we've been (hidden until toggled on).
+      map.addLayer({
+        id: 'place-heat',
+        type: 'heatmap',
+        source: SOURCE_ID,
+        layout: { visibility: 'none' },
+        paint: {
+          'heatmap-radius': 28,
+          'heatmap-opacity': 0.7,
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 3],
+          'heatmap-color': [
+            'interpolate',
+            ['linear'],
+            ['heatmap-density'],
+            0, 'rgba(59,130,246,0)',
+            0.3, 'rgba(59,130,246,0.6)',
+            0.6, 'rgba(168,85,247,0.7)',
+            1, 'rgba(244,63,94,0.85)',
+          ],
+        },
       });
 
       // Soft glow beneath clusters.
@@ -576,6 +599,20 @@ export default function MapView() {
   useEffect(() => {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);
+
+  // Heatmap toggle: show the heat layer and dim the individual markers.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    map.setLayoutProperty('place-heat', 'visibility', heatOn ? 'visible' : 'none');
+    const dim = heatOn ? 0.2 : 1;
+    const props: [string, string][] = [
+      ['place-dots', 'circle-opacity'],
+      ['place-glyphs', 'text-opacity'],
+      ['place-photos', 'icon-opacity'],
+    ];
+    for (const [id, prop] of props) if (map.getLayer(id)) map.setPaintProperty(id, prop, dim);
+  }, [heatOn, ready]);
 
   // Deep link: /?cat=dining (tapping a category on a card) → filter the map to
   // that category and zoom to fit those photo-pins.
@@ -990,6 +1027,14 @@ export default function MapView() {
       />
 
       <StatsBar places={places} onFilterCategory={setFilterCat} personFilter={personFilter} />
+
+      <button
+        className={`heat-btn ${heatOn ? 'on' : ''}`}
+        onClick={() => setHeatOn((v) => !v)}
+        title="Heatmap of everywhere we've been"
+      >
+        Heatmap
+      </button>
 
       <div className="map-top-row">
         {canEdit && (

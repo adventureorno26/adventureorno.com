@@ -29,6 +29,7 @@ import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
 import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
+import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
 import StarRating from './StarRating';
 
@@ -611,6 +612,8 @@ export default function PlacePanel({
           <span className="trail-miles">{trailMilesSummary(trailMiles)}</span>
         )}
       </div>
+
+      {!place.is_home && <WeatherLine lat={place.lat} lng={place.lng} />}
 
       {/* Tags — always visible. Tap a pill to toggle it; selected pills stay
           highlighted (no separate chip list). Includes Trip/Trail so any card,

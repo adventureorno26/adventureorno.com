@@ -3086,6 +3086,37 @@ textarea {
   font-size: 14px;
   font-weight: 600;
 }
+.weather-line {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: -6px 0 10px;
+}
+.weather-golden {
+  color: #d9a441;
+}
+.heat-btn {
+  position: fixed;
+  right: 12px;
+  bottom: 14px;
+  z-index: 5;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(6, 10, 20, 0.7);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  cursor: pointer;
+}
+.heat-btn.on {
+  background: var(--grad);
+  color: #06121f;
+  font-weight: 700;
+}
+.card-open .heat-btn {
+  display: none;
+}
 .spot-cat > summary {
   cursor: pointer;
   list-style: none;

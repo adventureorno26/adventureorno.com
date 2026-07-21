@@ -137,6 +137,7 @@ export interface StravaActivity {
   type?: string;
   sport_type?: string;
   distance?: number;
+  total_elevation_gain?: number;
   moving_time?: number;
   elapsed_time?: number;
   start_date?: string;
@@ -171,6 +172,7 @@ export async function ingestActivity(
     type,
     name: a.name ?? null,
     distance: a.distance ?? 0,
+    elevation_gain: a.total_elevation_gain ?? null,
     moving_time: a.moving_time ?? null,
     elapsed_time: a.elapsed_time ?? null,
     start_date: a.start_date ?? null,
