@@ -117,6 +117,7 @@ export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Prom
       files.push(
         new File([blob], mf.filename ?? 'google-photo.jpg', { type: mf.mimeType ?? blob.type }),
       );
+      onStatus?.(`Fetching from Google Photos… ${files.length}`);
     }
     pageToken = m.nextPageToken;
   } while (pageToken);

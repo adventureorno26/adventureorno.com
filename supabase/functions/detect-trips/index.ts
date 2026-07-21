@@ -24,8 +24,12 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const MAPTILER_KEY = Deno.env.get('MAPTILER_KEY')!;
 
-const HOME = { lat: 39.1157, lng: -77.5636 };
-const HOME_MI = 15;
+// Home center falls back to Leesburg; the real value comes from settings.home_zone.
+// NOTE: this 3-mi radius is used ONLY here (trip detection) — it filters out
+// near-home events so neighborhood walks never look like a trip. Ingest no longer
+// excludes the home zone (settings radius_m = 0), so those walks are still logged.
+const HOME_FALLBACK = { lat: 39.1157, lng: -77.5636 };
+const HOME_MI = 3;
 const GAP_H = 20;
 const MIN_SPAN_H = 20;
 const MIN_DIST_MI = 40;
@@ -120,6 +124,18 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (prof?.role !== 'owner') return json({ error: 'owner required' }, 403);
   }
+
+  // Home center from settings (radius here is our own 3mi, not settings.radius_m).
+  const { data: hz } = await admin
+    .from('settings')
+    .select('value')
+    .eq('key', 'home_zone')
+    .maybeSingle();
+  const home = ((hz?.value as { lat?: number; lng?: number } | null) ?? {}) as {
+    lat?: number;
+    lng?: number;
+  };
+  const HOME = { lat: home.lat ?? HOME_FALLBACK.lat, lng: home.lng ?? HOME_FALLBACK.lng };
 
   // 1. Gather timestamped events.
   const [{ data: photos }, { data: acts }] = await Promise.all([

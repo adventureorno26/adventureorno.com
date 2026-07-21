@@ -119,16 +119,22 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     const retryable: File[] = [];
 
     // Photos upload in parallel (4 at a time) — the big speed win for albums.
+    let done = 0;
+    const total = imgFiles.length;
     const photoResults = await mapPool(
       imgFiles,
-      (file) =>
-        uploadPhoto(file, {
+      async (file) => {
+        const r = await uploadPhoto(file, {
           placeId: place.id,
           lat: place.lat,
           lng: place.lng,
           override,
           takenAt: day ? `${day}T12:00:00Z` : undefined,
-        }),
+        });
+        done++;
+        if (total > 1) setNote(`Uploading ${done} of ${total}…`);
+        return r;
+      },
       4,
     );
     photoResults.forEach((r, i) => {
