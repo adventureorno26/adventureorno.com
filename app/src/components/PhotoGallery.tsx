@@ -13,7 +13,7 @@ import {
 } from '../lib/photos';
 import { updatePlace } from '../lib/data';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
-import type { Photo, Place, Video, Visit } from '../lib/types';
+import type { Photo, Place, Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
@@ -22,9 +22,6 @@ interface Props {
   place: Place;
   // When set, the gallery shows only this date's photos and pins uploads to it.
   day?: string;
-  // The place's visits — on the place card, photos are bucketed by visit (a trip
-  // may span several days) and each visit shows as a horizontal carousel.
-  visits?: Visit[];
   // Fired after photos are added, so the parent can refresh the place (e.g. to
   // pick up the new cover photo and convert its map marker).
   onUploaded?: () => void;
@@ -41,7 +38,7 @@ const SKIP_LABELS: Record<string, string> = {
 // Skips a deliberate manual upload is allowed to override.
 const OVERRIDABLE = new Set(['screenshot', 'home_zone']);
 
-export default function PhotoGallery({ place, day, visits, onUploaded }: Props) {
+export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -259,15 +256,6 @@ export default function PhotoGallery({ place, day, visits, onUploaded }: Props) 
           month: 'long',
           day: 'numeric',
         });
-  const visitLabel = (v: Visit): string => {
-    const s = new Date(v.start_date + 'T00:00:00');
-    const e = new Date(v.end_date + 'T00:00:00');
-    const full: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-    if (v.start_date === v.end_date) return s.toLocaleDateString(undefined, full);
-    const sameYear = s.getFullYear() === e.getFullYear();
-    const so: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : full;
-    return `${s.toLocaleDateString(undefined, so)} – ${e.toLocaleDateString(undefined, full)}`;
-  };
   const pushDayGroups = (items: { photo: Photo; idx: number }[], out: typeof photoGroups) => {
     const byDate = new Map<string, { photo: Photo; idx: number }[]>();
     for (const it of items) {
@@ -288,24 +276,16 @@ export default function PhotoGallery({ place, day, visits, onUploaded }: Props) 
   const photoGroups: { key: string; label: string; items: { photo: Photo; idx: number }[] }[] = [];
   if (list.length) {
     const withIdx = list.map((photo, idx) => ({ photo, idx }));
-    if (!day && visits && visits.length) {
-      const sorted = [...visits].sort((a, b) => b.start_date.localeCompare(a.start_date));
-      const used = new Set<number>();
-      for (const v of sorted) {
-        const items = withIdx.filter(({ photo, idx }) => {
-          const d = dateOf(photo);
-          return d !== '' && d >= v.start_date && d <= v.end_date && !used.has(idx);
-        });
-        items.forEach(({ idx }) => used.add(idx));
-        if (items.length) {
-          items.sort((a, b) => (a.photo.taken_at ?? '').localeCompare(b.photo.taken_at ?? ''));
-          photoGroups.push({ key: `v-${v.id}`, label: visitLabel(v), items });
-        }
-      }
-      // Photos outside any recorded visit → grouped by day.
-      pushDayGroups(withIdx.filter(({ idx }) => !used.has(idx)), photoGroups);
+    if (day) {
+      pushDayGroups(withIdx, photoGroups); // day view: this one day
     } else {
-      pushDayGroups(withIdx, photoGroups);
+      // Place card: ONE carousel, all photos in date order (oldest → newest).
+      const sorted = [...withIdx].sort((a, b) =>
+        (a.photo.taken_at ?? a.photo.created_at ?? '').localeCompare(
+          b.photo.taken_at ?? b.photo.created_at ?? '',
+        ),
+      );
+      photoGroups.push({ key: 'all', label: '', items: sorted });
     }
   }
 
@@ -380,7 +360,7 @@ export default function PhotoGallery({ place, day, visits, onUploaded }: Props) 
         <>
           {photoGroups.map((g) => (
             <div className="photo-date-group" key={g.key}>
-              <div className="photo-date">{g.label}</div>
+              {g.label && <div className="photo-date">{g.label}</div>}
               <div className="gallery carousel">
                 {g.items.map(({ photo: p, idx }) => (
                   <div

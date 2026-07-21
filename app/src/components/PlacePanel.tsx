@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addPlaceToTrail,
@@ -27,7 +27,6 @@ import { fetchActivitiesForPlace, fetchMileageForPlaces } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import AuthedImg from './AuthedImg';
-import { PinIcon } from './Icons';
 import EntryEditor from './EntryEditor';
 import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
@@ -64,33 +63,6 @@ function miStr(meters: number): string {
   return `${(meters / 1609.344).toFixed(1)} mi`;
 }
 
-// Singular noun for a Strava activity type (Hike → "hike", Ride → "ride").
-const ACTIVITY_NOUN: Record<string, string> = {
-  Run: 'run',
-  Hike: 'hike',
-  Walk: 'walk',
-  Ride: 'ride',
-};
-function activityNoun(type: string, n: number): string {
-  const base = ACTIVITY_NOUN[type] ?? 'activity';
-  if (n === 1) return base;
-  return base === 'activity' ? 'activities' : `${base}s`;
-}
-/** "2 hikes" when a trailhead's activities share a type, else "3 activities". */
-function groupCountLabel(runs: Activity[]): string {
-  const types = new Set(runs.map((r) => r.type));
-  const type = types.size === 1 ? [...types][0] : 'activity';
-  return `${runs.length} ${activityNoun(type, runs.length)}`;
-}
-
-/** Plural noun for a trail's "Logged ___" heading: "hikes" if all hikes, else
- *  "runs"/"walks"/… when uniform, "activities" when mixed or empty. */
-function trailActivityNoun(acts: Activity[] | null): string {
-  if (!acts || acts.length === 0) return 'activities';
-  const types = new Set(acts.map((a) => a.type));
-  const type = types.size === 1 ? [...types][0] : 'activity';
-  return activityNoun(type, 2);
-}
 
 // Past-tense verb for a "miles hiked/run/walked/biked" summary.
 const ACTIVITY_VERB: Record<string, string> = {
@@ -228,26 +200,6 @@ export default function PlacePanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place.id, place.is_trail, allPlaces]);
-
-  // Group a trail's activities by trailhead (fallback: Strava name), each group's
-  // runs newest-first, and groups ordered by their most-recent run.
-  const trailGroups = useMemo(() => {
-    if (!trailActs) return [];
-    const byHead = new Map<string, Activity[]>();
-    for (const a of trailActs) {
-      const label = a.trailhead?.trim() || a.name?.trim() || 'Run';
-      if (!byHead.has(label)) byHead.set(label, []);
-      byHead.get(label)!.push(a);
-    }
-    const groups = [...byHead.entries()].map(([label, runs]) => ({
-      label,
-      runs: [...runs].sort((x, y) => (y.start_date ?? '').localeCompare(x.start_date ?? '')),
-    }));
-    groups.sort((g, h) =>
-      (h.runs[0]?.start_date ?? '').localeCompare(g.runs[0]?.start_date ?? ''),
-    );
-    return groups;
-  }, [trailActs]);
 
   // Group spots by their tag (category), in CATEGORIES order, notes last.
   const spotGroups: { key: string; label: string; icon: string; items: Entry[] }[] = [];
@@ -621,16 +573,15 @@ export default function PlacePanel({
         place.review && <p className="body">{place.review}</p>
       )}
 
-      {/* Category-specific favorite: wines (winery) / meal (dining) / beer (brewery). */}
+      {/* Category-specific favorite: wines (winery) / beer (brewery). Meal is
+          intentionally excluded from the main card. */}
       {(() => {
         const cats = effectiveCategories(place);
         const favLabel = cats.includes('winery')
           ? 'Favorite wines'
-          : cats.includes('dining')
-            ? 'Favorite meal'
-            : cats.includes('brewery')
-              ? 'Favorite beer'
-              : null;
+          : cats.includes('brewery')
+            ? 'Favorite beer'
+            : null;
         if (!favLabel) return null;
         if (!canEdit) {
           return place.favorite ? (
@@ -666,166 +617,117 @@ export default function PlacePanel({
       })()}
 
 
-      {place.is_trail ? (
-        /* Trails — runs/hikes grouped by trailhead; tap a run for its map + miles. */
-        <>
-          <div className="visits-head">
-            <h3 style={{ margin: '22px 0 0' }}>Trailheads</h3>
-          </div>
-          {(() => {
-            const members = allPlaces.filter((p) => p.trail_id === place.id);
-            return members.length === 0 ? (
-              <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-                No trailheads linked yet. Open a place along this trail and use “This is a Trail →
-                add to an existing trail”.
-              </p>
-            ) : (
-              <div className="trailhead-cards">
-                {members.map((th) => (
-                  <Link key={th.id} className="trailhead-card" to={`/place/${th.id}`}>
-                    {th.cover_photo_id ? (
-                      <AuthedImg
-                        photoId={th.cover_photo_id}
-                        size="thumb"
-                        className="trailhead-thumb"
-                      />
-                    ) : (
-                      <span className="trailhead-thumb ph">
-                        <PinIcon size={18} />
-                      </span>
-                    )}
-                    <span className="trailhead-card-name">{th.name}</span>
-                    {th.admin1 && <span className="muted">{th.admin1}</span>}
-                  </Link>
-                ))}
-              </div>
-            );
-          })()}
-
-          <div className="visits-head">
-            <h3 style={{ margin: '22px 0 0' }}>
-              Logged {trailActivityNoun(trailActs)}
-              {trailActs && trailActs.length > 0 ? ` (${trailActs.length})` : ''}
-            </h3>
-            {canEdit && onAddRoute && (
-              <button className="link-btn" onClick={() => onAddRoute(place.id, place.name)}>
-                ＋ Add a route
-              </button>
-            )}
-          </div>
-          {trailActs === null ? (
-            <p style={{ color: 'var(--muted)' }}>Loading…</p>
-          ) : trailActs.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-              Nothing logged on this trail yet. Tap <b>＋ Add a route</b> to trace one on the map, or
-              log it to Strava.
-            </p>
-          ) : (
-            <div className="trailheads">
-              {trailGroups.map((g) => (
-                <details key={g.label} className="trailhead-group" open={trailGroups.length <= 3}>
-                  <summary>
-                    <span className="trailhead-name">{g.label}</span>
-                    <span className="muted"> · {groupCountLabel(g.runs)}</span>
-                  </summary>
-                  <div className="trail-runs">
-                    {g.runs.map((a) => (
-                      <Link
-                        key={a.id}
-                        className="trail-run"
-                        to={`/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`}
-                      >
-                        <span className="visit-date">{fmtRunDate(a.start_date)}</span>
-                        <span className="muted">
-                          {a.type} · {miStr(a.distance)}
-                        </span>
+      {/* Visits — uniform for places AND trails. Collapsed into a dropdown to
+          save space; click "Visits (N)" → the dates. Trails list their logged
+          activity days here in the same style as places. */}
+      {(() => {
+        const isTrail = place.is_trail;
+        const rows = isTrail
+          ? (trailActs ?? []).map((a) => ({
+              key: a.id,
+              date: fmtRunDate(a.start_date),
+              sub: `${a.type} · ${miStr(a.distance)}`,
+              to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
+              del: null as string | null,
+            }))
+          : (visits ?? []).map((v) => ({
+              key: v.id,
+              date: fmtVisit(v),
+              sub: null as string | null,
+              to: `/place/${place.id}/day/${v.start_date}`,
+              del: v.id as string | null,
+            }));
+        const loading = isTrail ? trailActs === null : visits === null;
+        return (
+          <>
+            <details className="visits-details">
+              <summary className="visits-summary">
+                Visits{rows.length > 0 ? ` (${rows.length})` : ''}
+              </summary>
+              {loading ? (
+                <p style={{ color: 'var(--muted)' }}>Loading…</p>
+              ) : rows.length === 0 ? (
+                <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+                  {isTrail ? 'Nothing logged here yet.' : 'No visits logged yet.'}
+                </p>
+              ) : (
+                <div className="visits">
+                  {rows.map((r) => (
+                    <div key={r.key} className="visit-row">
+                      <Link className="visit-main" to={r.to}>
+                        <span className="visit-date">{r.date}</span>
+                        {r.sub && <span className="muted">{r.sub}</span>}
                       </Link>
-                    ))}
-                  </div>
-                </details>
-              ))}
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          {/* Visits — each trip; tap to open its day (map + photos + spots) */}
-          <div className="visits-head">
-            <h3 style={{ margin: '22px 0 0' }}>
-              Visits{visits && visits.length > 0 ? ` (${visits.length})` : ''}
-            </h3>
-            {canEdit && !addingVisit && (
-              <button
-                className="link-btn"
-                onClick={() => {
-                  setAddingVisit(true);
-                  setVStart(new Date().toISOString().slice(0, 10));
-                }}
-              >
-                ＋ Add a visit
-              </button>
-            )}
-          </div>
-
-          {canEdit && addingVisit && (
-            <div className="entry" style={{ marginTop: 8 }}>
-              <label>Date{vMulti ? ' — from' : ''}</label>
-              <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
-              {vMulti && (
-                <>
-                  <label>to</label>
-                  <input type="date" value={vEnd} onChange={(e) => setVEnd(e.target.value)} />
-                </>
-              )}
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={vMulti}
-                  onChange={(e) => setVMulti(e.target.checked)}
-                  style={{ width: 'auto' }}
-                />
-                Multiple days
-              </label>
-              <div className="btn-row">
-                <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
-                  Add visit
-                </button>
-                <button onClick={() => setAddingVisit(false)}>Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {visits === null ? (
-            <p style={{ color: 'var(--muted)' }}>Loading…</p>
-          ) : visits.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-              No visits logged yet. Add one, or upload a photo here.
-            </p>
-          ) : (
-            <div className="visits">
-              {visits.map((v) => (
-                <div key={v.id} className="visit-row">
-                  <Link className="visit-main" to={`/place/${place.id}/day/${v.start_date}`}>
-                    <span className="visit-date">{fmtVisit(v)}</span>
-                  </Link>
-                  {canEdit && (
-                    <button
-                      className="visit-del"
-                      title="Delete visit"
-                      onClick={() => void removeVisit(v.id)}
-                    >
-                      ×
-                    </button>
-                  )}
+                      {canEdit && r.del && (
+                        <button
+                          className="visit-del"
+                          title="Delete visit"
+                          onClick={() => void removeVisit(r.del!)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+              )}
+            </details>
+
+            {canEdit &&
+              (isTrail
+                ? onAddRoute && (
+                    <button
+                      className="link-btn"
+                      onClick={() => onAddRoute(place.id, place.name)}
+                    >
+                      ＋ Add a route
+                    </button>
+                  )
+                : !addingVisit && (
+                    <button
+                      className="link-btn"
+                      onClick={() => {
+                        setAddingVisit(true);
+                        setVStart(new Date().toISOString().slice(0, 10));
+                      }}
+                    >
+                      ＋ Add a visit
+                    </button>
+                  ))}
+
+            {!isTrail && canEdit && addingVisit && (
+              <div className="entry" style={{ marginTop: 8 }}>
+                <label>Date{vMulti ? ' — from' : ''}</label>
+                <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
+                {vMulti && (
+                  <>
+                    <label>to</label>
+                    <input type="date" value={vEnd} onChange={(e) => setVEnd(e.target.value)} />
+                  </>
+                )}
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={vMulti}
+                    onChange={(e) => setVMulti(e.target.checked)}
+                    style={{ width: 'auto' }}
+                  />
+                  Multiple days
+                </label>
+                <div className="btn-row">
+                  <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
+                    Add visit
+                  </button>
+                  <button onClick={() => setAddingVisit(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
-      <PhotoGallery place={place} visits={visits ?? undefined} onUploaded={refreshPlace} />
+      <PhotoGallery place={place} onUploaded={refreshPlace} />
 
       <RouteMiniMap place={place} />
 
@@ -892,26 +794,24 @@ export default function PlacePanel({
         )
       )}
 
-      {/* Whose place is this — Both (default) or just one of you. */}
-      {canEdit && people.length >= 2 && (
-        <div className="attribution-row">
-          <label>Whose is this?</label>
-          <select
-            value={place.solo_profile ?? ''}
-            onChange={(e) => void patch({ solo_profile: e.target.value || null })}
-          >
-            <option value="">Both of us</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                Just {p.display_name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
+      {/* Bottom actions — attribution + Merge + Delete + This is a Trail, all in
+          one compact row. No "Whose is this?" label. */}
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
+          {people.length >= 2 && (
+            <select
+              className="attribution-select"
+              value={place.solo_profile ?? ''}
+              onChange={(e) => void patch({ solo_profile: e.target.value || null })}
+            >
+              <option value="">Both of us</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  Just {p.display_name}
+                </option>
+              ))}
+            </select>
+          )}
           <button onClick={() => setMerging((v) => !v)}>Merge…</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete

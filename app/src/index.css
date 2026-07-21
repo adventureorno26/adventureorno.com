@@ -2717,20 +2717,46 @@ textarea {
   font-size: 13px;
   color: #4dd07a;
 }
-.attribution-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* Collapsible Visits section (places + trails). */
+.visits-details > summary {
   margin-top: 22px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
 }
-.attribution-row label {
-  font-size: 13px;
-  font-weight: 600;
+.visits-details > summary::-webkit-details-marker {
+  display: none;
+}
+.visits-details > summary::before {
+  content: '▸ ';
   color: var(--muted);
-  flex: none;
+  font-size: 13px;
 }
-.attribution-row select {
-  flex: 1;
+.visits-details[open] > summary::before {
+  content: '▾ ';
+}
+.visits-details .visits {
+  margin-top: 8px;
+}
+
+/* Compact bottom action row: attribution + Merge + Delete + This is a Trail. */
+.bottom-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.bottom-actions button,
+.bottom-actions .attribution-select,
+.bottom-actions .inline-trail > summary {
+  font-size: 12px;
+  padding: 6px 11px;
+  height: auto;
+}
+.attribution-select {
+  border-radius: 8px;
+  max-width: 128px;
 }
 .app-launcher {
   display: grid;
