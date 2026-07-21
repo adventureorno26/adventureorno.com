@@ -445,14 +445,23 @@ export default function PlacePanel({
   const regionText = [place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region';
 
   // The location search: find the city & state; it fills the Title, State, pin,
-  // and the Directions link. Sits just under the photo.
+  // and the Directions link. For a freshly-added category place with no name yet,
+  // the placeholder hints what to type ("Winery Name", "Name of Restaurant"…).
+  const searchExample = (): string => {
+    if (place.name) return `${place.name} — search to change`;
+    const cats = effectiveCategories(place);
+    if (cats.includes('winery')) return 'Winery Name';
+    if (cats.includes('stay')) return 'Hotel Name';
+    if (cats.includes('dining')) return 'Name of Restaurant';
+    if (cats.includes('brewery')) return 'Brewery Name';
+    if (cats.some((c) => ['hiking', 'walking', 'running', 'biking'].includes(c)))
+      return 'Trail or spot name';
+    return 'Search for a place…';
+  };
   const locateSearch = canEdit && (
     <div className="place-locate bucket-search">
       {isTrailPlace && <div className="locate-label">Trailhead</div>}
-      <MapSearch
-        onPick={setLocationFromSearch}
-        placeholder={place.name ? `${place.name} — search to change` : 'Search for a place…'}
-      />
+      <MapSearch onPick={setLocationFromSearch} placeholder={searchExample()} />
     </div>
   );
 

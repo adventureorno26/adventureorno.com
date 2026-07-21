@@ -1645,13 +1645,17 @@ a {
 .map-top-row .add-wrap {
   flex: 0 0 auto;
 }
+/* Slim pill — shared look for the map controls. */
 .add-btn {
-  height: 44px;
+  height: 30px;
   white-space: nowrap;
   border-radius: 999px;
-  padding: 0 18px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
   background: #12131a;
   border: 1px solid var(--border-soft);
+  color: #fff;
 }
 .add-menu {
   position: absolute;
@@ -1670,6 +1674,14 @@ a {
   padding: 6px;
   box-shadow: var(--shadow);
   z-index: 12;
+}
+.add-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid var(--border);
+  margin-left: 6px;
 }
 .add-menu button {
   white-space: nowrap;
@@ -1694,23 +1706,20 @@ a {
   z-index: 30;
   pointer-events: auto;
 }
+/* Plain white gear ICON — no circle, no background, no border. */
 .gear-btn {
-  width: 44px;
-  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  line-height: 1;
-  padding: 0;
-  border-radius: 50%;
-  background: #ffffff; /* white so the gear is visible (dark emoji was invisible on dark) */
-  border: 1px solid #d7e0ec;
-  box-shadow: 0 6px 18px rgba(2, 8, 23, 0.5);
+  padding: 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
 }
 .gear-btn:hover {
-  background: #eef3f9;
-  border: 1px solid #d7e0ec;
+  background: transparent;
+  border: none;
   transform: rotate(30deg);
 }
 @media (max-width: 560px) {
@@ -2785,9 +2794,9 @@ textarea {
   z-index: 7;
   display: flex;
   align-items: center;
-  height: 44px;
-  gap: 4px;
-  padding: 0 4px;
+  height: 30px;
+  gap: 2px;
+  padding: 0 3px;
   border-radius: 999px;
   background: #12131a;
   border: 1px solid var(--border-soft);
@@ -2796,10 +2805,11 @@ textarea {
 .person-filter button {
   border: none;
   background: transparent;
-  color: var(--text);
+  color: #fff;
   font-weight: 600;
   font-size: 12px;
-  padding: 6px 12px;
+  height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
   cursor: pointer;
 }
@@ -2812,21 +2822,21 @@ textarea {
  * (which sits at left:12, ~50px wide). ⌘K also opens the palette. */
 .places-search-btn {
   position: fixed;
-  left: 68px;
+  left: 48px;
   bottom: calc(14px + env(safe-area-inset-bottom));
   top: auto;
-  height: 44px;
+  height: 30px;
   display: flex;
   align-items: center;
   z-index: 30;
-  padding: 0 18px;
+  padding: 0 14px;
   border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid #d7e0ec;
+  background: #12131a;
+  border: 1px solid var(--border-soft);
   box-shadow: 0 4px 16px rgba(2, 8, 23, 0.4);
-  color: #0b2a4a;
-  font-weight: 700;
-  font-size: 14px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
   cursor: pointer;
 }
 .search-palette-backdrop {
@@ -3235,12 +3245,16 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
-  padding: 0 14px;
+  height: 30px;
+  padding: 0 12px;
   border-radius: 999px;
   background: #12131a;
   border: 1px solid var(--border-soft);
   box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+}
+.map-search-box input {
+  font-size: 13px;
+  color: #fff;
 }
 .map-search-box input {
   flex: 1;

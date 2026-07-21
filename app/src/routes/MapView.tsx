@@ -134,7 +134,30 @@ export default function MapView() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [activitySub, setActivitySub] = useState(false);
   const addFileRef = useRef<HTMLInputElement | null>(null);
+
+  // +Add → a category/activity: create an empty place pre-tagged, open its card.
+  // The card's title-search fills name + location (placeholder shows an example).
+  async function addTagged(tag: string) {
+    setAddMenuOpen(false);
+    setActivitySub(false);
+    const c = mapRef.current?.getCenter();
+    try {
+      const p = await createPlace({
+        name: '',
+        country: null,
+        admin1: null,
+        lat: c?.lat ?? 39.5,
+        lng: c?.lng ?? -98.5,
+        categories: [tag],
+        saved: false,
+      });
+      navigate(`/place/${p.id}`);
+    } catch {
+      setBanner('Could not add — try again.');
+    }
+  }
 
   // Draw-a-trail mode: tap the map to add waypoints; segments snap to walking paths.
   const [drawMode, setDrawMode] = useState(false);
@@ -903,15 +926,29 @@ export default function MapView() {
             </button>
             {addMenuOpen && (
               <div className="add-menu">
+                <button onClick={() => setActivitySub((v) => !v)}>Activity</button>
+                {activitySub && (
+                  <div className="add-submenu">
+                    <button onClick={() => void addTagged('hiking')}>Hiking</button>
+                    <button onClick={() => void addTagged('walking')}>Walking</button>
+                    <button onClick={() => void addTagged('running')}>Running</button>
+                    <button onClick={() => void addTagged('biking')}>Biking</button>
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     setAddMenuOpen(false);
+                    setActivitySub(false);
                     setDrawMode(true);
                     setBanner(null);
                   }}
                 >
-                  Activity
+                  Trail
                 </button>
+                <button onClick={() => void addTagged('winery')}>Winery</button>
+                <button onClick={() => void addTagged('stay')}>Hotel</button>
+                <button onClick={() => void addTagged('dining')}>Restaurant</button>
+                <button onClick={() => void addTagged('brewery')}>Brewery</button>
                 <button
                   onClick={() => {
                     setAddMenuOpen(false);

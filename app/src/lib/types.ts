@@ -179,7 +179,17 @@ export interface MileageRow {
 // Draft shapes for inserts (server fills id / created_at / created_by).
 export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'> &
   Partial<
-    Pick<Place, 'first_visit' | 'last_visit' | 'address' | 'bucket' | 'website' | 'is_trail' | 'saved'>
+    Pick<
+      Place,
+      | 'first_visit'
+      | 'last_visit'
+      | 'address'
+      | 'bucket'
+      | 'website'
+      | 'is_trail'
+      | 'saved'
+      | 'categories'
+    >
   >;
 
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &

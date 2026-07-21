@@ -1,0 +1,8 @@
+# Hashed assets are immutable — cache them forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Everything else (index.html, the SPA shell) must always revalidate so a new
+# deploy is picked up immediately and never serves a stale HTML → dead-CSS pair.
+/*
+  Cache-Control: no-cache, must-revalidate
