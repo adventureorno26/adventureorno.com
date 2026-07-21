@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types'
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -293,4 +293,51 @@ export async function triggerGeocode(): Promise<{ named: number; considered: num
   });
   if (!res.ok) throw new Error(`Geocode failed (${res.status})`);
   return (await res.json()) as { named: number; considered: number };
+}
+
+/** Run trip auto-detection (drafts suggested trips from photos + Strava). */
+export async function detectTrips(): Promise<{
+  suggested: number;
+  trips: { name: string; start: string; end: string; attached: number }[];
+}> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  if (!token) throw new Error('Not signed in');
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/detect-trips`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`Trip detection failed (${res.status})`);
+  return (await res.json()) as {
+    suggested: number;
+    trips: { name: string; start: string; end: string; attached: number }[];
+  };
+}
+
+/** Confirm a suggested trip (keep it) or reject it (unlink members + delete). */
+export async function resolveSuggestedTrip(id: string, keep: boolean): Promise<void> {
+  if (keep) {
+    const { error } = await supabase
+      .from('places')
+      .update({ suggested: false, saved: true })
+      .eq('id', id);
+    if (error) throw error;
+    return;
+  }
+  // Reject: remove this trip from every member's part_of, then delete the draft.
+  const { data: members } = await supabase
+    .from('places')
+    .select('id, part_of')
+    .contains('part_of', [id]);
+  for (const m of members ?? []) {
+    const next = ((m.part_of as string[] | null) ?? []).filter((x) => x !== id);
+    await supabase.from('places').update({ part_of: next }).eq('id', m.id);
+  }
+  const { error } = await supabase.from('places').delete().eq('id', id);
+  if (error) throw error;
 }
