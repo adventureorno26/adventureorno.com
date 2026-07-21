@@ -1702,11 +1702,11 @@ a {
 .stats-bar .spacer {
   display: none;
 }
-/* Settings gear floats at the BOTTOM-LEFT on every screen size. */
+/* Settings gear — top of the bottom-left stack (above Search your activities). */
 .stats-bar .actions {
   position: fixed;
   left: 12px;
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  bottom: calc(78px + env(safe-area-inset-bottom));
   right: auto;
   top: auto;
   z-index: 30;
@@ -1737,23 +1737,8 @@ a {
   .map-top-row {
     top: calc(48px + env(safe-area-inset-top));
   }
-  /* Bottom-left vertical stack (bottom → top): Search your activities, then the
-     Just-me toggle, then the settings gear on top. */
-  .places-search-btn {
-    left: 12px;
-    bottom: calc(14px + env(safe-area-inset-bottom));
-  }
-  .person-filter {
-    position: fixed;
-    top: auto;
-    left: 12px;
-    bottom: calc(46px + env(safe-area-inset-bottom));
-  }
-  .stats-bar .actions {
-    left: 12px;
-    bottom: calc(78px + env(safe-area-inset-bottom));
-  }
-  /* Keep On This Day out of that bottom-left stack. */
+  /* Bottom-left stack (toggle/search/gear) is set in the base rules for both
+     platforms. On This Day stays out of the way on the small screen. */
   .on-this-day {
     display: none;
   }
@@ -2700,14 +2685,15 @@ textarea {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 14px 10px;
-  border-radius: 12px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
   text-decoration: none;
-  font-weight: 700;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 13px;
 }
 .app-tile:hover {
   background: var(--accent-soft);
@@ -2812,11 +2798,14 @@ textarea {
 }
 
 /* "Just me / Just Josh / Both" filter — top-left of the map. */
+/* Bottom-left vertical stack (both mobile & web), bottom → top:
+   toggle → Search your activities → settings gear. All left-aligned. */
 .person-filter {
-  position: absolute;
-  top: calc(12px + env(safe-area-inset-top));
+  position: fixed;
   left: 12px;
-  z-index: 7;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  top: auto;
+  z-index: 30;
   display: flex;
   align-items: center;
   height: 26px;
@@ -2847,8 +2836,8 @@ textarea {
  * (which sits at left:12, ~50px wide). ⌘K also opens the palette. */
 .places-search-btn {
   position: fixed;
-  left: 46px;
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  left: 12px;
+  bottom: calc(46px + env(safe-area-inset-bottom));
   top: auto;
   height: 26px;
   display: flex;
@@ -2933,8 +2922,9 @@ textarea {
 /* "On this day" memory card — map bottom-left, dismissible. */
 .on-this-day {
   position: absolute;
-  left: 12px;
-  bottom: calc(76px + env(safe-area-inset-bottom)); /* sits above the settings gear */
+  right: 12px;
+  left: auto;
+  bottom: calc(96px + env(safe-area-inset-bottom)); /* bottom-right, above the zoom control */
   z-index: 8;
   display: flex;
   align-items: stretch;
