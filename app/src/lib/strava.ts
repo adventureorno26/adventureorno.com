@@ -12,10 +12,11 @@ const ACTIVITY_COLS =
 // standing rule — see memory.)
 export const STATS_CUTOFF = '2025-12-21';
 
-export async function fetchMileage(): Promise<MileageRow[]> {
-  const { data, error } = await supabase
-    .from('activity_mileage')
-    .select('type, activity_count, meters, miles');
+/** Mileage by type. Pass a profile id for "just that person"; omit for both. */
+export async function fetchMileage(personId?: string | null): Promise<MileageRow[]> {
+  const { data, error } = await supabase.rpc('mileage_by_person', {
+    p_profile: personId ?? null,
+  });
   if (error) throw error;
   return (data ?? []) as MileageRow[];
 }

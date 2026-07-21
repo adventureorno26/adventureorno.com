@@ -6,6 +6,9 @@ import { fetchMileage } from '../lib/strava';
 interface Props {
   places: Place[];
   onFilterCategory: (slug: string | null) => void;
+  // "Just me / Just Josh" filter: scope the stats to that person's contributions.
+  personFilter?: string | null;
+  placePeople?: Map<string, Set<string>>;
 }
 
 // Strava activity type → map filter category.
@@ -55,9 +58,20 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({ places, onFilterCategory }: Props) {
-  // Only saved, non-bucket places count toward stats.
-  const visited = places.filter((p) => !p.bucket && p.saved);
+export default function StatsBar({
+  places,
+  onFilterCategory,
+  personFilter = null,
+  placePeople,
+}: Props) {
+  // Only saved, non-bucket places count — and, when a person filter is on, only
+  // the places that person added / visited / photographed.
+  const visited = places.filter(
+    (p) =>
+      !p.bucket &&
+      p.saved &&
+      (!personFilter || placePeople?.get(p.id)?.has(personFilter)),
+  );
   const countries = uniqueCount(visited.map((p) => p.country));
   const states = uniqueCount(visited.map((p) => p.admin1));
   const [detail, setDetail] = useState<null | 'places' | 'countries' | 'states' | 'miles'>(null);
@@ -82,10 +96,10 @@ export default function StatsBar({ places, onFilterCategory }: Props) {
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
-    fetchMileage()
+    fetchMileage(personFilter)
       .then(setMileage)
       .catch(() => setMileage([]));
-  }, [places.length]); // refresh when data likely changed
+  }, [places.length, personFilter]); // refresh on data change or person toggle
 
   const totalMiles = mileage.reduce((sum, r) => sum + Number(r.miles), 0);
   const animated = useCountUp(totalMiles);

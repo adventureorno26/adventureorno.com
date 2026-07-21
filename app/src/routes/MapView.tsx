@@ -900,7 +900,12 @@ export default function MapView() {
         meId={profile?.id}
       />
 
-      <StatsBar places={places} onFilterCategory={setFilterCat} />
+      <StatsBar
+        places={places}
+        onFilterCategory={setFilterCat}
+        personFilter={personFilter}
+        placePeople={placePeople}
+      />
 
       <div className="map-top-row">
         {canEdit && (
