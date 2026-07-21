@@ -605,25 +605,15 @@ export default function PlacePanel({
       {(() => {
         const isTrail = place.is_trail;
         // Member places: anything marked "part of" this place — a trip's stops,
-        // a trail's trailheads, a place's spots. Each keeps its own map marker;
-        // here they list as this place's visits.
-        const memberRows = allPlaces
+        // a trail's trailheads, a place's spots. Each keeps its own map marker
+        // and lists in its OWN section below — NOT counted as a visit here.
+        const members = allPlaces
           .filter((p) => p.trail_id === place.id)
-          .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''))
-          .map((c) => ({
-            key: `m-${c.id}`,
-            date: c.first_visit
-              ? new Date(c.first_visit + 'T00:00:00').toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : '',
-            sub: c.name,
-            to: `/place/${c.id}`,
-            del: null as string | null,
-          }));
-        const ownRows = isTrail
+          .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
+        const isTripPlace = (place.categories ?? []).includes('trip');
+        const memberLabel = isTripPlace ? 'Places on this trip' : isTrail ? 'Stops' : 'Places here';
+        // Visits = actual times we went to THIS place (its own dated visits/runs).
+        const rows = isTrail
           ? (trailActs ?? []).map((a) => ({
               key: a.id,
               date: fmtRunDate(a.start_date),
@@ -639,10 +629,35 @@ export default function PlacePanel({
               to: `/place/${place.id}/day/${v.start_date}`,
               del: v.id as string | null,
             }));
-        const rows = [...memberRows, ...ownRows];
         const loading = isTrail ? trailActs === null : visits === null;
         return (
           <>
+            {members.length > 0 && (
+              <details className="visits-details" open>
+                <summary className="visits-summary">
+                  {memberLabel} ({members.length})
+                </summary>
+                <div className="visits">
+                  {members.map((c) => (
+                    <div key={c.id} className="visit-row">
+                      <Link className="visit-main" to={`/place/${c.id}`}>
+                        {c.first_visit && (
+                          <span className="visit-date">
+                            {new Date(c.first_visit + 'T00:00:00').toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                          </span>
+                        )}
+                        <span className="muted">{c.name}</span>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
             <details className="visits-details">
               <summary className="visits-summary">
                 Visits{rows.length > 0 ? ` (${rows.length})` : ''}
