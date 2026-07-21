@@ -991,9 +991,9 @@ a {
 }
 
 /* ---------- Mobile safe area (don't hide under the iPhone clock) ---------- */
-/* Stats sit BELOW the Add/search row (which is pinned near the top). */
+/* Stats sit at the TOP; the Add/search row is beneath them (same on web & mobile). */
 .stats-bar {
-  padding-top: calc(108px + env(safe-area-inset-top));
+  padding-top: calc(8px + env(safe-area-inset-top));
 }
 .add-bar {
   top: calc(54px + env(safe-area-inset-top));
@@ -1599,15 +1599,6 @@ a {
   flex-wrap: nowrap;
   pointer-events: auto;
 }
-/* On web, line the stats up with the +Add / search row above them (same width,
-   left & right edges aligned) and spread the pills across it. */
-@media (min-width: 561px) {
-  .stat-row {
-    width: min(420px, calc(100vw - 32px));
-    margin: 0 auto;
-    justify-content: space-between;
-  }
-}
 @media (max-width: 560px) {
   .stat-row {
     gap: 4px;
@@ -1628,11 +1619,10 @@ a {
   position: relative;
 }
 
-/* +Add sits to the LEFT of the search; this row is on TOP, the stats bar below
- * it. Framed to roughly the width of the stat blocks. */
+/* +Add + search — BENEATH the stats bar (both web & mobile). */
 .map-top-row {
   position: absolute;
-  top: calc(52px + env(safe-area-inset-top));
+  top: calc(48px + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -2682,6 +2672,28 @@ textarea {
 .fav-label {
   font-size: 13px;
   font-weight: 600;
+  color: var(--muted);
+}
+/* Settings "Our stats" — same pill look as the map stats. */
+.our-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.our-stats .stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 13px;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.our-stats .stat b {
+  font-size: 15px;
+}
+.our-stats .stat .label {
   color: var(--muted);
 }
 .save-bottom {

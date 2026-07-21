@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
+import {
+  fetchHomeZone,
+  fetchSettingsStats,
+  triggerGeocode,
+  updateHomeZone,
+  type HomeZone,
+  type SettingsStats,
+} from '../lib/data';
 import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 import { importFileActivity, parseActivityFile } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
@@ -228,6 +235,32 @@ function GeocodeCard() {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Our stats — same pill style as the map. National Parks lands with that feature. */
+function OurStatsCard() {
+  const [s, setS] = useState<SettingsStats | null>(null);
+  useEffect(() => {
+    fetchSettingsStats().then(setS).catch(() => setS(null));
+  }, []);
+  if (!s) return null;
+  const pills = [
+    { label: 'Trails Taken', value: s.trails_taken },
+    { label: 'Camping', value: s.camping },
+    { label: 'Dining', value: s.dining },
+    { label: 'Wineries', value: s.winery },
+  ];
+  return (
+    <div className="card">
+      <div className="our-stats">
+        {pills.map((p) => (
+          <div key={p.label} className="stat">
+            <b>{p.value}</b> <span className="label">{p.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Upload Garmin (or any) GPX/TCX activity files — the Strava-limit workaround.
  *  Parses each client-side and imports it, attributed to whoever's signed in. */
 function GarminImportCard() {
@@ -399,6 +432,9 @@ export default function Settings() {
 
       <h2 style={{ marginTop: 28 }}>Account</h2>
       <button onClick={() => void signOut()}>Sign out</button>
+
+      <h2 style={{ marginTop: 28 }}>Our stats</h2>
+      <OurStatsCard />
 
       <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
       <SharedHub />

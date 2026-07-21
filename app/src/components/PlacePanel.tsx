@@ -486,14 +486,6 @@ export default function PlacePanel({
           </div>
         </div>
       )}
-      {canEdit && !place.saved && !place.bucket && (
-        <div className="save-place">
-          <span>Not saved — it won’t show on the map or count until you save.</span>
-          <button className="primary" onClick={() => void patch({ saved: true })}>
-            Save to map
-          </button>
-        </div>
-      )}
 
       {/* Cover-photo framing slider — appears below the title when you tap the
           photo. Sized/coloured like before, just repositioned. */}

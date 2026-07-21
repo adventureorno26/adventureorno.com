@@ -168,6 +168,8 @@ export default function MapView() {
         categories: [tag],
         saved: false,
       });
+      // Add to state so the card renders immediately (no waiting / map click).
+      setPlaces((prev) => [...prev, p]);
       navigate(`/place/${p.id}`);
     } catch {
       setBanner('Could not add — try again.');

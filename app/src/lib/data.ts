@@ -95,6 +95,21 @@ export async function addPlaceToTrail(
   if (error) throw error;
 }
 
+export interface SettingsStats {
+  trails_taken: number;
+  camping: number;
+  dining: number;
+  winery: number;
+}
+
+/** Headline counts for the Settings page (same pill style as the map). */
+export async function fetchSettingsStats(): Promise<SettingsStats | null> {
+  const { data, error } = await supabase.rpc('settings_stats');
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row ?? null) as SettingsStats | null;
+}
+
 export interface MapPerson {
   id: string;
   display_name: string | null;
