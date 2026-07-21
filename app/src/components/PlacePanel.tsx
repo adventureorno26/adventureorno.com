@@ -9,7 +9,6 @@ import {
   fetchMapPeople,
   fetchPlace,
   fetchVisits,
-  mergePlaces,
   updatePlace,
   type MapPerson,
 } from '../lib/data';
@@ -108,7 +107,6 @@ export default function PlacePanel({
   onClose,
   onPlaceChanged,
   onPlaceDeleted,
-  onMerged,
   onAddRoute,
 }: Props) {
   const { profile } = useAuth();
@@ -296,17 +294,15 @@ export default function PlacePanel({
     await patch({ categories: next });
   }
 
-  // Add THIS place into an existing one (this one's photos/visits/activities move
-  // over, then this place is removed) — the "add to existing place" action.
-  async function addToExisting(winnerId: string) {
-    const winner = allPlaces.find((p) => p.id === winnerId);
-    if (!winner) return;
-    if (!confirm(`Add "${place.name || 'this place'}" into "${winner.name}"? This place will be removed.`))
-      return;
+  // Add THIS place as a VISIT/stop of an existing place — NON-destructive: this
+  // place is kept and linked to the chosen one (they can be different stops along
+  // the same trail or trip). Full "shows under the parent" display is coming.
+  async function addToExisting(parentId: string) {
+    const parent = allPlaces.find((p) => p.id === parentId);
+    if (!parent) return;
     try {
-      await mergePlaces(place.id, winnerId);
+      await patch({ trail_id: parentId });
       setMerging(false);
-      onMerged(place.id, winner);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add to that place');
     }
@@ -715,69 +711,65 @@ export default function PlacePanel({
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
 
-      {/* Spots & reviews — grouped by tag, collapsed into a dropdown. */}
-      <details className="spots-details">
-        <summary className="visits-summary">
-          Spots &amp; reviews{spots && spots.length > 0 ? ` (${spots.length})` : ''}
-        </summary>
+      {/* SPOTS AND REVIEWS — heading like Photos and Videos, with a blue add link.
+          Each logged category is a dropdown that opens to its spots. */}
+      <div className="visits-head">
+        <h3 style={{ marginTop: 22 }}>SPOTS AND REVIEWS</h3>
         {canEdit && !addingSpot && (
-          <button className="link-btn" onClick={() => setAddingSpot(true)}>
-            ＋ Add a spot
+          <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
+            + Add a spot
           </button>
         )}
-        {canEdit && addingSpot && (
-          <EntryEditor
-            placeId={place.id}
-            defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
-            onSave={addSpot}
-            onCancel={() => setAddingSpot(false)}
-          />
-        )}
-        {spotGroups.length > 0 ? (
-          <div className="spot-groups">
-            {spotGroups.map((g) => (
-              <div className="spot-group" key={g.key}>
-                <div className="spot-group-head">
-                  {g.label} <span className="label">({g.items.length})</span>
-                </div>
-                {g.items.map((e) => {
-                  const dir = spotDirHref(e);
-                  return (
-                    <div key={e.id} className="spot-row">
-                      <Link
-                        className="spot-item"
-                        to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
+      </div>
+      {canEdit && addingSpot && (
+        <EntryEditor
+          placeId={place.id}
+          defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
+          onSave={addSpot}
+          onCancel={() => setAddingSpot(false)}
+        />
+      )}
+      {spotGroups.length > 0 ? (
+        <div className="spot-groups">
+          {spotGroups.map((g) => (
+            <details className="spot-cat" key={g.key}>
+              <summary className="spot-cat-head">
+                {g.label} <span className="label">({g.items.length})</span>
+              </summary>
+              {g.items.map((e) => {
+                const dir = spotDirHref(e);
+                return (
+                  <div key={e.id} className="spot-row">
+                    <Link
+                      className="spot-item"
+                      to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
+                    >
+                      <span className="spot-title">{e.title}</span>
+                      {e.rating ? (
+                        <span className="spot-rating">{'★'.repeat(e.rating)}</span>
+                      ) : null}
+                    </Link>
+                    {dir && (
+                      <a
+                        className="directions-btn sm spot-dir"
+                        href={dir}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Directions to ${e.address ?? e.title}`}
                       >
-                        <span className="spot-title">{e.title}</span>
-                        {e.rating ? (
-                          <span className="spot-rating">{'★'.repeat(e.rating)}</span>
-                        ) : null}
-                      </Link>
-                      {dir && (
-                        <a
-                          className="directions-btn sm spot-dir"
-                          href={dir}
-                          target="_blank"
-                          rel="noreferrer"
-                          title={`Directions to ${e.address ?? e.title}`}
-                        >
-                          Directions
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        ) : (
-          !addingSpot && (
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
-          )
-        )}
-      </details>
+                        Directions
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </details>
+          ))}
+        </div>
+      ) : (
+        !addingSpot && <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
+      )}
 
-      <h3 style={{ marginTop: 22 }}>Routes here</h3>
       <RouteMiniMap place={place} />
 
       {/* Bottom line: Both of us · Add to existing place · Delete · Save (green). */}

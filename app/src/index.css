@@ -2809,6 +2809,88 @@ textarea {
 .save-btn-green:hover {
   background: #15803d;
 }
+/* "Saved" as a plain white word. */
+.bottom-actions .saved-note {
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Visit rows — thin, single line, blue text, underline only on hover. */
+.visit-row {
+  padding: 6px 10px;
+}
+.visit-row .visit-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--accent);
+  text-decoration: none;
+}
+.visit-row .visit-main:hover {
+  text-decoration: underline;
+}
+.visit-row .visit-main .visit-date,
+.visit-row .visit-main .muted {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* SPOTS AND REVIEWS — blue add link + per-category dropdowns. */
+.add-spot-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.spot-cat > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--accent);
+  padding: 6px 0;
+}
+.spot-cat > summary::-webkit-details-marker {
+  display: none;
+}
+.spot-cat > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+}
+.spot-cat[open] > summary::before {
+  content: '▾ ';
+}
+
+/* Thinner +Add and Activity dropdown pills + the activity filter. */
+.add-menu button,
+.add-submenu button {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+.activity-filter {
+  font-size: 12px !important;
+  padding: 5px 10px !important;
+  margin-bottom: 4px;
+}
+
+/* Smaller "Kind" pill in the spot editor. */
+.kind-select {
+  max-width: 170px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
 
 /* Compact bottom action row: attribution + Add-to-existing + Delete + Save. */
 .bottom-actions {

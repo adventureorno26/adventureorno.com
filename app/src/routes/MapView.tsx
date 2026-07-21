@@ -136,6 +136,7 @@ export default function MapView() {
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [activitySub, setActivitySub] = useState(false);
+  const [activityFilter, setActivityFilter] = useState('');
   const [photoSub, setPhotoSub] = useState(false);
   const addFileRef = useRef<HTMLInputElement | null>(null);
   // Google Photos import is owner-only (Erica), web, and only if configured.
@@ -960,21 +961,34 @@ export default function MapView() {
                 <button onClick={() => setActivitySub((v) => !v)}>Activity</button>
                 {activitySub && (
                   <div className="add-submenu">
-                    {CATEGORIES.map((c) => (
-                      <button key={c.slug} onClick={() => void addTagged(c.slug)}>
-                        {c.label}
-                      </button>
-                    ))}
+                    <input
+                      className="activity-filter"
+                      placeholder="Search…"
+                      autoFocus
+                      value={activityFilter}
+                      onChange={(e) => setActivityFilter(e.target.value)}
+                    />
+                    {[...CATEGORIES]
+                      .sort((a, b) => {
+                        const q = activityFilter.trim().toLowerCase();
+                        if (!q) return 0;
+                        const am = a.label.toLowerCase().startsWith(q) ? 0 : 1;
+                        const bm = b.label.toLowerCase().startsWith(q) ? 0 : 1;
+                        return am - bm;
+                      })
+                      .filter(
+                        (c) =>
+                          !activityFilter.trim() ||
+                          c.label.toLowerCase().includes(activityFilter.trim().toLowerCase()),
+                      )
+                      .map((c) => (
+                        <button key={c.slug} onClick={() => void addTagged(c.slug)}>
+                          {c.label}
+                        </button>
+                      ))}
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    setAddMenuOpen(false);
-                    navigate('/trips');
-                  }}
-                >
-                  Trip
-                </button>
+                <button onClick={() => void addTagged('trip')}>Trip</button>
                 <button
                   onClick={() => {
                     setAddMenuOpen(false);

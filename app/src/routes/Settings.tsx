@@ -439,6 +439,11 @@ export default function Settings() {
       <h2 style={{ marginTop: 28 }}>Our stats</h2>
       <OurStatsCard />
 
+      <h2 style={{ marginTop: 28 }}>Trips</h2>
+      <Link to="/trips">
+        <button>All Our Trips</button>
+      </Link>
+
       <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
       <SharedHub />
 

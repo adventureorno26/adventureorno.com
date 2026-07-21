@@ -25,18 +25,22 @@ export default function BucketList() {
 
   // Group by US state, or by country for everywhere else; both sorted A→Z.
   const groups = useMemo(() => {
-    const map = new Map<string, Place[]>();
+    const map = new Map<string, { items: Place[]; isState: boolean }>();
     for (const p of places ?? []) {
       const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
       const key = isUS ? p.admin1 ?? 'United States' : p.country ?? 'Other';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(p);
+      if (!map.has(key)) map.set(key, { items: [], isState: Boolean(isUS) });
+      map.get(key)!.items.push(p);
     }
+    // US states first (A→Z), then other countries at the bottom (A→Z).
     return [...map.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, items]) => ({
+      .sort((a, b) => {
+        if (a[1].isState !== b[1].isState) return a[1].isState ? -1 : 1;
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([label, g]) => ({
         label,
-        items: items.sort((x, y) => x.name.localeCompare(y.name)),
+        items: g.items.sort((x, y) => x.name.localeCompare(y.name)),
       }));
   }, [places]);
 

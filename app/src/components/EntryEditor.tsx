@@ -83,7 +83,7 @@ export default function EntryEditor({
       </div>
 
       <label>Kind (tags this place so it shows in the tag search)</label>
-      <select value={kind} onChange={(e) => setKind(e.target.value)}>
+      <select className="kind-select" value={kind} onChange={(e) => setKind(e.target.value)}>
         {CATEGORIES.map((c) => (
           <option key={c.slug} value={c.slug}>
             {c.label}
