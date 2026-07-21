@@ -1704,13 +1704,13 @@ a {
   line-height: 1;
   padding: 0;
   border-radius: 50%;
-  background: #12131a;
-  border: 1px solid var(--border-soft);
+  background: #ffffff; /* white so the gear is visible (dark emoji was invisible on dark) */
+  border: 1px solid #d7e0ec;
   box-shadow: 0 6px 18px rgba(2, 8, 23, 0.5);
 }
 .gear-btn:hover {
-  background: #1b1d27;
-  border: 1px solid var(--border-soft);
+  background: #eef3f9;
+  border: 1px solid #d7e0ec;
   transform: rotate(30deg);
 }
 @media (max-width: 560px) {
