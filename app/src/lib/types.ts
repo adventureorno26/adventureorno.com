@@ -35,7 +35,6 @@ export interface Place {
   is_home: boolean;
   saved: boolean; // must be explicitly saved to show on the map / count in stats
   is_trail: boolean; // a linear trail (W&OD, AT, …); runs/hikes group by trailhead
-  trail_id: string | null; // legacy single-parent link (superseded by part_of)
   part_of: string[]; // ids of places this one is "part of" (trips, trails, …)
   bucket: boolean; // want-to-go wishlist place (not yet visited)
   website: string | null; // optional link for a bucket-list place
