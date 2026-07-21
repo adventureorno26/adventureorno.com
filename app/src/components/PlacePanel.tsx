@@ -219,6 +219,33 @@ export default function PlacePanel({
     }
   }
 
+  // Member places ("part of" this one) are spots too — a trip's stops, a trail's
+  // trailheads. Grouped by their tag and shown in SPOTS AND REVIEWS. Each keeps
+  // its own map marker and links to its own card.
+  const memberGroups: { key: string; label: string; items: Place[] }[] = [];
+  {
+    const members = allPlaces
+      .filter((p) => p.trail_id === place.id)
+      .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
+    const byKind = new Map<string, Place[]>();
+    for (const m of members) {
+      const k = (m.categories && m.categories[0]) || 'place';
+      if (!byKind.has(k)) byKind.set(k, []);
+      byKind.get(k)!.push(m);
+    }
+    const order = [...CATEGORIES.map((c) => c.slug), 'place'];
+    for (const k of order) {
+      const items = byKind.get(k);
+      if (items && items.length) {
+        memberGroups.push({
+          key: `mg-${k}`,
+          label: k === 'place' ? 'Places' : categoryReviewLabel(k),
+          items,
+        });
+      }
+    }
+  }
+
   async function submitVisit() {
     const start = vStart;
     const end = vMulti && vEnd ? vEnd : vStart;
@@ -604,15 +631,8 @@ export default function PlacePanel({
           activity days here in the same style as places. */}
       {(() => {
         const isTrail = place.is_trail;
-        // Member places: anything marked "part of" this place — a trip's stops,
-        // a trail's trailheads, a place's spots. Each keeps its own map marker
-        // and lists in its OWN section below — NOT counted as a visit here.
-        const members = allPlaces
-          .filter((p) => p.trail_id === place.id)
-          .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
-        const isTripPlace = (place.categories ?? []).includes('trip');
-        const memberLabel = isTripPlace ? 'Places on this trip' : isTrail ? 'Stops' : 'Places here';
         // Visits = actual times we went to THIS place (its own dated visits/runs).
+        // Member places ("part of" this one) list under SPOTS AND REVIEWS instead.
         const rows = isTrail
           ? (trailActs ?? []).map((a) => ({
               key: a.id,
@@ -632,32 +652,6 @@ export default function PlacePanel({
         const loading = isTrail ? trailActs === null : visits === null;
         return (
           <>
-            {members.length > 0 && (
-              <details className="visits-details" open>
-                <summary className="visits-summary">
-                  {memberLabel} ({members.length})
-                </summary>
-                <div className="visits">
-                  {members.map((c) => (
-                    <div key={c.id} className="visit-row">
-                      <Link className="visit-main" to={`/place/${c.id}`}>
-                        {c.first_visit && (
-                          <span className="visit-date">
-                            {new Date(c.first_visit + 'T00:00:00').toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
-                          </span>
-                        )}
-                        <span className="muted">{c.name}</span>
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
-
             <details className="visits-details">
               <summary className="visits-summary">
                 Visits{rows.length > 0 ? ` (${rows.length})` : ''}
@@ -765,8 +759,39 @@ export default function PlacePanel({
           onCancel={() => setAddingSpot(false)}
         />
       )}
-      {spotGroups.length > 0 ? (
+      {spotGroups.length > 0 || memberGroups.length > 0 ? (
         <div className="spot-groups">
+          {memberGroups.map((g) => (
+            <details className="spot-cat" key={g.key}>
+              <summary className="spot-cat-head">
+                {g.label} <span className="label">({g.items.length})</span>
+              </summary>
+              {g.items.map((m) => {
+                const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
+                return (
+                  <div key={m.id} className="spot-row">
+                    <Link className="spot-item" to={`/place/${m.id}`}>
+                      <span className="spot-title">{m.name}</span>
+                      {m.rating ? (
+                        <span className="spot-rating">{'★'.repeat(m.rating)}</span>
+                      ) : null}
+                    </Link>
+                    {dest && (
+                      <a
+                        className="directions-btn sm spot-dir"
+                        href={`https://maps.apple.com/?daddr=${encodeURIComponent(dest)}&dirflg=d`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Directions to ${m.name}`}
+                      >
+                        Directions
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </details>
+          ))}
           {spotGroups.map((g) => (
             <details className="spot-cat" key={g.key}>
               <summary className="spot-cat-head">
