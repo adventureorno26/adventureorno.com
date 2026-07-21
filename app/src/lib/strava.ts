@@ -46,14 +46,15 @@ export interface ActivityLine {
   owner_profile: string | null; // whose route it is (for the "just me" filter)
 }
 
-/** All activity route geometries (for drawing trails on the main map). Only
- *  activities on/after the stats cutoff appear on the map. */
-export async function fetchActivityLines(): Promise<ActivityLine[]> {
-  const { data, error } = await supabase
+/** Activity route geometries for the map. Both view = on/after the cutoff; a
+ *  single person's view = ALL their routes (their full history). */
+export async function fetchActivityLines(personId?: string | null): Promise<ActivityLine[]> {
+  let query = supabase
     .from('activities')
     .select('id, place_id, type, summary_polyline, owner_profile')
-    .gte('start_date', STATS_CUTOFF)
     .not('summary_polyline', 'is', null);
+  query = personId ? query.eq('owner_profile', personId) : query.gte('start_date', STATS_CUTOFF);
+  const { data, error } = await query;
   if (error) return [];
   return (data ?? []).filter(
     (a): a is ActivityLine => !!(a as ActivityLine).summary_polyline,

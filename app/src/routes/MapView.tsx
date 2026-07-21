@@ -221,12 +221,11 @@ export default function MapView() {
       Run: '#ff8a3d',
       Ride: '#c98bff',
     };
-    void fetchActivityLines()
+    // Both = post-cutoff routes; a person = their full history (pre-cutoff too).
+    void fetchActivityLines(personFilter)
       .then((lines) => {
         const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
         for (const l of lines) {
-          // "Just me / Just Josh" hides the other person's routes.
-          if (personFilter && l.owner_profile !== personFilter) continue;
           let coords: [number, number][] = [];
           try {
             coords = polyline.decode(l.summary_polyline).map(([la, ln]) => [ln, la] as [number, number]);
