@@ -60,6 +60,20 @@ function miStr(meters: number): string {
   return `${(meters / 1609.344).toFixed(1)} mi`;
 }
 
+/** Best-effort city from a place's geocoded address, e.g.
+ *  "5083 Santa Monica Ave, San Diego, California 92107, USA" → "San Diego".
+ *  Falls back to the state, then "Other". */
+function cityOf(p: Pick<Place, 'address' | 'admin1'>): string {
+  const parts = (p.address ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const st = (p.admin1 ?? '').toLowerCase();
+  const stIdx = parts.findIndex((s) => st && s.toLowerCase().startsWith(st));
+  if (stIdx > 0) return parts[stIdx - 1];
+  return p.admin1 || 'Other';
+}
+
 
 // Past-tense verb for a "miles hiked/run/walked/biked" summary.
 const ACTIVITY_VERB: Record<string, string> = {
@@ -199,21 +213,28 @@ export default function PlacePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place.id, place.is_trail, allPlaces]);
 
+  // A trip groups its member places by CITY (with a separate Activities group);
+  // everything else groups them by category alongside its entry-spots.
+  const isTripCard = (place.categories ?? []).includes('trip');
+  const ACTIVITY_SLUGS = ['hiking', 'walking', 'running', 'biking', 'jeeping'];
+  const memberPlaces = allPlaces
+    .filter((p) => (p.part_of ?? []).includes(place.id))
+    .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
+
   // SPOTS AND REVIEWS — ONE dropdown per category, holding BOTH member places
   // ("part of" this one) and entry-spots of that category. So "dining" shows a
   // single "Restaurant Reviews" section listing every reviewed restaurant,
-  // whether it's a linked place or an inline spot. In CATEGORIES order.
+  // whether it's a linked place or an inline spot. In CATEGORIES order. On a trip
+  // card the member places move to the city groups below, leaving only entries.
   const reviewGroups: { key: string; label: string; places: Place[]; entries: Entry[] }[] = [];
   {
-    const members = allPlaces
-      .filter((p) => (p.part_of ?? []).includes(place.id))
-      .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
     const placeByKind = new Map<string, Place[]>();
-    for (const m of members) {
-      const k = (m.categories && m.categories[0]) || 'place';
-      if (!placeByKind.has(k)) placeByKind.set(k, []);
-      placeByKind.get(k)!.push(m);
-    }
+    if (!isTripCard)
+      for (const m of memberPlaces) {
+        const k = (m.categories && m.categories[0]) || 'place';
+        if (!placeByKind.has(k)) placeByKind.set(k, []);
+        placeByKind.get(k)!.push(m);
+      }
     const entryByKind = new Map<string, Entry[]>();
     for (const e of spots ?? []) {
       const k = e.kind || 'note';
@@ -233,6 +254,25 @@ export default function PlacePanel({
         });
       }
     }
+  }
+
+  // Trip only: member places grouped by city, plus an Activities group.
+  const cityGroups: { city: string; places: Place[] }[] = [];
+  const activityMembers: Place[] = [];
+  if (isTripCard) {
+    const byCity = new Map<string, Place[]>();
+    for (const m of memberPlaces) {
+      const prim = (m.categories && m.categories[0]) || '';
+      if (ACTIVITY_SLUGS.includes(prim)) {
+        activityMembers.push(m);
+        continue;
+      }
+      const city = cityOf(m);
+      if (!byCity.has(city)) byCity.set(city, []);
+      byCity.get(city)!.push(m);
+    }
+    for (const [city, ps] of [...byCity.entries()].sort((a, b) => a[0].localeCompare(b[0])))
+      cityGroups.push({ city, places: ps.sort((a, b) => a.name.localeCompare(b.name)) });
   }
 
   async function submitVisit() {
@@ -837,6 +877,59 @@ export default function PlacePanel({
           onCancel={() => setAddingSpot(false)}
         />
       )}
+      {isTripCard && (cityGroups.length > 0 || activityMembers.length > 0) && (
+        <div className="spot-groups">
+          {cityGroups.map((g) => (
+            <details className="spot-cat" key={`city-${g.city}`} open>
+              <summary className="spot-cat-head">
+                {g.city} <span className="label">({g.places.length})</span>
+              </summary>
+              {g.places.map((m) => {
+                const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
+                return (
+                  <div key={m.id} className="spot-row">
+                    <Link className="spot-item" to={`/place/${m.id}`}>
+                      <span className="spot-title">{m.name}</span>
+                      {m.rating ? (
+                        <span className="spot-rating">{'★'.repeat(m.rating)}</span>
+                      ) : null}
+                    </Link>
+                    {dest && (
+                      <a
+                        className="directions-btn sm spot-dir"
+                        href={`https://maps.apple.com/?daddr=${encodeURIComponent(dest)}&dirflg=d`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Directions to ${m.name}`}
+                      >
+                        Directions
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </details>
+          ))}
+          {activityMembers.length > 0 && (
+            <details className="spot-cat" open>
+              <summary className="spot-cat-head">
+                Activities <span className="label">({activityMembers.length})</span>
+              </summary>
+              {activityMembers.map((m) => (
+                <div key={m.id} className="spot-row">
+                  <Link className="spot-item" to={`/place/${m.id}`}>
+                    <span className="spot-title">{m.name}</span>
+                    {m.rating ? (
+                      <span className="spot-rating">{'★'.repeat(m.rating)}</span>
+                    ) : null}
+                  </Link>
+                </div>
+              ))}
+            </details>
+          )}
+        </div>
+      )}
+
       {reviewGroups.length > 0 ? (
         <div className="spot-groups">
           {reviewGroups.map((g) => (
@@ -902,7 +995,11 @@ export default function PlacePanel({
           ))}
         </div>
       ) : (
-        !addingSpot && <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
+        !addingSpot &&
+        cityGroups.length === 0 &&
+        activityMembers.length === 0 && (
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
+        )
       )}
 
       <RouteMiniMap place={place} />

@@ -27,7 +27,16 @@ export const CATEGORIES: Category[] = [
   { slug: 'brewery', label: 'Brewery', icon: '🍺', color: '#ca8a04', review: 'Brewery Reviews' },
   { slug: 'viewpoint', label: 'Viewpoint', icon: '⛰️', color: '#64748b', review: 'Viewpoint Reviews' },
   { slug: 'stay', label: 'Stay', icon: '🏨', color: '#6366f1', review: 'Stay Reviews' },
+  // Container kinds — a place that holds other places (its members via part_of).
+  // No icon (per Erica). A Trip has dates; a Trail is a route.
+  { slug: 'trip', label: 'Trip', icon: '', color: '#ec4899', review: 'Trip Notes' },
+  { slug: 'trail', label: 'Trail', icon: '', color: '#0d9488', review: 'Trail Notes' },
 ];
+
+// Container kinds: places that group other places rather than being a single spot.
+export const CONTAINER_SLUGS = ['trip', 'trail'] as const;
+export const isContainerSlug = (slug: string): boolean =>
+  (CONTAINER_SLUGS as readonly string[]).includes(slug);
 
 export const categoryColor = (slug: string): string =>
   CATEGORIES.find((c) => c.slug === slug)?.color ?? '#38bdf8';

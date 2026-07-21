@@ -292,13 +292,9 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     if (day) {
       pushDayGroups(withIdx, photoGroups); // day view: this one day
     } else {
-      // Place card: ONE carousel, all photos in date order (oldest → newest).
-      const sorted = [...withIdx].sort((a, b) =>
-        (a.photo.taken_at ?? a.photo.created_at ?? '').localeCompare(
-          b.photo.taken_at ?? b.photo.created_at ?? '',
-        ),
-      );
-      photoGroups.push({ key: 'all', label: '', items: sorted });
+      // Every place/trip/trail card: ONE horizontal scrollable row of all photos,
+      // newest first. `list` (and thus withIdx) is already sorted newest → oldest.
+      photoGroups.push({ key: 'all', label: '', items: withIdx });
     }
   }
 

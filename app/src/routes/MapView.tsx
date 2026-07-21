@@ -28,7 +28,13 @@ import {
   type PlaceCount,
 } from '../lib/strava';
 import { haversineMeters } from '../lib/geo';
-import { CATEGORIES, categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
+import {
+  CATEGORIES,
+  categoryColor,
+  effectiveCategories,
+  isContainerSlug,
+  primaryCategory,
+} from '../lib/categories';
 import type { Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import StatsBar from '../components/StatsBar';
@@ -172,6 +178,9 @@ export default function MapView() {
         lat: c?.lat ?? 39.5,
         lng: c?.lng ?? -98.5,
         categories: [tag],
+        // A trail container groups hikes/runs by mileage — flag it so its card
+        // uses the trail layout.
+        is_trail: tag === 'trail',
         saved: false,
       });
       // Add to state so the card renders immediately (no waiting / map click).
@@ -1002,8 +1011,9 @@ export default function MapView() {
                       })
                       .filter(
                         (c) =>
-                          !activityFilter.trim() ||
-                          c.label.toLowerCase().includes(activityFilter.trim().toLowerCase()),
+                          !isContainerSlug(c.slug) &&
+                          (!activityFilter.trim() ||
+                            c.label.toLowerCase().includes(activityFilter.trim().toLowerCase())),
                       )
                       .map((c) => (
                         <button key={c.slug} onClick={() => void addTagged(c.slug)}>
@@ -1013,6 +1023,7 @@ export default function MapView() {
                   </div>
                 )}
                 <button onClick={() => void addTagged('trip')}>Trip</button>
+                <button onClick={() => void addTagged('trail')}>Trail</button>
                 <button
                   onClick={() => {
                     setAddMenuOpen(false);
