@@ -292,6 +292,7 @@ function PlacesByStateCard() {
   });
   const stateCount = ordered.filter((g) => g[1].isState).length;
   const countryCount = ordered.filter((g) => !g[1].isState).length;
+  const statePct = Math.round((stateCount / 50) * 100);
 
   return (
     <div className="card">
@@ -299,11 +300,17 @@ function PlacesByStateCard() {
         <summary>Cities &amp; states</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
-            <b>{stateCount}</b> <span className="label">states</span>
+            <b>{stateCount}</b> <span className="label">of 50 states</span>
+          </div>
+          <div className="stat">
+            <b>{statePct}%</b> <span className="label">of the US</span>
           </div>
           <div className="stat">
             <b>{countryCount}</b> <span className="label">countries</span>
           </div>
+        </div>
+        <div className="us-progress" title={`${stateCount} of 50 states`}>
+          <div className="us-progress-fill" style={{ width: `${statePct}%` }} />
         </div>
         {ordered.map(([label, g]) => (
           <details key={label} className="spot-cat">
@@ -321,6 +328,52 @@ function PlacesByStateCard() {
             </div>
           </details>
         ))}
+      </details>
+    </div>
+  );
+}
+
+/** National Parks visited — counts saved places whose name reads like a national
+ *  park / monument / forest, with a dropdown of which ones. */
+function NationalParksCard() {
+  const [places, setPlaces] = useState<Place[] | null>(null);
+  useEffect(() => {
+    fetchPlaces()
+      .then(setPlaces)
+      .catch(() => setPlaces([]));
+  }, []);
+  if (!places) return null;
+
+  const parks = places
+    .filter(
+      (p) =>
+        p.saved &&
+        !p.bucket &&
+        /national (park|monument|forest|seashore|recreation area|historic)/i.test(p.name),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div className="card">
+      <details className="stats-dropdown">
+        <summary>National Parks &amp; public lands</summary>
+        <div className="our-stats" style={{ marginBottom: 10 }}>
+          <div className="stat">
+            <b>{parks.length}</b> <span className="label">visited</span>
+          </div>
+        </div>
+        {parks.length === 0 ? (
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>None logged yet.</p>
+        ) : (
+          <div className="visit-list">
+            {parks.map((p) => (
+              <Link key={p.id} className="visit-row" to={`/place/${p.id}`}>
+                <span className="visit-main">{p.name}</span>
+                {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
+              </Link>
+            ))}
+          </div>
+        )}
       </details>
     </div>
   );
@@ -501,6 +554,7 @@ export default function Settings() {
       <h2 style={{ marginTop: 28 }}>Our stats</h2>
       <OurStatsCard />
       <PlacesByStateCard />
+      <NationalParksCard />
 
       <h2 style={{ marginTop: 28 }}>Trips</h2>
       <Link to="/trips">

@@ -74,11 +74,6 @@ function parseCity(address: string | null, admin1: string | null): string | null
   return stIdx > 0 ? parts[stIdx - 1] : null;
 }
 
-/** The place's city — the stored column, else parsed, else the state, else "Other". */
-function cityOf(p: Pick<Place, 'address' | 'admin1' | 'city'>): string {
-  if (p.city && p.city.trim()) return p.city.trim();
-  return parseCity(p.address, p.admin1) || p.admin1 || 'Other';
-}
 
 
 // Past-tense verb for a "miles hiked/run/walked/biked" summary.
@@ -292,6 +287,9 @@ export default function PlacePanel({
   const cityGroups: { city: string; places: Place[] }[] = [];
   const activityMembers: Place[] = [];
   if (isTripCard) {
+    // Spots without a resolvable city bucket under the trip's own location (its
+    // city or name) instead of "Other" or each under their own name.
+    const tripCity = place.city?.trim() || place.name?.trim() || 'This trip';
     const byCity = new Map<string, Place[]>();
     for (const m of memberPlaces) {
       const prim = (m.categories && m.categories[0]) || '';
@@ -299,7 +297,8 @@ export default function PlacePanel({
         activityMembers.push(m);
         continue;
       }
-      const city = cityOf(m);
+      const city =
+        m.city?.trim() || parseCity(m.address, m.admin1) || m.admin1?.trim() || tripCity;
       if (!byCity.has(city)) byCity.set(city, []);
       byCity.get(city)!.push(m);
     }

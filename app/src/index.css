@@ -2966,6 +2966,18 @@ textarea {
   width: auto;
   margin: 0;
 }
+.us-progress {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.us-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--grad);
+}
 .spot-cat > summary {
   cursor: pointer;
   list-style: none;
