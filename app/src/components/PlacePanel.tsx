@@ -1043,6 +1043,24 @@ export default function PlacePanel({
           </select>
         </div>
       )}
+
+      {/* Save at the very bottom — unsaved places don't stay on the map. */}
+      {canEdit && !place.bucket && (
+        <div className="save-bottom">
+          {place.saved ? (
+            <span className="saved-note">Saved — this place shows on the map.</span>
+          ) : (
+            <>
+              <button className="primary save-btn" onClick={() => void patch({ saved: true })}>
+                Save this place
+              </button>
+              <span className="unsaved-note">
+                Not saved yet — unsaved places disappear from the map.
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </aside>
   );
 }
