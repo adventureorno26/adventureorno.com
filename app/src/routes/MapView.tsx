@@ -13,6 +13,7 @@ import {
 import {
   createPlace,
   deletePlace,
+  fetchFog,
   fetchMapPeople,
   fetchMapProjection,
   fetchPlaces,
@@ -48,6 +49,26 @@ import SearchPalette from '../components/SearchPalette';
 import MemoryBanner from '../components/MemoryBanner';
 
 const SOURCE_ID = 'places';
+
+type MapLayer = 'fog' | 'heat' | 'none';
+
+// A world-covering polygon with the revealed areas punched out as holes — the fog
+// is everything NOT revealed. Each revealed polygon's exterior ring becomes a hole.
+function inverseFog(mp: GeoJSON.MultiPolygon | null): GeoJSON.Feature<GeoJSON.Polygon> {
+  const world = [
+    [-180, -85],
+    [180, -85],
+    [180, 85],
+    [-180, 85],
+    [-180, -85],
+  ];
+  const holes = (mp?.coordinates ?? []).map((poly) => poly[0]);
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Polygon', coordinates: [world, ...holes] },
+  };
+}
 
 // A place's effective cover photo — its own, or (for a trail) a trailhead's.
 function effectiveCover(p: Place, all: Place[]): string | null {
@@ -162,7 +183,10 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
-  const [heatOn, setHeatOn] = useState(false);
+  const [mapLayer, setMapLayer] = useState<MapLayer>(
+    () => (localStorage.getItem('aon_map_layer') as MapLayer) || 'none',
+  );
+  const fogLoaded = useRef(false);
   // "Just me / Just Josh / Both" filter (null = both).
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [people, setPeople] = useState<MapPerson[]>([]);
@@ -352,6 +376,31 @@ export default function MapView() {
           if (proj === 'globe') map.setProjection({ type: 'globe' });
         })
         .catch(() => undefined);
+
+      // Fog of war — two fills (soft edge + crisp core), above basemap, below all
+      // routes/markers. Hidden until the Fog layer is selected.
+      map.addSource('fog-soft', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addSource('fog-crisp', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'fog-soft',
+        type: 'fill',
+        source: 'fog-soft',
+        layout: { visibility: 'none' },
+        paint: { 'fill-color': '#05070d', 'fill-opacity': 0.55 },
+      });
+      map.addLayer({
+        id: 'fog-crisp',
+        type: 'fill',
+        source: 'fog-crisp',
+        layout: { visibility: 'none' },
+        paint: { 'fill-color': '#05070d', 'fill-opacity': 0.3 },
+      });
 
       // Trail/route lines render UNDER the place markers; tap a line to open its
       // place card (rename / merge / reassign there).
@@ -638,19 +687,43 @@ export default function MapView() {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);
 
-  // Heatmap toggle: show the heat layer and dim the individual markers.
+  // Layers control (Fog / Heat / none): toggle the fog + heat layers and dim the
+  // markers under the heatmap. Fog data is fetched lazily the first time it's on.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    map.setLayoutProperty('place-heat', 'visibility', heatOn ? 'visible' : 'none');
-    const dim = heatOn ? 0.2 : 1;
+    localStorage.setItem('aon_map_layer', mapLayer);
+
+    if (mapLayer === 'fog' && !fogLoaded.current) {
+      fogLoaded.current = true;
+      void fetchFog()
+        .then(({ crisp, soft }) => {
+          (map.getSource('fog-crisp') as GeoJSONSource | undefined)?.setData({
+            type: 'FeatureCollection',
+            features: [inverseFog(crisp)],
+          });
+          (map.getSource('fog-soft') as GeoJSONSource | undefined)?.setData({
+            type: 'FeatureCollection',
+            features: [inverseFog(soft)],
+          });
+        })
+        .catch(() => undefined);
+    }
+
+    const vis = (id: string, on: boolean) =>
+      map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+    vis('fog-soft', mapLayer === 'fog');
+    vis('fog-crisp', mapLayer === 'fog');
+    vis('place-heat', mapLayer === 'heat');
+
+    const dim = mapLayer === 'heat' ? 0.2 : 1;
     const props: [string, string][] = [
       ['place-dots', 'circle-opacity'],
       ['place-glyphs', 'text-opacity'],
       ['place-photos', 'icon-opacity'],
     ];
     for (const [id, prop] of props) if (map.getLayer(id)) map.setPaintProperty(id, prop, dim);
-  }, [heatOn, ready]);
+  }, [mapLayer, ready]);
 
   // Deep link: /?cat=dining (tapping a category on a card) → filter the map to
   // that category and zoom to fit those photo-pins.
@@ -1129,13 +1202,24 @@ export default function MapView() {
 
       <StatsBar places={places} onFilterCategory={setFilterCat} personFilter={personFilter} />
 
-      <button
-        className={`heat-btn ${heatOn ? 'on' : ''}`}
-        onClick={() => setHeatOn((v) => !v)}
-        title="Heatmap of everywhere we've been"
-      >
-        Heatmap
-      </button>
+      <div className="layers-control">
+        {(['fog', 'heat', 'none'] as const).map((l) => (
+          <button
+            key={l}
+            className={mapLayer === l ? 'on' : ''}
+            onClick={() => setMapLayer(l)}
+            title={
+              l === 'fog'
+                ? 'Fog of war — dim everywhere we haven’t been'
+                : l === 'heat'
+                  ? 'Heatmap of everywhere we’ve been'
+                  : 'No overlay'
+            }
+          >
+            {l === 'fog' ? 'Fog' : l === 'heat' ? 'Heat' : 'None'}
+          </button>
+        ))}
+      </div>
 
       <div className="map-top-row">
         {canEdit && (

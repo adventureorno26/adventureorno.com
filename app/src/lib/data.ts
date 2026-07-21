@@ -277,6 +277,16 @@ export async function updateHomeZone(zone: HomeZone): Promise<void> {
   if (error) throw error;
 }
 
+/** Fog of war: the revealed area (crisp 10km + soft 25km) as GeoJSON geometries. */
+export async function fetchFog(): Promise<{
+  crisp: GeoJSON.MultiPolygon | null;
+  soft: GeoJSON.MultiPolygon | null;
+}> {
+  const { data } = await supabase.rpc('revealed_area_geojson');
+  const d = data as { crisp?: GeoJSON.MultiPolygon; soft?: GeoJSON.MultiPolygon } | null;
+  return { crisp: d?.crisp ?? null, soft: d?.soft ?? null };
+}
+
 export type MapProjection = 'globe' | 'mercator';
 
 /** The map projection flag (settings.map_projection). Defaults to globe. */
