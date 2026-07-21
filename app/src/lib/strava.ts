@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
-  'id, strava_id, type, name, distance, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead';
+  'id, strava_id, type, name, distance, elevation_gain, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead';
 
 // Stats + map trails only reflect activities on/after this date. Older Strava
 // history stays in the DB (visits/day views), it just doesn't count. (Erica's

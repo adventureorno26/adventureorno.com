@@ -609,7 +609,13 @@ export default function PlacePanel({
           </span>
         )}
         {place.is_trail && trailMilesSummary(trailMiles) && (
-          <span className="trail-miles">{trailMilesSummary(trailMiles)}</span>
+          <span className="trail-miles">
+            {trailMilesSummary(trailMiles)}
+            {(() => {
+              const gainM = (trailActs ?? []).reduce((s, a) => s + (a.elevation_gain ?? 0), 0);
+              return gainM > 0 ? ` · ${Math.round(gainM * 3.28084).toLocaleString()} ft climbed` : '';
+            })()}
+          </span>
         )}
       </div>
 

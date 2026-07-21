@@ -139,6 +139,7 @@ export interface Activity {
   type: string; // Hike / Walk / Run / Ride / ...
   name: string | null;
   distance: number; // meters
+  elevation_gain: number | null; // meters (from Strava total_elevation_gain)
   moving_time: number | null; // seconds
   elapsed_time: number | null;
   start_date: string | null;
