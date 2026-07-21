@@ -46,7 +46,9 @@ const SOURCE_ID = 'places';
 function effectiveCover(p: Place, all: Place[]): string | null {
   if (p.cover_photo_id) return p.cover_photo_id;
   if (p.is_trail)
-    return all.find((x) => x.trail_id === p.id && x.cover_photo_id)?.cover_photo_id ?? null;
+    return (
+      all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id)?.cover_photo_id ?? null
+    );
   return null;
 }
 

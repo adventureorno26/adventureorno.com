@@ -12,6 +12,7 @@ import {
   uploadPhoto,
 } from '../lib/photos';
 import { updatePlace } from '../lib/data';
+import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
 import type { Photo, Place, Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
@@ -83,8 +84,20 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }
 
   const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
+  const canGoogle = profile?.role === 'owner' && googlePhotosEnabled();
   const canDelete = (p: Photo): boolean =>
     profile?.role === 'owner' || p.uploaded_by === profile?.id;
+
+  // Import straight from Google Photos → File[] → the normal upload path.
+  async function addFromGoogle() {
+    try {
+      const files = await pickFromGooglePhotos((s) => setNote(s));
+      setNote(null);
+      if (files.length) await upload(files, true);
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Google Photos import failed.');
+    }
+  }
 
   async function upload(files: File[], override: boolean) {
     if (files.length === 0) return;
@@ -321,6 +334,17 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
             }}
           />
         </div>
+      )}
+
+      {canGoogle && (
+        <button
+          className="link-btn"
+          style={{ marginTop: 6 }}
+          disabled={busy}
+          onClick={() => void addFromGoogle()}
+        >
+          ＋ Add from Google Photos
+        </button>
       )}
 
       {note && (

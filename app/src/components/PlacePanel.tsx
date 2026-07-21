@@ -184,7 +184,9 @@ export default function PlacePanel({
     fetchActivitiesForPlace(place.id)
       .then((rows) => active && setTrailActs(rows))
       .catch(() => active && setTrailActs([]));
-    const memberIds = allPlaces.filter((p) => p.trail_id === place.id).map((p) => p.id);
+    const memberIds = allPlaces
+      .filter((p) => (p.part_of ?? []).includes(place.id))
+      .map((p) => p.id);
     fetchMileageForPlaces([place.id, ...memberIds])
       .then((m) => active && setTrailMiles(m))
       .catch(() => undefined);
@@ -223,7 +225,7 @@ export default function PlacePanel({
   const memberGroups: { key: string; label: string; items: Place[] }[] = [];
   {
     const members = allPlaces
-      .filter((p) => p.trail_id === place.id)
+      .filter((p) => (p.part_of ?? []).includes(place.id))
       .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
     const byKind = new Map<string, Place[]>();
     for (const m of members) {
@@ -322,13 +324,17 @@ export default function PlacePanel({
   // Add THIS place as a VISIT/stop of an existing place — NON-destructive: this
   // place is kept and linked to the chosen one (they can be different stops along
   // the same trail or trip). Full "shows under the parent" display is coming.
-  // Non-destructive: mark this place as "part of" the chosen one (or clear it).
-  // The place keeps its own marker; it just lists under the parent's visits.
-  async function addToExisting(parentId: string) {
-    if (parentId && !allPlaces.find((p) => p.id === parentId)) return;
+  // Add/remove this place from a container's membership. A place can be part of
+  // several places at once (e.g. a trail AND a trip). Non-destructive — the place
+  // keeps its own marker and just lists under each container it belongs to.
+  async function togglePartOf(parentId: string) {
+    if (!parentId) return;
+    const cur = place.part_of ?? [];
+    const next = cur.includes(parentId)
+      ? cur.filter((id) => id !== parentId)
+      : [...cur, parentId];
     try {
-      await patch({ trail_id: parentId || null });
-      setMerging(false);
+      await patch({ part_of: next });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update that place');
     }
@@ -854,14 +860,41 @@ export default function PlacePanel({
       )}
       {merging && (
         <div className="entry">
+          {(place.part_of ?? []).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {(place.part_of ?? []).map((id) => {
+                const par = allPlaces.find((p) => p.id === id);
+                if (!par) return null;
+                return (
+                  <span key={id} className="cat-chip">
+                    {par.name}
+                    <button
+                      className="cat-chip-x"
+                      title={`Remove from ${par.name}`}
+                      onClick={() => void togglePartOf(id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <select
             className="kind-select"
-            value={place.trail_id ?? ''}
-            onChange={(e) => void addToExisting(e.target.value)}
+            value=""
+            onChange={(e) => e.target.value && void togglePartOf(e.target.value)}
           >
             <option value="">Select…</option>
             {allPlaces
-              .filter((p) => p.id !== place.id)
+              // Only offer top-level containers — not places already part of
+              // something, not this place, not ones already chosen.
+              .filter(
+                (p) =>
+                  p.id !== place.id &&
+                  (p.part_of ?? []).length === 0 &&
+                  !(place.part_of ?? []).includes(p.id),
+              )
               .sort((a, b) => a.name.localeCompare(b.name))
               .map((p) => (
                 <option key={p.id} value={p.id}>
