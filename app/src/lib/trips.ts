@@ -14,6 +14,8 @@ export async function fetchTrips(): Promise<Trip[]> {
   const { data, error } = await supabase
     .from('trips')
     .select(TRIP_COLS)
+    // Only trips from Dec 21, 2025 onward (undated drafts still show).
+    .or('start_date.gte.2025-12-21,start_date.is.null')
     .order('start_date', { ascending: false, nullsFirst: false });
   if (error) throw error;
   return (data ?? []) as Trip[];

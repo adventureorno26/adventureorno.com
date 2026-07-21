@@ -72,8 +72,12 @@ function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON
           photo: cover ? 1 : 0,
           icon: cover ? `ph-${cover}` : '',
           color: categoryColor(primary),
-          // White type indicator on no-photo pins (D=Dining, W=Winery, …).
-          glyph: cover || primary === 'default' ? '' : primary.charAt(0).toUpperCase(),
+          // White type indicator on no-photo pins (R=Restaurant, W=Winery, …).
+          // Trails show no letter — their route line already identifies them.
+          glyph:
+            cover || primary === 'default' || primary === 'trail'
+              ? ''
+              : primary.charAt(0).toUpperCase(),
         },
       };
     }),

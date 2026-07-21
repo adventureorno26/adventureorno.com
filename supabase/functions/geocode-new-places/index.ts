@@ -122,6 +122,9 @@ Deno.serve(async (req) => {
           name: geo.name,
           country: geo.country,
           admin1: geo.admin1,
+          // Auto places are named by their locality, so that's their city too
+          // (used for trip grouping).
+          city: geo.name,
           needs_geocode: false,
           geocoded_at: new Date().toISOString(),
         }

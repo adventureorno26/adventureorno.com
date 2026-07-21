@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
 import { fetchMileage } from '../lib/strava';
-import { fetchItemCounts } from '../lib/data';
+import { fetchAllEntries } from '../lib/data';
 
 interface Props {
   places: Place[];
@@ -71,15 +71,32 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
   const closeDetail = () => setDetail(null);
 
   // Trails + Spots + Places all count. Trails/places are already in `visited`;
-  // add the spots (entries). Visits are NOT counted (they're repeat trips to a
-  // place already counted).
-  const [extra, setExtra] = useState(0);
+  // spots (entries) add to the total AND the drill-down list. Visits are NOT
+  // counted (they're repeat trips to a place already counted).
+  const [spots, setSpots] = useState<{ id: string; place_id: string; title: string }[]>([]);
   useEffect(() => {
-    fetchItemCounts()
-      .then((c) => setExtra(c.entries))
-      .catch(() => setExtra(0));
+    fetchAllEntries()
+      .then((rows) => setSpots(rows.map((r) => ({ id: r.id, place_id: r.place_id, title: r.title }))))
+      .catch(() => setSpots([]));
   }, [places.length]);
-  const placesTotal = visited.length + extra;
+  const placesTotal = visited.length + spots.length;
+
+  // Combined drill-down: every place AND every spot, alphabetical.
+  const placeName = (id: string) => places.find((p) => p.id === id)?.name ?? '';
+  const combinedList = [
+    ...placeList.map((p) => ({
+      id: p.id,
+      label: p.name,
+      sub: p.admin1 ?? '',
+      to: `/place/${p.id}`,
+    })),
+    ...spots.map((s) => ({
+      id: s.id,
+      label: s.title,
+      sub: placeName(s.place_id),
+      to: `/place/${s.place_id}`,
+    })),
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
@@ -112,10 +129,10 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
           </div>
           <div className="stat-detail-list">
             {detail === 'places' &&
-              placeList.map((p) => (
-                <Link key={p.id} to={`/place/${p.id}`} onClick={closeDetail}>
-                  {p.name}
-                  {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
+              combinedList.map((it) => (
+                <Link key={it.id} to={it.to} onClick={closeDetail}>
+                  {it.label || 'Untitled'}
+                  {it.sub ? <span className="label"> · {it.sub}</span> : null}
                 </Link>
               ))}
             {detail === 'miles' &&
