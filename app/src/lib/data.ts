@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types'
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, trail_id, part_of, bucket, website, categories, activity_categories, cover_pos_y, address, solo_profile, favorite, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, trail_id, part_of, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -41,6 +41,7 @@ export async function updatePlace(
     review?: string | null;
     categories?: string[];
     address?: string | null;
+    city?: string | null;
     bucket?: boolean;
     website?: string | null;
     is_trail?: boolean;
@@ -104,6 +105,16 @@ export interface SettingsStats {
 }
 
 /** Headline counts for the Settings page (same pill style as the map). */
+/** Counts of spots (entries) and visits — folded into the "Places" total so it
+ *  reflects every spot, visit, and place we've logged. */
+export async function fetchItemCounts(): Promise<{ entries: number; visits: number }> {
+  const [e, v] = await Promise.all([
+    supabase.from('entries').select('*', { count: 'exact', head: true }),
+    supabase.from('visits').select('*', { count: 'exact', head: true }),
+  ]);
+  return { entries: e.count ?? 0, visits: v.count ?? 0 };
+}
+
 export async function fetchSettingsStats(): Promise<SettingsStats | null> {
   const { data, error } = await supabase.rpc('settings_stats');
   if (error) return null;

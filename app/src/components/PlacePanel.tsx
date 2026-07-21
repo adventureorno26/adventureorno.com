@@ -60,18 +60,23 @@ function miStr(meters: number): string {
   return `${(meters / 1609.344).toFixed(1)} mi`;
 }
 
-/** Best-effort city from a place's geocoded address, e.g.
- *  "5083 Santa Monica Ave, San Diego, California 92107, USA" → "San Diego".
- *  Falls back to the state, then "Other". */
-function cityOf(p: Pick<Place, 'address' | 'admin1'>): string {
-  const parts = (p.address ?? '')
+/** Parse the city from a geocoded address — the token just before the state, e.g.
+ *  "5083 Santa Monica Ave, San Diego, California 92107" → "San Diego". Null if it
+ *  can't be found. */
+function parseCity(address: string | null, admin1: string | null): string | null {
+  const parts = (address ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const st = (p.admin1 ?? '').toLowerCase();
+  const st = (admin1 ?? '').toLowerCase();
   const stIdx = parts.findIndex((s) => st && s.toLowerCase().startsWith(st));
-  if (stIdx > 0) return parts[stIdx - 1];
-  return p.admin1 || 'Other';
+  return stIdx > 0 ? parts[stIdx - 1] : null;
+}
+
+/** The place's city — the stored column, else parsed, else the state, else "Other". */
+function cityOf(p: Pick<Place, 'address' | 'admin1' | 'city'>): string {
+  if (p.city && p.city.trim()) return p.city.trim();
+  return parseCity(p.address, p.admin1) || p.admin1 || 'Other';
 }
 
 
@@ -142,7 +147,8 @@ export default function PlacePanel({
   const [error, setError] = useState<string | null>(null);
 
   const [review, setReview] = useState(place.review ?? '');
-  const [favorite, setFavorite] = useState(place.favorite ?? '');
+  const [favOpen, setFavOpen] = useState(false);
+  const [favInput, setFavInput] = useState('');
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [editingAddress, setEditingAddress] = useState(false);
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
@@ -154,7 +160,6 @@ export default function PlacePanel({
 
   useEffect(() => {
     setReview(place.review ?? '');
-    setFavorite(place.favorite ?? '');
     setName(place.name);
     setCoverPos(place.cover_pos_y ?? 50);
   }, [place]);
@@ -334,13 +339,17 @@ export default function PlacePanel({
       return;
     }
     setEditingAddress(false);
+    const newAddress = full.address ?? full.label ?? place.address;
+    const newAdmin1 = full.admin1 ?? place.admin1;
     await patch({
       lat: full.lat,
       lng: full.lng,
-      admin1: full.admin1 ?? place.admin1,
+      admin1: newAdmin1,
       country: full.country ?? place.country,
       // Prefer the full address; fall back to the searched label if no street addr.
-      address: full.address ?? full.label ?? place.address,
+      address: newAddress,
+      // Derive the city from the new address so trip grouping stays accurate.
+      city: parseCity(newAddress, newAdmin1),
     });
   }
 
@@ -486,6 +495,19 @@ export default function PlacePanel({
             <div className="hero-rating">{ratingEl}</div>
             <h2 className="title-with-rating">{titleEl}</h2>
           </div>
+          {/* Framing slider overlaid on the bottom of the photo when you tap it. */}
+          {canEdit && adjustCover && (
+            <input
+              className="cover-pos-slider"
+              type="range"
+              min={0}
+              max={100}
+              value={coverPos}
+              onChange={(e) => setCoverPos(Number(e.target.value))}
+              onPointerUp={() => void patch({ cover_pos_y: coverPos })}
+              onKeyUp={() => void patch({ cover_pos_y: coverPos })}
+            />
+          )}
         </div>
       ) : (
         <div className="panel-head">
@@ -499,21 +521,6 @@ export default function PlacePanel({
             </button>
           </div>
         </div>
-      )}
-
-      {/* Cover-photo framing slider — appears below the title when you tap the
-          photo. Sized/coloured like before, just repositioned. */}
-      {hasHero && canEdit && adjustCover && (
-        <input
-          className="cover-pos-slider"
-          type="range"
-          min={0}
-          max={100}
-          value={coverPos}
-          onChange={(e) => setCoverPos(Number(e.target.value))}
-          onPointerUp={() => void patch({ cover_pos_y: coverPos })}
-          onKeyUp={() => void patch({ cover_pos_y: coverPos })}
-        />
       )}
 
       {/* Address line — the full address (tap for Directions) with an "edit" that
@@ -546,10 +553,11 @@ export default function PlacePanel({
         )}
       </div>
 
-      {/* Edit tags — under the region line, above the tag chips. */}
+      {/* Tags — always visible. Tap a pill to toggle it; selected pills stay
+          highlighted (no separate chip list). Includes Trip/Trail so any card,
+          even one added from a photo, can be marked as a trip or trail. */}
       {canEdit && (
-        <details className="cat-edit">
-          <summary>Edit tags</summary>
+        <div className="cat-edit">
           <div className="cat-picker">
             {CATEGORIES.map((c) => {
               const on = (place.categories ?? []).includes(c.slug);
@@ -564,7 +572,7 @@ export default function PlacePanel({
               );
             })}
           </div>
-        </details>
+        </div>
       )}
 
       {(place.website || (canEdit && place.bucket)) && (
@@ -587,31 +595,18 @@ export default function PlacePanel({
 
       {error && <div className="banner">{error}</div>}
 
-      {/* Category tags — above the review box. Tap × to remove a tag you added. */}
-      <div className="cats">
-        {effectiveCategories(place).map((slug) => {
-          const removable = canEdit && (place.categories ?? []).includes(slug);
-          return (
+      {/* Read-only tag chips for viewers (editors see the highlighted picker). */}
+      {!canEdit && effectiveCategories(place).length > 0 && (
+        <div className="cats">
+          {effectiveCategories(place).map((slug) => (
             <span key={slug} className="cat-chip" title={`Show all ${categoryLabel(slug)} on the map`}>
               <Link className="cat-chip-link" to={`/?cat=${slug}`}>
                 {categoryIcon(slug)} {categoryLabel(slug)}
               </Link>
-              {removable && (
-                <button
-                  className="cat-chip-x"
-                  title={`Remove ${categoryLabel(slug)} tag`}
-                  onClick={() => void toggleCat(slug)}
-                >
-                  ×
-                </button>
-              )}
             </span>
-          );
-        })}
-        {effectiveCategories(place).length === 0 && (
-          <span style={{ color: 'var(--muted)', fontSize: 12 }}>No tags yet</span>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Overall review (rating lives next to the title; tags are above). */}
       {canEdit ? (
@@ -635,45 +630,96 @@ export default function PlacePanel({
         place.review && <p className="body">{place.review}</p>
       )}
 
-      {/* Category-specific favorite: wines (winery) / beer (brewery). Meal is
-          intentionally excluded from the main card. */}
+      {/* Winery → favorite wines, brewery → favorite beer. A small blue link opens
+          an editable list (stored newline-separated in `favorite`). */}
       {(() => {
         const cats = effectiveCategories(place);
-        const favLabel = cats.includes('winery')
-          ? 'Favorite wines'
-          : cats.includes('brewery')
-            ? 'Favorite beer'
-            : null;
-        if (!favLabel) return null;
+        const isWine = cats.includes('winery');
+        const isBeer = cats.includes('brewery');
+        if (!isWine && !isBeer) return null;
+        const noun = isWine ? 'wines' : 'beer';
+        const one = isWine ? 'wine' : 'beer';
+        const heading = isWine ? 'Favorite wines' : 'Favorite beer';
+        const items = (place.favorite ?? '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const saveItems = (next: string[]) => patch({ favorite: next.join('\n') || null });
+
         if (!canEdit) {
-          return place.favorite ? (
-            <p className="body">
-              <b>{favLabel}:</b> {place.favorite}
-            </p>
+          return items.length ? (
+            <div style={{ marginTop: 12 }}>
+              <label className="fav-label">{heading}</label>
+              <ul className="fav-list">
+                {items.map((it, i) => (
+                  <li key={i}>{it}</li>
+                ))}
+              </ul>
+            </div>
           ) : null;
         }
+
         return (
           <div style={{ marginTop: 12 }}>
-            <label className="fav-label">{favLabel}</label>
-            <div className="field-row" style={{ marginTop: 4 }}>
-              <input
-                value={favorite}
-                placeholder={favLabel}
-                onChange={(e) => setFavorite(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void patch({ favorite: favorite.trim() || null });
-                }}
-              />
-              {favorite !== (place.favorite ?? '') && (
+            {items.length > 0 && (
+              <>
+                <label className="fav-label">{heading}</label>
+                <ul className="fav-list">
+                  {items.map((it, i) => (
+                    <li key={i}>
+                      <span>{it}</span>
+                      <button
+                        className="fav-del"
+                        title="Remove"
+                        onClick={() => void saveItems(items.filter((_, j) => j !== i))}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {favOpen ? (
+              <div className="field-row" style={{ marginTop: 4 }}>
+                <input
+                  autoFocus
+                  value={favInput}
+                  placeholder={`Add a ${one}…`}
+                  onChange={(e) => setFavInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && favInput.trim()) {
+                      void saveItems([...items, favInput.trim()]);
+                      setFavInput('');
+                    }
+                  }}
+                />
                 <button
                   className="primary"
                   style={{ flex: 'none' }}
-                  onClick={() => void patch({ favorite: favorite.trim() || null })}
+                  disabled={!favInput.trim()}
+                  onClick={() => {
+                    void saveItems([...items, favInput.trim()]);
+                    setFavInput('');
+                  }}
                 >
-                  Save
+                  Add
                 </button>
-              )}
-            </div>
+                <button
+                  style={{ flex: 'none' }}
+                  onClick={() => {
+                    setFavOpen(false);
+                    setFavInput('');
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <button className="add-spot-link" onClick={() => setFavOpen(true)}>
+                + {items.length ? `Add another ${one}` : `Add your favorite ${noun}`}
+              </button>
+            )}
           </div>
         );
       })()}

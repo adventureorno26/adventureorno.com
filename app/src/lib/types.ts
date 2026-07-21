@@ -26,6 +26,7 @@ export interface Place {
   cover_photo_id: string | null;
   cover_pos_y: number; // 0-100, vertical focal point for the cover crop
   address: string | null; // full street address / label (from geocoding)
+  city: string | null; // city / locality (for trip grouping)
   auto: boolean; // created by the clustering job; badge until first edited
   needs_geocode: boolean;
   visit_count: number;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
 import { fetchMileage } from '../lib/strava';
+import { fetchItemCounts } from '../lib/data';
 
 interface Props {
   places: Place[];
@@ -60,6 +61,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
     (p) =>
       !p.bucket &&
       p.saved &&
+      p.name.trim() !== '' && // skip unnamed drafts
       !(personFilter && p.solo_profile && p.solo_profile !== personFilter),
   );
   // Main bar shows just Places + Miles. Cities/States moved to Settings.
@@ -67,6 +69,15 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
   const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
   const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
   const closeDetail = () => setDetail(null);
+
+  // Every spot + visit also counts toward the Places total.
+  const [extra, setExtra] = useState(0);
+  useEffect(() => {
+    fetchItemCounts()
+      .then((c) => setExtra(c.entries + c.visits))
+      .catch(() => setExtra(0));
+  }, [places.length]);
+  const placesTotal = visited.length + extra;
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
@@ -82,7 +93,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
     <div className="stats-bar">
       <div className="stat-row">
         <button className={`stat ${detail === 'places' ? 'on' : ''}`} onClick={() => toggle('places')}>
-          <b>{visited.length}</b> <span className="label">places</span>
+          <b>{placesTotal}</b> <span className="label">places</span>
         </button>
         <button className={`stat ${detail === 'miles' ? 'on' : ''}`} onClick={() => toggle('miles')}>
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>

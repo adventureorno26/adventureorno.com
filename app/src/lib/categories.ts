@@ -22,11 +22,11 @@ export const CATEGORIES: Category[] = [
   { slug: 'beach', label: 'Beach', icon: '🏖️', color: '#06b6d4', review: 'Beach Reviews' },
   { slug: 'sunrise', label: 'Sunrise', icon: '🌅', color: '#fbbf24', review: 'Sunrise Spot Reviews' },
   { slug: 'sunset', label: 'Sunset', icon: '🌇', color: '#fb7185', review: 'Sunset Spot Reviews' },
-  { slug: 'dining', label: 'Dining', icon: '🍽️', color: '#f59e0b', review: 'Restaurant Reviews' },
+  { slug: 'dining', label: 'Restaurant', icon: '🍽️', color: '#f59e0b', review: 'Restaurant Reviews' },
   { slug: 'winery', label: 'Winery', icon: '🍷', color: '#a855f7', review: 'Winery Reviews' },
   { slug: 'brewery', label: 'Brewery', icon: '🍺', color: '#ca8a04', review: 'Brewery Reviews' },
   { slug: 'viewpoint', label: 'Viewpoint', icon: '⛰️', color: '#64748b', review: 'Viewpoint Reviews' },
-  { slug: 'stay', label: 'Stay', icon: '🏨', color: '#6366f1', review: 'Stay Reviews' },
+  { slug: 'stay', label: 'Hotel', icon: '🏨', color: '#6366f1', review: 'Hotel Reviews' },
   // Container kinds — a place that holds other places (its members via part_of).
   // No icon (per Erica). A Trip has dates; a Trail is a route.
   { slug: 'trip', label: 'Trip', icon: '', color: '#ec4899', review: 'Trip Notes' },

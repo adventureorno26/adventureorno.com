@@ -51,7 +51,9 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const [lightIdx, setLightIdx] = useState<number | null>(null); // carousel position
   const [datingId, setDatingId] = useState<string | null>(null); // undated photo getting a date
   const [dragOver, setDragOver] = useState(false);
+  const [pickMenu, setPickMenu] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
   const touchX = useRef<number | null>(null);
 
   const load = (): Promise<Photo[]> =>
@@ -313,11 +315,11 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
             setDragOver(false);
             void upload(Array.from(e.dataTransfer.files), true);
           }}
-          onClick={() => fileRef.current?.click()}
+          onClick={() => setPickMenu((v) => !v)}
           role="button"
           tabIndex={0}
         >
-          {busy ? 'Uploading…' : 'Drag photos or videos here, or click to choose'}
+          {busy ? 'Uploading…' : 'Click Or Drag Photos'}
           <input
             ref={fileRef}
             type="file"
@@ -329,18 +331,50 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
               e.target.value = '';
             }}
           />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              void upload(Array.from(e.target.files ?? []), true);
+              e.target.value = '';
+            }}
+          />
         </div>
       )}
 
-      {canGoogle && (
-        <button
-          className="link-btn"
-          style={{ marginTop: 6 }}
-          disabled={busy}
-          onClick={() => void addFromGoogle()}
-        >
-          ＋ Add from Google Photos
-        </button>
+      {canUpload && pickMenu && (
+        <div className="pick-menu">
+          <button
+            onClick={() => {
+              setPickMenu(false);
+              fileRef.current?.click();
+            }}
+          >
+            Choose files
+          </button>
+          <button
+            onClick={() => {
+              setPickMenu(false);
+              cameraRef.current?.click();
+            }}
+          >
+            Take a photo
+          </button>
+          {canGoogle && (
+            <button
+              disabled={busy}
+              onClick={() => {
+                setPickMenu(false);
+                void addFromGoogle();
+              }}
+            >
+              Google Photos
+            </button>
+          )}
+        </div>
       )}
 
       {note && (
