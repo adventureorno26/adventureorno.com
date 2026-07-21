@@ -86,10 +86,10 @@ export default function EntryEditor({
       <select value={kind} onChange={(e) => setKind(e.target.value)}>
         {CATEGORIES.map((c) => (
           <option key={c.slug} value={c.slug}>
-            {c.icon} {c.label}
+            {c.label}
           </option>
         ))}
-        <option value="note">📝 Note</option>
+        <option value="note">Note</option>
       </select>
 
       <label>Title</label>

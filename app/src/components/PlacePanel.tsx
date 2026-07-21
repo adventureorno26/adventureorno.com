@@ -586,7 +586,7 @@ export default function PlacePanel({
                   className={`cat-toggle ${on ? 'on' : ''}`}
                   onClick={() => void toggleCat(c.slug)}
                 >
-                  {c.icon} {c.label}
+                  {c.label}
                 </button>
               );
             })}

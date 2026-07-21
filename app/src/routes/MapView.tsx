@@ -933,7 +933,7 @@ export default function MapView() {
                   <div className="add-submenu">
                     {CATEGORIES.map((c) => (
                       <button key={c.slug} onClick={() => void addTagged(c.slug)}>
-                        {c.icon} {c.label}
+                        {c.label}
                       </button>
                     ))}
                   </div>
