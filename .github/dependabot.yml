@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # One grouped PR per workspace, monthly.
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      app:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /workers/photo-gateway
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      photo-gateway:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

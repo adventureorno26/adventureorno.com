@@ -1,5 +1,7 @@
 # How to use this package
 
+[![CI](https://github.com/adventureorno26/adventureorno.com/actions/workflows/ci.yml/badge.svg)](https://github.com/adventureorno26/adventureorno.com/actions/workflows/ci.yml)
+
 1. Complete MANUAL-SETUP.md items 1–4 (domain; GitHub auth for `adventureorno26/adventureorno.com`
    including `gh auth login`; Supabase settings on the existing project; MapTiler key domain
    restriction).
