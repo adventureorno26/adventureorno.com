@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
 import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
+import { importFileActivity, parseActivityFile } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
@@ -227,6 +228,69 @@ function GeocodeCard() {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Upload Garmin (or any) GPX/TCX activity files — the Strava-limit workaround.
+ *  Parses each client-side and imports it, attributed to whoever's signed in. */
+function GarminImportCard() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function onFiles(files: FileList) {
+    setBusy(true);
+    let added = 0;
+    let failed = 0;
+    for (const file of Array.from(files)) {
+      try {
+        const raw = await file.text();
+        const parsed = parseActivityFile(raw, file.name);
+        if (!parsed) {
+          failed++;
+          continue;
+        }
+        await importFileActivity(parsed);
+        added++;
+      } catch {
+        failed++;
+      }
+      setMsg(`Imported ${added}, failed ${failed}…`);
+    }
+    setMsg(
+      `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported${failed ? `, ${failed} couldn't be read` : ''}. Re-importing the same file is safe (duplicates are ignored).`,
+    );
+    setBusy(false);
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <b>Import from Garmin (GPX / TCX)</b>
+      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
+        Strava only lets one athlete connect, so bring your Garmin activities in as files instead.
+        In Garmin Connect, open an activity → the gear icon → <b>Export to GPX</b> (or TCX), then
+        upload them here. They're attributed to you, and importing the same file twice is safe.
+      </div>
+      <button className="primary" disabled={busy} onClick={() => fileRef.current?.click()}>
+        {busy ? 'Importing…' : 'Choose GPX / TCX files'}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".gpx,.tcx,application/gpx+xml,application/xml,text/xml"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length) void onFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      {msg && (
+        <div className="banner" style={{ marginTop: 8 }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -343,6 +407,7 @@ export default function Settings() {
         <>
           <h2 style={{ marginTop: 28 }}>Strava &amp; Garmin</h2>
           <StravaCard myId={profile.id} isOwner={profile.role === 'owner'} />
+          <GarminImportCard />
         </>
       )}
 

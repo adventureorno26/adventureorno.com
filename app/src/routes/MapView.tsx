@@ -10,7 +10,16 @@ import {
   snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
-import { createPlace, deletePlace, fetchPlaces, fetchVisits, triggerGeocode } from '../lib/data';
+import {
+  createPlace,
+  deletePlace,
+  fetchMapPeople,
+  fetchPlacePeople,
+  fetchPlaces,
+  fetchVisits,
+  triggerGeocode,
+  type MapPerson,
+} from '../lib/data';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
 import {
   createManualActivity,
@@ -27,8 +36,8 @@ import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import OnThisDay from '../components/OnThisDay';
+import PersonFilter from '../components/PersonFilter';
 import SearchPalette from '../components/SearchPalette';
-import Slideshow from '../components/Slideshow';
 import MemoryBanner from '../components/MemoryBanner';
 
 const SOURCE_ID = 'places';
@@ -120,6 +129,10 @@ export default function MapView() {
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
+  // "Just me / Just Josh / Both" filter (null = both).
+  const [personFilter, setPersonFilter] = useState<string | null>(null);
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -191,6 +204,12 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Who owns/contributed to what, for the "just me" filter.
+  useEffect(() => {
+    void fetchMapPeople().then(setPeople).catch(() => undefined);
+    void fetchPlacePeople().then(setPlacePeople).catch(() => undefined);
+  }, [places.length]);
+
   // Draw every activity's route line on the main map (tap a line → its place card).
   useEffect(() => {
     if (!ready) return;
@@ -206,6 +225,8 @@ export default function MapView() {
       .then((lines) => {
         const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
         for (const l of lines) {
+          // "Just me / Just Josh" hides the other person's routes.
+          if (personFilter && l.owner_profile !== personFilter) continue;
           let coords: [number, number][] = [];
           try {
             coords = polyline.decode(l.summary_polyline).map(([la, ln]) => [ln, la] as [number, number]);
@@ -225,7 +246,7 @@ export default function MapView() {
         });
       })
       .catch(() => undefined);
-  }, [ready, places.length]);
+  }, [ready, places.length, personFilter]);
 
   // One-time map init.
   useEffect(() => {
@@ -465,12 +486,20 @@ export default function MapView() {
   }, []);
 
   // Filter the map: bucket-list places are hidden unless their toggle is on;
-  // visited places follow the selected activity tag.
+  // visited places follow the selected activity tag and the person filter.
   const visiblePlaces = places.filter((p) => {
     if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
     if (!p.saved) return false; // only saved places appear on the map
+    if (personFilter && !placePeople.get(p.id)?.has(personFilter)) return false;
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
+
+  // Only show the person filter once ≥2 people have actually contributed.
+  const contributors = new Set<string>();
+  placePeople.forEach((set) => set.forEach((id) => contributors.add(id)));
+  const filterPeople = people.filter(
+    (p) => contributors.has(p.id) || p.id === profile?.id,
+  );
 
   // Keep the source in sync once both map and data are ready (idle → syncMarkers).
   useEffect(() => {
@@ -857,14 +886,19 @@ export default function MapView() {
   }
 
   return (
-    <div className="map-root">
+    <div className={`map-root${selectedId ? ' card-open' : ''}`}>
       <div ref={containerRef} className="map-canvas" />
 
       <OnThisDay />
 
       <SearchPalette places={places} />
 
-      <Slideshow mapRef={mapRef} places={places} />
+      <PersonFilter
+        people={filterPeople}
+        value={personFilter}
+        onChange={setPersonFilter}
+        meId={profile?.id}
+      />
 
       <StatsBar places={places} onFilterCategory={setFilterCat} />
 

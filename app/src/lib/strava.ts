@@ -42,6 +42,7 @@ export interface ActivityLine {
   place_id: string | null;
   type: string;
   summary_polyline: string;
+  owner_profile: string | null; // whose route it is (for the "just me" filter)
 }
 
 /** All activity route geometries (for drawing trails on the main map). Only
@@ -49,7 +50,7 @@ export interface ActivityLine {
 export async function fetchActivityLines(): Promise<ActivityLine[]> {
   const { data, error } = await supabase
     .from('activities')
-    .select('id, place_id, type, summary_polyline')
+    .select('id, place_id, type, summary_polyline, owner_profile')
     .gte('start_date', STATS_CUTOFF)
     .not('summary_polyline', 'is', null);
   if (error) return [];

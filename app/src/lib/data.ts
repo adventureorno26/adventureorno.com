@@ -93,6 +93,32 @@ export async function addPlaceToTrail(
   if (error) throw error;
 }
 
+export interface MapPerson {
+  id: string;
+  display_name: string | null;
+  role: string;
+}
+
+/** The two people who can own places/activities (for the "just me" filter). */
+export async function fetchMapPeople(): Promise<MapPerson[]> {
+  const { data, error } = await supabase.rpc('map_people');
+  if (error) return [];
+  return (data ?? []) as MapPerson[];
+}
+
+/** place_id → set of profile ids who contributed (added it, hiked it, or have a
+ *  photo there). Drives the "Just me / Just Josh / Both" place filter. */
+export async function fetchPlacePeople(): Promise<Map<string, Set<string>>> {
+  const { data, error } = await supabase.rpc('place_people');
+  const out = new Map<string, Set<string>>();
+  if (error) return out;
+  for (const row of (data ?? []) as { place_id: string; profile_id: string }[]) {
+    if (!out.has(row.place_id)) out.set(row.place_id, new Set());
+    out.get(row.place_id)!.add(row.profile_id);
+  }
+  return out;
+}
+
 /** Lightweight fetch of every spot/review across all places, for global search. */
 export async function fetchAllEntries(): Promise<
   Pick<Entry, 'id' | 'place_id' | 'title' | 'body' | 'kind'>[]

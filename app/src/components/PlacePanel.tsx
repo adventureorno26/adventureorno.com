@@ -476,18 +476,18 @@ export default function PlacePanel({
               onKeyUp={() => void patch({ cover_pos_y: coverPos })}
             />
           )}
-          {/* Title on the photo; stars bottom-left. */}
+          {/* Stars above the title, bottom-left of the photo. */}
           <div className="hero-title">
-            <h2 className="title-with-rating">{titleEl}</h2>
             <div className="hero-rating">{ratingEl}</div>
+            <h2 className="title-with-rating">{titleEl}</h2>
           </div>
         </div>
       ) : (
         <div className="panel-head">
-          <h2 className="title-with-rating">
-            {titleEl}
-            <span className="title-rating">{ratingEl}</span>
-          </h2>
+          <div>
+            <div className="rating-above">{ratingEl}</div>
+            <h2 className="title-with-rating">{titleEl}</h2>
+          </div>
           <div className="head-actions">
             <button className="close" onClick={onClose} aria-label="Close">
               ×

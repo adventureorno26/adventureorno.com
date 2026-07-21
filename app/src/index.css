@@ -1045,9 +1045,13 @@ a {
   display: inline-flex;
   align-items: center;
 }
-/* Stars sit just under the title, bottom-left of the hero photo. */
+/* Stars sit just ABOVE the title (bottom-left of the hero photo). */
 .hero-rating {
-  margin-top: 4px;
+  margin-bottom: 4px;
+  display: inline-flex;
+}
+.rating-above {
+  margin-bottom: 4px;
   display: inline-flex;
 }
 
@@ -1678,64 +1682,64 @@ a {
 .stats-bar .spacer {
   display: none;
 }
+/* Settings gear floats at the BOTTOM-LEFT on every screen size. */
 .stats-bar .actions {
-  position: absolute;
-  right: 14px;
-  top: calc(10px + env(safe-area-inset-top));
+  position: fixed;
+  left: 12px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  right: auto;
+  top: auto;
+  z-index: 30;
   pointer-events: auto;
 }
 .gear-btn {
-  font-size: 34px;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
   line-height: 1;
-  padding: 2px 4px;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  padding: 0;
+  border-radius: 50%;
+  background: #12131a;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 6px 18px rgba(2, 8, 23, 0.5);
 }
 .gear-btn:hover {
-  background: transparent;
-  border: none;
+  background: #1b1d27;
+  border: 1px solid var(--border-soft);
   transform: rotate(30deg);
 }
 @media (max-width: 560px) {
-  /* Settings gear floats at the BOTTOM-RIGHT, clear of the top bars. */
-  .stats-bar .actions {
-    position: fixed;
-    right: 12px;
-    bottom: calc(14px + env(safe-area-inset-bottom));
-    top: auto;
-    left: auto;
-    width: auto;
-    margin: 0;
-    justify-content: flex-end;
-    z-index: 30;
-    pointer-events: auto;
-  }
-  .stats-bar .actions .gear-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 28px;
-    border-radius: 50%;
-    background: var(--panel-glass);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-soft);
-    box-shadow: 0 6px 18px rgba(2, 8, 23, 0.5);
-  }
-
-  /* Push the Add/search row + stats DOWN from the notch, and make the search
-     read crisply instead of muddy over the moving map. */
+  /* Push the Add/search row + stats DOWN from the notch. */
   .map-top-row {
-    top: calc(80px + env(safe-area-inset-top));
+    top: calc(84px + env(safe-area-inset-top));
   }
   .stats-bar {
     flex-direction: column;
     align-items: center;
-    padding-top: calc(132px + env(safe-area-inset-top));
+    padding-top: calc(140px + env(safe-area-inset-top));
   }
+  /* De-blur: solid, crisp controls instead of faded glass. */
   .map-search-box,
-  .add-btn {
-    background: rgba(12, 16, 26, 0.94);
-    backdrop-filter: blur(6px);
+  .add-btn,
+  .add-menu,
+  .places-search-btn,
+  .person-filter {
+    background: #12131a;
+    backdrop-filter: none;
+  }
+  /* An open place card fills the screen — hide the map chrome behind it. */
+  .map-root.card-open .map-top-row,
+  .map-root.card-open .stats-bar,
+  .map-root.card-open .places-search-btn,
+  .map-root.card-open .person-filter,
+  .map-root.card-open .on-this-day {
+    display: none;
+  }
+  .panel {
+    width: 100%;
   }
 }
 
@@ -2722,13 +2726,48 @@ textarea {
   color: var(--muted);
 }
 
-/* Search-your-places button (top-left of the map) + ⌘K palette. */
-.places-search-btn {
+/* "Just me / Just Josh / Both" filter — top-left of the map. */
+.person-filter {
   position: absolute;
   top: calc(12px + env(safe-area-inset-top));
   left: 12px;
   z-index: 7;
-  padding: 8px 16px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+}
+.person-filter button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.person-filter button.on {
+  background: var(--accent);
+  color: #061018;
+}
+
+/* Search-your-places button — bottom-left, on the same line as the settings gear
+ * (which sits at left:12, ~50px wide). ⌘K also opens the palette. */
+.places-search-btn {
+  position: fixed;
+  left: 74px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  top: auto;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  z-index: 30;
+  padding: 0 18px;
   border-radius: 999px;
   background: var(--panel-glass);
   backdrop-filter: blur(10px);
@@ -2736,7 +2775,7 @@ textarea {
   box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
   color: var(--text);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 .search-palette-backdrop {
@@ -2809,7 +2848,7 @@ textarea {
 .on-this-day {
   position: absolute;
   left: 12px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  bottom: calc(76px + env(safe-area-inset-bottom)); /* sits above the settings gear */
   z-index: 8;
   display: flex;
   align-items: stretch;
