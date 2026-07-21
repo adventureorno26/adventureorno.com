@@ -20,6 +20,7 @@ import {
   type MapPerson,
 } from '../lib/data';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
+import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import {
   createManualActivity,
   fetchActivityLines,
@@ -135,7 +136,21 @@ export default function MapView() {
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [activitySub, setActivitySub] = useState(false);
+  const [photoSub, setPhotoSub] = useState(false);
   const addFileRef = useRef<HTMLInputElement | null>(null);
+  // Google Photos import is owner-only (Erica), web, and only if configured.
+  const canGooglePhotos = profile?.role === 'owner' && googlePhotosEnabled();
+
+  async function importGooglePhotos() {
+    setPhotoSub(false);
+    setAddMenuOpen(false);
+    try {
+      const files = await pickFromGooglePhotos((s) => setBanner(s));
+      if (files.length) await handleAddPhotos(files);
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'Google Photos import failed');
+    }
+  }
 
   // +Add → a category/activity: create an empty place pre-tagged, open its card.
   // The card's title-search fills name + location (placeholder shows an example).
@@ -762,7 +777,7 @@ export default function MapView() {
 
   // Add photos: geotagged ones auto-place by GPS; photos WITHOUT a location get
   // a fresh card (placed at the current map center) so you can set the spot.
-  async function handleAddPhotos(files: FileList) {
+  async function handleAddPhotos(files: FileList | File[]) {
     setBanner('Uploading photos…');
     let added = 0;
     let geoPlaceId: string | null = null; // place the (first) geotagged photo landed on
@@ -966,12 +981,30 @@ export default function MapView() {
                 </button>
                 <button
                   onClick={() => {
-                    setAddMenuOpen(false);
-                    addFileRef.current?.click();
+                    if (canGooglePhotos) {
+                      setPhotoSub((v) => !v);
+                    } else {
+                      setAddMenuOpen(false);
+                      addFileRef.current?.click();
+                    }
                   }}
                 >
                   Photo
                 </button>
+                {canGooglePhotos && photoSub && (
+                  <div className="add-submenu">
+                    <button
+                      onClick={() => {
+                        setPhotoSub(false);
+                        setAddMenuOpen(false);
+                        addFileRef.current?.click();
+                      }}
+                    >
+                      Files
+                    </button>
+                    <button onClick={() => void importGooglePhotos()}>Google Photos</button>
+                  </div>
+                )}
               </div>
             )}
             <input
