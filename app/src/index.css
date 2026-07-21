@@ -208,7 +208,9 @@ a {
   right: 0;
   bottom: 0;
   width: min(420px, 100%);
-  z-index: 10;
+  /* Above the stats bar, Add/search row, and settings gear so the card (and its
+     × close) always sits in front of the map chrome. */
+  z-index: 60;
   background: var(--panel);
   border-left: 1px solid var(--border);
   overflow-y: auto;
@@ -355,6 +357,31 @@ a {
   border-radius: 8px;
   background: var(--panel-2);
 }
+/* Undated photo → "Add date" pill, and the date input it swaps to. */
+.thumb-date {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  z-index: 2;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(12, 16, 26, 0.85);
+  color: #fff;
+  cursor: pointer;
+}
+.thumb-date-input {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  z-index: 3;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
 /* One visit = one horizontally scrollable carousel (photos in date order). */
 .gallery.carousel {
   display: flex;
@@ -1017,6 +1044,54 @@ a {
   margin-left: 10px;
   display: inline-flex;
   align-items: center;
+}
+/* Stars sit just under the title, bottom-left of the hero photo. */
+.hero-rating {
+  margin-top: 4px;
+  display: inline-flex;
+}
+
+/* "City, State" line whose text is the Directions link, with a small edit. */
+.region-directions {
+  color: var(--accent-hover);
+  text-decoration: none;
+  font-weight: 600;
+}
+.region-directions:hover {
+  text-decoration: underline;
+}
+.region-edit-btn {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+/* Bottom actions: Merge / Delete / This is a Trail on one line. */
+.bottom-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.inline-trail {
+  margin: 0;
+}
+.inline-trail > summary {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 14px;
+  list-style: none;
+}
+.inline-trail > summary::-webkit-details-marker {
+  display: none;
+}
+/* When opened, take the full row so its selects/inputs have room. */
+.inline-trail[open] {
+  flex-basis: 100%;
 }
 
 /* ---------- Visits list ---------- */

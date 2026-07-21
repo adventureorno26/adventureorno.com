@@ -7,6 +7,11 @@ import type { Activity, MileageRow } from './types';
 const ACTIVITY_COLS =
   'id, strava_id, type, name, distance, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead';
 
+// Stats + map trails only reflect activities on/after this date. Older Strava
+// history stays in the DB (visits/day views), it just doesn't count. (Erica's
+// standing rule — see memory.)
+export const STATS_CUTOFF = '2025-12-21';
+
 export async function fetchMileage(): Promise<MileageRow[]> {
   const { data, error } = await supabase
     .from('activity_mileage')
@@ -39,11 +44,13 @@ export interface ActivityLine {
   summary_polyline: string;
 }
 
-/** All activity route geometries (for drawing trails on the main map). */
+/** All activity route geometries (for drawing trails on the main map). Only
+ *  activities on/after the stats cutoff appear on the map. */
 export async function fetchActivityLines(): Promise<ActivityLine[]> {
   const { data, error } = await supabase
     .from('activities')
     .select('id, place_id, type, summary_polyline')
+    .gte('start_date', STATS_CUTOFF)
     .not('summary_polyline', 'is', null);
   if (error) return [];
   return (data ?? []).filter(
@@ -59,7 +66,8 @@ export async function fetchMileageForPlaces(
   const { data, error } = await supabase
     .from('activities')
     .select('type, distance')
-    .in('place_id', placeIds);
+    .in('place_id', placeIds)
+    .gte('start_date', STATS_CUTOFF);
   if (error) return {};
   const out: Record<string, number> = {};
   for (const a of (data ?? []) as { type: string; distance: number }[]) {

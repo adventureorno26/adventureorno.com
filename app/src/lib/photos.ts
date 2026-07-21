@@ -339,6 +339,16 @@ export async function fetchPhotoObjectUrl(
   return URL.createObjectURL(await res.blob());
 }
 
+/** Set (or fix) a photo's date. Stored at midday UTC so it lands on the chosen
+ *  calendar day regardless of timezone. */
+export async function setPhotoDate(photoId: string, isoDate: string): Promise<void> {
+  const { error } = await supabase
+    .from('photos')
+    .update({ taken_at: `${isoDate}T12:00:00Z` })
+    .eq('id', photoId);
+  if (error) throw error;
+}
+
 export interface OnThisDayItem {
   photo_id: string;
   place_id: string;

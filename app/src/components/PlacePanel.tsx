@@ -151,6 +151,8 @@ export default function PlacePanel({
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState(place.name);
   const [error, setError] = useState<string | null>(null);
 
   const [review, setReview] = useState(place.review ?? '');
@@ -169,6 +171,7 @@ export default function PlacePanel({
 
   useEffect(() => {
     setReview(place.review ?? '');
+    setName(place.name);
     setCoverPos(place.cover_pos_y ?? 50);
     setEAdmin1(place.admin1 ?? '');
     setECountry(place.country ?? '');
@@ -311,9 +314,14 @@ export default function PlacePanel({
     await reloadVisits(); // a new photo/activity day may have added a visit
   }
 
-  // The card's title IS a "find this place" search: picking a result sets the
-  // name (Title), the state/country, the pin location, and — through those — the
-  // Directions button, all at once.
+  async function saveName() {
+    setEditingName(false);
+    if (name.trim() && name.trim() !== place.name) await patch({ name: name.trim(), auto: false });
+    else setName(place.name);
+  }
+
+  // The search also fills the title: picking a result sets the name (Title), the
+  // state/country, the pin location, and — through those — the Directions link.
   async function setLocationFromSearch(r: SearchResult) {
     setError(null);
     const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
@@ -389,29 +397,46 @@ export default function PlacePanel({
     />
   );
 
-  // Directions route to the NAMED place/city (address, or "name, region,
-  // country") so Maps drops you at the city rather than a bare lat/lng. On the
-  // main card it lives lower down, centred across from the region + tags.
+  // The place name, shown as the title on the photo. Click to edit it by hand;
+  // the search below also fills it in.
+  const titleEl =
+    editingName && canEdit ? (
+      <input
+        className="title-input"
+        value={name}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => void saveName()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void saveName();
+          if (e.key === 'Escape') {
+            setName(place.name);
+            setEditingName(false);
+          }
+        }}
+      />
+    ) : (
+      <span
+        className={canEdit ? 'title-editable' : undefined}
+        onClick={() => canEdit && setEditingName(true)}
+        title={canEdit ? 'Tap to rename' : undefined}
+      >
+        {place.name}
+        {place.auto && !place.is_home && <span className="auto-badge">auto</span>}
+      </span>
+    );
+
+  // "City, State" line under the title — the text itself is the Directions link
+  // (no separate Directions button). Routes to the named place/address.
   const dirDest =
     place.address?.trim() ||
     [place.name, place.admin1, place.country].filter(Boolean).join(', ') ||
     `${place.lat},${place.lng}`;
-  const directionsBtn = (
-    <a
-      className="directions-btn sm"
-      href={`https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${
-        place.lng
-      }&dirflg=d`}
-      target="_blank"
-      rel="noreferrer"
-      title={`Directions to ${dirDest}`}
-    >
-      Directions
-    </a>
-  );
+  const dirHref = `https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${place.lng}&dirflg=d`;
+  const regionText = [place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region';
 
-  // The location search that replaces the title on an editable card: find the
-  // city & state and it fills the Title, State, pin, and Directions.
+  // The location search: find the city & state; it fills the Title, State, pin,
+  // and the Directions link. Sits just under the photo.
   const locateSearch = canEdit && (
     <div className="place-locate bucket-search">
       {isTrailPlace && <div className="locate-label">Trailhead</div>}
@@ -451,24 +476,18 @@ export default function PlacePanel({
               onKeyUp={() => void patch({ cover_pos_y: coverPos })}
             />
           )}
-          {/* Title & Directions removed from the hero; view-only users still see the name. */}
-          {!canEdit && (
-            <div className="hero-title">
-              <h2 className="title-with-rating">
-                {place.name}
-                <span className="title-rating">{ratingEl}</span>
-              </h2>
-            </div>
-          )}
+          {/* Title on the photo; stars bottom-left. */}
+          <div className="hero-title">
+            <h2 className="title-with-rating">{titleEl}</h2>
+            <div className="hero-rating">{ratingEl}</div>
+          </div>
         </div>
       ) : (
         <div className="panel-head">
-          {!canEdit && (
-            <h2 className="title-with-rating">
-              {place.name}
-              <span className="title-rating">{ratingEl}</span>
-            </h2>
-          )}
+          <h2 className="title-with-rating">
+            {titleEl}
+            <span className="title-rating">{ratingEl}</span>
+          </h2>
           <div className="head-actions">
             <button className="close" onClick={onClose} aria-label="Close">
               ×
@@ -485,85 +504,77 @@ export default function PlacePanel({
         </div>
       )}
 
-      {/* The card's title IS this search: find the city & state here. It fills the
-          Title, State, pin location, and the Directions button below. */}
+      {/* Search to change the title/state (also fills them in). */}
       {locateSearch}
 
-      {/* Region + Edit tags on the left; rating + Directions centred opposite. */}
-      <div className="place-id-row">
-        <div className="place-id-left">
-          <div className={`meta ${place.is_trail ? 'meta-trail' : ''}`}>
-            <span>
-              {editingRegion && canEdit ? (
-                <span className="region-edit">
-                  <input
-                    placeholder="State / region"
-                    value={eAdmin1}
-                    autoFocus
-                    onChange={(e) => setEAdmin1(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
-                  />
-                  <input
-                    placeholder="Country"
-                    value={eCountry}
-                    onChange={(e) => setECountry(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
-                  />
-                  <button
-                    className="primary"
-                    style={{ flex: 'none' }}
-                    onClick={() => void saveRegion()}
-                  >
-                    Save
-                  </button>
-                </span>
-              ) : (
-                <span
-                  className={canEdit ? 'region-editable' : undefined}
-                  title={canEdit ? 'Tap to edit the state / region' : undefined}
-                  onClick={() => canEdit && setEditingRegion(true)}
-                >
-                  {[place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region'}
-                </span>
-              )}
-              {!editingRegion &&
-                visits &&
-                visits.length > 0 &&
-                ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
-              {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
+      {/* City, State — the text itself is the Directions link. */}
+      <div className={`meta ${place.is_trail ? 'meta-trail' : ''}`}>
+        <span>
+          {editingRegion && canEdit ? (
+            <span className="region-edit">
+              <input
+                placeholder="State / region"
+                value={eAdmin1}
+                autoFocus
+                onChange={(e) => setEAdmin1(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
+              />
+              <input
+                placeholder="Country"
+                value={eCountry}
+                onChange={(e) => setECountry(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void saveRegion()}
+              />
+              <button className="primary" style={{ flex: 'none' }} onClick={() => void saveRegion()}>
+                Save
+              </button>
             </span>
-            {place.is_trail && trailMilesSummary(trailMiles) && (
-              <span className="trail-miles">{trailMilesSummary(trailMiles)}</span>
-            )}
-          </div>
-
-          {/* Edit tags — sits under the region, above the tag chips. */}
-          {canEdit && (
-            <details className="cat-edit">
-              <summary>Edit tags</summary>
-              <div className="cat-picker">
-                {CATEGORIES.map((c) => {
-                  const on = (place.categories ?? []).includes(c.slug);
-                  return (
-                    <button
-                      key={c.slug}
-                      className={`cat-toggle ${on ? 'on' : ''}`}
-                      onClick={() => void toggleCat(c.slug)}
-                    >
-                      {c.icon} {c.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </details>
+          ) : (
+            <>
+              <a
+                className="region-directions"
+                href={dirHref}
+                target="_blank"
+                rel="noreferrer"
+                title={`Directions to ${dirDest}`}
+              >
+                {regionText}
+              </a>
+              {canEdit && (
+                <button className="link-btn region-edit-btn" onClick={() => setEditingRegion(true)}>
+                  edit
+                </button>
+              )}
+              {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+              {place.bucket && <span className="bucket-flag"> · 🔖 Bucket List!</span>}
+            </>
           )}
-        </div>
-
-        <div className="place-id-right">
-          {canEdit && <span className="id-rating">{ratingEl}</span>}
-          {directionsBtn}
-        </div>
+        </span>
+        {place.is_trail && trailMilesSummary(trailMiles) && (
+          <span className="trail-miles">{trailMilesSummary(trailMiles)}</span>
+        )}
       </div>
+
+      {/* Edit tags — under the region line, above the tag chips. */}
+      {canEdit && (
+        <details className="cat-edit">
+          <summary>Edit tags</summary>
+          <div className="cat-picker">
+            {CATEGORIES.map((c) => {
+              const on = (place.categories ?? []).includes(c.slug);
+              return (
+                <button
+                  key={c.slug}
+                  className={`cat-toggle ${on ? 'on' : ''}`}
+                  onClick={() => void toggleCat(c.slug)}
+                >
+                  {c.icon} {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </details>
+      )}
       {place.address && <div className="place-address">📍 {place.address}</div>}
 
       {(place.website || (canEdit && place.bucket)) && (
@@ -634,65 +645,6 @@ export default function PlacePanel({
         place.review && <p className="body">{place.review}</p>
       )}
 
-      {canEdit && !place.is_trail && !place.trail_id && (
-        <details className="cat-edit trail-assign">
-          <summary>This is a Trail</summary>
-          <div style={{ marginTop: 8 }}>
-            <button className="primary" onClick={() => void patch({ is_trail: true })}>
-              Yes — make this its own trail
-            </button>
-            {allPlaces.some((p) => p.is_trail) && (
-              <>
-                <div className="trail-or">or add it as a trailhead on an existing trail:</div>
-                <div className="field-row">
-                  <select value={trailSel} onChange={(e) => setTrailSel(e.target.value)}>
-                    <option value="">Choose a trail…</option>
-                    {allPlaces
-                      .filter((p) => p.is_trail)
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div className="field-row" style={{ marginTop: 6 }}>
-                  <input
-                    placeholder={`Trailhead name (default: ${place.name})`}
-                    value={trailheadName}
-                    onChange={(e) => setTrailheadName(e.target.value)}
-                  />
-                  <button
-                    className="primary"
-                    style={{ flex: 'none' }}
-                    disabled={!trailSel}
-                    onClick={() => void addToExistingTrail()}
-                  >
-                    Add to trail
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </details>
-      )}
-      {canEdit && place.trail_id && (
-        <div className="trail-member">
-          Trailhead of{' '}
-          <Link to={`/place/${place.trail_id}`}>
-            {allPlaces.find((p) => p.id === place.trail_id)?.name ?? 'a trail'}
-          </Link>
-          <button className="link-btn" onClick={() => void patch({ trail_id: null })}>
-            Remove from trail
-          </button>
-        </div>
-      )}
-      {canEdit && place.is_trail && (
-        <label className="trail-toggle">
-          <input type="checkbox" checked onChange={() => void patch({ is_trail: false })} />
-          This is a trail
-        </label>
-      )}
 
       {place.is_trail ? (
         /* Trails — runs/hikes grouped by trailhead; tap a run for its map + miles. */
@@ -921,11 +873,72 @@ export default function PlacePanel({
       )}
 
       {canEdit && (
-        <div className="btn-row" style={{ marginTop: 22 }}>
+        <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
           <button onClick={() => setMerging((v) => !v)}>Merge…</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete
           </button>
+
+          {/* "This is a Trail" lives on the same line as Merge / Delete. */}
+          {!place.is_trail && !place.trail_id && (
+            <details className="cat-edit trail-assign inline-trail">
+              <summary>This is a Trail</summary>
+              <div style={{ marginTop: 8 }}>
+                <button className="primary" onClick={() => void patch({ is_trail: true })}>
+                  Yes — make this its own trail
+                </button>
+                {allPlaces.some((p) => p.is_trail) && (
+                  <>
+                    <div className="trail-or">or add it as a trailhead on an existing trail:</div>
+                    <div className="field-row">
+                      <select value={trailSel} onChange={(e) => setTrailSel(e.target.value)}>
+                        <option value="">Choose a trail…</option>
+                        {allPlaces
+                          .filter((p) => p.is_trail)
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="field-row" style={{ marginTop: 6 }}>
+                      <input
+                        placeholder={`Trailhead name (default: ${place.name})`}
+                        value={trailheadName}
+                        onChange={(e) => setTrailheadName(e.target.value)}
+                      />
+                      <button
+                        className="primary"
+                        style={{ flex: 'none' }}
+                        disabled={!trailSel}
+                        onClick={() => void addToExistingTrail()}
+                      >
+                        Add to trail
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </details>
+          )}
+          {place.trail_id && (
+            <span className="trail-member">
+              Trailhead of{' '}
+              <Link to={`/place/${place.trail_id}`}>
+                {allPlaces.find((p) => p.id === place.trail_id)?.name ?? 'a trail'}
+              </Link>
+              <button className="link-btn" onClick={() => void patch({ trail_id: null })}>
+                Remove from trail
+              </button>
+            </span>
+          )}
+          {place.is_trail && (
+            <label className="trail-toggle">
+              <input type="checkbox" checked onChange={() => void patch({ is_trail: false })} />
+              This is a trail
+            </label>
+          )}
         </div>
       )}
       {merging && (

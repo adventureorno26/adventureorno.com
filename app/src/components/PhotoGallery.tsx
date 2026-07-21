@@ -8,6 +8,7 @@ import {
   fetchPhotosForPlaceOnDay,
   mapPool,
   photosEnabled,
+  setPhotoDate,
   uploadPhoto,
 } from '../lib/photos';
 import { updatePlace } from '../lib/data';
@@ -50,6 +51,7 @@ export default function PhotoGallery({ place, day, visits, onUploaded }: Props) 
   const [overridable, setOverridable] = useState<File[]>([]);
   const [pending, setPending] = useState<{ id: string; url: string }[]>([]); // optimistic previews
   const [lightIdx, setLightIdx] = useState<number | null>(null); // carousel position
+  const [datingId, setDatingId] = useState<string | null>(null); // undated photo getting a date
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const touchX = useRef<number | null>(null);
@@ -149,6 +151,18 @@ export default function PhotoGallery({ place, day, visits, onUploaded }: Props) 
     setNote(parts.join(' · ') || 'Nothing to add');
     setOverridable(retryable);
     setBusy(false);
+  }
+
+  // Give an undated photo a date (click "Add date" on the thumb).
+  async function applyDate(p: Photo, isoDate: string) {
+    try {
+      await setPhotoDate(p.id, isoDate);
+      setDatingId(null);
+      setPhotos(await load());
+      onUploaded?.(); // dates can extend a visit / change the cover
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Could not set the date');
+    }
   }
 
   async function setCover(p: Photo) {
@@ -394,6 +408,22 @@ export default function PhotoGallery({ place, day, visits, onUploaded }: Props) 
                         🗑
                       </button>
                     )}
+                    {/* Undated photo → tap to add a date. */}
+                    {canUpload &&
+                      !p.taken_at &&
+                      (datingId === p.id ? (
+                        <input
+                          type="date"
+                          className="thumb-date-input"
+                          autoFocus
+                          onChange={(e) => e.target.value && void applyDate(p, e.target.value)}
+                          onBlur={() => setDatingId(null)}
+                        />
+                      ) : (
+                        <button className="thumb-date" onClick={() => setDatingId(p.id)}>
+                          Add date
+                        </button>
+                      ))}
                   </div>
                 ))}
               </div>
