@@ -66,10 +66,12 @@ function JoinRequestsCard() {
           <div key={r.id} className="join-req">
             <div>
               <b>{r.display_name ?? r.email ?? 'Someone'}</b>
-              {r.email && r.display_name ? (
-                <span className="muted"> · {r.email}</span>
+              {r.email && r.display_name ? <span className="muted"> · {r.email}</span> : null}
+              {r.note ? (
+                <div className="muted" style={{ fontSize: 13 }}>
+                  “{r.note}”
+                </div>
               ) : null}
-              {r.note ? <div className="muted" style={{ fontSize: 13 }}>“{r.note}”</div> : null}
             </div>
             <div className="join-req-actions">
               <button
@@ -82,14 +84,22 @@ function JoinRequestsCard() {
               <button disabled={busy === r.id} onClick={() => void act(r, 'viewer')}>
                 Viewer
               </button>
-              <button className="danger" disabled={busy === r.id} onClick={() => void act(r, 'deny')}>
+              <button
+                className="danger"
+                disabled={busy === r.id}
+                onClick={() => void act(r, 'deny')}
+              >
                 Deny
               </button>
             </div>
           </div>
         ))
       )}
-      {msg && <div className="banner" style={{ marginTop: 10 }}>{msg}</div>}
+      {msg && (
+        <div className="banner" style={{ marginTop: 10 }}>
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
@@ -242,7 +252,9 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 function OurStatsCard() {
   const [s, setS] = useState<SettingsStats | null>(null);
   useEffect(() => {
-    fetchSettingsStats().then(setS).catch(() => setS(null));
+    fetchSettingsStats()
+      .then(setS)
+      .catch(() => setS(null));
   }, []);
   if (!s) return null;
   const pills = [
@@ -283,7 +295,7 @@ function PlacesByStateCard() {
   for (const p of places) {
     if (p.bucket || !p.saved) continue;
     const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
-    const key = isUS ? p.admin1 ?? 'United States' : p.country ?? 'Other';
+    const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
     if (!groups.has(key)) groups.set(key, { isState: Boolean(isUS), cities: [] });
     groups.get(key)!.cities.push(p);
   }
@@ -569,7 +581,10 @@ export default function Settings() {
   const { profile, signOut } = useAuth();
 
   return (
-    <div className="settings-page" style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
+    <div
+      className="settings-page"
+      style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}
+    >
       <Link className="back-bar" to="/">
         <span>Map</span>
       </Link>

@@ -76,7 +76,9 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
   const [spots, setSpots] = useState<{ id: string; place_id: string; title: string }[]>([]);
   useEffect(() => {
     fetchAllEntries()
-      .then((rows) => setSpots(rows.map((r) => ({ id: r.id, place_id: r.place_id, title: r.title }))))
+      .then((rows) =>
+        setSpots(rows.map((r) => ({ id: r.id, place_id: r.place_id, title: r.title }))),
+      )
       .catch(() => setSpots([]));
   }, [places.length]);
   const placesTotal = visited.length + spots.length;
@@ -111,10 +113,16 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
   return (
     <div className="stats-bar">
       <div className="stat-row">
-        <button className={`stat ${detail === 'places' ? 'on' : ''}`} onClick={() => toggle('places')}>
+        <button
+          className={`stat ${detail === 'places' ? 'on' : ''}`}
+          onClick={() => toggle('places')}
+        >
           <b>{placesTotal}</b> <span className="label">places</span>
         </button>
-        <button className={`stat ${detail === 'miles' ? 'on' : ''}`} onClick={() => toggle('miles')}>
+        <button
+          className={`stat ${detail === 'miles' ? 'on' : ''}`}
+          onClick={() => toggle('miles')}
+        >
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
         </button>
       </div>

@@ -15,13 +15,7 @@ interface Props {
 
 /** Inline add/edit form for a spot. Its "Kind" is a category tag (Dining,
  *  Winery, …) which auto-tags the place; 'note' is a plain note. */
-export default function EntryEditor({
-  placeId,
-  existing,
-  defaultDate,
-  onSave,
-  onCancel,
-}: Props) {
+export default function EntryEditor({ placeId, existing, defaultDate, onSave, onCancel }: Props) {
   const [kind, setKind] = useState<string>(existing?.kind ?? 'dining');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [body, setBody] = useState(existing?.body ?? '');

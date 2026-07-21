@@ -75,8 +75,6 @@ function parseCity(address: string | null, admin1: string | null): string | null
   return stIdx > 0 ? parts[stIdx - 1] : null;
 }
 
-
-
 // Past-tense verb for a "miles hiked/run/walked/biked" summary.
 const ACTIVITY_VERB: Record<string, string> = {
   Run: 'run',
@@ -89,7 +87,9 @@ function trailMilesSummary(miles: Record<string, number>): string {
   return Object.entries(miles)
     .filter(([, m]) => m > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([type, m]) => `${(m / 1609.344).toFixed(1)} mi ${ACTIVITY_VERB[type] ?? type.toLowerCase()}`)
+    .map(
+      ([type, m]) => `${(m / 1609.344).toFixed(1)} mi ${ACTIVITY_VERB[type] ?? type.toLowerCase()}`,
+    )
     .join(' · ');
 }
 
@@ -110,9 +110,7 @@ function fmtVisit(v: Visit): string {
   const full: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
   if (v.start_date === v.end_date) return s.toLocaleDateString(undefined, full);
   const sameYear = s.getFullYear() === e.getFullYear();
-  const startOpt: Intl.DateTimeFormatOptions = sameYear
-    ? { month: 'short', day: 'numeric' }
-    : full;
+  const startOpt: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : full;
   return `${s.toLocaleDateString(undefined, startOpt)} – ${e.toLocaleDateString(undefined, full)}`;
 }
 
@@ -153,7 +151,9 @@ export default function PlacePanel({
   const [adjustCover, setAdjustCover] = useState(false);
 
   useEffect(() => {
-    fetchMapPeople().then(setPeople).catch(() => undefined);
+    fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -298,8 +298,7 @@ export default function PlacePanel({
         activityMembers.push(m);
         continue;
       }
-      const city =
-        m.city?.trim() || parseCity(m.address, m.admin1) || m.admin1?.trim() || tripCity;
+      const city = m.city?.trim() || parseCity(m.address, m.admin1) || m.admin1?.trim() || tripCity;
       if (!byCity.has(city)) byCity.set(city, []);
       byCity.get(city)!.push(m);
     }
@@ -428,9 +427,7 @@ export default function PlacePanel({
   async function togglePartOf(parentId: string) {
     if (!parentId) return;
     const cur = place.part_of ?? [];
-    const next = cur.includes(parentId)
-      ? cur.filter((id) => id !== parentId)
-      : [...cur, parentId];
+    const next = cur.includes(parentId) ? cur.filter((id) => id !== parentId) : [...cur, parentId];
     try {
       await patch({ part_of: next });
     } catch (e) {
@@ -604,7 +601,9 @@ export default function PlacePanel({
                 edit
               </button>
             )}
-            {visits && visits.length > 0 && ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+            {visits &&
+              visits.length > 0 &&
+              ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
             {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
           </span>
         )}
@@ -613,7 +612,9 @@ export default function PlacePanel({
             {trailMilesSummary(trailMiles)}
             {(() => {
               const gainM = (trailActs ?? []).reduce((s, a) => s + (a.elevation_gain ?? 0), 0);
-              return gainM > 0 ? ` · ${Math.round(gainM * 3.28084).toLocaleString()} ft climbed` : '';
+              return gainM > 0
+                ? ` · ${Math.round(gainM * 3.28084).toLocaleString()} ft climbed`
+                : '';
             })()}
           </span>
         )}
@@ -646,7 +647,12 @@ export default function PlacePanel({
       {(place.website || (canEdit && place.bucket)) && (
         <div className="card-actions">
           {place.website && (
-            <a className="website-btn" href={normalizeUrl(place.website)} target="_blank" rel="noreferrer">
+            <a
+              className="website-btn"
+              href={normalizeUrl(place.website)}
+              target="_blank"
+              rel="noreferrer"
+            >
               Website
             </a>
           )}
@@ -667,7 +673,11 @@ export default function PlacePanel({
       {!canEdit && effectiveCategories(place).length > 0 && (
         <div className="cats">
           {effectiveCategories(place).map((slug) => (
-            <span key={slug} className="cat-chip" title={`Show all ${categoryLabel(slug)} on the map`}>
+            <span
+              key={slug}
+              className="cat-chip"
+              title={`Show all ${categoryLabel(slug)} on the map`}
+            >
               <Link className="cat-chip-link" to={`/?cat=${slug}`}>
                 {categoryIcon(slug)} {categoryLabel(slug)}
               </Link>
@@ -687,7 +697,10 @@ export default function PlacePanel({
           />
           {review !== (place.review ?? '') && (
             <div className="btn-row" style={{ marginTop: 6 }}>
-              <button className="primary" onClick={() => void patch({ review: review.trim() || null })}>
+              <button
+                className="primary"
+                onClick={() => void patch({ review: review.trim() || null })}
+              >
                 Save review
               </button>
               <button onClick={() => setReview(place.review ?? '')}>Cancel</button>
@@ -792,7 +805,6 @@ export default function PlacePanel({
         );
       })()}
 
-
       {/* Visits — uniform for places AND trails. Collapsed into a dropdown to
           save space; click "Visits (N)" → the dates. Trails list their logged
           activity days here in the same style as places. */}
@@ -844,9 +856,7 @@ export default function PlacePanel({
                           <button
                             className="visit-stop"
                             title="Add a specific stop on this day"
-                            onClick={() =>
-                              setMovingVisit((cur) => (cur === r.key ? null : r.key))
-                            }
+                            onClick={() => setMovingVisit((cur) => (cur === r.key ? null : r.key))}
                           >
                             + stop
                           </button>
@@ -933,10 +943,7 @@ export default function PlacePanel({
             <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
               + Add a spot
             </button>
-            <button
-              className="add-spot-link"
-              onClick={() => setAddingMembers((v) => !v)}
-            >
+            <button className="add-spot-link" onClick={() => setAddingMembers((v) => !v)}>
               + Add existing places
             </button>
           </span>
@@ -945,7 +952,9 @@ export default function PlacePanel({
 
       {canEdit && addingMembers && (
         <div className="entry">
-          <label>Add places you've already saved to this one (a trip's stops, a trail's spots)</label>
+          <label>
+            Add places you've already saved to this one (a trip's stops, a trail's spots)
+          </label>
           <input
             className="member-search"
             placeholder="Search your places…"
@@ -1059,9 +1068,7 @@ export default function PlacePanel({
                 <div key={m.id} className="spot-row">
                   <Link className="spot-item" to={`/place/${m.id}`}>
                     <span className="spot-title">{m.name}</span>
-                    {m.rating ? (
-                      <span className="spot-rating">{'★'.repeat(m.rating)}</span>
-                    ) : null}
+                    {m.rating ? <span className="spot-rating">{'★'.repeat(m.rating)}</span> : null}
                   </Link>
                 </div>
               ))}
@@ -1075,8 +1082,7 @@ export default function PlacePanel({
           {reviewGroups.map((g) => (
             <details className="spot-cat" key={g.key}>
               <summary className="spot-cat-head">
-                {g.label}{' '}
-                <span className="label">({g.places.length + g.entries.length})</span>
+                {g.label} <span className="label">({g.places.length + g.entries.length})</span>
               </summary>
               {/* Linked member places of this category */}
               {g.places.map((m) => {

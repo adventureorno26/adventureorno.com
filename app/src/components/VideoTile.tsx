@@ -27,7 +27,11 @@ export default function VideoTile({ id, onClick }: { id: string; onClick: () => 
 
   return (
     <button className="thumb video-thumb" onClick={onClick} title="Play video">
-      {url ? <img src={url} alt="" /> : <div className={failed ? 'img-fallback' : 'img-skeleton'} />}
+      {url ? (
+        <img src={url} alt="" />
+      ) : (
+        <div className={failed ? 'img-fallback' : 'img-skeleton'} />
+      )}
       <span className="video-play">▶</span>
     </button>
   );

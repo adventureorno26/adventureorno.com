@@ -77,14 +77,6 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place.id, day]);
 
-  if (!photosEnabled()) {
-    return (
-      <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-        Photo uploads aren’t configured yet (needs the R2 Worker — see setup docs).
-      </p>
-    );
-  }
-
   const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
   const canGoogle = profile?.role === 'owner' && googlePhotosEnabled();
   const canDelete = (p: Photo): boolean =>
@@ -110,7 +102,10 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     const vidFiles = files.filter(isVid);
 
     // Optimistic preview — show local thumbnails instantly while they upload.
-    const previews = imgFiles.map((f) => ({ id: `pending-${Math.random()}`, url: URL.createObjectURL(f) }));
+    const previews = imgFiles.map((f) => ({
+      id: `pending-${Math.random()}`,
+      url: URL.createObjectURL(f),
+    }));
     setPending(previews);
 
     let added = 0;
@@ -306,6 +301,15 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     }
   }
 
+  // Guard AFTER all hooks (hooks must run every render).
+  if (!photosEnabled()) {
+    return (
+      <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+        Photo uploads aren’t configured yet (needs the R2 Worker — see setup docs).
+      </p>
+    );
+  }
+
   return (
     <div>
       {canUpload && (
@@ -432,7 +436,9 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                       <button
                         className="thumb-cover"
                         title={
-                          place.cover_photo_id === p.id ? 'Cover photo' : 'Set as cover (map marker)'
+                          place.cover_photo_id === p.id
+                            ? 'Cover photo'
+                            : 'Set as cover (map marker)'
                         }
                         onClick={() => void setCover(p)}
                       >
@@ -500,72 +506,72 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
           <div
             className="lightbox"
             onClick={() => setLightIdx(null)}
-          onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
-          onTouchEnd={(e) => {
-            if (touchX.current == null) return;
-            const dx = e.changedTouches[0].clientX - touchX.current;
-            if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
-            touchX.current = null;
-          }}
-        >
-          <button className="lightbox-close" onClick={() => setLightIdx(null)} title="Close">
-            ×
-          </button>
-
-          {list.length > 1 && (
-            <button
-              className="lightbox-nav prev"
-              onClick={(e) => {
-                e.stopPropagation();
-                step(-1);
-              }}
-              title="Previous"
-            >
-              ‹
+            onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+            onTouchEnd={(e) => {
+              if (touchX.current == null) return;
+              const dx = e.changedTouches[0].clientX - touchX.current;
+              if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+              touchX.current = null;
+            }}
+          >
+            <button className="lightbox-close" onClick={() => setLightIdx(null)} title="Close">
+              ×
             </button>
-          )}
 
-          <AuthedImg
-            key={openPhoto.id}
-            photoId={openPhoto.id}
-            size="full"
-            alt=""
-            className="lightbox-img"
-          />
+            {list.length > 1 && (
+              <button
+                className="lightbox-nav prev"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  step(-1);
+                }}
+                title="Previous"
+              >
+                ‹
+              </button>
+            )}
 
-          {list.length > 1 && (
-            <button
-              className="lightbox-nav next"
-              onClick={(e) => {
-                e.stopPropagation();
-                step(1);
-              }}
-              title="Next"
-            >
-              ›
-            </button>
-          )}
+            <AuthedImg
+              key={openPhoto.id}
+              photoId={openPhoto.id}
+              size="full"
+              alt=""
+              className="lightbox-img"
+            />
 
-          {/* Date + count on one line; download as a compact icon. */}
-          <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
-            <span className="lightbox-meta">
-              {fmtTaken(openPhoto)}
-              {list.length > 1 && (
-                <span className="lightbox-count">
-                  {fmtTaken(openPhoto) ? ' · ' : ''}
-                  {(lightIdx ?? 0) + 1} / {list.length}
-                </span>
-              )}
-            </span>
-            <button
-              className="lightbox-dl"
-              onClick={() => void download(openPhoto)}
-              title="Download photo"
-              aria-label="Download"
-            >
-              ⤓
-            </button>
-          </div>
+            {list.length > 1 && (
+              <button
+                className="lightbox-nav next"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  step(1);
+                }}
+                title="Next"
+              >
+                ›
+              </button>
+            )}
+
+            {/* Date + count on one line; download as a compact icon. */}
+            <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
+              <span className="lightbox-meta">
+                {fmtTaken(openPhoto)}
+                {list.length > 1 && (
+                  <span className="lightbox-count">
+                    {fmtTaken(openPhoto) ? ' · ' : ''}
+                    {(lightIdx ?? 0) + 1} / {list.length}
+                  </span>
+                )}
+              </span>
+              <button
+                className="lightbox-dl"
+                onClick={() => void download(openPhoto)}
+                title="Download photo"
+                aria-label="Download"
+              >
+                ⤓
+              </button>
+            </div>
           </div>,
           document.body,
         )}

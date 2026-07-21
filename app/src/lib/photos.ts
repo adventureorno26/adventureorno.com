@@ -25,8 +25,7 @@ export async function readGps(file: File): Promise<{ lat: number; lng: number } 
 export async function readTakenAt(file: File): Promise<string | undefined> {
   try {
     const d = (await exifr.parse(file, ['DateTimeOriginal', 'CreateDate'])) as
-      | { DateTimeOriginal?: Date; CreateDate?: Date }
-      | undefined;
+      { DateTimeOriginal?: Date; CreateDate?: Date } | undefined;
     const dt = d?.DateTimeOriginal ?? d?.CreateDate;
     if (dt instanceof Date && !Number.isNaN(dt.getTime())) return dt.toISOString();
   } catch {
@@ -61,7 +60,10 @@ interface Prepared {
 }
 
 /** Draw an image scaled so its longest edge ≤ maxEdge, return the canvas + dims. */
-function drawScaled(img: HTMLImageElement, maxEdge: number): { canvas: HTMLCanvasElement; w: number; h: number } {
+function drawScaled(
+  img: HTMLImageElement,
+  maxEdge: number,
+): { canvas: HTMLCanvasElement; w: number; h: number } {
   const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * scale));
   const h = Math.max(1, Math.round(img.height * scale));

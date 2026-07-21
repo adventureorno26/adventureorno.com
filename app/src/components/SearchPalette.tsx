@@ -43,7 +43,9 @@ export default function SearchPalette({ places }: { places: Place[] }) {
     if (!open) return;
     setQ('');
     setActive(0);
-    fetchAllEntries().then(setEntries).catch(() => setEntries([]));
+    fetchAllEntries()
+      .then(setEntries)
+      .catch(() => setEntries([]));
     const t = setTimeout(() => inputRef.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [open]);
@@ -96,7 +98,11 @@ export default function SearchPalette({ places }: { places: Place[] }) {
           break;
         }
         // Boost when the token hits the start of the label.
-        score += item.label.toLowerCase().startsWith(t) ? 3 : item.label.toLowerCase().includes(t) ? 2 : 1;
+        score += item.label.toLowerCase().startsWith(t)
+          ? 3
+          : item.label.toLowerCase().includes(t)
+            ? 2
+            : 1;
       }
       if (score >= 0) scored.push({ item, score });
     }

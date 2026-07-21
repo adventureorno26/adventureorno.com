@@ -24,9 +24,9 @@ describe('isInHomeZone', () => {
 
   it('detects a point just inside 3 miles', () => {
     // ~1.4 miles north of center
-    expect(
-      isInHomeZone({ lng: DEFAULT_HOME_ZONE.lng, lat: DEFAULT_HOME_ZONE.lat + 0.02 }),
-    ).toBe(true);
+    expect(isInHomeZone({ lng: DEFAULT_HOME_ZONE.lng, lat: DEFAULT_HOME_ZONE.lat + 0.02 })).toBe(
+      true,
+    );
   });
 
   it('allows a point well outside the zone (Lisbon)', () => {

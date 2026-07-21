@@ -112,7 +112,17 @@ async function circleIcon(photoId: string): Promise<ImageData | null> {
     ctx.arc(S / 2, S / 2, S / 2 - 5, 0, Math.PI * 2);
     ctx.clip();
     const s = Math.min(img.naturalWidth, img.naturalHeight);
-    ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 4, 4, S - 8, S - 8);
+    ctx.drawImage(
+      img,
+      (img.naturalWidth - s) / 2,
+      (img.naturalHeight - s) / 2,
+      s,
+      s,
+      4,
+      4,
+      S - 8,
+      S - 8,
+    );
     ctx.restore();
     ctx.lineWidth = 5;
     ctx.strokeStyle = '#fff';
@@ -248,7 +258,6 @@ export default function MapView() {
       .addTo(map);
   }, []);
 
-
   // Initial data load — places + per-place photo/route counts for popups.
   useEffect(() => {
     fetchPlaces()
@@ -264,7 +273,9 @@ export default function MapView() {
 
   // The two people, for the "just me" filter + attribution.
   useEffect(() => {
-    void fetchMapPeople().then(setPeople).catch(() => undefined);
+    void fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
   }, [places.length]);
 
   // Draw every activity's route line on the main map (tap a line → its place card).
@@ -285,7 +296,9 @@ export default function MapView() {
         for (const l of lines) {
           let coords: [number, number][] = [];
           try {
-            coords = polyline.decode(l.summary_polyline).map(([la, ln]) => [ln, la] as [number, number]);
+            coords = polyline
+              .decode(l.summary_polyline)
+              .map(([la, ln]) => [ln, la] as [number, number]);
           } catch {
             continue;
           }
@@ -318,6 +331,8 @@ export default function MapView() {
       ],
       fitBoundsOptions: { padding: 24 },
       attributionControl: { compact: true },
+      // v5: antialias moved here from the top-level map option (smooth globe edges).
+      canvasContextAttributes: { antialias: true },
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -370,10 +385,14 @@ export default function MapView() {
             'interpolate',
             ['linear'],
             ['heatmap-density'],
-            0, 'rgba(59,130,246,0)',
-            0.3, 'rgba(59,130,246,0.6)',
-            0.6, 'rgba(168,85,247,0.7)',
-            1, 'rgba(244,63,94,0.85)',
+            0,
+            'rgba(59,130,246,0)',
+            0.3,
+            'rgba(59,130,246,0.6)',
+            0.6,
+            'rgba(168,85,247,0.7)',
+            1,
+            'rgba(244,63,94,0.85)',
           ],
         },
       });
@@ -465,7 +484,11 @@ export default function MapView() {
         if (!iid || !iid.startsWith('ph-') || map.hasImage(iid)) return;
         // Reserve the id with a transparent placeholder so it doesn't refire,
         // then fill in the real circular thumbnail once it decodes.
-        map.addImage(iid, { width: 100, height: 100, data: new Uint8Array(100 * 100 * 4) }, { pixelRatio: 2 });
+        map.addImage(
+          iid,
+          { width: 100, height: 100, data: new Uint8Array(100 * 100 * 4) },
+          { pixelRatio: 2 },
+        );
         void circleIcon(iid.slice(3)).then((data) => {
           if (data && map.hasImage(iid)) map.updateImage(iid, data);
         });
@@ -666,7 +689,9 @@ export default function MapView() {
     if (pts.length >= 2) {
       const snapped = await snapWalkingRoute(pts);
       if (snapped) {
-        lineCoords = polyline.decode(snapped.polyline).map(([la, ln]) => [ln, la] as [number, number]);
+        lineCoords = polyline
+          .decode(snapped.polyline)
+          .map(([la, ln]) => [ln, la] as [number, number]);
         dist = snapped.distance;
         drawEncodedRef.current = snapped.polyline;
       } else {
@@ -861,13 +886,21 @@ export default function MapView() {
     const skips: Record<string, number> = {};
 
     // Read GPS for all files first, then upload the geotagged ones in parallel (4×).
-    const withGps = await mapPool(Array.from(files), async (f) => ({ f, gps: await readGps(f) }), 6);
+    const withGps = await mapPool(
+      Array.from(files),
+      async (f) => ({ f, gps: await readGps(f) }),
+      6,
+    );
     const geo = withGps.filter(
       (x): x is { f: File; gps: { lat: number; lng: number } } => !!x && !!x.gps,
     );
     const noLoc = withGps.filter((x) => x && !x.gps).map((x) => x!.f);
 
-    const results = await mapPool(geo, ({ f, gps }) => uploadPhoto(f, { lat: gps.lat, lng: gps.lng }), 4);
+    const results = await mapPool(
+      geo,
+      ({ f, gps }) => uploadPhoto(f, { lat: gps.lat, lng: gps.lng }),
+      4,
+    );
     results.forEach((r) => {
       if (!r) skips.error = (skips.error ?? 0) + 1;
       else if (r.ok) {
@@ -918,9 +951,7 @@ export default function MapView() {
     } else if (geoPlaceId) {
       // Geotagged photo(s) auto-placed — open the card so the location/name/tags
       // can be adjusted just like any other place.
-      setBanner(
-        added > 1 ? `Added ${added} photos. Review the location and details here.` : null,
-      );
+      setBanner(added > 1 ? `Added ${added} photos. Review the location and details here.` : null);
       navigate(`/place/${geoPlaceId}`);
     } else if (added > 0) {
       setBanner(`Added ${added} photo${added > 1 ? 's' : ''} to the map.`);
@@ -1204,7 +1235,11 @@ export default function MapView() {
         </div>
       )}
 
-      <UnassignedTray key={trayNonce} places={places} onChanged={() => setTrayNonce((n) => n + 1)} />
+      <UnassignedTray
+        key={trayNonce}
+        places={places}
+        onChanged={() => setTrayNonce((n) => n + 1)}
+      />
 
       {selectedPlace && (
         <PlacePanel

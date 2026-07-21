@@ -83,7 +83,11 @@ export default function EntryPhotos({ entryId, placeId, lat, lng, canEdit }: Pro
       )}
       {canEdit && (
         <div className="entry-photo-actions">
-          <button className="link-photos-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
+          <button
+            className="link-photos-btn"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
             {busy ? 'Uploading…' : '⬆ Upload photos'}
           </button>
           <button

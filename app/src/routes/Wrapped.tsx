@@ -40,7 +40,12 @@ export default function Wrapped() {
     const saved = (places ?? []).filter((p) => p.saved && !p.bucket && p.name.trim());
     const inYear = saved.filter((p) => yearOf(p) === year);
     const isUS = (p: Place) => (p.country ?? '').match(/^(United States|USA|US)$/i);
-    const states = new Set(inYear.filter(isUS).map((p) => p.admin1).filter(Boolean));
+    const states = new Set(
+      inYear
+        .filter(isUS)
+        .map((p) => p.admin1)
+        .filter(Boolean),
+    );
     const countries = new Set(inYear.map((p) => p.country).filter(Boolean));
     const trips = inYear.filter((p) => (p.categories ?? []).includes('trip'));
     const parks = inYear.filter((p) =>

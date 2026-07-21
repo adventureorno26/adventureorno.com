@@ -1032,7 +1032,9 @@ a {
   color: #3a4d6b;
   line-height: 0;
   cursor: pointer;
-  transition: transform 0.1s ease, color 0.1s ease;
+  transition:
+    transform 0.1s ease,
+    color 0.1s ease;
 }
 .star-rating .star.on {
   color: #ffc23d;
@@ -2128,8 +2130,7 @@ textarea {
 }
 .geo-marker.selected .geo-pin {
   transform: scale(1.28);
-  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85))
-    drop-shadow(0 4px 6px rgba(2, 8, 23, 0.6));
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85)) drop-shadow(0 4px 6px rgba(2, 8, 23, 0.6));
 }
 /* Small modern wishlist dot */
 .bucket-dot {
@@ -3886,7 +3887,9 @@ textarea {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Native select dropdown options: readable dark text on white (was white-on-white) */

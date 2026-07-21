@@ -28,7 +28,7 @@ export default function BucketList() {
     const map = new Map<string, { items: Place[]; isState: boolean }>();
     for (const p of places ?? []) {
       const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
-      const key = isUS ? p.admin1 ?? 'United States' : p.country ?? 'Other';
+      const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
       if (!map.has(key)) map.set(key, { items: [], isState: Boolean(isUS) });
       map.get(key)!.items.push(p);
     }

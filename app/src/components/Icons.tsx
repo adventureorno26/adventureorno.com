@@ -23,29 +23,32 @@ function line(size: number, children: React.ReactNode) {
 }
 
 export function SearchIcon({ size = 16 }: IconProps) {
-  return line(size, (
+  return line(
+    size,
     <>
       <circle cx="11" cy="11" r="7" />
       <line x1="21" y1="21" x2="16.6" y2="16.6" />
-    </>
-  ));
+    </>,
+  );
 }
 
 // Slim modern map pin (outline), lighter than a solid teardrop.
 export function PinIcon({ size = 16 }: IconProps) {
-  return line(size, (
+  return line(
+    size,
     <>
       <path d="M12 21c4.5-4.2 7-7.6 7-11a7 7 0 1 0-14 0c0 3.4 2.5 6.8 7 11Z" />
       <circle cx="12" cy="10" r="2.5" />
-    </>
-  ));
+    </>,
+  );
 }
 
 // Bucket List motif: a clean rounded bookmark.
 export function BucketIcon({ size = 16 }: IconProps) {
-  return line(size, (
-    <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v14.4a.6.6 0 0 1-.94.5L12 16.2l-5.56 3.7A.6.6 0 0 1 5.5 19.4V5A1.5 1.5 0 0 1 7 3.5Z" />
-  ));
+  return line(
+    size,
+    <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v14.4a.6.6 0 0 1-.94.5L12 16.2l-5.56 3.7A.6.6 0 0 1 5.5 19.4V5A1.5 1.5 0 0 1 7 3.5Z" />,
+  );
 }
 
 // Modern star with softly rounded points (used by ratings).

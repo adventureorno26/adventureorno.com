@@ -50,7 +50,11 @@ export default function Trips() {
     setMsg(null);
     try {
       const r = await detectTrips();
-      setMsg(r.suggested > 0 ? `Found ${r.suggested} possible trip${r.suggested > 1 ? 's' : ''}.` : 'No new trips found.');
+      setMsg(
+        r.suggested > 0
+          ? `Found ${r.suggested} possible trip${r.suggested > 1 ? 's' : ''}.`
+          : 'No new trips found.',
+      );
       load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Detection failed.');

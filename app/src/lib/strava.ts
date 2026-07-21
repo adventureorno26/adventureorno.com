@@ -66,9 +66,7 @@ export async function fetchActivityLines(personId?: string | null): Promise<Acti
 }
 
 /** Total meters by activity type across a set of places (trail + its trailheads). */
-export async function fetchMileageForPlaces(
-  placeIds: string[],
-): Promise<Record<string, number>> {
+export async function fetchMileageForPlaces(placeIds: string[]): Promise<Record<string, number>> {
   if (placeIds.length === 0) return {};
   const { data, error } = await supabase
     .from('activities')

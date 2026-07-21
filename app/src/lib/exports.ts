@@ -16,7 +16,10 @@ function download(filename: string, mime: string, text: string) {
 }
 
 const xml = (s: string | null | undefined) =>
-  (s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+  (s ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
 
 const csvCell = (s: string | number | null | undefined) => {
   const v = String(s ?? '');

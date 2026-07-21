@@ -79,7 +79,11 @@ export default function BucketMiniMap({ places }: { places: Place[] }) {
     map.resize();
     const target = expanded ? allBounds() : denseBounds();
     if (!target.isEmpty()) {
-      map.fitBounds(target, { padding: expanded ? 40 : 26, maxZoom: expanded ? 12 : 9, duration: 500 });
+      map.fitBounds(target, {
+        padding: expanded ? 40 : 26,
+        maxZoom: expanded ? 12 : 9,
+        duration: 500,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded]);

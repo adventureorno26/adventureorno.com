@@ -80,7 +80,10 @@ export default function DayView() {
     void fetchPlace(id).then(setPlace);
     void fetchActivitiesForDay(id, date).then(setActs);
     void loadEntries();
-    if (canEdit) void fetchPlaces().then(setAllPlaces).catch(() => undefined);
+    if (canEdit)
+      void fetchPlaces()
+        .then(setAllPlaces)
+        .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, date]);
 
@@ -237,7 +240,11 @@ export default function DayView() {
                         <option value="Walk">Walk</option>
                         <option value="Ride">Ride</option>
                       </select>
-                      <button className="primary" style={{ flex: 'none' }} onClick={() => void saveActivity(a)}>
+                      <button
+                        className="primary"
+                        style={{ flex: 'none' }}
+                        onClick={() => void saveActivity(a)}
+                      >
                         Save
                       </button>
                     </div>
@@ -278,7 +285,9 @@ export default function DayView() {
                         <div className="move-picker">
                           <select
                             defaultValue=""
-                            onChange={(e) => e.target.value && void moveToExisting(a, e.target.value)}
+                            onChange={(e) =>
+                              e.target.value && void moveToExisting(a, e.target.value)
+                            }
                           >
                             <option value="">Move to an existing place…</option>
                             {allPlaces
