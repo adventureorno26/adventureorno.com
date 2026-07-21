@@ -2674,27 +2674,62 @@ textarea {
   font-weight: 600;
   color: var(--muted);
 }
-/* Settings "Our stats" — same pill look as the map stats. */
+/* Settings — smaller headings + thinner pills. */
+.settings-page h1 {
+  font-size: 22px;
+}
+.settings-page h2 {
+  font-size: 15px;
+}
+.stats-dropdown > summary {
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.stats-dropdown > summary::-webkit-details-marker {
+  display: none;
+}
+.stats-dropdown > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+  font-size: 12px;
+}
+.stats-dropdown[open] > summary::before {
+  content: '▾ ';
+}
 .our-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  margin-top: 10px;
 }
 .our-stats .stat {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 4px 14px;
-  font-size: 13px;
+  padding: 2px 11px;
+  font-size: 11px;
   display: flex;
-  gap: 6px;
+  gap: 5px;
   align-items: baseline;
 }
 .our-stats .stat b {
-  font-size: 15px;
+  font-size: 13px;
 }
 .our-stats .stat .label {
   color: var(--muted);
+}
+.settings-page .app-tile {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+/* Trail setup form — compact. */
+.trail-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .save-bottom {
   margin-top: 26px;

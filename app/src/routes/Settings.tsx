@@ -250,13 +250,16 @@ function OurStatsCard() {
   ];
   return (
     <div className="card">
-      <div className="our-stats">
-        {pills.map((p) => (
-          <div key={p.label} className="stat">
-            <b>{p.value}</b> <span className="label">{p.label}</span>
-          </div>
-        ))}
-      </div>
+      <details className="stats-dropdown">
+        <summary>Our stats</summary>
+        <div className="our-stats">
+          {pills.map((p) => (
+            <div key={p.label} className="stat">
+              <b>{p.value}</b> <span className="label">{p.label}</span>
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }
@@ -421,7 +424,7 @@ export default function Settings() {
   const { profile, signOut } = useAuth();
 
   return (
-    <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
+    <div className="settings-page" style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
       <Link className="back-bar" to="/">
         <span>Map</span>
       </Link>

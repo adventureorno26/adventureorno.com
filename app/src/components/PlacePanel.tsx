@@ -4,6 +4,7 @@ import {
   addPlaceToTrail,
   addVisit,
   createEntry,
+  createPlace,
   deletePlace,
   deleteVisit,
   fetchEntries,
@@ -134,6 +135,7 @@ export default function PlacePanel({
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [trailSel, setTrailSel] = useState('');
   const [trailheadName, setTrailheadName] = useState('');
+  const [newTrailName, setNewTrailName] = useState('');
   const [editingAddress, setEditingAddress] = useState(false);
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
@@ -293,13 +295,31 @@ export default function PlacePanel({
     });
   }
 
-  // Trail assignment: either make this place its own trail, or attach it as a
-  // trailhead of an existing trail (keeps its photos/marker).
-  async function addToExistingTrail() {
-    if (!trailSel) return;
+  // Make this place a trailhead of a trail system — either an existing trail, or
+  // a brand-new one created on the spot (trailSel === '__new__'). The place keeps
+  // its own photos/marker and joins the trail.
+  async function attachToTrail() {
     setError(null);
     try {
-      await addPlaceToTrail(place.id, trailSel, trailheadName.trim() || place.name);
+      let trailId = trailSel;
+      if (trailSel === '__new__') {
+        if (!newTrailName.trim()) {
+          setError('Name the new trail first.');
+          return;
+        }
+        const t = await createPlace({
+          name: newTrailName.trim(),
+          country: place.country,
+          admin1: place.admin1,
+          lat: place.lat,
+          lng: place.lng,
+          is_trail: true,
+          saved: true,
+        });
+        trailId = t.id;
+      }
+      if (!trailId) return;
+      await addPlaceToTrail(place.id, trailId, trailheadName.trim() || place.name);
       const updated = await fetchPlace(place.id);
       if (updated) onPlaceChanged(updated);
     } catch (e) {
@@ -821,41 +841,48 @@ export default function PlacePanel({
           {!place.is_trail && !place.trail_id && (
             <details className="cat-edit trail-assign inline-trail">
               <summary>This is a Trail</summary>
-              <div style={{ marginTop: 8 }}>
+              <div className="trail-setup" style={{ marginTop: 8 }}>
                 <button className="primary" onClick={() => void patch({ is_trail: true })}>
-                  Yes — make this its own trail
+                  Make this its own trail
                 </button>
-                {allPlaces.some((p) => p.is_trail) && (
-                  <>
-                    <div className="trail-or">or add it as a trailhead on an existing trail:</div>
-                    <div className="field-row">
-                      <select value={trailSel} onChange={(e) => setTrailSel(e.target.value)}>
-                        <option value="">Choose a trail…</option>
-                        {allPlaces
-                          .filter((p) => p.is_trail)
-                          .map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    <div className="field-row" style={{ marginTop: 6 }}>
-                      <input
-                        placeholder={`Trailhead name (default: ${place.name})`}
-                        value={trailheadName}
-                        onChange={(e) => setTrailheadName(e.target.value)}
-                      />
-                      <button
-                        className="primary"
-                        style={{ flex: 'none' }}
-                        disabled={!trailSel}
-                        onClick={() => void addToExistingTrail()}
-                      >
-                        Add to trail
-                      </button>
-                    </div>
-                  </>
+                <div className="trail-or">or make it a trailhead of a bigger trail:</div>
+                <div className="field-row">
+                  <select value={trailSel} onChange={(e) => setTrailSel(e.target.value)}>
+                    <option value="">Choose a trail…</option>
+                    {allPlaces
+                      .filter((p) => p.is_trail)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    <option value="__new__">＋ New trail…</option>
+                  </select>
+                </div>
+                {trailSel === '__new__' && (
+                  <div className="field-row" style={{ marginTop: 6 }}>
+                    <input
+                      placeholder="New trail name (e.g. Appalachian Trail)"
+                      value={newTrailName}
+                      onChange={(e) => setNewTrailName(e.target.value)}
+                    />
+                  </div>
+                )}
+                {trailSel && (
+                  <div className="field-row" style={{ marginTop: 6 }}>
+                    <input
+                      placeholder={`Trailhead name (default: ${place.name})`}
+                      value={trailheadName}
+                      onChange={(e) => setTrailheadName(e.target.value)}
+                    />
+                    <button
+                      className="primary"
+                      style={{ flex: 'none' }}
+                      onClick={() => void attachToTrail()}
+                    >
+                      Add
+                    </button>
+                  </div>
                 )}
               </div>
             </details>
