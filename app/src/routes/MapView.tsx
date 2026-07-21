@@ -55,6 +55,7 @@ function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON
     type: 'FeatureCollection',
     features: places.map((p) => {
       const cover = effectiveCover(p, places);
+      const primary = primaryCategory(p);
       return {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
@@ -62,7 +63,9 @@ function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON
           id: p.id,
           photo: cover ? 1 : 0,
           icon: cover ? `ph-${cover}` : '',
-          color: categoryColor(primaryCategory(p)),
+          color: categoryColor(primary),
+          // White type indicator on no-photo pins (D=Dining, W=Winery, …).
+          glyph: cover || primary === 'default' ? '' : primary.charAt(0).toUpperCase(),
         },
       };
     }),
@@ -389,6 +392,21 @@ export default function MapView() {
           'circle-stroke-width': 2,
         },
       });
+      // White type letter centered on each no-photo pin (its category indicator).
+      map.addLayer({
+        id: 'place-glyphs',
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'photo'], 0]],
+        layout: {
+          'text-field': ['get', 'glyph'],
+          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-size': 11,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: { 'text-color': '#fff' },
+      });
       // Unclustered places WITH a photo → the cover as a circular symbol icon,
       // lazily generated in `styleimagemissing`. Symbols are part of the map, so
       // they stay anchored to their exact coordinates through any zoom.
@@ -414,7 +432,7 @@ export default function MapView() {
           if (data && map.hasImage(iid)) map.updateImage(iid, data);
         });
       });
-      for (const layer of ['place-dots', 'place-photos'] as const) {
+      for (const layer of ['place-dots', 'place-glyphs', 'place-photos'] as const) {
         map.on('click', layer, (e) => {
           const pid = e.features?.[0]?.properties?.id as string | undefined;
           if (pid) navigateRef.current(`/place/${pid}`);
@@ -482,7 +500,11 @@ export default function MapView() {
       const onCluster = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
       if (onCluster.length > 0) return;
       // Tapped an existing place marker → its layer handler opens the card.
-      if (map.queryRenderedFeatures(e.point, { layers: ['place-dots', 'place-photos'] }).length > 0)
+      if (
+        map.queryRenderedFeatures(e.point, {
+          layers: ['place-dots', 'place-glyphs', 'place-photos'],
+        }).length > 0
+      )
         return;
 
       const label = map.queryRenderedFeatures(e.point).find((f) => {
@@ -1124,13 +1146,6 @@ export default function MapView() {
           onPlaceChanged={handlePlaceChanged}
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}
-          onAddRoute={(placeId, name) => {
-            drawTargetRef.current = placeId;
-            setDrawName(name);
-            setDrawMode(true);
-            setBanner('Tap the map to trace the route, then Save.');
-            navigate('/');
-          }}
         />
       )}
     </div>

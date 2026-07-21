@@ -38,7 +38,6 @@ interface Props {
   onPlaceChanged: (place: Place) => void;
   onPlaceDeleted: (id: string) => void;
   onMerged: (loserId: string, winner: Place) => void;
-  onAddRoute?: (placeId: string, name: string) => void;
 }
 
 /** Prepend https:// when the user typed a bare domain, so the link works. */
@@ -107,7 +106,6 @@ export default function PlacePanel({
   onClose,
   onPlaceChanged,
   onPlaceDeleted,
-  onAddRoute,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -685,29 +683,19 @@ export default function PlacePanel({
               )}
             </details>
 
-            {canEdit &&
-              (isTrail
-                ? onAddRoute && (
-                    <button
-                      className="link-btn"
-                      onClick={() => onAddRoute(place.id, place.name)}
-                    >
-                      ＋ Add a route
-                    </button>
-                  )
-                : !addingVisit && (
-                    <button
-                      className="link-btn"
-                      onClick={() => {
-                        setAddingVisit(true);
-                        setVStart(new Date().toISOString().slice(0, 10));
-                      }}
-                    >
-                      ＋ Add a visit
-                    </button>
-                  ))}
+            {canEdit && !addingVisit && (
+              <button
+                className="link-btn"
+                onClick={() => {
+                  setAddingVisit(true);
+                  setVStart(new Date().toISOString().slice(0, 10));
+                }}
+              >
+                ＋ Add a visit
+              </button>
+            )}
 
-            {!isTrail && canEdit && addingVisit && (
+            {canEdit && addingVisit && (
               <div className="entry" style={{ marginTop: 8 }}>
                 <label>Date{vMulti ? ' — from' : ''}</label>
                 <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
@@ -866,15 +854,12 @@ export default function PlacePanel({
       )}
       {merging && (
         <div className="entry">
-          <label>
-            Make this part of a trip or place — e.g. a San Diego trip, or a trail. It keeps its own
-            map marker and shows up under that place's visits.
-          </label>
           <select
+            className="kind-select"
             value={place.trail_id ?? ''}
             onChange={(e) => void addToExisting(e.target.value)}
           >
-            <option value="">Not part of anything</option>
+            <option value="">Select…</option>
             {allPlaces
               .filter((p) => p.id !== place.id)
               .sort((a, b) => a.name.localeCompare(b.name))
