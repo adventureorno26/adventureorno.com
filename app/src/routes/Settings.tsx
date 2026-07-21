@@ -557,9 +557,14 @@ export default function Settings() {
       <NationalParksCard />
 
       <h2 style={{ marginTop: 28 }}>Trips</h2>
-      <Link to="/trips">
-        <button>All Our Trips</button>
-      </Link>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Link to="/trips">
+          <button>All Our Trips</button>
+        </Link>
+        <Link to="/wrapped">
+          <button>Our Year in Travel</button>
+        </Link>
+      </div>
 
       <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
       <SharedHub />

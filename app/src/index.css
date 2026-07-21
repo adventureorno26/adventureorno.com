@@ -2978,6 +2978,114 @@ textarea {
   border-radius: 4px;
   background: var(--grad);
 }
+
+/* Our Year in Travel (Wrapped) */
+.wrapped {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 16px 60px;
+}
+.wrapped-hero {
+  text-align: center;
+  padding: 24px 0 8px;
+}
+.wrapped-hero h1 {
+  font-size: 30px;
+  margin: 10px 0 2px;
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.wrapped-sub {
+  color: var(--muted);
+  margin: 0;
+}
+.wrapped-year-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.wrapped-year {
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+.wrapped-year.on {
+  background: var(--grad);
+  color: #06121f;
+  font-weight: 700;
+}
+.wrapped-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 20px 0;
+}
+.wrapped-stat {
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  padding: 16px 10px;
+  text-align: center;
+}
+.wrapped-stat.big {
+  grid-column: span 3;
+  padding: 22px 10px;
+}
+.wrapped-stat b {
+  display: block;
+  font-size: 30px;
+  line-height: 1.1;
+}
+.wrapped-stat.big b {
+  font-size: 48px;
+}
+.wrapped-stat span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.wrapped-card {
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.wrapped-card-label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.wrapped-card-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+.wrapped-card-sub {
+  color: var(--muted);
+  font-size: 14px;
+}
+.wrapped-tags,
+.wrapped-trips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wrapped-tag {
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+.wrapped-trip {
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
 .spot-cat > summary {
   cursor: pointer;
   list-style: none;

@@ -11,6 +11,7 @@ const DayView = lazy(() => import('./routes/DayView'));
 const PlacesList = lazy(() => import('./routes/PlacesList'));
 const Settings = lazy(() => import('./routes/Settings'));
 const Trips = lazy(() => import('./routes/Trips'));
+const Wrapped = lazy(() => import('./routes/Wrapped'));
 const BucketList = lazy(() => import('./routes/BucketList'));
 const ImportTimeline = lazy(() => import('./routes/ImportTimeline'));
 
@@ -73,6 +74,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Trips />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/wrapped"
+          element={
+            <RequireAuth>
+              <Wrapped />
             </RequireAuth>
           }
         />
