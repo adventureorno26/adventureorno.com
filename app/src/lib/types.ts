@@ -145,6 +145,28 @@ export interface Activity {
   trailhead: string | null; // where this run started on a trail (falls back to name)
 }
 
+export interface SharedLink {
+  id: string;
+  label: string;
+  url: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export type BoardKind = 'drink' | 'eat' | 'watch' | 'visit' | 'listen';
+
+export interface BoardItem {
+  id: string;
+  board: BoardKind;
+  title: string;
+  url: string | null;
+  note: string | null;
+  done: boolean;
+  done_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface MileageRow {
   type: string;
   activity_count: number;

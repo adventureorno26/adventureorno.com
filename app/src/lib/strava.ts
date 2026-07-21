@@ -152,6 +152,26 @@ export async function isStravaConnected(): Promise<boolean> {
   return Boolean(data);
 }
 
+/** Whether the CURRENT signed-in user has connected their own Strava. */
+export async function isMyStravaConnected(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('strava_connected_me');
+  if (error) return false;
+  return Boolean(data);
+}
+
+export interface StravaAthlete {
+  athlete_id: number;
+  profile_id: string | null;
+  display_name: string | null;
+}
+
+/** Connected athletes → for attribution and the "just me / both" toggle. */
+export async function fetchStravaAthletes(): Promise<StravaAthlete[]> {
+  const { data, error } = await supabase.rpc('strava_athletes');
+  if (error) return [];
+  return (data ?? []) as StravaAthlete[];
+}
+
 /** Build the Strava authorize URL. Client ID is public; secret stays server-side.
  *  `state` carries the owner's user id so the callback can attribute the account. */
 export function stravaAuthorizeUrl(clientId: string, ownerId: string): string {

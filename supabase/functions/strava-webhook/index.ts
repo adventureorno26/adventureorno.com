@@ -11,7 +11,7 @@
 import {
   adminClient,
   getHomeZone,
-  getValidAccessToken,
+  getValidAccessTokenFor,
   ingestActivity,
   type StravaActivity,
 } from '../_shared/strava.ts';
@@ -71,15 +71,17 @@ Deno.serve(async (req) => {
       return json({ ok: true, deleted: event.object_id });
     }
 
-    // create | update → fetch the full activity, then apply rule #2.
-    const access = await getValidAccessToken(admin);
+    // create | update → fetch the full activity using the OWNER's token, then
+    // apply rule #2 and attribute it to that athlete.
+    const access = await getValidAccessTokenFor(admin, event.owner_id);
     const res = await fetch(`https://www.strava.com/api/v3/activities/${event.object_id}`, {
       headers: { Authorization: `Bearer ${access}` },
     });
     if (!res.ok) return json({ ok: false, error: `fetch activity ${res.status}` });
     const activity = (await res.json()) as StravaActivity;
     const zone = await getHomeZone(admin);
-    const outcome = await ingestActivity(admin, activity, zone);
+    const outcome = await ingestActivity(admin, activity, zone, event.owner_id);
+    if (outcome === 'stored') await admin.rpc('dedupe_shared_outings').catch(() => undefined);
     return json({ ok: true, outcome });
   } catch (e) {
     console.error('strava-webhook error', String(e));

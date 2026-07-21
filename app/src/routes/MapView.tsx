@@ -28,6 +28,7 @@ import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import OnThisDay from '../components/OnThisDay';
 import SearchPalette from '../components/SearchPalette';
+import Slideshow from '../components/Slideshow';
 import MemoryBanner from '../components/MemoryBanner';
 
 const SOURCE_ID = 'places';
@@ -862,6 +863,8 @@ export default function MapView() {
       <OnThisDay />
 
       <SearchPalette places={places} />
+
+      <Slideshow mapRef={mapRef} places={places} />
 
       <StatsBar places={places} onFilterCategory={setFilterCat} />
 

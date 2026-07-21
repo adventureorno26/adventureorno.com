@@ -66,20 +66,26 @@ export async function exchangeCode(code: string): Promise<TokenResponse> {
   return (await res.json()) as TokenResponse & { athlete?: { id: number } };
 }
 
-/** Return a valid access token for the (single) connected athlete, refreshing if
- *  it expires within 5 minutes. */
-export async function getValidAccessToken(admin: SupabaseClient): Promise<string> {
-  const { data: acct, error } = await admin
+interface Account {
+  athlete_id: number;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+}
+
+/** Every connected athlete (Erica + Josh). */
+export async function getAllAccounts(admin: SupabaseClient): Promise<Account[]> {
+  const { data } = await admin
     .from('strava_accounts')
     .select('athlete_id, access_token, refresh_token, expires_at')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !acct) throw new Error('no connected Strava account');
+    .order('created_at', { ascending: true });
+  return (data ?? []) as Account[];
+}
 
-  const expMs = new Date(acct.expires_at as string).getTime();
-  if (expMs - Date.now() > 5 * 60_000) return acct.access_token as string;
-
+/** A fresh access token for one account, refreshing if it expires within 5 min. */
+async function tokenFor(admin: SupabaseClient, acct: Account): Promise<string> {
+  const expMs = new Date(acct.expires_at).getTime();
+  if (expMs - Date.now() > 5 * 60_000) return acct.access_token;
   const res = await fetch('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -104,6 +110,27 @@ export async function getValidAccessToken(admin: SupabaseClient): Promise<string
   return t.access_token;
 }
 
+/** Valid access token for a specific athlete (webhook routes by owner_id). */
+export async function getValidAccessTokenFor(
+  admin: SupabaseClient,
+  athleteId: number,
+): Promise<string> {
+  const { data: acct } = await admin
+    .from('strava_accounts')
+    .select('athlete_id, access_token, refresh_token, expires_at')
+    .eq('athlete_id', athleteId)
+    .maybeSingle();
+  if (!acct) throw new Error(`no Strava account for athlete ${athleteId}`);
+  return tokenFor(admin, acct as Account);
+}
+
+/** Back-compat: token for the first connected athlete. */
+export async function getValidAccessToken(admin: SupabaseClient): Promise<string> {
+  const accts = await getAllAccounts(admin);
+  if (accts.length === 0) throw new Error('no connected Strava account');
+  return tokenFor(admin, accts[0]);
+}
+
 export interface StravaActivity {
   id: number;
   name?: string;
@@ -123,6 +150,7 @@ export async function ingestActivity(
   admin: SupabaseClient,
   a: StravaActivity,
   zone: HomeZone,
+  athleteId?: number,
 ): Promise<'stored' | 'skipped'> {
   const type = a.type ?? a.sport_type ?? 'Workout';
   const ll = a.start_latlng;
@@ -149,6 +177,8 @@ export async function ingestActivity(
     lat,
     lng,
     summary_polyline: a.map?.summary_polyline ?? null,
+    // Which of us recorded it (for "just me / just Josh / both" + dedupe).
+    ...(athleteId != null ? { athlete_id: athleteId } : {}),
   };
 
   let placeId: string | null = null;

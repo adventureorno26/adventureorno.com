@@ -2620,6 +2620,108 @@ textarea {
   color: var(--accent);
   margin-bottom: 4px;
 }
+/* Shared hub (Settings): links + want-to boards. */
+.shared-hub .card {
+  margin-top: 12px;
+}
+.hub-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hub-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.hub-link-row a {
+  font-weight: 600;
+}
+.board-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.board-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.board-item input[type='checkbox'] {
+  width: auto;
+  flex: none;
+}
+.board-item-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+}
+.board-item.done .board-item-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+/* Slideshow / Surprise controls (top-left, under Search) + caption. */
+.slideshow-controls {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  left: 12px;
+  z-index: 7;
+  display: flex;
+  gap: 6px;
+}
+.slideshow-controls button {
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.slideshow-caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 16px 10px 10px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(2, 8, 23, 0.5);
+}
+.slideshow-thumb,
+.slideshow-thumb.img-skeleton,
+.slideshow-thumb.img-fallback {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex: none;
+}
+.slideshow-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.slideshow-region {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* Search-your-places button (top-left of the map) + ⌘K palette. */
 .places-search-btn {
   position: absolute;

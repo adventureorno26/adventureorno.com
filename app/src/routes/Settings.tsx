@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchHomeZone, triggerGeocode, updateHomeZone, type HomeZone } from '../lib/data';
-import { backfillPage, isStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
+import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
 import PeopleCard from '../components/PeopleCard';
+import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
 import {
   approveJoinRequest,
@@ -226,14 +227,14 @@ function GeocodeCard() {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function StravaCard({ ownerId }: { ownerId: string }) {
+function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const clientId = import.meta.env.VITE_STRAVA_CLIENT_ID;
 
   useEffect(() => {
-    isStravaConnected().then(setConnected);
+    isMyStravaConnected().then(setConnected);
     const params = new URLSearchParams(window.location.search);
     if (params.get('strava') === 'connected') setConnected(true);
   }, []);
@@ -283,28 +284,34 @@ function StravaCard({ ownerId }: { ownerId: string }) {
       ) : connected ? (
         <>
           <div style={{ color: '#4dd07a', fontSize: 13, margin: '4px 0 10px' }}>
-            ✓ Connected. New activities import automatically via webhook.
+            ✓ Your Strava is connected. New activities import automatically.
           </div>
-          <div className="btn-row" style={{ marginTop: 0 }}>
-            <button disabled={running} onClick={() => void runBackfill(365)}>
-              {running ? 'Importing…' : 'Backfill last 12 months'}
-            </button>
-            <button disabled={running} onClick={() => void runBackfill(30)}>
-              Last 30 days
-            </button>
-          </div>
-          {progress && (
-            <div className="banner" style={{ marginTop: 8 }}>
-              {progress}
-            </div>
+          {isOwner && (
+            <>
+              <div className="btn-row" style={{ marginTop: 0 }}>
+                <button disabled={running} onClick={() => void runBackfill(3650)}>
+                  {running ? 'Importing…' : 'Backfill all history (both of you)'}
+                </button>
+                <button disabled={running} onClick={() => void runBackfill(365)}>
+                  Last 12 months
+                </button>
+              </div>
+              {progress && (
+                <div className="banner" style={{ marginTop: 8 }}>
+                  {progress}
+                </div>
+              )}
+            </>
           )}
         </>
       ) : (
         <>
           <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
-            Connect Strava to auto-import hikes, walks, runs, and rides.
+            Connect your Strava to auto-import your hikes, walks, runs, and rides. To pull in Garmin
+            activities, turn on <b>Garmin Connect → Strava</b> in Garmin Connect — they'll flow in
+            through Strava, no separate Garmin connection needed.
           </div>
-          <a href={stravaAuthorizeUrl(clientId, ownerId)}>
+          <a href={stravaAuthorizeUrl(clientId, myId)}>
             <button className="primary">Connect Strava</button>
           </a>
         </>
@@ -329,6 +336,16 @@ export default function Settings() {
       <h2 style={{ marginTop: 28 }}>Account</h2>
       <button onClick={() => void signOut()}>Sign out</button>
 
+      <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
+      <SharedHub />
+
+      {profile && (
+        <>
+          <h2 style={{ marginTop: 28 }}>Strava &amp; Garmin</h2>
+          <StravaCard myId={profile.id} isOwner={profile.role === 'owner'} />
+        </>
+      )}
+
       {profile?.role === 'owner' && (
         <>
           <h2 style={{ marginTop: 28 }}>Join requests</h2>
@@ -340,9 +357,6 @@ export default function Settings() {
           <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
           <HomeZoneCard />
           <GeocodeCard />
-
-          <h2 style={{ marginTop: 28 }}>Strava</h2>
-          <StravaCard ownerId={profile.id} />
         </>
       )}
     </div>

@@ -8,8 +8,9 @@
 
 import {
   adminClient,
+  getAllAccounts,
   getHomeZone,
-  getValidAccessToken,
+  getValidAccessTokenFor,
   ingestActivity,
   type StravaActivity,
 } from '../_shared/strava.ts';
@@ -74,34 +75,43 @@ Deno.serve(async (req) => {
   const page = Math.max(1, body.page ?? 1);
 
   try {
-    const access = await getValidAccessToken(admin);
     const zone = await getHomeZone(admin);
-    const params = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
-    if (body.after) params.set('after', String(body.after));
-    if (body.before) params.set('before', String(body.before));
+    const accounts = await getAllAccounts(admin);
+    if (accounts.length === 0) return json({ error: 'no connected Strava account' }, 400);
 
-    const res = await fetch(`https://www.strava.com/api/v3/athlete/activities?${params}`, {
-      headers: { Authorization: `Bearer ${access}` },
-    });
-    if (res.status === 429) return json({ error: 'rate_limited', retryAfter: 900 }, 429);
-    if (!res.ok) return json({ error: `list failed ${res.status}` }, 502);
-
-    const activities = (await res.json()) as StravaActivity[];
+    // Backfill the same page for EVERY connected athlete (Erica + Josh), tagging
+    // each activity with whose it is. hasMore is true if any account has more.
+    let processed = 0;
     let stored = 0;
     let skipped = 0;
-    for (const a of activities) {
-      const outcome = await ingestActivity(admin, a, zone);
-      if (outcome === 'stored') stored++;
-      else skipped++;
+    let hasMore = false;
+    for (const acct of accounts) {
+      const access = await getValidAccessTokenFor(admin, acct.athlete_id);
+      const params = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
+      if (body.after) params.set('after', String(body.after));
+      if (body.before) params.set('before', String(body.before));
+      const res = await fetch(`https://www.strava.com/api/v3/athlete/activities?${params}`, {
+        headers: { Authorization: `Bearer ${access}` },
+      });
+      if (res.status === 429) return json({ error: 'rate_limited', retryAfter: 900 }, 429);
+      if (!res.ok) continue; // skip this athlete's page on error, keep the others
+      const activities = (await res.json()) as StravaActivity[];
+      processed += activities.length;
+      if (activities.length === PER_PAGE) hasMore = true;
+      for (const a of activities) {
+        const outcome = await ingestActivity(admin, a, zone, acct.athlete_id);
+        if (outcome === 'stored') stored++;
+        else skipped++;
+      }
     }
 
-    return json({
-      processed: activities.length,
-      stored,
-      skipped,
-      page,
-      hasMore: activities.length === PER_PAGE,
-    });
+    // Once we've reached the end, link any outings both of you recorded so stats
+    // count them once.
+    if (!hasMore) {
+      await admin.rpc('dedupe_shared_outings').catch(() => undefined);
+    }
+
+    return json({ processed, stored, skipped, page, hasMore });
   } catch (e) {
     return json({ error: String(e).slice(0, 200) }, 500);
   }
