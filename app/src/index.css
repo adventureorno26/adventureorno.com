@@ -1207,6 +1207,7 @@ a {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(6, 10, 20, 0.1) 40%, rgba(6, 10, 20, 0.92) 100%);
+  pointer-events: none; /* let taps reach the photo (opens the framing slider) */
 }
 .hero-title {
   position: absolute;
