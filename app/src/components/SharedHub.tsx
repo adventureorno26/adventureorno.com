@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import {
-  addBoardItem,
-  addSharedLink,
-  deleteBoardItem,
-  deleteSharedLink,
-  fetchBoardItems,
-  fetchSharedLinks,
-  setBoardItemDone,
-} from '../lib/hub';
-import type { BoardItem, BoardKind, SharedLink } from '../lib/types';
+import { addBoardItem, deleteBoardItem, fetchBoardItems, setBoardItemDone } from '../lib/hub';
+import type { BoardItem, BoardKind } from '../lib/types';
+
+// The apps we both use — one-tap launch. No credentials stored; each opens where
+// you sign in normally (a shared household login works there).
+const APPS: { name: string; url: string }[] = [
+  { name: 'Wegmans', url: 'https://www.wegmans.com/' },
+  { name: 'Total Wine', url: 'https://www.totalwine.com/' },
+  { name: 'CellarTracker', url: 'https://www.cellartracker.com/' },
+  { name: 'Amazon Music', url: 'https://music.amazon.com/' },
+  { name: 'Spotify', url: 'https://open.spotify.com/' },
+  { name: 'Audible', url: 'https://www.audible.com/' },
+  { name: 'Netflix', url: 'https://www.netflix.com/' },
+  { name: 'AnyList', url: 'https://www.anylist.com/' },
+];
 
 const BOARDS: { key: BoardKind; label: string; hint: string }[] = [
   { key: 'drink', label: 'Want to drink', hint: 'Wine, cocktails… (paste a CellarTracker/Vivino link)' },
@@ -29,78 +34,28 @@ export default function SharedHub() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
-  const [links, setLinks] = useState<SharedLink[]>([]);
   const [items, setItems] = useState<BoardItem[]>([]);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const [lLabel, setLLabel] = useState('');
-  const [lUrl, setLUrl] = useState('');
 
   function load() {
-    fetchSharedLinks().then(setLinks).catch(() => setLinks([]));
     fetchBoardItems().then(setItems).catch(() => setItems([]));
   }
   useEffect(load, []);
 
-  async function onAddLink() {
-    if (!lLabel.trim() || !lUrl.trim()) return;
-    try {
-      const row = await addSharedLink(lLabel.trim(), normalizeUrl(lUrl));
-      setLinks((prev) => [...prev, row]);
-      setLLabel('');
-      setLUrl('');
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not add link');
-    }
-  }
-  async function onDeleteLink(id: string) {
-    setLinks((prev) => prev.filter((l) => l.id !== id));
-    try {
-      await deleteSharedLink(id);
-    } catch {
-      load();
-    }
-  }
-
   return (
     <div className="shared-hub">
-      {msg && <div className="banner">{msg}</div>}
-
-      {/* Reference links both of you share. */}
+      {/* One-tap launcher for the apps you both use. */}
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Shared links</h3>
+        <h3 style={{ marginTop: 0 }}>Our apps</h3>
         <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-          Your joint accounts & lists — CellarTracker cellar, grocery list, watchlist…
+          Tap to open — sign in there with your shared household login.
         </p>
-        <div className="hub-links">
-          {links.length === 0 && <p className="muted" style={{ fontSize: 13 }}>None yet.</p>}
-          {links.map((l) => (
-            <div key={l.id} className="hub-link-row">
-              <a href={l.url} target="_blank" rel="noreferrer">
-                {l.label}
-              </a>
-              {canEdit && (
-                <button className="link-btn" onClick={() => void onDeleteLink(l.id)}>
-                  remove
-                </button>
-              )}
-            </div>
+        <div className="app-launcher">
+          {APPS.map((a) => (
+            <a key={a.name} className="app-tile" href={a.url} target="_blank" rel="noreferrer">
+              {a.name}
+            </a>
           ))}
         </div>
-        {canEdit && (
-          <div className="field-row" style={{ marginTop: 10 }}>
-            <input placeholder="Label" value={lLabel} onChange={(e) => setLLabel(e.target.value)} />
-            <input
-              placeholder="https://…"
-              value={lUrl}
-              onChange={(e) => setLUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void onAddLink()}
-            />
-            <button className="primary" style={{ flex: 'none' }} onClick={() => void onAddLink()}>
-              Add
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Want-to boards. */}

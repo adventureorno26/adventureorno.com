@@ -57,6 +57,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
   const items: SearchItem[] = useMemo(() => {
     const out: SearchItem[] = [];
     for (const p of places) {
+      if (p.bucket) continue; // only things we've actually done, not the wishlist
       const region = [p.admin1, p.country].filter(Boolean).join(', ');
       const tags = (p.categories ?? []).map((c) => categoryLabel(c)).join(' ');
       out.push({
@@ -71,7 +72,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
     }
     for (const e of entries) {
       const p = placeName.get(e.place_id);
-      if (!p) continue;
+      if (!p || p.bucket) continue;
       out.push({
         placeId: e.place_id,
         label: e.title,
@@ -110,8 +111,12 @@ export default function SearchPalette({ places }: { places: Place[] }) {
 
   return (
     <>
-      <button className="places-search-btn" onClick={() => setOpen(true)} title="Search your places (⌘K)">
-        Search
+      <button
+        className="places-search-btn"
+        onClick={() => setOpen(true)}
+        title="Search your activities (⌘K)"
+      >
+        Search your activities
       </button>
 
       {open && (

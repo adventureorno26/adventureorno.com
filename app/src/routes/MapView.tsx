@@ -14,7 +14,6 @@ import {
   createPlace,
   deletePlace,
   fetchMapPeople,
-  fetchPlacePeople,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
@@ -132,7 +131,6 @@ export default function MapView() {
   // "Just me / Just Josh / Both" filter (null = both).
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [people, setPeople] = useState<MapPerson[]>([]);
-  const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -204,10 +202,9 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Who owns/contributed to what, for the "just me" filter.
+  // The two people, for the "just me" filter + attribution.
   useEffect(() => {
     void fetchMapPeople().then(setPeople).catch(() => undefined);
-    void fetchPlacePeople().then(setPlacePeople).catch(() => undefined);
   }, [places.length]);
 
   // Draw every activity's route line on the main map (tap a line → its place card).
@@ -489,16 +486,13 @@ export default function MapView() {
   const visiblePlaces = places.filter((p) => {
     if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
     if (!p.saved) return false; // only saved places appear on the map
-    if (personFilter && !placePeople.get(p.id)?.has(personFilter)) return false;
+    // "Just me / Just Josh" hides only places explicitly marked the OTHER person's.
+    if (personFilter && p.solo_profile && p.solo_profile !== personFilter) return false;
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 
-  // Only show the person filter once ≥2 people have actually contributed.
-  const contributors = new Set<string>();
-  placePeople.forEach((set) => set.forEach((id) => contributors.add(id)));
-  const filterPeople = people.filter(
-    (p) => contributors.has(p.id) || p.id === profile?.id,
-  );
+  // Show the person filter once both people exist (test/bot excluded server-side).
+  const filterPeople = people;
 
   // Keep the source in sync once both map and data are ready (idle → syncMarkers).
   useEffect(() => {
@@ -899,12 +893,7 @@ export default function MapView() {
         meId={profile?.id}
       />
 
-      <StatsBar
-        places={places}
-        onFilterCategory={setFilterCat}
-        personFilter={personFilter}
-        placePeople={placePeople}
-      />
+      <StatsBar places={places} onFilterCategory={setFilterCat} personFilter={personFilter} />
 
       <div className="map-top-row">
         {canEdit && (

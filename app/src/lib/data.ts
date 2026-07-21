@@ -5,7 +5,7 @@ import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types'
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, trail_id, bucket, website, categories, activity_categories, cover_pos_y, address, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, trail_id, bucket, website, categories, activity_categories, cover_pos_y, address, solo_profile, favorite, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -46,6 +46,8 @@ export async function updatePlace(
     is_trail?: boolean;
     trail_id?: string | null;
     saved?: boolean;
+    solo_profile?: string | null;
+    favorite?: string | null;
   },
 ): Promise<Place> {
   const { data, error } = await supabase

@@ -7,10 +7,12 @@ import {
   deletePlace,
   deleteVisit,
   fetchEntries,
+  fetchMapPeople,
   fetchPlace,
   fetchVisits,
   mergePlaces,
   updatePlace,
+  type MapPerson,
 } from '../lib/data';
 import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
 import {
@@ -156,6 +158,8 @@ export default function PlacePanel({
   const [error, setError] = useState<string | null>(null);
 
   const [review, setReview] = useState(place.review ?? '');
+  const [favorite, setFavorite] = useState(place.favorite ?? '');
+  const [people, setPeople] = useState<MapPerson[]>([]);
   const [trailSel, setTrailSel] = useState('');
   const [trailheadName, setTrailheadName] = useState('');
   const [editingRegion, setEditingRegion] = useState(false);
@@ -170,7 +174,12 @@ export default function PlacePanel({
   const [adjustCover, setAdjustCover] = useState(false);
 
   useEffect(() => {
+    fetchMapPeople().then(setPeople).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     setReview(place.review ?? '');
+    setFavorite(place.favorite ?? '');
     setName(place.name);
     setCoverPos(place.cover_pos_y ?? 50);
     setEAdmin1(place.admin1 ?? '');
@@ -645,6 +654,50 @@ export default function PlacePanel({
         place.review && <p className="body">{place.review}</p>
       )}
 
+      {/* Category-specific favorite: wines (winery) / meal (dining) / beer (brewery). */}
+      {(() => {
+        const cats = effectiveCategories(place);
+        const favLabel = cats.includes('winery')
+          ? 'Favorite wines'
+          : cats.includes('dining')
+            ? 'Favorite meal'
+            : cats.includes('brewery')
+              ? 'Favorite beer'
+              : null;
+        if (!favLabel) return null;
+        if (!canEdit) {
+          return place.favorite ? (
+            <p className="body">
+              <b>{favLabel}:</b> {place.favorite}
+            </p>
+          ) : null;
+        }
+        return (
+          <div style={{ marginTop: 12 }}>
+            <label className="fav-label">{favLabel}</label>
+            <div className="field-row" style={{ marginTop: 4 }}>
+              <input
+                value={favorite}
+                placeholder={favLabel}
+                onChange={(e) => setFavorite(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void patch({ favorite: favorite.trim() || null });
+                }}
+              />
+              {favorite !== (place.favorite ?? '') && (
+                <button
+                  className="primary"
+                  style={{ flex: 'none' }}
+                  onClick={() => void patch({ favorite: favorite.trim() || null })}
+                >
+                  Save
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
 
       {place.is_trail ? (
         /* Trails — runs/hikes grouped by trailhead; tap a run for its map + miles. */
@@ -870,6 +923,24 @@ export default function PlacePanel({
             No spots yet. Add a restaurant, trail, winery… with a rating and review.
           </p>
         )
+      )}
+
+      {/* Whose place is this — Both (default) or just one of you. */}
+      {canEdit && people.length >= 2 && (
+        <div className="attribution-row">
+          <label>Whose is this?</label>
+          <select
+            value={place.solo_profile ?? ''}
+            onChange={(e) => void patch({ solo_profile: e.target.value || null })}
+          >
+            <option value="">Both of us</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                Just {p.display_name}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
 
       {canEdit && (

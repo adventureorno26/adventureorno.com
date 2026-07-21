@@ -39,6 +39,8 @@ export interface Place {
   website: string | null; // optional link for a bucket-list place
   categories: string[]; // manual tags
   activity_categories: string[]; // auto tags from Strava
+  solo_profile: string | null; // if set, this place belongs to just that person (else both)
+  favorite: string | null; // favorite wine / meal / beer at this place
   created_by: string | null;
   created_at: string;
 }

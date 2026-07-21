@@ -53,10 +53,11 @@ export async function fetchActivityLines(personId?: string | null): Promise<Acti
     .from('activities')
     .select('id, place_id, type, summary_polyline, owner_profile')
     .not('summary_polyline', 'is', null);
-  // A person's routes = ones they recorded OR were a companion on (did together).
+  // Both = joint routes only (solo_profile null, incl. drawn trails). A person =
+  // joint + their own.
   query = personId
-    ? query.or(`owner_profile.eq.${personId},also_profiles.cs.{${personId}}`)
-    : query.gte('start_date', STATS_CUTOFF);
+    ? query.or(`solo_profile.is.null,solo_profile.eq.${personId}`)
+    : query.is('solo_profile', null);
   const { data, error } = await query;
   if (error) return [];
   return (data ?? []).filter(

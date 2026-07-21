@@ -6,9 +6,8 @@ import { fetchMileage } from '../lib/strava';
 interface Props {
   places: Place[];
   onFilterCategory: (slug: string | null) => void;
-  // "Just me / Just Josh" filter: scope the stats to that person's contributions.
+  // "Just me / Just Josh" filter: scope the stats to that person.
   personFilter?: string | null;
-  placePeople?: Map<string, Set<string>>;
 }
 
 // Strava activity type → map filter category.
@@ -58,19 +57,14 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({
-  places,
-  onFilterCategory,
-  personFilter = null,
-  placePeople,
-}: Props) {
-  // Only saved, non-bucket places count — and, when a person filter is on, only
-  // the places that person added / visited / photographed.
+export default function StatsBar({ places, onFilterCategory, personFilter = null }: Props) {
+  // Only saved, non-bucket places count. "Just me / Just Josh" hides only places
+  // explicitly marked the other person's; "both"-tagged places count for either.
   const visited = places.filter(
     (p) =>
       !p.bucket &&
       p.saved &&
-      (!personFilter || placePeople?.get(p.id)?.has(personFilter)),
+      !(personFilter && p.solo_profile && p.solo_profile !== personFilter),
   );
   const countries = uniqueCount(visited.map((p) => p.country));
   const states = uniqueCount(visited.map((p) => p.admin1));
