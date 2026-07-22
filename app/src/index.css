@@ -2754,11 +2754,27 @@ textarea {
 .settings-page h2 {
   font-size: 15px;
 }
+/* Three stat dropdowns sit as compact pills on one line, wrapping on narrow screens. */
+.stats-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.stats-row > .card {
+  flex: 1 1 0;
+  min-width: 132px;
+  margin: 0;
+  padding: 9px 12px;
+}
 .stats-dropdown > summary {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .stats-dropdown > summary::-webkit-details-marker {
   display: none;

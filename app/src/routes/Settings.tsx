@@ -646,9 +646,11 @@ export default function Settings() {
       <button onClick={() => void signOut()}>Sign out</button>
 
       <h2 style={{ marginTop: 28 }}>Our stats</h2>
-      <OurStatsCard />
-      <PlacesByStateCard />
-      <NationalParksCard />
+      <div className="stats-row">
+        <OurStatsCard />
+        <PlacesByStateCard />
+        <NationalParksCard />
+      </div>
 
       <h2 style={{ marginTop: 28 }}>Trips</h2>
       <div style={{ display: 'flex', gap: 8 }}>
