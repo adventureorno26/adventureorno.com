@@ -16,7 +16,7 @@ import {
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
 import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
-import { importFileActivity, parseActivityFile } from '../lib/importFile';
+import { importFileActivity, parseActivityFile, parseFitActivity } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
@@ -481,8 +481,9 @@ function GarminImportCard() {
     let failed = 0;
     for (const file of Array.from(files)) {
       try {
-        const raw = await file.text();
-        const parsed = parseActivityFile(raw, file.name);
+        const parsed = /\.fit$/i.test(file.name)
+          ? await parseFitActivity(await file.arrayBuffer(), file.name)
+          : parseActivityFile(await file.text(), file.name);
         if (!parsed) {
           failed++;
           continue;
@@ -502,19 +503,20 @@ function GarminImportCard() {
 
   return (
     <div className="card" style={{ marginTop: 12 }}>
-      <b>Import from Garmin (GPX / TCX)</b>
+      <b>Import from Garmin (GPX / TCX / FIT)</b>
       <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
         Strava only lets one athlete connect, so bring your Garmin activities in as files instead.
-        In Garmin Connect, open an activity → the gear icon → <b>Export to GPX</b> (or TCX), then
-        upload them here. They're attributed to you, and importing the same file twice is safe.
+        You can upload the <b>.FIT</b> files straight from your watch/Garmin Connect, or export an
+        activity as GPX/TCX (gear icon → <b>Export</b>). They're attributed to you, and importing the
+        same file twice is safe.
       </div>
       <button className="primary" disabled={busy} onClick={() => fileRef.current?.click()}>
-        {busy ? 'Importing…' : 'Choose GPX / TCX files'}
+        {busy ? 'Importing…' : 'Choose GPX / TCX / FIT files'}
       </button>
       <input
         ref={fileRef}
         type="file"
-        accept=".gpx,.tcx,application/gpx+xml,application/xml,text/xml"
+        accept=".gpx,.tcx,.fit,application/gpx+xml,application/xml,text/xml,application/octet-stream"
         multiple
         hidden
         onChange={(e) => {

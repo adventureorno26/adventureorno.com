@@ -1,8 +1,9 @@
-// Import Garmin (or any) GPX/TCX activity files — the workaround for Strava's
+// Import Garmin (or any) GPX/TCX/FIT activity files — the workaround for Strava's
 // one-athlete-per-app limit. Parses the track client-side, encodes a Strava-style
 // polyline, and inserts via the import_file_activity RPC (attributed to the
-// uploader). FIT is binary and not supported here — export GPX/TCX from Garmin
-// Connect (each activity → gear icon → "Export to GPX/TCX").
+// uploader). GPX/TCX are XML (parsed synchronously); FIT is Garmin's native binary
+// format, decoded via @garmin/fitsdk (dynamically imported so it stays out of the
+// main bundle) in parseFitActivity().
 
 import polyline from '@mapbox/polyline';
 import { supabase } from './supabase';
@@ -103,6 +104,81 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
 
   return {
     name,
+    type,
+    polyline: polyline.encode(clean),
+    distance: Math.round(distanceMeters),
+    moving,
+    lat: clean[0][0],
+    lng: clean[0][1],
+    date: new Date(start).toISOString(),
+  };
+}
+
+// FIT stores lat/lng as "semicircles": degrees = semicircles * 180 / 2^31.
+const SEMICIRCLE_TO_DEG = 180 / 2 ** 31;
+
+/**
+ * Parse a Garmin .fit (binary) file into a ParsedActivity (or null if it isn't a
+ * valid FIT file or has no GPS track). @garmin/fitsdk is imported dynamically so
+ * the ~decoder only loads when someone actually drops a FIT file.
+ */
+export async function parseFitActivity(
+  buf: ArrayBuffer,
+  filename: string,
+): Promise<ParsedActivity | null> {
+  const { Decoder, Stream } = await import('@garmin/fitsdk');
+  const stream = Stream.fromArrayBuffer(buf);
+  if (!Decoder.isFIT(stream)) return null;
+
+  const decoder = new Decoder(stream);
+  const { messages } = decoder.read({
+    convertTypesToStrings: true,
+    convertDateTimesToDates: true,
+    applyScaleAndOffset: true,
+  });
+  const records: Array<Record<string, unknown>> = messages.recordMesgs ?? [];
+  const session = (messages.sessionMesgs ?? [])[0] as Record<string, unknown> | undefined;
+
+  const pts: [number, number][] = [];
+  const times: number[] = [];
+  for (const r of records) {
+    const la = r.positionLat;
+    const ln = r.positionLong;
+    if (typeof la === 'number' && typeof ln === 'number') {
+      pts.push([la * SEMICIRCLE_TO_DEG, ln * SEMICIRCLE_TO_DEG]);
+    }
+    const t = r.timestamp;
+    if (t instanceof Date) times.push(t.getTime());
+    else if (typeof t === 'number') times.push(t);
+  }
+
+  const clean = pts.filter(([la, ln]) => Number.isFinite(la) && Number.isFinite(ln));
+  if (clean.length < 2) return null;
+
+  const sport = session?.sport;
+  const type = typeof sport === 'string' ? mapType(sport) : 'Workout';
+
+  let distanceMeters = typeof session?.totalDistance === 'number' ? session.totalDistance : 0;
+  if (!distanceMeters) {
+    for (let i = 1; i < clean.length; i++) distanceMeters += haversine(clean[i - 1], clean[i]);
+  }
+
+  const validTimes = times.filter((t) => Number.isFinite(t));
+  const startTime = session?.startTime;
+  const start =
+    startTime instanceof Date
+      ? startTime.getTime()
+      : validTimes.length
+        ? validTimes[0]
+        : Date.now();
+  const end = validTimes.length ? validTimes[validTimes.length - 1] : start;
+  const moving =
+    typeof session?.totalTimerTime === 'number'
+      ? Math.round(session.totalTimerTime)
+      : Math.max(0, Math.round((end - start) / 1000));
+
+  return {
+    name: filename.replace(/\.[^.]+$/, ''),
     type,
     polyline: polyline.encode(clean),
     distance: Math.round(distanceMeters),

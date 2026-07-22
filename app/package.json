@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@garmin/fitsdk": "^21.208.0",
     "@mapbox/polyline": "^1.2.1",
     "@supabase/supabase-js": "^2.45.4",
     "@types/mapbox__polyline": "^1.0.5",
