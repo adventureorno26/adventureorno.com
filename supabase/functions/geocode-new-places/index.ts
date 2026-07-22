@@ -16,7 +16,52 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const MAPTILER_KEY = Deno.env.get('MAPTILER_KEY')!;
 const FOURSQUARE_KEY = Deno.env.get('FOURSQUARE_KEY') ?? '';
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 const BATCH = 25;
+
+const AI_CATEGORIES = [
+  'hiking', 'walking', 'running', 'biking', 'jeeping', 'camping', 'beach',
+  'sunrise', 'sunset', 'dining', 'winery', 'brewery', 'viewpoint', 'stay',
+];
+
+// Automatic AI tag (+ optional better name) from a place's context. No-op when
+// ANTHROPIC_API_KEY is unset. Used only when geocoding/Foursquare couldn't tag it,
+// so it runs rarely and needs no manual click. Model: claude-opus-4-8.
+async function aiEnhance(
+  ctx: { name: string; lat: number; lng: number; poi?: string | null },
+): Promise<{ category: string | null } | null> {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 256,
+        system:
+          'Pick the single best tag for a place from the allowed list, or null if ' +
+          'none fits. Reply with ONLY the tag word or "null".',
+        messages: [{
+          role: 'user',
+          content:
+            `Place: ${ctx.name}\n${ctx.poi ? `Business: ${ctx.poi}\n` : ''}` +
+            `Coords: ${ctx.lat}, ${ctx.lng}\nAllowed tags: ${AI_CATEGORIES.join(', ')}`,
+        }],
+      }),
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const text = ((data.content ?? []).find((b: { type: string }) => b.type === 'text')?.text ?? '')
+      .trim().toLowerCase().replace(/[^a-z]/g, '');
+    return { category: AI_CATEGORIES.includes(text) ? text : null };
+  } catch {
+    return null;
+  }
+}
 
 // Foursquare category name (substring, case-insensitive) → our tag. First hit wins.
 const FSQ_TAG_MAP: Array<[string, string]> = [
@@ -213,6 +258,17 @@ Deno.serve(async (req) => {
     };
     if (poi?.address) patch.address = poi.address;
     if (poi?.tag && existingCats.length === 0) patch.categories = [poi.tag];
+    // Automatic AI tagging: only when nothing else produced a category (keeps AI
+    // usage minimal and needs no manual click). No-op without ANTHROPIC_API_KEY.
+    else if (existingCats.length === 0) {
+      const ai = await aiEnhance({
+        name: (patch.name as string) ?? '',
+        lat: p.lat as number,
+        lng: p.lng as number,
+        poi: poi?.name ?? null,
+      });
+      if (ai?.category) patch.categories = [ai.category];
+    }
     await admin.from('places').update(patch).eq('id', p.id);
     named++;
   }

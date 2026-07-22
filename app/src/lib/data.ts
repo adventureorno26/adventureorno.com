@@ -111,20 +111,6 @@ export async function promoteBucketPlace(id: string): Promise<Place> {
   return updatePlace(id, { bucket: false });
 }
 
-/** Fold a place into an existing trail as a trailhead (moves its activities). */
-export async function addPlaceToTrail(
-  placeId: string,
-  trailId: string,
-  trailhead: string,
-): Promise<void> {
-  const { error } = await supabase.rpc('add_place_to_trail', {
-    p_place: placeId,
-    p_trail: trailId,
-    p_trailhead: trailhead,
-  });
-  if (error) throw error;
-}
-
 export interface SettingsStats {
   trails_taken: number;
   camping: number;

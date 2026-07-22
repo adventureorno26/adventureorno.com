@@ -46,7 +46,6 @@ const TAG_COLORS = [
  *  cards, the map legend, review-section headings). */
 function TagsCard() {
   const [label, setLabel] = useState('');
-  const [icon, setIcon] = useState('');
   const [color, setColor] = useState(TAG_COLORS[0]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -57,9 +56,9 @@ function TagsCard() {
     setBusy(true);
     setMsg(null);
     try {
-      await addCategory(label.trim(), icon.trim(), color);
+      // No icon — Erica's standing rule is no icons unless asked.
+      await addCategory(label.trim(), '', color);
       setLabel('');
-      setIcon('');
       setColor(TAG_COLORS[0]);
       setTick((t) => t + 1);
       setMsg('Added — it now shows everywhere tags appear.');
@@ -79,7 +78,6 @@ function TagsCard() {
       <div className="our-stats" key={tick} style={{ marginBottom: 10 }}>
         {CATEGORIES.map((c) => (
           <span key={c.slug} className="stat">
-            {c.icon ? `${c.icon} ` : ''}
             {c.label}
           </span>
         ))}
@@ -90,14 +88,6 @@ function TagsCard() {
           placeholder="New tag name (e.g. Spa)"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-        />
-        <input
-          style={{ width: 56, textAlign: 'center' }}
-          placeholder="🧖"
-          maxLength={2}
-          value={icon}
-          onChange={(e) => setIcon(e.target.value)}
-          title="Optional emoji"
         />
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {TAG_COLORS.map((c) => (
