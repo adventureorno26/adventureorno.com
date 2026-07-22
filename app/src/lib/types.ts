@@ -63,6 +63,8 @@ export interface Visit {
   end_date: string; // date (= start_date for a single-day visit)
   note: string | null;
   is_trip: boolean; // end_date > start_date (multi-day)
+  solo_profile: string | null; // who was on this visit (null = both of us)
+  solo_override: boolean; // true = human-set; kept across rebuilds
   created_at: string;
 }
 
@@ -149,6 +151,7 @@ export interface Activity {
   summary_polyline: string | null;
   place_id: string | null;
   trailhead: string | null; // where this run started on a trail (falls back to name)
+  solo_profile: string | null; // who did it (null = both of us)
 }
 
 export interface SharedLink {

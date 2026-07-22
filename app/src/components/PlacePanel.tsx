@@ -10,6 +10,7 @@ import {
   fetchMapPeople,
   fetchPlace,
   fetchVisits,
+  setVisitSolo,
   updatePlace,
   type MapPerson,
 } from '../lib/data';
@@ -22,7 +23,7 @@ import {
   effectiveCategories,
 } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchActivitiesForPlace, fetchMileageForPlaces } from '../lib/strava';
+import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import AuthedImg from './AuthedImg';
@@ -164,6 +165,25 @@ export default function PlacePanel({
 
   async function reloadVisits() {
     setVisits(await fetchVisits(place.id).catch(() => []));
+  }
+
+  async function reloadActs() {
+    setTrailActs(await fetchActivitiesForPlace(place.id).catch(() => []));
+  }
+
+  // Set who was on a visit row. Activity rows update the activity (visits then
+  // re-infer); visit-only rows set a manual override. Reloads both after.
+  async function setRowSolo(
+    target: { type: 'activity' | 'visit'; id: string },
+    profileId: string | null,
+  ) {
+    try {
+      if (target.type === 'activity') await setActivitySolo(target.id, profileId);
+      else await setVisitSolo(target.id, profileId);
+      await Promise.all([reloadActs(), reloadVisits()]);
+    } catch {
+      /* leave as-is on failure */
+    }
   }
   async function reloadSpots() {
     setSpots(await fetchEntries(place.id).catch(() => []));
@@ -823,6 +843,8 @@ export default function PlacePanel({
           del: null as string | null,
           start: '' as string,
           sort: (a.start_date ?? '').slice(0, 10),
+          solo: a.solo_profile as string | null,
+          target: { type: 'activity' as const, id: a.id },
         }));
         const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
         // Non-trail places also surface visit rows an activity doesn't already
@@ -839,6 +861,8 @@ export default function PlacePanel({
                 del: v.id as string | null,
                 start: v.start_date as string,
                 sort: v.start_date,
+                solo: v.solo_profile as string | null,
+                target: { type: 'visit' as const, id: v.id },
               }));
         const rows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
         const loading = isTrail ? trailActs === null : visits === null || trailActs === null;
@@ -863,6 +887,22 @@ export default function PlacePanel({
                           <span className="visit-date">{r.date}</span>
                           {r.sub && <span className="muted">{r.sub}</span>}
                         </Link>
+                        {canEdit && people.length >= 2 && (
+                          <select
+                            className="attribution-select visit-who"
+                            value={r.solo ?? ''}
+                            title="Who was here"
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
+                          >
+                            <option value="">Both</option>
+                            {people.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         {canEdit && r.start && (
                           <button
                             className="visit-stop"

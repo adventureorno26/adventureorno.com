@@ -5,7 +5,16 @@ import { supabase } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
-  'id, strava_id, type, name, distance, elevation_gain, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead';
+  'id, strava_id, type, name, distance, elevation_gain, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
+
+/** Set who an activity belongs to (null = both of us). Rebuilds the place's visits. */
+export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_activity_solo', {
+    p_activity: activityId,
+    p_profile: profileId,
+  });
+  if (error) throw error;
+}
 
 // Stats + map trails only reflect activities on/after this date. Older Strava
 // history stays in the DB (visits/day views), it just doesn't count. (Erica's

@@ -184,7 +184,17 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
   return (data ?? []) as PlaceDay[];
 }
 
-const VISIT_COLS = 'id, place_id, start_date, end_date, note, is_trip, created_at';
+const VISIT_COLS =
+  'id, place_id, start_date, end_date, note, is_trip, solo_profile, solo_override, created_at';
+
+/** Manually set who a visit belongs to (null = both). Sticks across rebuilds. */
+export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_visit_solo', {
+    p_visit: visitId,
+    p_profile: profileId,
+  });
+  if (error) throw error;
+}
 
 export async function fetchVisits(placeId: string): Promise<Visit[]> {
   const { data, error } = await supabase

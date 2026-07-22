@@ -3198,6 +3198,14 @@ textarea {
   border-radius: 8px;
   max-width: 128px;
 }
+/* Compact per-visit "who was here" chip inside a visit row. */
+.visit-row .visit-who {
+  font-size: 11px;
+  padding: 1px 6px;
+  max-width: 96px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
 .app-launcher {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
