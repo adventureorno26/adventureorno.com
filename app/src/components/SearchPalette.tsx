@@ -88,7 +88,11 @@ export default function SearchPalette({ places }: { places: Place[] }) {
 
   const results = useMemo(() => {
     const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return items.filter((i) => i.kind === 'place').slice(0, 30);
+    if (tokens.length === 0)
+      return items
+        .filter((i) => i.kind === 'place')
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .slice(0, 30);
     const scored: { item: SearchItem; score: number }[] = [];
     for (const item of items) {
       let score = 0;
@@ -106,7 +110,8 @@ export default function SearchPalette({ places }: { places: Place[] }) {
       }
       if (score >= 0) scored.push({ item, score });
     }
-    scored.sort((a, b) => b.score - a.score);
+    // Highest score first; alphabetical within the same score.
+    scored.sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label));
     return scored.slice(0, 40).map((s) => s.item);
   }, [q, items]);
 

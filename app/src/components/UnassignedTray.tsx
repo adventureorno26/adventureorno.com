@@ -107,11 +107,13 @@ export default function UnassignedTray({ places, onChanged }: Props) {
                     <option value="" disabled>
                       Assign to place…
                     </option>
-                    {places.map((pl) => (
-                      <option key={pl.id} value={pl.id}>
-                        {pl.name}
-                      </option>
-                    ))}
+                    {[...places]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((pl) => (
+                        <option key={pl.id} value={pl.id}>
+                          {pl.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
