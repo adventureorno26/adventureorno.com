@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
+  addCategory,
   fetchHomeZone,
   fetchMapProjection,
   fetchPlaces,
@@ -13,6 +14,7 @@ import {
   type MapProjection,
   type SettingsStats,
 } from '../lib/data';
+import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
 import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
@@ -28,6 +30,105 @@ import {
 } from '../lib/join';
 
 const METERS_PER_MILE = 1609.344;
+
+const TAG_COLORS = [
+  '#38bdf8',
+  '#22c55e',
+  '#f97316',
+  '#a855f7',
+  '#ec4899',
+  '#eab308',
+  '#06b6d4',
+  '#ef4444',
+];
+
+/** Create custom tags. New tags populate everywhere tags appear (chips on place
+ *  cards, the map legend, review-section headings). */
+function TagsCard() {
+  const [label, setLabel] = useState('');
+  const [icon, setIcon] = useState('');
+  const [color, setColor] = useState(TAG_COLORS[0]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [tick, setTick] = useState(0); // re-render after a tag is added
+
+  async function submit() {
+    if (!label.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await addCategory(label.trim(), icon.trim(), color);
+      setLabel('');
+      setIcon('');
+      setColor(TAG_COLORS[0]);
+      setTick((t) => t + 1);
+      setMsg('Added — it now shows everywhere tags appear.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Could not add tag');
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="card">
+      <b>Tags</b>
+      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
+        Add your own tags. A new tag appears everywhere tags do — the chips on a place, the map
+        legend, and its own review section heading (e.g. “Spa Reviews”).
+      </div>
+      <div className="our-stats" key={tick} style={{ marginBottom: 10 }}>
+        {CATEGORIES.map((c) => (
+          <span key={c.slug} className="stat">
+            {c.icon ? `${c.icon} ` : ''}
+            {c.label}
+          </span>
+        ))}
+      </div>
+      <div className="btn-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <input
+          style={{ flex: '1 1 140px' }}
+          placeholder="New tag name (e.g. Spa)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <input
+          style={{ width: 56, textAlign: 'center' }}
+          placeholder="🧖"
+          maxLength={2}
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+          title="Optional emoji"
+        />
+        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          {TAG_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              title={c}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: c,
+                border: color === c ? '2px solid var(--fg)' : '2px solid transparent',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+            />
+          ))}
+        </span>
+        <button className="primary" disabled={busy || !label.trim()} onClick={() => void submit()}>
+          {busy ? 'Adding…' : 'Add tag'}
+        </button>
+      </div>
+      {msg && (
+        <div className="banner" style={{ marginTop: 8 }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function JoinRequestsCard() {
   const [reqs, setReqs] = useState<JoinRequest[] | null>(null);
@@ -651,6 +752,9 @@ export default function Settings() {
         <PlacesByStateCard />
         <NationalParksCard />
       </div>
+
+      <h2 style={{ marginTop: 28 }}>Tags</h2>
+      <TagsCard />
 
       <h2 style={{ marginTop: 28 }}>Trips</h2>
       <div style={{ display: 'flex', gap: 8 }}>

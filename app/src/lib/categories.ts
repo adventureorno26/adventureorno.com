@@ -12,7 +12,11 @@ export interface Category {
   auto?: boolean; // derived from activities, not manually toggled
 }
 
-export const CATEGORIES: Category[] = [
+// Built-in fallback set. At app boot, applyCategories() replaces this with the
+// DB-backed list (public.place_categories) so custom tags Erica adds in Settings
+// appear everywhere. `let` (not const) so ES-module live bindings propagate the
+// merged list to every synchronous consumer after load.
+const BUILT_IN: Category[] = [
   {
     slug: 'hiking',
     label: 'Hiking',
@@ -85,22 +89,40 @@ export const CATEGORIES: Category[] = [
   { slug: 'trail', label: 'Trail', icon: '', color: '#0d9488', review: 'Trail Notes' },
 ];
 
-// Container kinds: places that group other places rather than being a single spot.
-export const CONTAINER_SLUGS = ['trip', 'trail'] as const;
-export const isContainerSlug = (slug: string): boolean =>
-  (CONTAINER_SLUGS as readonly string[]).includes(slug);
+// The live registry. Starts as the built-ins; applyCategories() swaps in the DB
+// list at boot. Exported as `let` so consumers see updates via live bindings.
+export let CATEGORIES: Category[] = [...BUILT_IN];
+export let CONTAINER_SLUGS: string[] = ['trip', 'trail'];
+export let MANUAL_CATEGORIES: Category[] = BUILT_IN.filter((c) => !c.auto);
+let BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
 
-export const categoryColor = (slug: string): string =>
-  CATEGORIES.find((c) => c.slug === slug)?.color ?? '#38bdf8';
+/** Replace the runtime category list from DB rows (public.place_categories). */
+export function applyCategories(
+  rows: Array<
+    Category & { is_auto?: boolean; is_container?: boolean; sort_order?: number }
+  >,
+): void {
+  if (!rows || rows.length === 0) return;
+  CATEGORIES = rows.map((r) => ({
+    slug: r.slug,
+    label: r.label,
+    icon: r.icon ?? '',
+    color: r.color ?? '#38bdf8',
+    review: r.review ?? `${r.label} Reviews`,
+    auto: r.is_auto ?? r.auto,
+  }));
+  CONTAINER_SLUGS = rows.filter((r) => r.is_container).map((r) => r.slug);
+  MANUAL_CATEGORIES = CATEGORIES.filter((c) => !c.auto);
+  BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
+}
 
-const BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
+export const isContainerSlug = (slug: string): boolean => CONTAINER_SLUGS.includes(slug);
+
+export const categoryColor = (slug: string): string => BY_SLUG.get(slug)?.color ?? '#38bdf8';
 export const categoryIcon = (slug: string): string => BY_SLUG.get(slug)?.icon ?? '📍';
 export const categoryLabel = (slug: string): string => BY_SLUG.get(slug)?.label ?? slug;
 export const categoryReviewLabel = (slug: string): string =>
   BY_SLUG.get(slug)?.review ?? `${categoryLabel(slug)} Reviews`;
-
-// Categories that can be toggled by hand (everything that isn't auto-derived).
-export const MANUAL_CATEGORIES = CATEGORIES.filter((c) => !c.auto);
 
 /** All categories for a place: manual ∪ auto (deduped, in CATEGORIES order). */
 export function effectiveCategories(

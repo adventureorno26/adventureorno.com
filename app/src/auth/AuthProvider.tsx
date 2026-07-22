@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { loadCategories } from '../lib/data';
 import type { Profile } from '../lib/types';
 
 interface AuthState {
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [, setCatsV] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -49,6 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       setSession(data.session);
       await loadProfile(data.session);
+      // Load DB-backed tags into the category registry, then nudge a re-render so
+      // any custom tags show up in chips/menus/legend/review headings.
+      if (data.session) {
+        await loadCategories().catch(() => undefined);
+        if (active) setCatsV((v) => v + 1);
+      }
       if (active) setLoading(false);
     });
 

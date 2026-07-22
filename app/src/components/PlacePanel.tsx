@@ -263,26 +263,38 @@ export default function PlacePanel({
 
   // A trip groups its member places by CITY (with a separate Activities group);
   // everything else groups them by category alongside its entry-spots.
-  const isTripCard = (place.categories ?? []).includes('trip');
-  const ACTIVITY_SLUGS = ['hiking', 'walking', 'running', 'biking', 'jeeping'];
   const memberPlaces = allPlaces
     .filter((p) => (p.part_of ?? []).includes(place.id))
     .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
 
+  // Trail card: its member places ARE its sections. Split into done (visited) and
+  // not-yet so a long trail's progress lives in one place. Done first, most-recent
+  // first; not-yet alphabetical.
+  const trailSections = place.is_trail
+    ? {
+        done: memberPlaces
+          .filter((p) => p.visit_count > 0 || p.first_visit)
+          .sort((a, b) => (b.last_visit ?? '').localeCompare(a.last_visit ?? '')),
+        todo: memberPlaces
+          .filter((p) => !(p.visit_count > 0 || p.first_visit))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      }
+    : null;
+
   // SPOTS AND REVIEWS — ONE dropdown per category, holding BOTH member places
   // ("part of" this one) and entry-spots of that category. So "dining" shows a
   // single "Restaurant Reviews" section listing every reviewed restaurant,
-  // whether it's a linked place or an inline spot. In CATEGORIES order. On a trip
-  // card the member places move to the city groups below, leaving only entries.
+  // whether it's a linked place or an inline spot. In CATEGORIES order. This is
+  // the Appalachian-Trail grouping, now used for EVERY card (trips included) so a
+  // hotel reads as "Hotel Reviews", not under the trip's city name.
   const reviewGroups: { key: string; label: string; places: Place[]; entries: Entry[] }[] = [];
   {
     const placeByKind = new Map<string, Place[]>();
-    if (!isTripCard)
-      for (const m of memberPlaces) {
-        const k = (m.categories && m.categories[0]) || 'place';
-        if (!placeByKind.has(k)) placeByKind.set(k, []);
-        placeByKind.get(k)!.push(m);
-      }
+    for (const m of memberPlaces) {
+      const k = (m.categories && m.categories[0]) || 'place';
+      if (!placeByKind.has(k)) placeByKind.set(k, []);
+      placeByKind.get(k)!.push(m);
+    }
     const entryByKind = new Map<string, Entry[]>();
     for (const e of spots ?? []) {
       const k = e.kind || 'note';
@@ -302,28 +314,6 @@ export default function PlacePanel({
         });
       }
     }
-  }
-
-  // Trip only: member places grouped by city, plus an Activities group.
-  const cityGroups: { city: string; places: Place[] }[] = [];
-  const activityMembers: Place[] = [];
-  if (isTripCard) {
-    // Spots without a resolvable city bucket under the trip's own location (its
-    // city or name) instead of "Other" or each under their own name.
-    const tripCity = place.city?.trim() || place.name?.trim() || 'This trip';
-    const byCity = new Map<string, Place[]>();
-    for (const m of memberPlaces) {
-      const prim = (m.categories && m.categories[0]) || '';
-      if (ACTIVITY_SLUGS.includes(prim)) {
-        activityMembers.push(m);
-        continue;
-      }
-      const city = m.city?.trim() || parseCity(m.address, m.admin1) || m.admin1?.trim() || tripCity;
-      if (!byCity.has(city)) byCity.set(city, []);
-      byCity.get(city)!.push(m);
-    }
-    for (const [city, ps] of [...byCity.entries()].sort((a, b) => a[0].localeCompare(b[0])))
-      cityGroups.push({ city, places: ps.sort((a, b) => a.name.localeCompare(b.name)) });
   }
 
   async function submitVisit() {
@@ -985,6 +975,54 @@ export default function PlacePanel({
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
 
+      {/* SECTIONS — a trail's member places are its sections. Shows the ones
+          you've done (with dates) up top, then any not-yet-done, all in one place. */}
+      {trailSections && (trailSections.done.length > 0 || trailSections.todo.length > 0) && (
+        <>
+          <h3 style={{ marginTop: 22 }}>
+            SECTIONS{' '}
+            <span className="label">
+              ({trailSections.done.length}/{trailSections.done.length + trailSections.todo.length}{' '}
+              done)
+            </span>
+          </h3>
+          <div className="spot-groups">
+            {trailSections.done.length > 0 && (
+              <details className="spot-cat" open>
+                <summary className="spot-cat-head">
+                  Done <span className="label">({trailSections.done.length})</span>
+                </summary>
+                {trailSections.done.map((m) => (
+                  <div key={m.id} className="spot-row">
+                    <Link className="spot-item" to={`/place/${m.id}`}>
+                      <span className="spot-title">{m.name}</span>
+                      <span className="muted">
+                        {m.first_visit ? fmtRunDate(m.first_visit) : ''}
+                        {m.visit_count > 1 ? ` · ${m.visit_count}×` : ''}
+                      </span>
+                    </Link>
+                  </div>
+                ))}
+              </details>
+            )}
+            {trailSections.todo.length > 0 && (
+              <details className="spot-cat">
+                <summary className="spot-cat-head">
+                  Not yet <span className="label">({trailSections.todo.length})</span>
+                </summary>
+                {trailSections.todo.map((m) => (
+                  <div key={m.id} className="spot-row">
+                    <Link className="spot-item" to={`/place/${m.id}`}>
+                      <span className="spot-title">{m.name}</span>
+                    </Link>
+                  </div>
+                ))}
+              </details>
+            )}
+          </div>
+        </>
+      )}
+
       {/* SPOTS AND REVIEWS — heading like Photos and Videos, with a blue add link.
           Each logged category is a dropdown that opens to its spots. */}
       <div className="visits-head">
@@ -1077,57 +1115,6 @@ export default function PlacePanel({
           onCancel={() => setAddingSpot(false)}
         />
       )}
-      {isTripCard && (cityGroups.length > 0 || activityMembers.length > 0) && (
-        <div className="spot-groups">
-          {cityGroups.map((g) => (
-            <details className="spot-cat" key={`city-${g.city}`} open>
-              <summary className="spot-cat-head">
-                {g.city} <span className="label">({g.places.length})</span>
-              </summary>
-              {g.places.map((m) => {
-                const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
-                return (
-                  <div key={m.id} className="spot-row">
-                    <Link className="spot-item" to={`/place/${m.id}`}>
-                      <span className="spot-title">{m.name}</span>
-                      {m.rating ? (
-                        <span className="spot-rating">{'★'.repeat(m.rating)}</span>
-                      ) : null}
-                    </Link>
-                    {dest && (
-                      <a
-                        className="directions-btn sm spot-dir"
-                        href={`https://maps.apple.com/?daddr=${encodeURIComponent(dest)}&dirflg=d`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Directions to ${m.name}`}
-                      >
-                        Directions
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
-            </details>
-          ))}
-          {activityMembers.length > 0 && (
-            <details className="spot-cat" open>
-              <summary className="spot-cat-head">
-                Activities <span className="label">({activityMembers.length})</span>
-              </summary>
-              {activityMembers.map((m) => (
-                <div key={m.id} className="spot-row">
-                  <Link className="spot-item" to={`/place/${m.id}`}>
-                    <span className="spot-title">{m.name}</span>
-                    {m.rating ? <span className="spot-rating">{'★'.repeat(m.rating)}</span> : null}
-                  </Link>
-                </div>
-              ))}
-            </details>
-          )}
-        </div>
-      )}
-
       {reviewGroups.length > 0 ? (
         <div className="spot-groups">
           {reviewGroups.map((g) => (
@@ -1201,23 +1188,11 @@ export default function PlacePanel({
 
       <RouteMiniMap place={place} />
 
-      {/* Bottom line: Both of us · Part of… · Delete · Save (green). */}
+      {/* Bottom line: Part of… · Delete · Save (green). Attribution (who was
+          here) lives on each VISIT now, not on the place as a whole — a place can
+          be visited solo one time and together the next. */}
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
-          {people.length >= 2 && (
-            <select
-              className="attribution-select"
-              value={place.solo_profile ?? ''}
-              onChange={(e) => void patch({ solo_profile: e.target.value || null })}
-            >
-              <option value="">Both of us</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  Just {p.display_name}
-                </option>
-              ))}
-            </select>
-          )}
           <button onClick={() => setMerging((v) => !v)}>Part of…</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete

@@ -1,5 +1,34 @@
 import { supabase } from './supabase';
+import { applyCategories } from './categories';
 import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
+
+/** Load categories/tags from the DB into the runtime registry (call once at boot). */
+export async function loadCategories(): Promise<void> {
+  const { data, error } = await supabase
+    .from('place_categories')
+    .select('slug, label, icon, color, review, is_auto, is_container, sort_order')
+    .order('sort_order');
+  if (error || !data) return;
+  applyCategories(data as never);
+}
+
+/** Create a custom tag; returns its slug. Populates everywhere tags appear. */
+export async function addCategory(
+  label: string,
+  icon: string,
+  color: string,
+  review?: string,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('add_place_category', {
+    p_label: label,
+    p_icon: icon,
+    p_color: color,
+    p_review: review ?? null,
+  });
+  if (error) throw error;
+  await loadCategories();
+  return data as string;
+}
 
 // All reads/writes go through RLS; the client never sees rows it isn't allowed
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
