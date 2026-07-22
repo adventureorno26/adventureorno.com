@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
-import { fetchMileage, fetchWanderStats, type WanderStats } from '../lib/strava';
+import {
+  fetchMileage,
+  fetchRacesList,
+  fetchRaceStats,
+  fetchWanderStats,
+  type RaceRow,
+  type RaceStat,
+  type WanderStats,
+} from '../lib/strava';
 import { fetchAllEntries } from '../lib/data';
 
 interface Props {
@@ -64,8 +72,8 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       p.name.trim() !== '' && // skip unnamed drafts
       !(personFilter && p.solo_profile && p.solo_profile !== personFilter),
   );
-  // Main bar shows just Places + Miles. Cities/States moved to Settings.
-  const [detail, setDetail] = useState<null | 'places' | 'miles'>(null);
+  // Main bar shows Places + Miles + Races. Cities/States moved to Settings.
+  const [detail, setDetail] = useState<null | 'places' | 'miles' | 'races'>(null);
   const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
   const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
   const closeDetail = () => setDetail(null);
@@ -118,6 +126,20 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       .catch(() => setWander(null));
   }, [places.length, personFilter]);
 
+  // Races: each running counts (race_stats buckets); races_list is one row per
+  // named race, so tapping a race opens it to see every time it was run.
+  const [raceStats, setRaceStats] = useState<RaceStat[]>([]);
+  const [racesList, setRacesList] = useState<RaceRow[]>([]);
+  useEffect(() => {
+    fetchRaceStats(personFilter)
+      .then(setRaceStats)
+      .catch(() => setRaceStats([]));
+    fetchRacesList(personFilter)
+      .then(setRacesList)
+      .catch(() => setRacesList([]));
+  }, [places.length, personFilter]);
+  const raceCount = raceStats.reduce((s, r) => s + Number(r.n), 0);
+
   const placesHeadline = wander ? wander.places_count : placesTotal;
   const totalMiles = wander
     ? wander.miles
@@ -139,17 +161,55 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
         >
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
         </button>
+        {raceCount > 0 && (
+          <button
+            className={`stat ${detail === 'races' ? 'on' : ''}`}
+            onClick={() => toggle('races')}
+          >
+            <b>{raceCount}</b> <span className="label">{raceCount === 1 ? 'race' : 'races'}</span>
+          </button>
+        )}
       </div>
 
       {detail && (
         <div className="stat-detail">
           <div className="stat-detail-head">
-            <b>{detail === 'places' ? 'All places' : 'Activity totals — tap to show on map'}</b>
+            <b>
+              {detail === 'places'
+                ? 'All places'
+                : detail === 'races'
+                  ? 'Races — tap one to see every time you ran it'
+                  : 'Activity totals — tap to show on map'}
+            </b>
             <button className="stat-detail-x" onClick={closeDetail}>
               ×
             </button>
           </div>
           <div className="stat-detail-list">
+            {detail === 'races' && (
+              <>
+                <div className="race-buckets">
+                  {raceStats.map((r) => (
+                    <span key={r.bucket} className="race-bucket">
+                      <b>{r.n}</b> {r.bucket}
+                      {r.n === 1 ? '' : 's'}
+                    </span>
+                  ))}
+                  <span className="race-bucket race-bucket-total">
+                    <b>{raceStats.reduce((s, r) => s + Number(r.miles), 0).toFixed(1)}</b> mi
+                  </span>
+                </div>
+                {racesList.map((r) => (
+                  <Link key={r.id} to={`/place/${r.id}`} onClick={closeDetail}>
+                    {r.name}
+                    <span className="label">
+                      {' '}
+                      · {r.times}× · {r.bucket}
+                    </span>
+                  </Link>
+                ))}
+              </>
+            )}
             {detail === 'places' &&
               combinedList.map((it) => (
                 <Link key={it.id} to={it.to} onClick={closeDetail}>

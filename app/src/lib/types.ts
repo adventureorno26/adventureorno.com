@@ -183,6 +183,7 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
       | 'saved'
       | 'categories'
       | 'part_of'
+      | 'needs_geocode'
     >
   >;
 

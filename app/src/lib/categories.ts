@@ -83,6 +83,8 @@ const BUILT_IN: Category[] = [
     review: 'Viewpoint Reviews',
   },
   { slug: 'stay', label: 'Hotel', icon: '🏨', color: '#6366f1', review: 'Hotel Reviews' },
+  // A race is its own place; each running is an activity under it. No icon.
+  { slug: 'race', label: 'Race', icon: '', color: '#f97316', review: 'Race Notes' },
   // Container kinds — a place that holds other places (its members via part_of).
   // No icon (per Erica). A Trip has dates; a Trail is a route.
   { slug: 'trip', label: 'Trip', icon: '', color: '#ec4899', review: 'Trip Notes' },

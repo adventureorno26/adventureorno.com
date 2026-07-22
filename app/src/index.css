@@ -2815,6 +2815,18 @@ textarea {
 .stat-detail-list > a:hover {
   background: var(--accent-soft);
 }
+.race-buckets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 8px 10px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+.race-bucket-total {
+  color: var(--muted, #94a3b8);
+}
 
 /* Spots grouped by tag on the card */
 .spot-groups {
