@@ -2,14 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addVisit,
+  clearCity,
   createEntry,
   createPlace,
   deletePlace,
   deleteVisit,
+  fetchCityBoundary,
   fetchEntries,
   fetchMapPeople,
   fetchPlace,
+  fetchSpatialMembers,
   fetchVisits,
+  setCityBoundary,
   setVisitSolo,
   updatePlace,
   type MapPerson,
@@ -150,6 +154,9 @@ export default function PlacePanel({
   const [editingAddress, setEditingAddress] = useState(false);
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
+  const [cityBusy, setCityBusy] = useState(false);
+  const [cityMsg, setCityMsg] = useState<string | null>(null);
+  const [spatialCount, setSpatialCount] = useState<number | null>(null);
 
   useEffect(() => {
     fetchMapPeople()
@@ -222,6 +229,20 @@ export default function PlacePanel({
     await reloadSpots();
     await refreshPlace();
   }
+  // How many leaf places fall inside this container's boundary (city/region).
+  useEffect(() => {
+    let active = true;
+    setSpatialCount(null);
+    if (place.category === 'city' || place.category === 'region') {
+      fetchSpatialMembers(place.id)
+        .then((ids) => active && setSpatialCount(ids.length))
+        .catch(() => active && setSpatialCount(null));
+    }
+    return () => {
+      active = false;
+    };
+  }, [place.id, place.category]);
+
   useEffect(() => {
     let active = true;
     setVisits(null);
@@ -427,6 +448,42 @@ export default function PlacePanel({
     const cur = place.categories ?? [];
     const next = cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug];
     await patch({ categories: next });
+  }
+
+  // City/region: pull the real OSM boundary for this place, mark it a container,
+  // and let every leaf inside it roll up spatially (no manual "part of" needed).
+  async function makeCityRegion(kind: 'city' | 'region') {
+    setCityBusy(true);
+    setCityMsg(null);
+    try {
+      const query = [place.name, place.admin1, place.country].filter(Boolean).join(', ');
+      const geojson = await fetchCityBoundary(query);
+      if (!geojson) {
+        setCityMsg(
+          `No boundary found for “${place.name}” on OpenStreetMap. Use “edit” on the address to match a real place name, then try again.`,
+        );
+        return;
+      }
+      await setCityBoundary(place.id, geojson, kind);
+      await refreshPlace();
+    } catch (e) {
+      setCityMsg(e instanceof Error ? e.message : 'Could not fetch that boundary.');
+    } finally {
+      setCityBusy(false);
+    }
+  }
+
+  async function removeCityRegion() {
+    setCityBusy(true);
+    setCityMsg(null);
+    try {
+      await clearCity(place.id);
+      await refreshPlace();
+    } catch (e) {
+      setCityMsg(e instanceof Error ? e.message : 'Could not remove that.');
+    } finally {
+      setCityBusy(false);
+    }
   }
 
   // Add THIS place as a VISIT/stop of an existing place — NON-destructive: this
@@ -652,6 +709,37 @@ export default function PlacePanel({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* City / region: pull the real OSM boundary so leaves inside roll up. Not
+          offered on trails or trips (those group by explicit membership). */}
+      {canEdit && !place.is_trail && place.category !== 'trip' && (
+        <div className="city-region">
+          {place.category === 'city' || place.category === 'region' ? (
+            <div className="city-region-row">
+              <span>
+                {place.category === 'region' ? 'Region' : 'City'}
+                {spatialCount != null &&
+                  ` · ${spatialCount} place${spatialCount === 1 ? '' : 's'} inside`}
+              </span>
+              <button className="link-btn" disabled={cityBusy} onClick={() => void removeCityRegion()}>
+                {cityBusy ? '…' : 'remove'}
+              </button>
+            </div>
+          ) : (
+            <div className="city-region-row">
+              <span className="city-region-label">Make this a</span>
+              <button className="link-btn" disabled={cityBusy} onClick={() => void makeCityRegion('city')}>
+                City
+              </button>
+              <button className="link-btn" disabled={cityBusy} onClick={() => void makeCityRegion('region')}>
+                Region
+              </button>
+              {cityBusy && <span className="muted"> fetching boundary…</span>}
+            </div>
+          )}
+          {cityMsg && <div className="city-region-msg">{cityMsg}</div>}
         </div>
       )}
 

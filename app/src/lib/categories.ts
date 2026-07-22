@@ -121,8 +121,6 @@ export const isContainerSlug = (slug: string): boolean => CONTAINER_SLUGS.includ
 export const categoryColor = (slug: string): string => BY_SLUG.get(slug)?.color ?? '#38bdf8';
 export const categoryIcon = (slug: string): string => BY_SLUG.get(slug)?.icon ?? '📍';
 export const categoryLabel = (slug: string): string => BY_SLUG.get(slug)?.label ?? slug;
-export const categoryReviewLabel = (slug: string): string =>
-  BY_SLUG.get(slug)?.review ?? `${categoryLabel(slug)} Reviews`;
 
 /** All categories for a place: manual ∪ auto (deduped, in CATEGORIES order). */
 export function effectiveCategories(
