@@ -184,7 +184,7 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
   return (data ?? []) as PlaceDay[];
 }
 
-const VISIT_COLS = 'id, place_id, start_date, end_date, note, created_at';
+const VISIT_COLS = 'id, place_id, start_date, end_date, note, is_trip, created_at';
 
 export async function fetchVisits(placeId: string): Promise<Visit[]> {
   const { data, error } = await supabase

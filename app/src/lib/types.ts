@@ -62,6 +62,7 @@ export interface Visit {
   start_date: string; // date
   end_date: string; // date (= start_date for a single-day visit)
   note: string | null;
+  is_trip: boolean; // end_date > start_date (multi-day)
   created_at: string;
 }
 

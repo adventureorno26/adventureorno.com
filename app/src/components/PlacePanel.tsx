@@ -219,22 +219,22 @@ export default function PlacePanel({
   // Trail places group their runs/hikes by trailhead; load the place's activities
   // and the total mileage-by-type across the trail + its trailhead members.
   useEffect(() => {
-    if (!place.is_trail) {
-      setTrailActs(null);
-      setTrailMiles({});
-      return;
-    }
     let active = true;
     setTrailActs(null);
+    // Every place now lists its own activities as visit rows (not just trails).
     fetchActivitiesForPlace(place.id)
       .then((rows) => active && setTrailActs(rows))
       .catch(() => active && setTrailActs([]));
-    const memberIds = allPlaces
-      .filter((p) => (p.part_of ?? []).includes(place.id))
-      .map((p) => p.id);
-    fetchMileageForPlaces([place.id, ...memberIds])
-      .then((m) => active && setTrailMiles(m))
-      .catch(() => undefined);
+    if (place.is_trail) {
+      const memberIds = allPlaces
+        .filter((p) => (p.part_of ?? []).includes(place.id))
+        .map((p) => p.id);
+      fetchMileageForPlaces([place.id, ...memberIds])
+        .then((m) => active && setTrailMiles(m))
+        .catch(() => undefined);
+    } else {
+      setTrailMiles({});
+    }
     return () => {
       active = false;
     };
@@ -810,27 +810,38 @@ export default function PlacePanel({
           activity days here in the same style as places. */}
       {(() => {
         const isTrail = place.is_trail;
-        // Visits = actual times we went to THIS place (its own dated visits/runs).
-        // Member places ("part of" this one) list under SPOTS AND REVIEWS instead.
-        const rows = isTrail
-          ? (trailActs ?? []).map((a) => ({
-              key: a.id,
-              date: fmtRunDate(a.start_date),
-              // Each visit: date · name · type · miles.
-              sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-              to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
-              del: null as string | null,
-              start: '' as string,
-            }))
-          : (visits ?? []).map((v) => ({
-              key: v.id,
-              date: fmtVisit(v),
-              sub: null as string | null,
-              to: `/place/${place.id}/day/${v.start_date}`,
-              del: v.id as string | null,
-              start: v.start_date as string,
-            }));
-        const loading = isTrail ? trailActs === null : visits === null;
+        // Visits = actual times we went to THIS place. Every Strava/Garmin activity
+        // gets its own row (date · name · type · miles); photo/entry-only days and
+        // multi-day trips show as dated visit rows. Member places ("part of" this
+        // one) list under SPOTS AND REVIEWS instead.
+        const acts = trailActs ?? [];
+        const actRows = acts.map((a) => ({
+          key: a.id,
+          date: fmtRunDate(a.start_date),
+          sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+          to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
+          del: null as string | null,
+          start: '' as string,
+          sort: (a.start_date ?? '').slice(0, 10),
+        }));
+        const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
+        // Non-trail places also surface visit rows an activity doesn't already
+        // cover: multi-day trips, and single days with photos/entries but no run.
+        const visitRows = isTrail
+          ? []
+          : (visits ?? [])
+              .filter((v) => v.is_trip || !actDays.has(v.start_date))
+              .map((v) => ({
+                key: v.id,
+                date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
+                sub: null as string | null,
+                to: `/place/${place.id}/day/${v.start_date}`,
+                del: v.id as string | null,
+                start: v.start_date as string,
+                sort: v.start_date,
+              }));
+        const rows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
+        const loading = isTrail ? trailActs === null : visits === null || trailActs === null;
         return (
           <>
             <details className="visits-details">
