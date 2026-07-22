@@ -2,10 +2,11 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
-import MapView from './routes/MapView';
 
-// Non-landing routes are code-split so their JS (and @mapbox/polyline in the
-// routes view) stays out of the initial map bundle.
+// Every route (incl. the map) is code-split. This keeps MapLibre (~280KB gz) and
+// @mapbox/polyline OUT of the initial shell, so /login and the auth check paint
+// immediately; the map bundle loads only once an authed user hits the map route.
+const MapView = lazy(() => import('./routes/MapView'));
 const RoutesView = lazy(() => import('./routes/RoutesView'));
 const DayView = lazy(() => import('./routes/DayView'));
 const PlacesList = lazy(() => import('./routes/PlacesList'));

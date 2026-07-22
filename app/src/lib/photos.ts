@@ -34,6 +34,30 @@ export async function readTakenAt(file: File): Promise<string | undefined> {
   return undefined;
 }
 
+/** iPhone HEIC/HEIF — Safari can decode these in an <img>, but Chrome/Firefox
+ *  CANNOT, so the upload used to silently store undecodable bytes → broken photo.
+ *  Detect by MIME or extension (iOS files often have an empty `type`). */
+function isHeic(file: File): boolean {
+  const t = (file.type || '').toLowerCase();
+  if (t === 'image/heic' || t === 'image/heif') return true;
+  const n = (file.name || '').toLowerCase();
+  return n.endsWith('.heic') || n.endsWith('.heif');
+}
+
+/** Return a browser-decodable blob: HEIC → JPEG via heic2any (lazy-loaded so its
+ *  ~1.4 MB decoder only downloads when someone actually uploads a HEIC); anything
+ *  else passes through untouched. Falls back to the original on failure. */
+async function toDecodableBlob(file: File): Promise<Blob> {
+  if (!isHeic(file)) return file;
+  try {
+    const heic2any = (await import('heic2any')).default;
+    const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+    return Array.isArray(out) ? out[0] : (out as Blob);
+  } catch {
+    return file; // no worse than before if the decoder fails
+  }
+}
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -85,7 +109,9 @@ const toBlob = (c: HTMLCanvasElement, q: number): Promise<Blob | null> =>
  *  the browser genuinely can't decode the file. */
 async function prepareUpload(file: File): Promise<Prepared> {
   try {
-    const url = URL.createObjectURL(file);
+    // HEIC → JPEG first (time-boxed; the decode can be slow on big photos).
+    const decodable = await withTimeout(toDecodableBlob(file), 20000);
+    const url = URL.createObjectURL(decodable);
     const img = await withTimeout(loadImage(url), 15000);
     URL.revokeObjectURL(url);
     const web = drawScaled(img, 2400);

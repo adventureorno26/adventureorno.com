@@ -30,6 +30,55 @@ export async function fetchMileage(personId?: string | null): Promise<MileageRow
   return (data ?? []) as MileageRow[];
 }
 
+export interface ActivityListRow {
+  id: string;
+  type: string;
+  name: string | null;
+  distance: number;
+  start_date: string | null;
+  place_id: string | null;
+  place_name: string | null;
+}
+
+/** Every activity of one type for a person (null = Both view), newest first —
+ *  for the "tap a run total → see the list of runs" drill-down. */
+export async function fetchActivitiesOfType(
+  type: string,
+  personId?: string | null,
+): Promise<ActivityListRow[]> {
+  let query = supabase
+    .from('activities')
+    .select('id, type, name, distance, start_date, place_id, places(name)')
+    .eq('type', type)
+    .order('start_date', { ascending: false, nullsFirst: false });
+  query = personId
+    ? query.or(`solo_profile.is.null,solo_profile.eq.${personId}`)
+    : query.is('solo_profile', null);
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []).map((a) => {
+    const row = a as unknown as {
+      id: string;
+      type: string;
+      name: string | null;
+      distance: number;
+      start_date: string | null;
+      place_id: string | null;
+      places: { name: string } | { name: string }[] | null;
+    };
+    const pl = Array.isArray(row.places) ? row.places[0] : row.places;
+    return {
+      id: row.id,
+      type: row.type,
+      name: row.name,
+      distance: row.distance,
+      start_date: row.start_date,
+      place_id: row.place_id,
+      place_name: pl?.name ?? null,
+    };
+  });
+}
+
 export interface PlaceCount {
   place_id: string;
   photo_count: number;

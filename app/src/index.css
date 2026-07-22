@@ -2827,6 +2827,20 @@ textarea {
 .race-bucket-total {
   color: var(--muted, #94a3b8);
 }
+.stat-back {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.mi-map-row {
+  color: var(--accent, #38bdf8);
+  font-weight: 600;
+}
 
 /* Spots grouped by tag on the card */
 .spot-groups {
@@ -3565,6 +3579,30 @@ textarea {
 }
 .search-palette-input:focus {
   box-shadow: none;
+}
+.search-cat-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  max-height: 96px;
+  overflow-y: auto;
+}
+.search-cat-chip {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.search-cat-chip.on {
+  background: var(--accent, #38bdf8);
+  border-color: var(--accent, #38bdf8);
+  color: #05202e;
 }
 .search-palette-list {
   overflow-y: auto;

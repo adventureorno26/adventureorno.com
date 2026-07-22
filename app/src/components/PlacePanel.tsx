@@ -139,7 +139,6 @@ export default function PlacePanel({
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
   const [merging, setMerging] = useState(false);
-  const [movingVisit, setMovingVisit] = useState<string | null>(null);
   const [addingMembers, setAddingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
@@ -363,39 +362,6 @@ export default function PlacePanel({
     }
   }
 
-  // Add a specific stop to a city/town visit: create that place with its OWN
-  // address (part of this one), and give it its own visit on the same date — so
-  // the city visit stays AND the stop shows in Spots & Reviews and counts as a
-  // visit. e.g. our Washington DC visit → add "The Pocket" with its own address.
-  async function addStopAtVisit(visitDate: string, r: SearchResult) {
-    setError(null);
-    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
-    if (full.lat === 0 && full.lng === 0) {
-      setError("Couldn't resolve that place — try another.");
-      return;
-    }
-    try {
-      const address = full.address ?? full.label ?? null;
-      const admin1 = full.admin1 ?? place.admin1;
-      const spot = await createPlace({
-        name: full.name || 'New stop',
-        country: full.country ?? place.country,
-        admin1,
-        lat: full.lat,
-        lng: full.lng,
-        address,
-        city: parseCity(address, admin1),
-        saved: true,
-        part_of: [place.id], // grouped under this city/town
-      });
-      if (visitDate) await addVisit(spot.id, visitDate, visitDate);
-      onPlaceChanged(spot); // add the new place to the map
-      setMovingVisit(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add that stop');
-    }
-  }
-
   async function patch(p: Parameters<typeof updatePlace>[1]) {
     try {
       const updated = await updatePlace(place.id, p);
@@ -595,6 +561,21 @@ export default function PlacePanel({
   const dirHref = `https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${place.lng}&dirflg=d`;
   const regionText = [place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region';
 
+  // One visit count, shared by the header line AND the "Visits (N)" dropdown so
+  // they always agree. A visit = each activity row + any photo/entry-only visit
+  // day an activity doesn't already cover. Notes are entries, NOT visits, so they
+  // never count here. (Mirrors the row build inside the Visits section below.)
+  const _isTrailCard = place.is_trail;
+  const _isRollupCard = !!place.holds_children && !_isTrailCard;
+  const _actsForCount = trailActs ?? [];
+  const _actDaysForCount = new Set(_actsForCount.map((a) => (a.start_date ?? '').slice(0, 10)));
+  const visitCount = _isTrailCard
+    ? _actsForCount.length
+    : (_isRollupCard ? 0 : _actsForCount.length) +
+      (visits ?? []).filter(
+        (v) => _isRollupCard || v.is_trip || !_actDaysForCount.has(v.start_date),
+      ).length;
+
   // "Edit address" → a search pill that sets the address/pin (not the title).
   const addressSearch = (
     <div className="place-locate bucket-search">
@@ -670,8 +651,8 @@ export default function PlacePanel({
               </button>
             )}
             {visits &&
-              visits.length > 0 &&
-              ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+              visitCount > 0 &&
+              ` · ${visitCount} visit${visitCount > 1 ? 's' : ''}`}
             {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
           </span>
         )}
@@ -989,15 +970,6 @@ export default function PlacePanel({
                             ))}
                           </select>
                         )}
-                        {canEdit && r.start && (
-                          <button
-                            className="visit-stop"
-                            title="Add a specific stop on this day"
-                            onClick={() => setMovingVisit((cur) => (cur === r.key ? null : r.key))}
-                          >
-                            + stop
-                          </button>
-                        )}
                         {canEdit && r.del && (
                           <button
                             className="visit-del"
@@ -1008,17 +980,6 @@ export default function PlacePanel({
                           </button>
                         )}
                       </div>
-                      {canEdit && movingVisit === r.key && (
-                        <div className="entry" style={{ marginTop: 6 }}>
-                          <label>Add a stop on {r.date} — its own address, counts as a visit</label>
-                          <div className="spot-search bucket-search">
-                            <MapSearch
-                              onPick={(res) => void addStopAtVisit(r.start, res)}
-                              placeholder="Search the place you stopped…"
-                            />
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -1153,7 +1114,7 @@ export default function PlacePanel({
         {canEdit && !addingSpot && (
           <span style={{ display: 'flex', gap: 12 }}>
             <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
-              + Add a spot
+              + Add a place here
             </button>
             <button className="add-spot-link" onClick={() => setAddingMembers((v) => !v)}>
               + Add existing places
