@@ -42,9 +42,9 @@ where category is null;
 -- Containers = trail/trip today (cities/regions get designated + get boundaries in
 -- a later step; this only sets what we can infer now).
 update public.places
-  set holds_children = (category in ('trail','trip')),
-      kind = case when category in ('trail','trip') then 'container' else 'leaf' end
-where kind = 'leaf' and not holds_children;
+  set holds_children = coalesce(category in ('trail','trip'), false),
+      kind = case when coalesce(category in ('trail','trip'), false) then 'container' else 'leaf' end
+where not holds_children;
 
 -- ── place_membership: the single explicit parent↔child mechanism ───────────────
 -- Replaces the part_of uuid[] array (kept in parallel for now; retired later).
@@ -65,10 +65,15 @@ create policy place_membership_write on public.place_membership for all
   using (public.is_editor_or_owner()) with check (public.is_editor_or_owner());
 
 -- Backfill memberships from the existing part_of arrays (non-destructive copy).
+-- Only where the parent still exists — some part_of arrays hold dangling ids
+-- pointing at deleted places; those are silently skipped (nothing to link to).
 insert into public.place_membership (child_id, parent_id)
-select p.id, unnest(p.part_of)
+select p.id, par
 from public.places p
+cross join lateral unnest(p.part_of) as par
 where coalesce(array_length(p.part_of,1),0) > 0
+  and par <> p.id
+  and exists (select 1 from public.places pp where pp.id = par)
 on conflict do nothing;
 
 -- ── visits: protect manually-entered visits from rebuilds ──────────────────────
