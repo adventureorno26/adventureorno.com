@@ -34,7 +34,7 @@ export async function addCategory(
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, holds_children, category, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -223,6 +223,24 @@ export async function setVisitSolo(visitId: string, profileId: string | null): P
     p_profile: profileId,
   });
   if (error) throw error;
+}
+
+/** Set who a whole (leaf) place belongs to — sets all its visits. null = both. */
+export async function setPlaceSolo(placeId: string, profileId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_place_solo', {
+    p_place: placeId,
+    p_profile: profileId,
+  });
+  if (error) throw error;
+}
+
+/** Place ids that should show for a person view (null = Both, post-cutoff only). */
+export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
+  const { data, error } = await supabase.rpc('place_ids_for_view', { p_profile: profileId ?? null });
+  if (error) throw error;
+  return new Set((data ?? []).map((r: { place_ids_for_view: string } | string) =>
+    typeof r === 'string' ? r : r.place_ids_for_view,
+  ));
 }
 
 export async function fetchVisits(placeId: string): Promise<Visit[]> {

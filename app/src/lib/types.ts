@@ -41,8 +41,10 @@ export interface Place {
   website: string | null; // optional link for a bucket-list place
   categories: string[]; // manual tags
   activity_categories: string[]; // auto tags from Strava
-  solo_profile: string | null; // if set, this place belongs to just that person (else both)
+  solo_profile: string | null; // legacy place-level attribution (superseded by visit-level)
   favorite: string | null; // favorite wine / meal / beer at this place
+  holds_children: boolean; // container (trail/trip/city) — no attribution toggle
+  category: string | null; // normalized singular category
   created_by: string | null;
   created_at: string;
 }

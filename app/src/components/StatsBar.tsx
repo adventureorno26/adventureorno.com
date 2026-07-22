@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
-import { fetchMileage } from '../lib/strava';
+import { fetchMileage, fetchWanderStats, type WanderStats } from '../lib/strava';
 import { fetchAllEntries } from '../lib/data';
 
 interface Props {
@@ -107,7 +107,21 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       .catch(() => setMileage([]));
   }, [places.length, personFilter]); // refresh on data change or person toggle
 
-  const totalMiles = mileage.reduce((sum, r) => sum + Number(r.miles), 0);
+  // Headline places + miles come from the visit-level model (wander_stats): each
+  // place counted once, miles/trips per person, one cutoff. The drill-down lists
+  // above stay as-is (they're the detail view). Falls back to the local tallies
+  // if the RPC hasn't answered yet.
+  const [wander, setWander] = useState<WanderStats | null>(null);
+  useEffect(() => {
+    fetchWanderStats(personFilter)
+      .then(setWander)
+      .catch(() => setWander(null));
+  }, [places.length, personFilter]);
+
+  const placesHeadline = wander ? wander.places_count : placesTotal;
+  const totalMiles = wander
+    ? wander.miles
+    : mileage.reduce((sum, r) => sum + Number(r.miles), 0);
   const animated = useCountUp(totalMiles);
 
   return (
@@ -117,7 +131,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
           className={`stat ${detail === 'places' ? 'on' : ''}`}
           onClick={() => toggle('places')}
         >
-          <b>{placesTotal}</b> <span className="label">places</span>
+          <b>{placesHeadline}</b> <span className="label">places</span>
         </button>
         <button
           className={`stat ${detail === 'miles' ? 'on' : ''}`}

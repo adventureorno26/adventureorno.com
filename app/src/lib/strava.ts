@@ -75,6 +75,25 @@ export async function fetchActivityLines(personId?: string | null): Promise<Acti
 }
 
 /** Total meters by activity type across a set of places (trail + its trailheads). */
+export interface WanderStats {
+  places_count: number;
+  miles: number;
+  trips_count: number;
+}
+
+/** Headline stats from the visit-level model: places (each counts once), miles,
+ *  and trips (per occurrence). Pass a profile id for that person; omit for Both. */
+export async function fetchWanderStats(personId?: string | null): Promise<WanderStats> {
+  const { data, error } = await supabase.rpc('wander_stats', { p_profile: personId ?? null });
+  if (error) throw error;
+  const r = (data?.[0] ?? {}) as Partial<WanderStats>;
+  return {
+    places_count: Number(r.places_count ?? 0),
+    miles: Number(r.miles ?? 0),
+    trips_count: Number(r.trips_count ?? 0),
+  };
+}
+
 export async function fetchMileageForPlaces(placeIds: string[]): Promise<Record<string, number>> {
   if (placeIds.length === 0) return {};
   const { data, error } = await supabase

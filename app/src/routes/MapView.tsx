@@ -17,6 +17,7 @@ import {
   fetchMapPeople,
   fetchMapProjection,
   fetchPings,
+  fetchPlaceIdsForView,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
@@ -689,13 +690,28 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Which leaf places belong to the current person view (attribution + cutoff).
+  // "Both" = only places with a post-2025-12-21 joint visit; a person = their solo
+  // + joint visits. Containers (trails/trips) roll up and aren't visit-filtered.
+  const [viewSet, setViewSet] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetchPlaceIdsForView(personFilter)
+      .then((s) => active && setViewSet(s))
+      .catch(() => active && setViewSet(null));
+    return () => {
+      active = false;
+    };
+  }, [personFilter, places.length]);
+
   // Filter the map: bucket-list places are hidden unless their toggle is on;
-  // visited places follow the selected activity tag and the person filter.
+  // visited places follow the selected activity tag and the person view.
   const visiblePlaces = places.filter((p) => {
     if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
     if (!p.saved) return false; // only saved places appear on the map
-    // "Just me / Just Josh" hides only places explicitly marked the OTHER person's.
-    if (personFilter && p.solo_profile && p.solo_profile !== personFilter) return false;
+    // Leaf places must be in the current person view (attribution + cutoff).
+    // Containers (trails/trips) are exempt so their rollup markers stay.
+    if (!p.holds_children && viewSet && !viewSet.has(p.id)) return false;
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 
