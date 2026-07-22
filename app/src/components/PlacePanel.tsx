@@ -10,7 +10,6 @@ import {
   fetchMapPeople,
   fetchPlace,
   fetchVisits,
-  setPlaceSolo,
   setVisitSolo,
   updatePlace,
   aiSuggest,
@@ -184,17 +183,6 @@ export default function PlacePanel({
     try {
       if (target.type === 'activity') await setActivitySolo(target.id, profileId);
       else await setVisitSolo(target.id, profileId);
-      await Promise.all([reloadActs(), reloadVisits()]);
-    } catch {
-      /* leave as-is on failure */
-    }
-  }
-
-  // Leaf-level "who was here" toggle: sets every visit of this place. Containers
-  // (trails/trips/cities) don't get this — their attribution rolls up.
-  async function setLeafSolo(profileId: string | null) {
-    try {
-      await setPlaceSolo(place.id, profileId);
       await Promise.all([reloadActs(), reloadVisits()]);
     } catch {
       /* leave as-is on failure */
@@ -1250,41 +1238,9 @@ export default function PlacePanel({
 
       <RouteMiniMap place={place} />
 
-      {/* Bottom line: [who was here — leaf only] · Part of… · Delete · Save.
-          Leaf places carry a Just-me/Just-Josh/Both toggle that sets all their
-          visits; containers (trails/trips/cities) roll up and show no toggle. */}
-      {canEdit &&
-        people.length >= 2 &&
-        !place.holds_children &&
-        !place.is_trail &&
-        place.category !== 'trail' &&
-        place.category !== 'trip' &&
-        (() => {
-          // Derive the toggle's value from this place's visits: all-same → that
-          // person; all-null or mixed → Both.
-          const vals = (visits ?? []).map((v) => v.solo_profile);
-          const uniq = Array.from(new Set(vals));
-          const current = uniq.length === 1 ? (uniq[0] ?? '') : '';
-          return (
-            <div className="leaf-attribution" style={{ marginTop: 18 }}>
-              <label className="label" style={{ display: 'block', marginBottom: 4 }}>
-                Who was here
-              </label>
-              <select
-                className="attribution-select"
-                value={current}
-                onChange={(e) => void setLeafSolo(e.target.value || null)}
-              >
-                <option value="">Both of us</option>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          );
-        })()}
+      {/* Attribution ("who was here") is NOT a place-level property — a place can
+          be visited solo one time and together another. It lives ONLY on each
+          visit row (the Me/Both/Josh chip in the Visits list above). No toggle here. */}
 
       {/* AI suggestion for a cleaner name + tag (leaf places; hidden if no AI key). */}
       {canEdit && !place.holds_children && !place.is_trail && !aiOff && (
