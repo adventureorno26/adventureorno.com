@@ -19,7 +19,6 @@ import {
   CATEGORIES,
   categoryIcon,
   categoryLabel,
-  categoryReviewLabel,
   effectiveCategories,
 } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
@@ -310,7 +309,7 @@ export default function PlacePanel({
       if (places.length || entries.length) {
         reviewGroups.push({
           key: k,
-          label: k === 'note' ? 'Notes' : k === 'place' ? 'Places' : categoryReviewLabel(k),
+          label: k === 'note' ? 'Notes' : k === 'place' ? 'Places' : categoryLabel(k),
           places,
           entries,
         });
@@ -822,12 +821,17 @@ export default function PlacePanel({
           activity days here in the same style as places. */}
       {(() => {
         const isTrail = place.is_trail;
-        // Visits = actual times we went to THIS place. Every Strava/Garmin activity
-        // gets its own row (date · name · type · miles); photo/entry-only days and
-        // multi-day trips show as dated visit rows. Member places ("part of" this
-        // one) list under SPOTS AND REVIEWS instead.
+        // A trip/city/region rollup shows its FUSED visit(s) — one trip is ONE
+        // visit (e.g. "San Diego · Jul 11–16 · Trip"), never a row per activity.
+        // Only LEAF places break out each activity as its own dated row.
+        const isRollup = place.holds_children && !isTrail;
+        // Visits = actual times we went to THIS place. On a leaf, every Strava/
+        // Garmin activity gets its own row (date · name · type · miles); photo/
+        // entry-only days and multi-day trips show as dated visit rows.
         const acts = trailActs ?? [];
-        const actRows = acts.map((a) => ({
+        const actRows = isRollup
+          ? []
+          : acts.map((a) => ({
           key: a.id,
           date: fmtRunDate(a.start_date),
           sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
@@ -844,7 +848,9 @@ export default function PlacePanel({
         const visitRows = isTrail
           ? []
           : (visits ?? [])
-              .filter((v) => v.is_trip || !actDays.has(v.start_date))
+              // Rollups show all their (fused) visits; leaves show trips + any
+              // photo/entry day an activity row doesn't already cover.
+              .filter((v) => isRollup || v.is_trip || !actDays.has(v.start_date))
               .map((v) => ({
                 key: v.id,
                 date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),

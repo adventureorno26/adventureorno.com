@@ -220,6 +220,52 @@ export async function setPlaceSolo(placeId: string, profileId: string | null): P
   if (error) throw error;
 }
 
+/** Fetch a city/region's boundary polygon from OpenStreetMap Nominatim.
+ *  Returns a GeoJSON string, or null if no polygon was found. */
+export async function fetchCityBoundary(query: string): Promise<string | null> {
+  try {
+    const url =
+      'https://nominatim.openstreetmap.org/search?' +
+      new URLSearchParams({ q: query, format: 'json', polygon_geojson: '1', limit: '3' });
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ geojson?: { type?: string } }>;
+    const hit = rows.find((r) => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon');
+    return hit?.geojson ? JSON.stringify(hit.geojson) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Mark a place as a city/region container with a boundary polygon (GeoJSON). */
+export async function setCityBoundary(
+  placeId: string,
+  geojson: string,
+  kind: 'city' | 'region',
+): Promise<void> {
+  const { error } = await supabase.rpc('set_city_boundary', {
+    p_place: placeId,
+    p_geojson: geojson,
+    p_kind: kind,
+  });
+  if (error) throw error;
+}
+
+/** Remove a city/region designation. */
+export async function clearCity(placeId: string): Promise<void> {
+  const { error } = await supabase.rpc('clear_city', { p_place: placeId });
+  if (error) throw error;
+}
+
+/** Leaf place ids that fall inside a city/region's boundary (spatial members). */
+export async function fetchSpatialMembers(containerId: string): Promise<string[]> {
+  const { data, error } = await supabase.rpc('spatial_members', { p_container: containerId });
+  if (error) throw error;
+  return (data ?? []).map((r: { spatial_members: string } | string) =>
+    typeof r === 'string' ? r : r.spatial_members,
+  );
+}
+
 /** Place ids that should show for a person view (null = Both, post-cutoff only). */
 export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('place_ids_for_view', { p_profile: profileId ?? null });
