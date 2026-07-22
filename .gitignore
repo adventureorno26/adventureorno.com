@@ -24,3 +24,8 @@ supabase/.temp
 
 # test coverage
 coverage/
+
+# Google Timeline Takeout dumps / partial downloads (never commit — huge)
+app/TimlineTakeout/
+TimlineTakeout/
+*.crdownload
