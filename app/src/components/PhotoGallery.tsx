@@ -18,6 +18,7 @@ import type { Photo, Place, Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
+import PhotoMatchReview from './PhotoMatchReview';
 
 interface Props {
   place: Place;
@@ -82,12 +83,27 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const canDelete = (p: Photo): boolean =>
     profile?.role === 'owner' || p.uploaded_by === profile?.id;
 
-  // Import straight from Google Photos → File[] → the normal upload path.
+  // Photos chosen for review before upload (place cards only — day view already
+  // pins the date, so it uploads straight through).
+  const [reviewFiles, setReviewFiles] = useState<File[] | null>(null);
+
+  // Picked from Files/Google → show the location+date match review, unless we're
+  // in day view (date fixed) or it's a single photo (nothing to sort).
+  function handlePicked(files: File[]) {
+    if (files.length === 0) return;
+    if (day || files.length === 1) {
+      void upload(files, true);
+    } else {
+      setReviewFiles(files);
+    }
+  }
+
+  // Import straight from Google Photos → File[] → the review/upload path.
   async function addFromGoogle() {
     try {
       const files = await pickFromGooglePhotos((s) => setNote(s));
       setNote(null);
-      if (files.length) await upload(files, true);
+      if (files.length) handlePicked(files);
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Google Photos import failed.');
     }
@@ -323,7 +339,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            void upload(Array.from(e.dataTransfer.files), true);
+            handlePicked(Array.from(e.dataTransfer.files));
           }}
           onClick={() => setPickMenu((v) => !v)}
           role="button"
@@ -337,7 +353,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
             multiple
             hidden
             onChange={(e) => {
-              void upload(Array.from(e.target.files ?? []), true);
+              handlePicked(Array.from(e.target.files ?? []));
               e.target.value = '';
             }}
           />
@@ -575,6 +591,18 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
           </div>,
           document.body,
         )}
+
+      {reviewFiles && (
+        <PhotoMatchReview
+          place={place}
+          files={reviewFiles}
+          onConfirm={(selected) => {
+            setReviewFiles(null);
+            void upload(selected, true);
+          }}
+          onCancel={() => setReviewFiles(null)}
+        />
+      )}
     </div>
   );
 }

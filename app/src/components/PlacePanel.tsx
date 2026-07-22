@@ -33,6 +33,7 @@ import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
+import TrailSectionsMap from './TrailSectionsMap';
 import StarRating from './StarRating';
 
 interface Props {
@@ -998,6 +999,33 @@ export default function PlacePanel({
               done)
             </span>
           </h3>
+          {/* Rollup: sections done · total miles · total visit-days across sections. */}
+          {(() => {
+            const done = trailSections.done;
+            const totalMiles = Object.values(trailMiles).reduce((s, m) => s + m, 0) / 1609.344;
+            const totalVisits = done.reduce((s, m) => s + (m.visit_count || 0), 0);
+            return (
+              <div className="our-stats" style={{ marginBottom: 12 }}>
+                <span className="stat">
+                  <b>{done.length}</b> <span className="label">sections done</span>
+                </span>
+                {totalMiles > 0 && (
+                  <span className="stat">
+                    <b>{totalMiles.toFixed(1)}</b> <span className="label">miles</span>
+                  </span>
+                )}
+                {totalVisits > 0 && (
+                  <span className="stat">
+                    <b>{totalVisits}</b> <span className="label">visits</span>
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+          {/* One fitted map of every done section along this trail. */}
+          {trailSections.done.length > 0 && (
+            <TrailSectionsMap trail={place} sections={trailSections.done} />
+          )}
           <div className="spot-groups">
             {trailSections.done.length > 0 && (
               <details className="spot-cat" open>
