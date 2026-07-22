@@ -189,6 +189,44 @@ export async function fetchRacesList(personId?: string | null): Promise<RaceRow[
   return (data ?? []) as RaceRow[];
 }
 
+export interface SearchActivity {
+  id: string;
+  name: string | null;
+  type: string;
+  place_id: string | null;
+  start_date: string | null;
+  place_name: string | null;
+}
+
+/** All activities (name + type + place) for the ⌘K search, so a run/hike is
+ *  findable by its name and jumps to its day. */
+export async function fetchSearchActivities(): Promise<SearchActivity[]> {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('id, name, type, place_id, start_date, places(name)')
+    .order('start_date', { ascending: false, nullsFirst: false });
+  if (error) return [];
+  return (data ?? []).map((a) => {
+    const row = a as unknown as {
+      id: string;
+      name: string | null;
+      type: string;
+      place_id: string | null;
+      start_date: string | null;
+      places: { name: string } | { name: string }[] | null;
+    };
+    const pl = Array.isArray(row.places) ? row.places[0] : row.places;
+    return {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      place_id: row.place_id,
+      start_date: row.start_date,
+      place_name: pl?.name ?? null,
+    };
+  });
+}
+
 /** All race names (regardless of who ran them) — for the "log another running"
  *  datalist, so an existing race is one click to reuse. */
 export async function fetchRaceNames(): Promise<string[]> {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   addCategory,
+  fetchGeoCoverage,
   fetchHomeZone,
   fetchMapProjection,
   fetchPlaces,
@@ -10,6 +11,7 @@ import {
   setMapProjection,
   triggerGeocode,
   updateHomeZone,
+  type GeoCoverage,
   type HomeZone,
   type MapProjection,
   type SettingsStats,
@@ -377,10 +379,14 @@ function OurStatsCard() {
  *  Each state/country is a dropdown listing the cities (places) within it. */
 function PlacesByStateCard() {
   const [places, setPlaces] = useState<Place[] | null>(null);
+  const [cov, setCov] = useState<GeoCoverage | null>(null);
   useEffect(() => {
     fetchPlaces()
       .then(setPlaces)
       .catch(() => setPlaces([]));
+    fetchGeoCoverage()
+      .then(setCov)
+      .catch(() => setCov(null));
   }, []);
   if (!places) return null;
 
@@ -397,8 +403,12 @@ function PlacesByStateCard() {
     if (a[1].isState !== b[1].isState) return a[1].isState ? -1 : 1;
     return a[0].localeCompare(b[0]);
   });
-  const stateCount = ordered.filter((g) => g[1].isState).length;
-  const countryCount = ordered.filter((g) => !g[1].isState).length;
+  // Accurate counts from the server (DC excluded from the 50, US/US-States
+  // spellings normalized); fall back to the client grouping until it loads.
+  const stateCount =
+    cov?.us_state_count ??
+    ordered.filter((g) => g[1].isState && g[0] !== 'District of Columbia').length;
+  const countryCount = cov?.country_count ?? ordered.filter((g) => !g[1].isState).length;
   const statePct = Math.round((stateCount / 50) * 100);
 
   return (
@@ -407,7 +417,8 @@ function PlacesByStateCard() {
         <summary>Cities &amp; states</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
-            <b>{stateCount}</b> <span className="label">of 50 states</span>
+            <b>{stateCount}</b>{' '}
+            <span className="label">of 50 states{cov?.has_dc ? ' + DC' : ''}</span>
           </div>
           <div className="stat">
             <b>{statePct}%</b> <span className="label">of the US</span>

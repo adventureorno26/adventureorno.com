@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchAllEntries } from '../lib/data';
+import { fetchSearchActivities, type SearchActivity } from '../lib/strava';
 import { CATEGORIES, categoryLabel, effectiveCategories } from '../lib/categories';
 import type { Place } from '../lib/types';
 
 interface SearchItem {
   placeId: string;
+  to: string; // where to navigate on select
   label: string; // primary line
   sub: string; // secondary line
   hay: string; // lower-cased searchable text
-  kind: 'place' | 'spot';
+  kind: 'place' | 'spot' | 'activity';
   cats: string[]; // category slugs, for the type filter
 }
+
+// Strava activity type → the map category slug (so the type chips filter them).
+const ACT_CAT: Record<string, string> = {
+  Run: 'running',
+  Hike: 'hiking',
+  Walk: 'walking',
+  Ride: 'biking',
+};
 
 /** ⌘K / Ctrl-K global search over the places YOU'VE added — names, regions,
  *  reviews, tags, and spots. Type to filter; Enter/click opens the place. */
@@ -21,6 +31,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
   const [entries, setEntries] = useState<
     { id: string; place_id: string; title: string; body: string | null; kind: string }[]
   >([]);
+  const [activities, setActivities] = useState<SearchActivity[]>([]);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
@@ -48,6 +59,9 @@ export default function SearchPalette({ places }: { places: Place[] }) {
     fetchAllEntries()
       .then(setEntries)
       .catch(() => setEntries([]));
+    fetchSearchActivities()
+      .then(setActivities)
+      .catch(() => setActivities([]));
     const t = setTimeout(() => inputRef.current?.focus(), 30);
     return () => clearTimeout(t);
   }, [open]);
@@ -66,6 +80,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
       const tags = (p.categories ?? []).map((c) => categoryLabel(c)).join(' ');
       out.push({
         placeId: p.id,
+        to: `/place/${p.id}`,
         label: p.name,
         sub: [region, p.bucket ? 'Bucket list' : '', p.is_trail ? 'Trail' : '']
           .filter(Boolean)
@@ -80,6 +95,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
       if (!p || p.bucket) continue;
       out.push({
         placeId: e.place_id,
+        to: `/place/${e.place_id}`,
         label: e.title,
         sub: `${p.name}${e.kind ? ` · ${categoryLabel(e.kind)}` : ''}`,
         hay: `${e.title} ${e.body ?? ''} ${p.name}`.toLowerCase(),
@@ -87,8 +103,21 @@ export default function SearchPalette({ places }: { places: Place[] }) {
         cats: e.kind ? [e.kind] : [],
       });
     }
+    for (const a of activities) {
+      const day = (a.start_date ?? '').slice(0, 10);
+      const label = a.name || `${a.type}${a.place_name ? ` · ${a.place_name}` : ''}`;
+      out.push({
+        placeId: a.place_id ?? '',
+        to: a.place_id ? `/place/${a.place_id}${day ? `/day/${day}` : ''}` : '#',
+        label,
+        sub: [a.type, a.place_name ?? '', day].filter(Boolean).join(' · '),
+        hay: `${a.name ?? ''} ${a.type} ${a.place_name ?? ''}`.toLowerCase(),
+        kind: 'activity',
+        cats: ACT_CAT[a.type] ? [ACT_CAT[a.type]] : [],
+      });
+    }
     return out;
-  }, [places, entries, placeName]);
+  }, [places, entries, activities, placeName]);
 
   // Category filter chips — only the categories that actually appear in the data,
   // in CATEGORIES order. Selecting some narrows results to items with those tags.
@@ -141,8 +170,9 @@ export default function SearchPalette({ places }: { places: Place[] }) {
   }, [q, items, activeCats]);
 
   function choose(item: SearchItem) {
+    if (item.to === '#') return;
     setOpen(false);
-    navigate(`/place/${item.placeId}`);
+    navigate(item.to);
   }
 
   return (

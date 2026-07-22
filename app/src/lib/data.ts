@@ -136,6 +136,29 @@ export async function fetchSettingsStats(): Promise<SettingsStats | null> {
   return (row ?? null) as SettingsStats | null;
 }
 
+export interface GeoCoverage {
+  us_states: string[];
+  us_state_count: number;
+  countries: string[];
+  country_count: number;
+  has_dc: boolean;
+}
+
+/** How many US states / world countries we've actually set foot in (not bucket). */
+export async function fetchGeoCoverage(): Promise<GeoCoverage | null> {
+  const { data, error } = await supabase.rpc('geo_coverage');
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return {
+    us_states: row.us_states ?? [],
+    us_state_count: Number(row.us_state_count ?? 0),
+    countries: row.countries ?? [],
+    country_count: Number(row.country_count ?? 0),
+    has_dc: Boolean(row.has_dc),
+  };
+}
+
 export interface MapPerson {
   id: string;
   display_name: string | null;
