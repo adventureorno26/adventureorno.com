@@ -579,25 +579,28 @@ function GarminImportCard() {
   async function onFiles(files: FileList) {
     setBusy(true);
     let added = 0;
-    let failed = 0;
+    const problems: string[] = [];
     for (const file of Array.from(files)) {
       try {
         const parsed = /\.fit$/i.test(file.name)
           ? await parseFitActivity(await file.arrayBuffer(), file.name)
           : parseActivityFile(await file.text(), file.name);
         if (!parsed) {
-          failed++;
+          problems.push(`${file.name}: no GPS track found`);
           continue;
         }
         await importFileActivity(parsed);
         added++;
-      } catch {
-        failed++;
+      } catch (e) {
+        // Surface the real reason instead of a silent "couldn't be read".
+        problems.push(`${file.name}: ${e instanceof Error ? e.message : 'upload failed'}`);
       }
-      setMsg(`Imported ${added}, failed ${failed}…`);
+      setMsg(`Imported ${added}${problems.length ? `, ${problems.length} failed` : ''}…`);
     }
     setMsg(
-      `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported${failed ? `, ${failed} couldn't be read` : ''}. Re-importing the same file is safe (duplicates are ignored).`,
+      `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported.` +
+        (problems.length ? ` Couldn't import: ${problems.join('; ')}` : '') +
+        ' Re-importing the same file is safe (duplicates are ignored).',
     );
     setBusy(false);
   }

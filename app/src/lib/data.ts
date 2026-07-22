@@ -372,6 +372,39 @@ export async function setMapProjection(type: MapProjection): Promise<void> {
   if (error) throw error;
 }
 
+export interface AiSuggestion {
+  configured: boolean;
+  title: string | null;
+  category: string | null;
+  confidence: number | null;
+}
+
+/** Ask the ai-suggest Edge Function for a better title + tag for a place.
+ *  Returns { configured:false } when no AI key is set (so the UI hides itself). */
+export async function aiSuggest(input: {
+  name?: string;
+  category?: string | null;
+  lat?: number;
+  lng?: number;
+  address?: string | null;
+  activityType?: string | null;
+}): Promise<AiSuggestion> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  if (!token) throw new Error('Not signed in');
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-suggest`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`AI suggest failed (${res.status})`);
+  return (await res.json()) as AiSuggestion;
+}
+
 /** Ask the geocode-new-places Edge Function to name any pending auto places. */
 export async function triggerGeocode(): Promise<{ named: number; considered: number }> {
   const { data: sess } = await supabase.auth.getSession();

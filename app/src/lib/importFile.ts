@@ -76,11 +76,17 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
     }
   } else {
     const trk = doc.getElementsByTagName('trk')[0];
-    const t = text(trk?.getElementsByTagName('type')[0]);
+    const rte = doc.getElementsByTagName('rte')[0];
+    const container = trk ?? rte;
+    const t = text(container?.getElementsByTagName('type')[0]);
     if (t) type = mapType(t);
-    const nm = text(trk?.getElementsByTagName('name')[0]);
+    const nm = text(container?.getElementsByTagName('name')[0]);
     if (nm) name = nm;
-    const tps = doc.getElementsByTagName('trkpt');
+    // Recorded tracks use <trkpt>; routes/courses use <rtept>; some exports only
+    // carry <wpt>. Fall back through them so a route export still imports.
+    let tps = doc.getElementsByTagName('trkpt');
+    if (tps.length === 0) tps = doc.getElementsByTagName('rtept');
+    if (tps.length === 0) tps = doc.getElementsByTagName('wpt');
     for (let i = 0; i < tps.length; i++) {
       const tp = tps[i];
       const la = tp.getAttribute('lat');

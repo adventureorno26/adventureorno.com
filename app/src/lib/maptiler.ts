@@ -147,25 +147,73 @@ interface MapTilerFeature {
  * Returns null on any network/parse failure so the caller can fall back to a
  * manual name — never throws into the click handler.
  */
+// Prefer a real named place over a road/address. Higher = better name for a pin:
+// a named POI/park, then a city/town, then a county, then a state as last resort.
+// Road numbers / bare addresses score 0 and are only used if nothing else exists.
+const NAME_TIER: Record<string, number> = {
+  poi: 6,
+  park: 6,
+  place: 5,
+  municipality: 5,
+  municipal_district: 5,
+  city: 5,
+  town: 5,
+  village: 5,
+  locality: 4,
+  neighbourhood: 3,
+  county: 2,
+  subregion: 2,
+  district: 2,
+  region: 1,
+  state: 1,
+  address: 0,
+  street: 0,
+  postal_code: 0,
+};
+function nameTier(pt?: string[]): number {
+  if (!pt || pt.length === 0) return 1;
+  return Math.max(...pt.map((t) => NAME_TIER[t] ?? 1));
+}
+
 export async function reverseGeocode(
   lng: number,
   lat: number,
 ): Promise<ReverseGeocodeResult | null> {
   try {
-    const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${KEY}&limit=1`;
+    // Pull the whole hierarchy (address → POI → city → county → region), then
+    // pick the best-named feature instead of blindly taking the most specific
+    // (which is usually a road number).
+    const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${KEY}&limit=5`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = (await res.json()) as { features?: MapTilerFeature[] };
-    const f = data.features?.[0];
-    if (!f) return null;
+    const feats = data.features ?? [];
+    if (feats.length === 0) return null;
 
-    const contextText = (prefix: string): string | null =>
-      f.context?.find((c) => c.id.startsWith(prefix))?.text ?? null;
+    // Highest tier wins; on a tie keep the more specific (earlier) feature.
+    let best = feats[0];
+    let bestTier = nameTier(best.place_type);
+    for (const f of feats) {
+      const t = nameTier(f.place_type);
+      if (t > bestTier) {
+        best = f;
+        bestTier = t;
+      }
+    }
+    // From whichever feature won, still read country/region out of any feature's
+    // context (they all share the same broader context).
+    const ctx = (prefix: string): string | null => {
+      for (const f of feats) {
+        const hit = f.context?.find((c) => c.id.startsWith(prefix))?.text;
+        if (hit) return hit;
+      }
+      return null;
+    };
 
     return {
-      name: f.text ?? f.place_name ?? 'Untitled place',
-      country: contextText('country'),
-      admin1: contextText('region') ?? contextText('subregion'),
+      name: best.text ?? best.place_name ?? 'Untitled place',
+      country: ctx('country'),
+      admin1: ctx('region') ?? ctx('subregion'),
     };
   } catch {
     return null;

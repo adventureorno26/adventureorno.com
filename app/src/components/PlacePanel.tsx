@@ -13,6 +13,8 @@ import {
   setPlaceSolo,
   setVisitSolo,
   updatePlace,
+  aiSuggest,
+  type AiSuggestion,
   type MapPerson,
 } from '../lib/data';
 import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
@@ -197,6 +199,30 @@ export default function PlacePanel({
     } catch {
       /* leave as-is on failure */
     }
+  }
+
+  // AI: suggest a cleaner name + tag for this place. Hides itself if the AI key
+  // isn't configured on the server (configured:false).
+  const [aiSug, setAiSug] = useState<AiSuggestion | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiOff, setAiOff] = useState(false);
+  async function runAiSuggest() {
+    setAiBusy(true);
+    try {
+      const s = await aiSuggest({
+        name: place.name,
+        category: place.category,
+        lat: place.lat,
+        lng: place.lng,
+        address: place.address,
+        activityType: (trailActs ?? [])[0]?.type ?? null,
+      });
+      if (!s.configured) setAiOff(true);
+      else setAiSug(s);
+    } catch {
+      setAiOff(true);
+    }
+    setAiBusy(false);
   }
   async function reloadSpots() {
     setSpots(await fetchEntries(place.id).catch(() => []));
@@ -1263,6 +1289,54 @@ export default function PlacePanel({
             </div>
           );
         })()}
+
+      {/* AI suggestion for a cleaner name + tag (leaf places; hidden if no AI key). */}
+      {canEdit && !place.holds_children && !place.is_trail && !aiOff && (
+        <div style={{ marginTop: 14 }}>
+          <button className="link-btn" disabled={aiBusy} onClick={() => void runAiSuggest()}>
+            {aiBusy ? 'Thinking…' : '✨ Suggest name & tag'}
+          </button>
+          {aiSug && (
+            <div className="entry" style={{ marginTop: 8 }}>
+              {aiSug.title && aiSug.title !== place.name && (
+                <div className="btn-row" style={{ alignItems: 'center' }}>
+                  <span>
+                    Name: <b>{aiSug.title}</b>
+                  </span>
+                  <button
+                    className="save-btn-green"
+                    onClick={() => void patch({ name: aiSug.title!, auto: false })}
+                  >
+                    Use
+                  </button>
+                </div>
+              )}
+              {aiSug.category && aiSug.category !== place.category && (
+                <div className="btn-row" style={{ alignItems: 'center', marginTop: 6 }}>
+                  <span>
+                    Tag: <b>{categoryLabel(aiSug.category)}</b>
+                  </span>
+                  <button
+                    className="save-btn-green"
+                    onClick={() =>
+                      void patch({
+                        categories: [aiSug.category!],
+                        category: aiSug.category!,
+                      })
+                    }
+                  >
+                    Use
+                  </button>
+                </div>
+              )}
+              {(!aiSug.title || aiSug.title === place.name) &&
+                (!aiSug.category || aiSug.category === place.category) && (
+                  <span className="label">Looks good as-is — no changes suggested.</span>
+                )}
+            </div>
+          )}
+        </div>
+      )}
 
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
