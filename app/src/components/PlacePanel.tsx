@@ -1245,11 +1245,7 @@ export default function PlacePanel({
           ))}
         </div>
       ) : (
-        !addingSpot &&
-        cityGroups.length === 0 &&
-        activityMembers.length === 0 && (
-          <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
-        )
+        !addingSpot && <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
       )}
 
       <RouteMiniMap place={place} />
@@ -1318,12 +1314,7 @@ export default function PlacePanel({
                   </span>
                   <button
                     className="save-btn-green"
-                    onClick={() =>
-                      void patch({
-                        categories: [aiSug.category!],
-                        category: aiSug.category!,
-                      })
-                    }
+                    onClick={() => void patch({ categories: [aiSug.category!] })}
                   >
                     Use
                   </button>

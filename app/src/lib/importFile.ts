@@ -142,7 +142,7 @@ export async function parseFitActivity(
     convertDateTimesToDates: true,
     applyScaleAndOffset: true,
   });
-  const records: Array<Record<string, unknown>> = messages.recordMesgs ?? [];
+  const records = (messages.recordMesgs ?? []) as unknown as Array<Record<string, unknown>>;
   const session = (messages.sessionMesgs ?? [])[0] as Record<string, unknown> | undefined;
 
   const pts: [number, number][] = [];
