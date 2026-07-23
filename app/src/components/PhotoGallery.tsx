@@ -16,6 +16,7 @@ import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
 import type { Photo, Place, Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
+import PhotoReactions from './PhotoReactions';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
 import PhotoMatchReview from './PhotoMatchReview';
@@ -588,6 +589,13 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                 ⤓
               </button>
             </div>
+
+            <PhotoReactions
+              key={openPhoto.id}
+              photoId={openPhoto.id}
+              caption={openPhoto.caption}
+              canEdit={canUpload}
+            />
           </div>,
           document.body,
         )}

@@ -150,7 +150,39 @@ export async function postWithRetry(url: string, init: RequestInit, tries = 3): 
 }
 
 const PHOTO_COLS =
-  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at';
+  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at, caption';
+
+export interface PhotoReaction {
+  emoji: string;
+  n: number;
+  who: string[];
+  mine: boolean;
+}
+
+/** Set or clear a photo's caption (owner/editor). */
+export async function setPhotoCaption(photoId: string, caption: string): Promise<void> {
+  const { error } = await supabase.rpc('set_photo_caption', {
+    p_photo: photoId,
+    p_caption: caption,
+  });
+  if (error) throw error;
+}
+
+/** Toggle the current user's emoji reaction on a photo. */
+export async function togglePhotoReaction(photoId: string, emoji: string): Promise<void> {
+  const { error } = await supabase.rpc('toggle_photo_reaction', {
+    p_photo: photoId,
+    p_emoji: emoji,
+  });
+  if (error) throw error;
+}
+
+/** Grouped reactions for a photo (emoji + count + who + whether mine). */
+export async function fetchPhotoReactions(photoId: string): Promise<PhotoReaction[]> {
+  const { data, error } = await supabase.rpc('photo_reactions_for', { p_photo: photoId });
+  if (error) return [];
+  return (data ?? []) as PhotoReaction[];
+}
 
 export async function fetchPhotosForEntry(entryId: string): Promise<Photo[]> {
   const { data, error } = await supabase

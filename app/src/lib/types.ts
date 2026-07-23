@@ -94,6 +94,7 @@ export interface Photo {
   uploaded_by: string | null;
   entry_id: string | null;
   created_at: string;
+  caption: string | null;
 }
 
 export interface Invite {
