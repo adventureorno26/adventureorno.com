@@ -5,6 +5,8 @@ import {
   addCategory,
   fetchGeoCoverage,
   fetchHomeZone,
+  fetchPeaksBagged,
+  type Peak,
   fetchMapProjection,
   fetchPlaces,
   fetchSettingsStats,
@@ -497,6 +499,43 @@ function NationalParksCard() {
   );
 }
 
+/** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
+function PeaksCard() {
+  const [peaks, setPeaks] = useState<Peak[] | null>(null);
+  useEffect(() => {
+    fetchPeaksBagged()
+      .then(setPeaks)
+      .catch(() => setPeaks([]));
+  }, []);
+  if (!peaks) return null;
+  return (
+    <div className="card">
+      <details className="stats-dropdown">
+        <summary>Peaks bagged</summary>
+        <div className="our-stats" style={{ marginBottom: 10 }}>
+          <div className="stat">
+            <b>{peaks.length}</b> <span className="label">summits</span>
+          </div>
+        </div>
+        {peaks.length === 0 ? (
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>No summits matched yet.</p>
+        ) : (
+          <div className="visit-list">
+            {peaks.map((p) => (
+              <div key={p.id} className="visit-row">
+                <span className="visit-main">{p.name}</span>
+                {p.ele_ft ? (
+                  <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </details>
+    </div>
+  );
+}
+
 /** Owner toggle: globe vs Mercator projection (falls back without a deploy). */
 function ProjectionCard() {
   const [proj, setProj] = useState<MapProjection | null>(null);
@@ -755,6 +794,7 @@ export default function Settings() {
         <OurStatsCard />
         <PlacesByStateCard />
         <NationalParksCard />
+        <PeaksCard />
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         <Link to="/trips">

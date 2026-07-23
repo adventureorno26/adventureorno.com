@@ -26,6 +26,7 @@ import { useAuth } from '../auth/AuthProvider';
 import EntryEditor from '../components/EntryEditor';
 import EntryPhotos from '../components/EntryPhotos';
 import PhotoGallery from '../components/PhotoGallery';
+import WeatherThatDay from '../components/WeatherThatDay';
 import StarRating from '../components/StarRating';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -238,6 +239,9 @@ export default function DayView() {
           <span>{place?.name ?? 'Place'}</span>
         </Link>
         <h2 style={{ margin: '4px 0' }}>{date ? dayLabel(date) : ''}</h2>
+        {place && date && (place.lat || place.lng) && (
+          <WeatherThatDay lat={place.lat} lng={place.lng} date={date} />
+        )}
 
         {/* Strava routes this day */}
         {acts.length > 0 && (

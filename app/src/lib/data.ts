@@ -144,6 +144,19 @@ export interface GeoCoverage {
   has_dc: boolean;
 }
 
+export interface Peak {
+  id: string;
+  name: string;
+  ele_ft: number | null;
+}
+
+/** Summits reached — matched from hike GPS tracks against OSM peaks. */
+export async function fetchPeaksBagged(): Promise<Peak[]> {
+  const { data, error } = await supabase.rpc('peaks_bagged');
+  if (error) return [];
+  return (data ?? []) as Peak[];
+}
+
 /** How many US states / world countries we've actually set foot in (not bucket). */
 export async function fetchGeoCoverage(): Promise<GeoCoverage | null> {
   const { data, error } = await supabase.rpc('geo_coverage');
