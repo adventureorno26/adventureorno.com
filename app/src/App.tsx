@@ -1,20 +1,43 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
 
+// After a redeploy, a browser holding a STALE index.html asks for old chunk
+// hashes that no longer exist (404) → the dynamic import rejects and the page
+// looks broken (e.g. "the map didn't load"). Self-heal: on the first such
+// failure, reload ONCE to fetch fresh assets (guarded so we never loop). Erica
+// dislikes manual hard-refreshes — this makes the app recover on its own.
+function lazyWithReload<T extends ComponentType<unknown>>(factory: () => Promise<{ default: T }>) {
+  return lazy(async () => {
+    const KEY = 'ao-chunk-reloaded';
+    try {
+      const mod = await factory();
+      sessionStorage.removeItem(KEY); // healthy load → allow a future retry
+      return mod;
+    } catch (e) {
+      if (!sessionStorage.getItem(KEY)) {
+        sessionStorage.setItem(KEY, '1');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {}); // hold render while reloading
+      }
+      throw e; // already retried once — surface the real error
+    }
+  });
+}
+
 // Every route (incl. the map) is code-split. This keeps MapLibre (~280KB gz) and
 // @mapbox/polyline OUT of the initial shell, so /login and the auth check paint
 // immediately; the map bundle loads only once an authed user hits the map route.
-const MapView = lazy(() => import('./routes/MapView'));
-const RoutesView = lazy(() => import('./routes/RoutesView'));
-const DayView = lazy(() => import('./routes/DayView'));
-const PlacesList = lazy(() => import('./routes/PlacesList'));
-const Settings = lazy(() => import('./routes/Settings'));
-const Trips = lazy(() => import('./routes/Trips'));
-const Wrapped = lazy(() => import('./routes/Wrapped'));
-const BucketList = lazy(() => import('./routes/BucketList'));
-const ImportTimeline = lazy(() => import('./routes/ImportTimeline'));
+const MapView = lazyWithReload(() => import('./routes/MapView'));
+const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
+const DayView = lazyWithReload(() => import('./routes/DayView'));
+const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
+const Settings = lazyWithReload(() => import('./routes/Settings'));
+const Trips = lazyWithReload(() => import('./routes/Trips'));
+const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
+const BucketList = lazyWithReload(() => import('./routes/BucketList'));
+const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
   return <div className="center-screen">{children}</div>;
