@@ -148,9 +148,15 @@ a {
   position: fixed;
   inset: 0;
 }
-.map-canvas {
+/* Higher specificity than maplibre-gl.css's `.maplibregl-map { position: relative }`,
+   which now loads AFTER this file (MapView is lazy-loaded) and would otherwise
+   override `position: absolute` → the container collapses to 0 height and the map
+   disappears. Explicit width/height fills the parent even if position is beaten. */
+.map-root .map-canvas {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* ---------- Stats bar ---------- */
@@ -1012,7 +1018,9 @@ a {
   top: 54px;
   left: 14px;
   right: 14px;
-  z-index: 7;
+  /* Above the stats bar, which is z-index 12 on mobile — otherwise the "Add Trail"
+     panel opens BEHIND the stats bar and can't be used on a phone. */
+  z-index: 40;
   max-width: 620px;
   display: flex;
   flex-direction: column;
@@ -3084,16 +3092,15 @@ textarea {
 }
 /* Three stat dropdowns sit as compact pills on one line, wrapping on narrow screens. */
 .stats-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  align-items: start;
 }
 .stats-row > .card {
-  flex: 1 1 0;
-  min-width: 132px;
   margin: 0;
   padding: 9px 12px;
+  min-width: 0;
 }
 .stats-dropdown > summary {
   font-size: 13px;
@@ -3106,14 +3113,6 @@ textarea {
 }
 .stats-dropdown > summary::-webkit-details-marker {
   display: none;
-}
-.stats-dropdown > summary::before {
-  content: '▸ ';
-  color: var(--muted);
-  font-size: 12px;
-}
-.stats-dropdown[open] > summary::before {
-  content: '▾ ';
 }
 .our-stats {
   display: flex;
@@ -3328,7 +3327,9 @@ textarea {
 .wrapped {
   max-width: 640px;
   margin: 0 auto;
-  padding: 16px 16px 60px;
+  /* Include the safe-area inset so the back button isn't tucked under the phone's
+     status bar / notch (was "too high and unusable" on mobile). */
+  padding: calc(16px + env(safe-area-inset-top)) 16px 60px;
 }
 .wrapped-hero {
   text-align: center;
@@ -3742,6 +3743,13 @@ textarea {
   justify-content: center;
   align-items: flex-start;
   padding: 10vh 16px 16px;
+}
+/* On a phone the person-filter + stats pills wrap to ~2 rows at the very top;
+   start the search panel below them so it doesn't open on top of the pills. */
+@media (max-width: 560px) {
+  .search-palette-backdrop {
+    padding-top: calc(96px + env(safe-area-inset-top));
+  }
 }
 .search-palette {
   width: min(560px, 100%);

@@ -390,20 +390,31 @@ export default function MapView() {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
-      map.addLayer({
-        id: 'fog-soft',
-        type: 'fill',
-        source: 'fog-soft',
-        layout: { visibility: 'none' },
-        paint: { 'fill-color': '#05070d', 'fill-opacity': 0.55 },
-      });
-      map.addLayer({
-        id: 'fog-crisp',
-        type: 'fill',
-        source: 'fog-crisp',
-        layout: { visibility: 'none' },
-        paint: { 'fill-color': '#05070d', 'fill-opacity': 0.3 },
-      });
+      // Insert the fog UNDER the basemap's first label (symbol) layer so city /
+      // place names stay readable ON TOP of the fog — otherwise fog-of-war hides
+      // every city label ("barely any cities labeled"). Falls back to on-top if
+      // the style has no symbol layer.
+      const firstLabelId = map.getStyle().layers?.find((l) => l.type === 'symbol')?.id;
+      map.addLayer(
+        {
+          id: 'fog-soft',
+          type: 'fill',
+          source: 'fog-soft',
+          layout: { visibility: 'none' },
+          paint: { 'fill-color': '#05070d', 'fill-opacity': 0.55 },
+        },
+        firstLabelId,
+      );
+      map.addLayer(
+        {
+          id: 'fog-crisp',
+          type: 'fill',
+          source: 'fog-crisp',
+          layout: { visibility: 'none' },
+          paint: { 'fill-color': '#05070d', 'fill-opacity': 0.3 },
+        },
+        firstLabelId,
+      );
 
       // Trail/route lines render UNDER the place markers; tap a line to open its
       // place card (rename / merge / reassign there).
@@ -704,14 +715,23 @@ export default function MapView() {
     };
   }, [personFilter, places.length]);
 
+  // Trailheads = leaf places that belong to a trail. They're landmarks Erica
+  // wants ALWAYS on the map (e.g. the Appalachian / Tuscarora / W&OD trailheads),
+  // so they're exempt from the person/cutoff view filter just like the trails.
+  const trailIds = new Set(places.filter((p) => p.is_trail).map((p) => p.id));
+  const trailMemberIds = new Set(
+    places.filter((p) => (p.part_of ?? []).some((pid) => trailIds.has(pid))).map((p) => p.id),
+  );
+
   // Filter the map: bucket-list places are hidden unless their toggle is on;
   // visited places follow the selected activity tag and the person view.
   const visiblePlaces = places.filter((p) => {
     if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
     if (!p.saved) return false; // only saved places appear on the map
     // Leaf places must be in the current person view (attribution + cutoff).
-    // Containers (trails/trips) are exempt so their rollup markers stay.
-    if (!p.holds_children && viewSet && !viewSet.has(p.id)) return false;
+    // Containers (trails/trips) AND trailheads are exempt so trails stay visible.
+    if (!p.holds_children && !trailMemberIds.has(p.id) && viewSet && !viewSet.has(p.id))
+      return false;
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 

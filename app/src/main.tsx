@@ -3,6 +3,12 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import App from './App';
+// MapLibre's stylesheet MUST load before ours so our .map-canvas / route-map
+// rules win. It used to ride in with the eager MapView bundle; once MapView
+// became lazy it started loading AFTER index.css and MapLibre's
+// `.maplibregl-map { position: relative }` overrode our sizing → every map
+// (main, route preview, routes view, trail sections) collapsed to 0 height.
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

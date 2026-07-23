@@ -414,7 +414,7 @@ function PlacesByStateCard() {
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>Cities &amp; states</summary>
+        <summary>Cities and states</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{stateCount}</b>{' '}
@@ -474,7 +474,7 @@ function NationalParksCard() {
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>National Parks &amp; public lands</summary>
+        <summary>National Parks</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{parks.length}</b> <span className="label">visited</span>
@@ -756,19 +756,17 @@ export default function Settings() {
         <PlacesByStateCard />
         <NationalParksCard />
       </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+        <Link to="/trips">
+          <button>Our Trips</button>
+        </Link>
+        <Link to="/wrapped">
+          <button>Our Years</button>
+        </Link>
+      </div>
 
       <h2 style={{ marginTop: 28 }}>Tags</h2>
       <TagsCard />
-
-      <h2 style={{ marginTop: 28 }}>Trips</h2>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Link to="/trips">
-          <button>All Our Trips</button>
-        </Link>
-        <Link to="/wrapped">
-          <button>Our Year in Travel</button>
-        </Link>
-      </div>
 
       <h2 style={{ marginTop: 28 }}>Export our data</h2>
       <ExportCard />

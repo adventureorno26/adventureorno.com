@@ -2,6 +2,13 @@ import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
+// MapView is the landing view and owns the MapLibre map + all its markers. It is
+// imported EAGERLY on purpose: lazy-loading it split MapLibre's CSS/JS into a
+// chunk that loaded after our styles (maps collapsed to 0 height, markers/route
+// maps broke) and made the map appear only after a second chunk download (slow).
+// Eager keeps the map instant and correct; the login shell paying for MapLibre is
+// an acceptable trade for the map actually working.
+import MapView from './routes/MapView';
 
 // After a redeploy, a browser holding a STALE index.html asks for old chunk
 // hashes that no longer exist (404) → the dynamic import rejects and the page
@@ -26,10 +33,7 @@ function lazyWithReload<T extends ComponentType<unknown>>(factory: () => Promise
   });
 }
 
-// Every route (incl. the map) is code-split. This keeps MapLibre (~280KB gz) and
-// @mapbox/polyline OUT of the initial shell, so /login and the auth check paint
-// immediately; the map bundle loads only once an authed user hits the map route.
-const MapView = lazyWithReload(() => import('./routes/MapView'));
+// Secondary routes stay code-split (their JS loads only when visited).
 const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
 const DayView = lazyWithReload(() => import('./routes/DayView'));
 const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));

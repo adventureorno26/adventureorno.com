@@ -351,7 +351,7 @@ export default function DayView() {
                       )}
                     </div>
                   )}
-                  {canEdit && a.type === 'Run' && (
+                  {canEdit && ['Run', 'Hike', 'Walk', 'Ride'].includes(a.type) && (
                     <div className="route-move">
                       {racingId === a.id ? (
                         <div className="move-picker">
