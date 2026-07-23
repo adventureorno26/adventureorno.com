@@ -165,6 +165,69 @@ export interface MapPerson {
   role: string;
 }
 
+/** Set (or clear, with null) the current user's own star rating for a place. */
+export async function setMyRating(placeId: string, rating: number | null): Promise<void> {
+  const { error } = await supabase.rpc('set_my_rating', {
+    p_place: placeId,
+    p_rating: rating,
+  });
+  if (error) throw error;
+}
+
+export interface WishInfo {
+  wanters: string[];
+  n: number;
+  everyone: boolean;
+}
+
+/** Toggle the current user's "want to go" on a place. */
+export async function toggleWish(placeId: string): Promise<void> {
+  const { error } = await supabase.rpc('toggle_wish', { p_place: placeId });
+  if (error) throw error;
+}
+
+/** Who wants each bucket place, keyed by place id. */
+export async function fetchWishes(): Promise<Record<string, WishInfo>> {
+  const { data, error } = await supabase.rpc('wishes_overview');
+  if (error) return {};
+  const out: Record<string, WishInfo> = {};
+  for (const r of (data ?? []) as {
+    place_id: string;
+    wanters: string[];
+    n: number;
+    everyone: boolean;
+  }[]) {
+    out[r.place_id] = { wanters: r.wanters ?? [], n: Number(r.n), everyone: Boolean(r.everyone) };
+  }
+  return out;
+}
+
+/** Date-night spinner: a random place you both want (optionally within km of a point). */
+export async function dateNightPick(
+  lat?: number,
+  lng?: number,
+  radiusKm?: number,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('date_night_pick', {
+    p_lat: lat ?? null,
+    p_lng: lng ?? null,
+    p_radius_km: radiusKm ?? null,
+  });
+  if (error) return null;
+  return (data as string | null) ?? null;
+}
+
+/** Each person's rating for a place, keyed by profile id. */
+export async function fetchPlaceRatings(placeId: string): Promise<Record<string, number>> {
+  const { data, error } = await supabase.rpc('place_ratings_for', { p_place: placeId });
+  if (error) return {};
+  const out: Record<string, number> = {};
+  for (const r of (data ?? []) as { profile_id: string; rating: number }[]) {
+    out[r.profile_id] = Number(r.rating);
+  }
+  return out;
+}
+
 /** The two people who can own places/activities (for the "just me" filter). */
 export async function fetchMapPeople(): Promise<MapPerson[]> {
   const { data, error } = await supabase.rpc('map_people');

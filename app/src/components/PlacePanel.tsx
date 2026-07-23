@@ -11,9 +11,11 @@ import {
   fetchEntries,
   fetchMapPeople,
   fetchPlace,
+  fetchPlaceRatings,
   fetchSpatialMembers,
   fetchVisits,
   setCityBoundary,
+  setMyRating,
   setVisitSolo,
   updatePlace,
   type MapPerson,
@@ -156,6 +158,7 @@ export default function PlacePanel({
   const [cityBusy, setCityBusy] = useState(false);
   const [cityMsg, setCityMsg] = useState<string | null>(null);
   const [spatialCount, setSpatialCount] = useState<number | null>(null);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchMapPeople()
@@ -228,6 +231,34 @@ export default function PlacePanel({
     await reloadSpots();
     await refreshPlace();
   }
+  // His/her star ratings for this place.
+  useEffect(() => {
+    let active = true;
+    fetchPlaceRatings(place.id)
+      .then((r) => active && setRatings(r))
+      .catch(() => active && setRatings({}));
+    return () => {
+      active = false;
+    };
+  }, [place.id]);
+
+  async function rateMine(n: number | null) {
+    const myId = profile?.id;
+    if (!myId) return;
+    setRatings((prev) => {
+      const next = { ...prev };
+      if (n == null) delete next[myId];
+      else next[myId] = n;
+      return next;
+    });
+    try {
+      await setMyRating(place.id, n);
+    } catch {
+      /* revert-free: reload on failure */
+      fetchPlaceRatings(place.id).then(setRatings).catch(() => undefined);
+    }
+  }
+
   // How many leaf places fall inside this container's boundary (city/region).
   useEffect(() => {
     let active = true;
@@ -513,14 +544,45 @@ export default function PlacePanel({
     return 'Add a title';
   })();
 
-  const ratingEl = (
-    <StarRating
-      value={place.rating}
-      size={16}
-      readOnly={!canEdit}
-      onChange={(n) => void patch({ rating: n })}
-    />
-  );
+  // His/her ratings. With 2+ people, show a labeled row each (only YOURS is
+  // editable) + an "you agree" note when they match. Solo → a single rating.
+  const raters =
+    people.length >= 2
+      ? people
+      : profile
+        ? [{ id: profile.id, display_name: profile.display_name ?? 'You', role: profile.role }]
+        : [];
+  const bothRated =
+    raters.length >= 2 && raters.every((p) => ratings[p.id] != null);
+  const agree =
+    bothRated && new Set(raters.map((p) => ratings[p.id])).size === 1;
+  const ratingEl =
+    raters.length >= 2 ? (
+      <div className="dual-rating">
+        {raters.map((pers) => {
+          const mine = pers.id === profile?.id;
+          return (
+            <span key={pers.id} className="dual-rating-row">
+              <span className="dual-rating-who">{mine ? 'You' : pers.display_name}</span>
+              <StarRating
+                value={ratings[pers.id] ?? null}
+                size={15}
+                readOnly={!mine}
+                onChange={(n) => void rateMine(n)}
+              />
+            </span>
+          );
+        })}
+        {agree && <span className="dual-rating-agree">you agree</span>}
+      </div>
+    ) : (
+      <StarRating
+        value={ratings[profile?.id ?? ''] ?? place.rating}
+        size={16}
+        readOnly={!canEdit}
+        onChange={(n) => void rateMine(n)}
+      />
+    );
 
   // The place name, shown as the title on the photo. Click to edit it by hand;
   // the search below also fills it in.

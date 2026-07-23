@@ -1162,6 +1162,34 @@ a {
   margin-bottom: 4px;
   display: inline-flex;
 }
+.dual-rating {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+.dual-rating-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dual-rating-who {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #94a3b8);
+  min-width: 30px;
+}
+.dual-rating-agree {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent, #38bdf8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* On the photo hero the labels need to read on imagery. */
+.hero-rating .dual-rating-who {
+  color: rgba(255, 255, 255, 0.85);
+}
 
 /* "City, State" line whose text is the Directions link, with a small edit. */
 .region-directions {
@@ -2276,6 +2304,68 @@ textarea {
   margin-top: 4px;
   color: var(--muted, #94a3b8);
   line-height: 1.35;
+}
+.bucket-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 14px 0 4px;
+}
+.spin-btn {
+  font-weight: 700;
+}
+.chip-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chip-toggle.on {
+  background: var(--accent, #38bdf8);
+  border-color: var(--accent, #38bdf8);
+  color: #05202e;
+}
+.bucket-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bucket-row .trip-place {
+  flex: 1;
+  min-width: 0;
+}
+.both-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #05202e;
+  background: var(--accent, #38bdf8);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.want-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted, #94a3b8);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.want-btn.on {
+  color: #e0466e;
+  border-color: #e0466e;
+  background: rgba(224, 70, 110, 0.12);
 }
 .move-picker {
   margin-top: 8px;
