@@ -31,6 +31,8 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.peaks_bagged() to authenticated;
 
+-- p_profile null → COMBINED total across everyone (the couple's "Our stats"
+-- climbing); a specific profile → that person's (their solo + joint).
 create or replace function public.climbing_stats(p_profile uuid default null)
 returns table(total_ft integer, everests double precision)
 language sql stable security definer set search_path = public as $$
@@ -38,7 +40,6 @@ language sql stable security definer set search_path = public as $$
          round((coalesce(sum(elevation_gain), 0) / 8848.86)::numeric, 2)::float
   from public.activities
   where elevation_gain is not null
-    and case when p_profile is null then solo_profile is null
-             else (solo_profile is null or solo_profile = p_profile) end;
+    and (p_profile is null or solo_profile is null or solo_profile = p_profile);
 $$;
 grant execute on function public.climbing_stats(uuid) to authenticated;
