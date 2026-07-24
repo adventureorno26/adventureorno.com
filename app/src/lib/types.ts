@@ -45,6 +45,7 @@ export interface Place {
   favorite: string | null; // favorite wine / meal / beer at this place
   holds_children: boolean; // container (trail/trip/city) — no attribution toggle
   category: string | null; // normalized singular category
+  park: string | null; // national park / public land this place falls inside
   created_by: string | null;
   created_at: string;
 }

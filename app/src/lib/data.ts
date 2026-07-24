@@ -34,7 +34,7 @@ export async function addCategory(
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, holds_children, category, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, holds_children, category, park, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -148,6 +148,48 @@ export interface Peak {
   id: string;
   name: string;
   ele_ft: number | null;
+}
+
+export interface TripTimelineItem {
+  day: string;
+  kind: 'activity' | 'spot';
+  title: string;
+  sub: string | null;
+  place_id: string | null;
+}
+export interface TripNote {
+  id: string;
+  day: string;
+  note: string;
+}
+
+/** Auto day-by-day timeline of everything that happened on a trip. */
+export async function fetchTripTimeline(tripId: string): Promise<TripTimelineItem[]> {
+  const { data, error } = await supabase.rpc('trip_timeline', { p_trip: tripId });
+  if (error) return [];
+  return (data ?? []) as TripTimelineItem[];
+}
+/** Manual per-day plan notes on a trip. */
+export async function fetchTripNotes(tripId: string): Promise<TripNote[]> {
+  const { data, error } = await supabase
+    .from('trip_notes')
+    .select('id, day, note')
+    .eq('trip_id', tripId)
+    .order('day');
+  if (error) return [];
+  return (data ?? []) as TripNote[];
+}
+export async function addTripNote(tripId: string, day: string, note: string): Promise<void> {
+  const { error } = await supabase.rpc('add_trip_note', {
+    p_trip: tripId,
+    p_day: day,
+    p_note: note,
+  });
+  if (error) throw error;
+}
+export async function deleteTripNote(id: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_trip_note', { p_id: id });
+  if (error) throw error;
 }
 
 /** Summits reached — matched from hike GPS tracks against OSM peaks. */

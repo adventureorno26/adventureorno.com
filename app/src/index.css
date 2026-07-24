@@ -2292,6 +2292,90 @@ textarea {
   cursor: pointer;
   text-align: left;
 }
+.trip-itin {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.itin-day {
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.itin-date {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #94a3b8);
+}
+.itin-item {
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+.itin-item:hover {
+  color: var(--accent);
+}
+.itin-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  background: var(--accent-soft, rgba(56, 189, 248, 0.1));
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.itin-note span {
+  flex: 1;
+}
+.itin-del {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}
+.itin-add,
+.itin-newday {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.itin-add input,
+.itin-newday input[type='text'],
+.itin-newday input:not([type]) {
+  flex: 1;
+  min-width: 120px;
+}
+.itin-newday {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.park-badge {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f7a4d;
+  background: rgba(31, 122, 77, 0.14);
+  border: 1px solid rgba(31, 122, 77, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+@media (prefers-color-scheme: dark) {
+  .park-badge {
+    color: #6ee7a8;
+    background: rgba(52, 211, 154, 0.14);
+    border-color: rgba(52, 211, 154, 0.3);
+  }
+}
 .city-region {
   margin: 8px 0 2px;
   font-size: 12px;

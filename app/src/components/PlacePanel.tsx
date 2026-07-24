@@ -38,6 +38,7 @@ import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
 import TrailSectionsMap from './TrailSectionsMap';
+import TripItinerary from './TripItinerary';
 import StarRating from './StarRating';
 
 interface Props {
@@ -718,6 +719,7 @@ export default function PlacePanel({
             {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
           </span>
         )}
+        {place.park && <div className="park-badge">In {place.park}</div>}
         {place.is_trail && trailMilesSummary(trailMiles) && (
           <span className="trail-miles">
             {trailMilesSummary(trailMiles)}
@@ -1090,6 +1092,13 @@ export default function PlacePanel({
           </>
         );
       })()}
+
+      {place.category === 'trip' && (
+        <>
+          <h3 style={{ marginTop: 22 }}>Itinerary</h3>
+          <TripItinerary tripId={place.id} canEdit={canEdit} />
+        </>
+      )}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
