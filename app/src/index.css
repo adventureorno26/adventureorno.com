@@ -2295,6 +2295,10 @@ textarea {
 .add-route-btn {
   margin: 10px 0 4px;
 }
+.fly-btn {
+  margin: 4px 0 12px;
+  width: 100%;
+}
 .elev-chart {
   margin: 6px 0 2px;
 }

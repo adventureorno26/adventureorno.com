@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
-import { MAPTILER_STYLE_URL } from '../lib/maptiler';
+import { MAPTILER_STYLE_URL, MAPTILER_TERRAIN_URL } from '../lib/maptiler';
 import { fetchPlace } from '../lib/data';
 import { fetchActivitiesForPlace } from '../lib/strava';
 import { fetchPlacePings, walkSegments } from '../lib/walks';
@@ -38,6 +38,56 @@ export default function RoutesView() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [walks, setWalks] = useState<[number, number][][]>([]);
   const [mapReady, setMapReady] = useState(false);
+  const [flying, setFlying] = useState(false);
+
+  // 3D flyover: add terrain and sweep the camera along the longest route with a
+  // low pitch. Isolated to THIS map (never the main globe map).
+  async function flyRoute() {
+    const map = mapRef.current;
+    if (!map || flying) return;
+    let path: [number, number][] = [];
+    for (const a of activities) {
+      if (!a.summary_polyline) continue;
+      const c = polyline.decode(a.summary_polyline).map(([la, ln]) => [ln, la] as [number, number]);
+      if (c.length > path.length) path = c; // fly the longest track
+    }
+    if (path.length < 2) return;
+    setFlying(true);
+    if (!map.getSource('terrain')) {
+      map.addSource('terrain', { type: 'raster-dem', url: MAPTILER_TERRAIN_URL, tileSize: 256 });
+    }
+    map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
+    const N = 60;
+    const step = Math.max(1, Math.floor(path.length / N));
+    const wp = path.filter((_, i) => i % step === 0);
+    if (wp[wp.length - 1] !== path[path.length - 1]) wp.push(path[path.length - 1]);
+    const bearing = (a: [number, number], b: [number, number]) => {
+      const dl = ((b[0] - a[0]) * Math.PI) / 180;
+      const y = Math.sin(dl) * Math.cos((b[1] * Math.PI) / 180);
+      const x =
+        Math.cos((a[1] * Math.PI) / 180) * Math.sin((b[1] * Math.PI) / 180) -
+        Math.sin((a[1] * Math.PI) / 180) * Math.cos((b[1] * Math.PI) / 180) * Math.cos(dl);
+      return (Math.atan2(y, x) * 180) / Math.PI;
+    };
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    map.easeTo({ center: wp[0], zoom: 14, pitch: 68, bearing: bearing(wp[0], wp[1] ?? wp[0]), duration: 1600 });
+    await wait(1700);
+    for (let i = 1; i < wp.length && mapRef.current; i++) {
+      map.easeTo({
+        center: wp[i],
+        bearing: bearing(wp[i - 1], wp[i]),
+        pitch: 68,
+        zoom: 14.5,
+        duration: 360,
+        easing: (t) => t,
+      });
+      await wait(340);
+    }
+    if (!mapRef.current) return;
+    map.easeTo({ pitch: 0, duration: 1200 });
+    setTimeout(() => mapRef.current?.setTerrain(null), 1400);
+    setFlying(false);
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -152,6 +202,11 @@ export default function RoutesView() {
         <h2>
           Routes {activities.length > 0 && <span className="muted">({activities.length})</span>}
         </h2>
+        {activities.some((a) => a.summary_polyline) && (
+          <button className="primary fly-btn" disabled={flying} onClick={() => void flyRoute()}>
+            {flying ? 'Flying…' : '▶ Fly this route in 3D'}
+          </button>
+        )}
         {activities.length === 0 ? (
           <p className="muted">No Strava activities recorded here yet.</p>
         ) : (
