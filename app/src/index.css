@@ -2829,6 +2829,18 @@ textarea {
   transform: translateX(-50%);
   bottom: calc(20px + env(safe-area-inset-bottom));
   z-index: 6;
+}
+/* On a phone the bottom is crowded (gear, Add Trail, Search, person filter, zoom),
+   so the wide "On this day" pill overlapped them. Move it to the top, below the
+   search row, where it's clear. */
+@media (max-width: 640px) {
+  .memory-banner {
+    bottom: auto;
+    top: calc(84px + env(safe-area-inset-top));
+    max-width: calc(100vw - 24px);
+  }
+}
+.memory-banner {
   display: flex;
   align-items: stretch;
   max-width: min(520px, calc(100vw - 28px));
@@ -3559,7 +3571,9 @@ textarea {
 .layers-control {
   position: fixed;
   right: 12px;
-  top: 12px;
+  /* Include the notch/status-bar inset so the Fog/Heat/None toggle isn't tucked
+     under the phone status bar (it aligns with the stats pills, which also inset). */
+  top: calc(12px + env(safe-area-inset-top));
   z-index: 5;
   display: flex;
   gap: 2px;
