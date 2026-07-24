@@ -1030,6 +1030,15 @@ export default function MapView() {
     setDrawBusy(false);
   }
 
+  // Launched from a trail card's "Add a route": close the card, enter draw mode
+  // pre-named + targeted so the drawn route attaches to THIS trail on save.
+  function startDrawForTrail(trailId: string, name: string) {
+    drawTargetRef.current = trailId;
+    setDrawName(name);
+    navigate('/');
+    setDrawMode(true);
+  }
+
   async function handleAddAt(lng: number, lat: number, presetName?: string) {
     setAddMode(false);
     setBanner('Adding that place…');
@@ -1475,6 +1484,7 @@ export default function MapView() {
           onPlaceChanged={handlePlaceChanged}
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}
+          onAddRoute={startDrawForTrail}
         />
       )}
     </div>

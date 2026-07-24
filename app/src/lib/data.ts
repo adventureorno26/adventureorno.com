@@ -192,6 +192,18 @@ export async function deleteTripNote(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export interface ClimbingStats {
+  total_ft: number;
+  everests: number;
+}
+/** Total vertical climbed + Everests, from per-activity elevation gain. */
+export async function fetchClimbingStats(personId?: string | null): Promise<ClimbingStats> {
+  const { data, error } = await supabase.rpc('climbing_stats', { p_profile: personId ?? null });
+  if (error) return { total_ft: 0, everests: 0 };
+  const row = (Array.isArray(data) ? data[0] : data) ?? {};
+  return { total_ft: Number(row.total_ft ?? 0), everests: Number(row.everests ?? 0) };
+}
+
 /** Summits reached — matched from hike GPS tracks against OSM peaks. */
 export async function fetchPeaksBagged(): Promise<Peak[]> {
   const { data, error } = await supabase.rpc('peaks_bagged');

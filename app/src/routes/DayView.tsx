@@ -27,6 +27,7 @@ import EntryEditor from '../components/EntryEditor';
 import EntryPhotos from '../components/EntryPhotos';
 import PhotoGallery from '../components/PhotoGallery';
 import WeatherThatDay from '../components/WeatherThatDay';
+import ElevationChart from '../components/ElevationChart';
 import StarRating from '../components/StarRating';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -311,6 +312,7 @@ export default function DayView() {
                       View on Strava ↗
                     </a>
                   )}
+                  <ElevationChart profile={a.elevation_profile} gainM={a.elevation_gain} />
                   {canEdit && (
                     <div className="route-move">
                       {movingId === a.id ? (

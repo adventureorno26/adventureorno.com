@@ -48,6 +48,7 @@ interface Props {
   onPlaceChanged: (place: Place) => void;
   onPlaceDeleted: (id: string) => void;
   onMerged: (loserId: string, winner: Place) => void;
+  onAddRoute?: (trailId: string, name: string) => void;
 }
 
 /** Prepend https:// when the user typed a bare domain, so the link works. */
@@ -128,6 +129,7 @@ export default function PlacePanel({
   onClose,
   onPlaceChanged,
   onPlaceDeleted,
+  onAddRoute,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -732,6 +734,13 @@ export default function PlacePanel({
           </span>
         )}
       </div>
+
+      {/* Empty trail → let the user draw its route right on the map. */}
+      {place.is_trail && canEdit && onAddRoute && (trailActs?.length ?? 0) === 0 && (
+        <button className="primary add-route-btn" onClick={() => onAddRoute(place.id, place.name)}>
+          + Add a route on the map
+        </button>
+      )}
 
       {!place.is_home && <WeatherLine lat={place.lat} lng={place.lng} />}
 

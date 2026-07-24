@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   addCategory,
+  fetchClimbingStats,
   fetchGeoCoverage,
   fetchHomeZone,
   fetchPeaksBagged,
@@ -502,20 +503,34 @@ function NationalParksCard() {
 /** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
 function PeaksCard() {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
+  const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
   useEffect(() => {
     fetchPeaksBagged()
       .then(setPeaks)
       .catch(() => setPeaks([]));
+    fetchClimbingStats()
+      .then(setClimb)
+      .catch(() => setClimb(null));
   }, []);
   if (!peaks) return null;
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>Peaks bagged</summary>
+        <summary>Peaks &amp; climbing</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{peaks.length}</b> <span className="label">summits</span>
           </div>
+          {climb && climb.total_ft > 0 && (
+            <>
+              <div className="stat">
+                <b>{climb.total_ft.toLocaleString()}</b> <span className="label">ft climbed</span>
+              </div>
+              <div className="stat">
+                <b>{climb.everests}</b> <span className="label">Everests</span>
+              </div>
+            </>
+          )}
         </div>
         {peaks.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>No summits matched yet.</p>

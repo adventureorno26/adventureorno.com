@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
-  'id, strava_id, type, name, distance, elevation_gain, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
+  'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
 
 /** Set who an activity belongs to (null = both of us). Rebuilds the place's visits. */
 export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {
