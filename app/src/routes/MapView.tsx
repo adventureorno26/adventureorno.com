@@ -25,6 +25,7 @@ import {
   type MapPerson,
 } from '../lib/data';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
+import { fetchVideoCovers, fetchVideoPosterUrl } from '../lib/videos';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import {
   createManualActivity,
@@ -73,34 +74,42 @@ function inverseFog(mp: GeoJSON.MultiPolygon | null): GeoJSON.Feature<GeoJSON.Po
   };
 }
 
-// A place's effective cover photo — its own, or (for a trail) a trailhead's.
-function effectiveCover(p: Place, all: Place[]): string | null {
-  if (p.cover_photo_id) return p.cover_photo_id;
-  if (p.is_trail)
-    return (
-      all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id)?.cover_photo_id ?? null
-    );
-  return null;
+// place_id → a video id (with a poster) to use as the marker when there's no
+// cover photo. Populated by the map from fetchVideoCovers().
+const coverVideoByPlace = new Map<string, string>();
+
+// A place's marker image id: its cover photo (`ph-<id>`), a trailhead's photo,
+// else — if it has a video with a poster — that video's poster (`vid-<id>`),
+// else '' (a plain pin). Every marker still = a real photo/video frame.
+function coverIcon(p: Place, all: Place[]): string {
+  if (p.cover_photo_id) return `ph-${p.cover_photo_id}`;
+  if (p.is_trail) {
+    const th = all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id);
+    if (th?.cover_photo_id) return `ph-${th.cover_photo_id}`;
+  }
+  const vid = coverVideoByPlace.get(p.id);
+  if (vid) return `vid-${vid}`;
+  return '';
 }
 
 function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: 'FeatureCollection',
     features: places.map((p) => {
-      const cover = effectiveCover(p, places);
+      const icon = coverIcon(p, places);
       const primary = primaryCategory(p);
       return {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         properties: {
           id: p.id,
-          photo: cover ? 1 : 0,
-          icon: cover ? `ph-${cover}` : '',
+          photo: icon ? 1 : 0,
+          icon,
           color: categoryColor(primary),
           // White type indicator on no-photo pins (R=Restaurant, W=Winery, …).
           // Trails show no letter — their route line already identifies them.
           glyph:
-            cover || primary === 'default' || primary === 'trail'
+            icon || primary === 'default' || primary === 'trail'
               ? ''
               : primary.charAt(0).toUpperCase(),
         },
@@ -118,11 +127,29 @@ async function coverUrl(photoId: string): Promise<string> {
   coverUrlCache.set(photoId, url);
   return url;
 }
+const videoUrlCache = new Map<string, string>();
+async function videoCoverUrl(videoId: string): Promise<string> {
+  const cached = videoUrlCache.get(videoId);
+  if (cached) return cached;
+  const url = await fetchVideoPosterUrl(videoId);
+  videoUrlCache.set(videoId, url);
+  return url;
+}
 
 // Render a place's cover thumbnail into a circular map icon (white ring).
 async function circleIcon(photoId: string): Promise<ImageData | null> {
+  return circleIconFromUrl(await coverUrl(photoId));
+}
+// Same, from a video poster.
+async function videoCircleIcon(videoId: string): Promise<ImageData | null> {
   try {
-    const url = await coverUrl(photoId);
+    return circleIconFromUrl(await videoCoverUrl(videoId));
+  } catch {
+    return null;
+  }
+}
+async function circleIconFromUrl(url: string): Promise<ImageData | null> {
+  try {
     const img = new Image();
     img.src = url;
     await img.decode();
@@ -303,6 +330,15 @@ export default function MapView() {
     fetchPlaceCounts()
       .then((c) => {
         countsRef.current = c;
+      })
+      .catch(() => undefined);
+    // Video covers: places with a video (but no cover photo) get the video's
+    // poster as their marker. Load once; re-sync if the map is already up.
+    fetchVideoCovers()
+      .then((m) => {
+        coverVideoByPlace.clear();
+        for (const [k, v] of m) coverVideoByPlace.set(k, v);
+        if (mapRef.current?.getSource(SOURCE_ID)) syncSource(placesRef.current);
       })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -579,7 +615,9 @@ export default function MapView() {
       });
       map.on('styleimagemissing', (e) => {
         const iid = e.id;
-        if (!iid || !iid.startsWith('ph-') || map.hasImage(iid)) return;
+        const isPhoto = iid?.startsWith('ph-');
+        const isVideo = iid?.startsWith('vid-');
+        if (!iid || (!isPhoto && !isVideo) || map.hasImage(iid)) return;
         // Reserve the id with a transparent placeholder so it doesn't refire,
         // then fill in the real circular thumbnail once it decodes.
         map.addImage(
@@ -587,7 +625,8 @@ export default function MapView() {
           { width: 100, height: 100, data: new Uint8Array(100 * 100 * 4) },
           { pixelRatio: 2 },
         );
-        void circleIcon(iid.slice(3)).then((data) => {
+        const build = isVideo ? videoCircleIcon(iid.slice(4)) : circleIcon(iid.slice(3));
+        void build.then((data) => {
           if (data && map.hasImage(iid)) map.updateImage(iid, data);
         });
       });
