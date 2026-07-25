@@ -129,8 +129,8 @@ export async function fetchItemCounts(): Promise<{ entries: number; visits: numb
   return { entries: e.count ?? 0, visits: v.count ?? 0 };
 }
 
-export async function fetchSettingsStats(): Promise<SettingsStats | null> {
-  const { data, error } = await supabase.rpc('settings_stats');
+export async function fetchSettingsStats(personId?: string | null): Promise<SettingsStats | null> {
+  const { data, error } = await supabase.rpc('settings_stats', { p_profile: personId ?? null });
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
   return (row ?? null) as SettingsStats | null;
@@ -148,6 +148,7 @@ export interface Peak {
   id: string;
   name: string;
   ele_ft: number | null;
+  place_id: string | null; // the place/trail where it was bagged (for its card)
 }
 
 export interface TripTimelineItem {
@@ -205,15 +206,15 @@ export async function fetchClimbingStats(personId?: string | null): Promise<Clim
 }
 
 /** Summits reached — matched from hike GPS tracks against OSM peaks. */
-export async function fetchPeaksBagged(): Promise<Peak[]> {
-  const { data, error } = await supabase.rpc('peaks_bagged');
+export async function fetchPeaksBagged(personId?: string | null): Promise<Peak[]> {
+  const { data, error } = await supabase.rpc('peaks_bagged', { p_profile: personId ?? null });
   if (error) return [];
   return (data ?? []) as Peak[];
 }
 
 /** How many US states / world countries we've actually set foot in (not bucket). */
-export async function fetchGeoCoverage(): Promise<GeoCoverage | null> {
-  const { data, error } = await supabase.rpc('geo_coverage');
+export async function fetchGeoCoverage(personId?: string | null): Promise<GeoCoverage | null> {
+  const { data, error } = await supabase.rpc('geo_coverage', { p_profile: personId ?? null });
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;

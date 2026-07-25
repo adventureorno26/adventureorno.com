@@ -6,7 +6,10 @@ import {
   fetchClimbingStats,
   fetchGeoCoverage,
   fetchHomeZone,
+  fetchMapPeople,
   fetchPeaksBagged,
+  fetchPlacePeople,
+  type MapPerson,
   type Peak,
   fetchMapProjection,
   fetchPlaces,
@@ -357,13 +360,13 @@ function GeocodeCard() {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Our stats — same pill style as the map. National Parks lands with that feature. */
-function OurStatsCard() {
+function OurStatsCard({ personId }: { personId: string | null }) {
   const [s, setS] = useState<SettingsStats | null>(null);
   useEffect(() => {
-    fetchSettingsStats()
+    fetchSettingsStats(personId)
       .then(setS)
       .catch(() => setS(null));
-  }, []);
+  }, [personId]);
   if (!s) return null;
   const pills = [
     { label: 'Trails Taken', value: s.trails_taken },
@@ -374,7 +377,7 @@ function OurStatsCard() {
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>Our stats</summary>
+        <summary>Stats</summary>
         <div className="our-stats">
           {pills.map((p) => (
             <div key={p.label} className="stat">
@@ -389,23 +392,30 @@ function OurStatsCard() {
 
 /** Cities & States — the geography count that used to sit in the map stats bar.
  *  Each state/country is a dropdown listing the cities (places) within it. */
-function PlacesByStateCard() {
+function PlacesByStateCard({
+  personId,
+  placePeople,
+}: {
+  personId: string | null;
+  placePeople: Map<string, Set<string>>;
+}) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [cov, setCov] = useState<GeoCoverage | null>(null);
   useEffect(() => {
     fetchPlaces()
       .then(setPlaces)
       .catch(() => setPlaces([]));
-    fetchGeoCoverage()
+    fetchGeoCoverage(personId)
       .then(setCov)
       .catch(() => setCov(null));
-  }, []);
+  }, [personId]);
   if (!places) return null;
 
   // Top-level, saved, non-bucket places grouped by state (US) or country.
   const groups = new Map<string, { isState: boolean; cities: Place[] }>();
   for (const p of places) {
     if (p.bucket || !p.saved) continue;
+    if (personId && !(placePeople.get(p.id)?.has(personId) ?? false)) continue;
     const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
     const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
     if (!groups.has(key)) groups.set(key, { isState: Boolean(isUS), cities: [] });
@@ -465,7 +475,13 @@ function PlacesByStateCard() {
 
 /** National Parks visited — counts saved places whose name reads like a national
  *  park / monument / forest, with a dropdown of which ones. */
-function NationalParksCard() {
+function NationalParksCard({
+  personId,
+  placePeople,
+}: {
+  personId: string | null;
+  placePeople: Map<string, Set<string>>;
+}) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   useEffect(() => {
     fetchPlaces()
@@ -479,6 +495,7 @@ function NationalParksCard() {
       (p) =>
         p.saved &&
         !p.bucket &&
+        (!personId || (placePeople.get(p.id)?.has(personId) ?? false)) &&
         /national (park|monument|forest|seashore|recreation area|historic)/i.test(p.name),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -566,17 +583,17 @@ function TrackingCard({ myId }: { myId: string }) {
 }
 
 /** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
-function PeaksCard() {
+function PeaksCard({ personId }: { personId: string | null }) {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
   const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
   useEffect(() => {
-    fetchPeaksBagged()
+    fetchPeaksBagged(personId)
       .then(setPeaks)
       .catch(() => setPeaks([]));
-    fetchClimbingStats()
+    fetchClimbingStats(personId)
       .then(setClimb)
       .catch(() => setClimb(null));
-  }, []);
+  }, [personId]);
   if (!peaks) return null;
   return (
     <div className="card">
@@ -601,18 +618,67 @@ function PeaksCard() {
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>No summits matched yet.</p>
         ) : (
           <div className="visit-list">
-            {peaks.map((p) => (
-              <div key={p.id} className="visit-row peak-row">
-                <span className="visit-main">{p.name}</span>
-                {p.ele_ft ? (
-                  <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
-                ) : null}
-              </div>
-            ))}
+            {peaks.map((p) =>
+              p.place_id ? (
+                <Link key={p.id} className="visit-row peak-row" to={`/place/${p.place_id}`}>
+                  <span className="visit-main">{p.name}</span>
+                  {p.ele_ft ? <span className="label"> · {p.ele_ft.toLocaleString()} ft</span> : null}
+                </Link>
+              ) : (
+                <div key={p.id} className="visit-row peak-row">
+                  <span className="visit-main">{p.name}</span>
+                  {p.ele_ft ? <span className="label"> · {p.ele_ft.toLocaleString()} ft</span> : null}
+                </div>
+              ),
+            )}
           </div>
         )}
       </details>
     </div>
+  );
+}
+
+/** The whole Stats section with one Me / Josh / Both toggle that drives every
+ *  pill (each card refetches/refilters for the selected person). */
+function StatsSection() {
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
+  const [person, setPerson] = useState<string | null>(null); // null = Both
+  useEffect(() => {
+    fetchMapPeople().then(setPeople).catch(() => undefined);
+    fetchPlacePeople().then(setPlacePeople).catch(() => undefined);
+  }, []);
+  const real = people.filter((p) => p.display_name !== 'Test Bot');
+  return (
+    <>
+      <div className="stats-toggle">
+        <button className={person === null ? 'on' : ''} onClick={() => setPerson(null)} type="button">
+          Both
+        </button>
+        {real.map((pp) => (
+          <button
+            key={pp.id}
+            className={person === pp.id ? 'on' : ''}
+            onClick={() => setPerson(pp.id)}
+            type="button"
+          >
+            {pp.display_name ?? 'Me'}
+          </button>
+        ))}
+      </div>
+      <div className="stats-row">
+        <OurStatsCard personId={person} />
+        <PlacesByStateCard personId={person} placePeople={placePeople} />
+        <NationalParksCard personId={person} placePeople={placePeople} />
+        <PeaksCard personId={person} />
+        <Link className="card stat-navcard" to="/trips">
+          Trips
+        </Link>
+        <Link className="card stat-navcard" to="/wrapped">
+          Years
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -870,18 +936,7 @@ export default function Settings() {
       <button onClick={() => void signOut()}>Sign out</button>
 
       <h2 style={{ marginTop: 28 }}>Stats</h2>
-      <div className="stats-row">
-        <OurStatsCard />
-        <PlacesByStateCard />
-        <NationalParksCard />
-        <PeaksCard />
-        <Link className="card stat-navcard" to="/trips">
-          Trips
-        </Link>
-        <Link className="card stat-navcard" to="/wrapped">
-          Years
-        </Link>
-      </div>
+      <StatsSection />
 
       {(profile?.role === 'owner' || profile?.role === 'editor') && (
         <>
