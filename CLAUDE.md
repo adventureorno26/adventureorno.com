@@ -83,3 +83,121 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
 - Small commits with imperative messages.
 - When a task requires a human step (dashboard clicks, App Store installs, OAuth approval), stop
   and print the exact steps rather than faking it — MANUAL-SETUP.md tracks these.
+
+## Backlog / TODO (proposed roadmap — not yet built)
+
+Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check items off
+(or delete) as they ship. Tier 0 is correctness/security and should come first.
+
+### Tier 0 — Security & correctness (do first)
+- [ ] **Audit SECURITY DEFINER functions (CRITICAL).** `match_photo` (`0082_photo_matching.sql:11`)
+  is SECURITY DEFINER, granted to all `authenticated`, does NOT check `is_member()`, and searches
+  ALL pings/activities regardless of person. Require `is_member()`, accept/derive the relevant
+  profile, filter pings/activities by attribution, add negative tests for revoked users + viewers.
+  Review all ~66 SECURITY DEFINER occurrences the same way. The `ai-suggest` edge function's comment
+  says owner/editor-only but it only checks that an Auth user exists — verify a profile + role
+  before expanding AI usage.
+- [ ] **Preserve source identity.** The browser resizes/re-encodes before the Worker computes SHA-256
+  (`app/src/lib/photos.ts:310`, worker `index.ts:133`), so the same original hashes differently across
+  browsers and a manual resize won't dedupe against the Shortcut's original. Hash the ORIGINAL bytes
+  client-side before conversion; optionally keep a second stored-object hash.
+- [ ] **Harden photo/video ingestion.** Validate max byte size, allowed MIME types, finite/valid
+  lat-lng, pixel dimensions, image-decode success before commit, video duration/type/size, valid
+  UUID/place ownership; add per-profile rate limits. Stop returning raw internal error detail
+  (Worker currently returns `String(err).slice(0,200)`).
+- [ ] **Transaction & idempotency.** R2 writes and DB writes are separate → orphaned objects/rows on
+  failure. Add a client upload-id/idempotency key, an upload-attempt table with explicit states,
+  duplicate-request short-circuit, compensating deletes, and periodic R2↔DB reconciliation.
+- [ ] **No-GPS handling (don't fabricate coords).** Never store the map-center as a photo's GPS. Keep
+  coordinates null; match by capture time vs location history/activities; show likely places; let the
+  user search / drop a pin / pick an existing place; store coords only when explicitly confirmed.
+  (Partially addressed in the Sorter — audit all upload paths.)
+- [ ] **Fix lint + CI trust.** LocationTracker has a `react-hooks/exhaustive-deps` warning; both Vitest
+  commands stalled locally (test runner / env / OneDrive-backed workspace?) — diagnose before treating
+  CI as dependable.
+
+### Tier 1 — Ingestion pipeline & dedup
+- [ ] **Type-aware duplicate-place warning before creation.** Show existing places within
+  configurable, type-aware radii: ~100 m dining/winery, 1–3 km parks/attractions, larger for
+  trails/cities/containers. Offer "use existing", "create separate", "merge". (The current pipeline
+  can attach photos to a place up to 30 km away — type-aware matching fixes that.)
+- [ ] **Multi-place batch completion screen.** A geotagged batch can touch several places, but the map
+  upload flow only remembers the first. Show "N photos added across M places", one row per place with
+  added/skipped/duplicated/uncertain counts, and a "review all" action.
+- [ ] **Split "upload" from "process".** State machine: queued → uploading → stored → metadata
+  extracted → matched → ready for review → accepted. Makes failures recoverable and unblocks future
+  OCR / AI tagging / perceptual dedup / face blur without the browser waiting.
+- [ ] **Persistent upload queue.** Survive navigation + connection loss: per-file progress, pause /
+  resume / retry / cancel, background continuation while the PWA is active, retry only failed files,
+  clear per-photo skip reasons, final server reconciliation.
+- [ ] **Similar-photo review (perceptual).** SHA-256 misses edited/cropped/re-downloaded/burst/
+  recompressed copies. Add perceptual hashes or image embeddings; show likely-duplicate groups +
+  "best shot" stacks.
+
+### Tier 2 — Soft delete & curation UX
+- [ ] **Undo + trash (replace permanent delete).** Soft-delete window for places/photos/visits: undo
+  snackbar immediately, a Trash page with 30-day retention, restore to original place. Keep the
+  automated re-import blocklist SEPARATE from ordinary recovery. Safer than browser confirm dialogs,
+  esp. on mobile.
+- [ ] **Type-aware place templates.** After choosing a type, show relevant fields — Trail: distance/
+  elevation/difficulty/route/trailhead; Restaurant: meal/cuisine/reservation link/dish photos;
+  Winery/brewery: tasting notes/favorites; Accommodation: dates/booking ref; Park: park system/pass/
+  trails/badges; Viewpoint: sunrise/sunset orientation.
+- [ ] **Batch metadata drawer.** Multi-select → apply-to-all: date/time + timezone correction, place
+  reassignment, caption, people, tags, rotation, cover-photo selection.
+- [ ] **Attention-needed dashboard.** One page: unassigned photos, low-confidence matches, unnamed
+  places, places missing categories/visit dates, suspected duplicate places, suspected duplicate
+  photos, failed uploads, photos with missing dates, activities without places, trips awaiting
+  confirmation.
+- [ ] **Google Photos import improvements.** Cancelable polling, download progress + failed-item retry,
+  album/date filters before download, duplicate previews before transferring bytes, token
+  disconnect/reconnect controls.
+
+### Tier 3 — Views & enrichment
+- [ ] **Smart albums (rule-based):** national parks; beaches/sunsets; hikes > 5 mi; favorites per trip;
+  unreviewed; "both of us"; new places this year; repeat visits.
+- [ ] **Calendar / continuous timeline** — unified chronological view of photos, visits, routes, notes,
+  weather, trips (complements the map).
+- [ ] **Before/after & repeat-visit comparison** — side-by-side visits, route/mileage changes,
+  same-viewpoint photos, "what changed" summary.
+- [ ] **POI enrichment (OSM/Wikidata):** suggest official name, website, hours, park/trail membership,
+  nearby peaks/landmarks, Wikipedia blurb. Confirm, never overwrite curated data.
+- [ ] **Route planning (OSRM/Valhalla/OpenRouteService):** itineraries, travel time between places,
+  optimize a day's stop order, suggest nearby bucket-list places, GPX export.
+- [ ] **Offline capture** — offline drafts (photo, rough location, note, rating, visit date) that sync
+  when online, without forcing the whole library offline.
+
+### Tier 4 — AI & search
+- [ ] **Natural-language photo search (high value).** e.g. "sunsets from beach trips", "Josh and me
+  hiking in California", "winery photos from 2024", "similar to this one". Image embeddings in Supabase
+  pgvector (HNSW/IVFFlat). Generate privately with Transformers.js or a server model.
+- [ ] **AI-assisted categorization.** Extend `ai-suggest` to propose title/category/activity tags/short
+  caption with confidence + evidence. Batch queue — don't call an expensive model on every edit.
+- [ ] **Image-content tagging (CLIP / Transformers.js or hosted vision):** hiking, beach, food, winery,
+  summit, dog, sunset, camping (pattern proven in Immich / PhotoPrism).
+- [ ] **OCR (Tesseract.js or vision API):** signs, trail markers, menus, museum labels, race bibs.
+  Searchable, not shown as caption unless approved.
+- [ ] **Visual duplicate & best-shot ranking:** perceptual similarity + quality signals (blur,
+  exposure, resolution, eyes-open, composition, already-cover/favorite).
+- [ ] **Conversational travel assistant:** "Where did we hike near Seattle?", "Which unreviewed photos
+  belong to the California trip?", "Bucket-list places within 30 min of Saturday's itinerary?",
+  "Which places have photos but no review?".
+- [ ] **Custom AdventureOrNo MCP** (narrow, private): `search_places`, `get_place_history`,
+  `find_unassigned_photos`, `suggest_photo_matches`, `find_duplicate_places`, `summarize_trip`,
+  `get_data_health`, `create_place_draft`, `apply_review_decision`. Security: read-only default, no
+  photo-byte access unless enabled, NEVER expose home-zone coords, mutations create drafts/require
+  confirmation, separate owner/editor scopes, full audit log.
+
+### Tier 5 — Code health & platform
+- [ ] **Split oversized modules:** MapView.tsx (~1524), PlacePanel.tsx (~1420), Settings.tsx (~1007),
+  index.css (~4948). Extract hooks/components for map layers, draw mode, uploads, place creation,
+  photo markers, panels; feature-specific CSS / CSS modules.
+- [ ] **Centralize server state (TanStack Query):** dedup requests, cache invalidation, retry, optimistic
+  updates w/ rollback, consistent loading/error states — replaces the manual refetch-and-setState.
+- [ ] **Generate DB types** from the Supabase schema instead of hand-maintained column strings /
+  duplicated interfaces; catch migration↔frontend drift in CI.
+- [ ] **Expand testing:** pgTAP for RLS/triggers/RPC authz/deletion/attribution/matching; Worker
+  integration tests (mocked R2 + Supabase); Playwright flows (login, create place, upload, sort, merge,
+  delete/restore, mobile layout); axe-core accessibility.
+- [ ] **Backup & data-health center:** scheduled DB export, R2 inventory/reconciliation, orphan/missing
+  object detection, full export (JSON/CSV/GeoJSON/GPX), documented restore rehearsal.
