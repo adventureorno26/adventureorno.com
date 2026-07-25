@@ -11,6 +11,7 @@ import {
   fetchMapProjection,
   fetchPlaces,
   fetchSettingsStats,
+  fetchTrackingStatus,
   setMapProjection,
   triggerGeocode,
   updateHomeZone,
@@ -18,7 +19,15 @@ import {
   type HomeZone,
   type MapProjection,
   type SettingsStats,
+  type TrackingStatus,
 } from '../lib/data';
+import {
+  setTrackingPref,
+  startTracking,
+  stopTracking,
+  trackingPref,
+  trackingSupported,
+} from '../lib/tracking';
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
@@ -500,6 +509,62 @@ function NationalParksCard() {
   );
 }
 
+/** Location tracking — turn on in-app tracking + show each person's last ping. */
+function TrackingCard({ myId }: { myId: string }) {
+  const [on, setOn] = useState(trackingPref());
+  const [rows, setRows] = useState<TrackingStatus[] | null>(null);
+  useEffect(() => {
+    fetchTrackingStatus()
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, []);
+  function toggle() {
+    const next = !on;
+    setOn(next);
+    setTrackingPref(next);
+    if (next) startTracking(myId);
+    else stopTracking();
+  }
+  const rel = (iso: string | null): string => {
+    if (!iso) return 'never';
+    const ms = Date.now() - new Date(iso).getTime();
+    const d = Math.floor(ms / 86400000);
+    if (d > 0) return `${d}d ago`;
+    const h = Math.floor(ms / 3600000);
+    if (h > 0) return `${h}h ago`;
+    const m = Math.floor(ms / 60000);
+    return m > 0 ? `${m}m ago` : 'just now';
+  };
+  return (
+    <div className="card">
+      <b>Location tracking</b>
+      <p className="label" style={{ margin: '6px 0 10px' }}>
+        Records your location while the app is open — powers the map fog, heatmap, and matching
+        photos to places. Phones only track while the app is open (no background tracking on iPhone).
+      </p>
+      {trackingSupported() ? (
+        <button className={on ? 'primary' : ''} onClick={toggle}>
+          {on ? 'Tracking on — tap to stop' : 'Turn on tracking'}
+        </button>
+      ) : (
+        <p className="label">This device can’t share its location.</p>
+      )}
+      {rows && (
+        <div className="our-stats" style={{ marginTop: 10 }}>
+          {rows
+            .filter((r) => r.display_name !== 'Test Bot')
+            .map((r) => (
+              <div key={r.profile_id} className="stat">
+                <b>{r.display_name ?? 'You'}</b>{' '}
+                <span className="label">last {rel(r.last_ping)}</span>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
 function PeaksCard() {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
@@ -835,6 +900,13 @@ export default function Settings() {
               </Link>
             </div>
           </div>
+        </>
+      )}
+
+      {profile && (
+        <>
+          <h2 style={{ marginTop: 28 }}>Location tracking</h2>
+          <TrackingCard myId={profile.id} />
         </>
       )}
 

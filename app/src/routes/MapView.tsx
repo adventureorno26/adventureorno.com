@@ -12,6 +12,7 @@ import {
 } from '../lib/maptiler';
 import {
   createPlace,
+  updatePlace,
   deletePlace,
   fetchFog,
   fetchMapPeople,
@@ -1162,6 +1163,27 @@ export default function MapView() {
 
     if (added > 0) await triggerGeocode().catch(() => undefined);
     const rows = await fetchPlaces().catch(() => places);
+    // Prefill a freshly geo-placed photo's card from the photo's own coordinates
+    // right away (name/state/country), so the address is populated the moment the
+    // card opens — not only after the server geocode. Empty fields ONLY, so an
+    // existing named place the photo attached to is never overwritten.
+    if (geoPlaceId && geo[0]?.gps) {
+      const gp = rows.find((r) => r.id === geoPlaceId);
+      if (gp && (!gp.name || gp.name === 'New place' || !gp.admin1 || !gp.country)) {
+        const rev = await reverseGeocode(geo[0].gps.lng, geo[0].gps.lat).catch(() => null);
+        if (rev) {
+          const patch: { name?: string; admin1?: string | null; country?: string | null } = {};
+          if (!gp.name || gp.name === 'New place') patch.name = rev.name;
+          if (!gp.admin1) patch.admin1 = rev.admin1;
+          if (!gp.country) patch.country = rev.country;
+          const upd = await updatePlace(geoPlaceId, patch).catch(() => null);
+          if (upd) {
+            const i = rows.findIndex((r) => r.id === geoPlaceId);
+            if (i >= 0) rows[i] = upd;
+          }
+        }
+      }
+    }
     setPlaces(rows);
     await fetchPlaceCounts()
       .then((c) => {

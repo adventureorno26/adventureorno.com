@@ -9,6 +9,7 @@ import Login from './routes/Login';
 // Eager keeps the map instant and correct; the login shell paying for MapLibre is
 // an acceptable trade for the map actually working.
 import MapView from './routes/MapView';
+import LocationTracker from './components/LocationTracker';
 
 // After a redeploy, a browser holding a STALE index.html asks for old chunk
 // hashes that no longer exist (404) → the dynamic import rejects and the page
@@ -64,6 +65,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Suspense fallback={<FullScreenMessage>Loading…</FullScreenMessage>}>
+      <LocationTracker />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route

@@ -232,6 +232,20 @@ export interface MapPerson {
   role: string;
 }
 
+export interface TrackingStatus {
+  profile_id: string;
+  display_name: string | null;
+  last_ping: string | null;
+  pings: number;
+}
+
+/** Each person's location-tracking health (last ping + total), for Settings. */
+export async function fetchTrackingStatus(): Promise<TrackingStatus[]> {
+  const { data, error } = await supabase.rpc('tracking_status');
+  if (error) return [];
+  return (data ?? []).map((r: TrackingStatus) => ({ ...r, pings: Number(r.pings) }));
+}
+
 /** Set (or clear, with null) the current user's own star rating for a place. */
 export async function setMyRating(placeId: string, rating: number | null): Promise<void> {
   const { error } = await supabase.rpc('set_my_rating', {
