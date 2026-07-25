@@ -7,12 +7,14 @@ import {
   fetchMapPeople,
   fetchPlacePeople,
   fetchPlaces,
+  restorePlace,
   setPlaceSolo,
   setVisitSolo,
   updatePlace,
 } from '../lib/data';
 import type { MapPerson } from '../lib/data';
-import { deletePhoto, fetchPhotosForPlace, mapPool, uploadPhoto } from '../lib/photos';
+import { deletePhoto, fetchPhotosForPlace, mapPool, restorePhoto, uploadPhoto } from '../lib/photos';
+import { showSnack } from '../lib/snackbar';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import PhotoMatchReview from '../components/PhotoMatchReview';
@@ -214,10 +216,18 @@ export default function PlacesEditor() {
       .catch(() => setPanelPhotos([]));
   }
   async function removePhoto(id: string) {
-    if (!window.confirm('Delete this photo? This removes it everywhere.')) return;
     try {
       await deletePhoto(id);
       setPanelPhotos((cur) => (cur ? cur.filter((ph) => ph.id !== id) : cur));
+      showSnack({
+        message: 'Photo moved to trash',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void restorePhoto(id)
+            .then(() => photoPanel && openPhotos(photoPanel))
+            .catch(() => undefined);
+        },
+      });
     } catch {
       setNote('Could not delete that photo.');
     }
@@ -259,12 +269,19 @@ export default function PlacesEditor() {
   }
 
   async function onDelete(p: Place) {
-    if (!window.confirm(`Delete “${p.name || 'this place'}” and all its photos? This can’t be undone.`))
-      return;
     try {
       await deletePlace(p.id);
       setPlaces((cur) => cur.filter((x) => x.id !== p.id));
       serverById.current.delete(p.id);
+      showSnack({
+        message: `Moved “${p.name || 'place'}” to trash`,
+        actionLabel: 'Undo',
+        onAction: () => {
+          void restorePlace(p.id)
+            .then(load)
+            .catch(() => undefined);
+        },
+      });
     } catch {
       setNote(`Could not delete ${p.name}.`);
     }

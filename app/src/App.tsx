@@ -10,6 +10,8 @@ import Login from './routes/Login';
 // an acceptable trade for the map actually working.
 import MapView from './routes/MapView';
 import LocationTracker from './components/LocationTracker';
+import ErrorBoundary from './components/ErrorBoundary';
+import Snackbar from './components/Snackbar';
 
 // After a redeploy, a browser holding a STALE index.html asks for old chunk
 // hashes that no longer exist (404) → the dynamic import rejects and the page
@@ -40,6 +42,7 @@ const DayView = lazyWithReload(() => import('./routes/DayView'));
 const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
 const PlacesEditor = lazyWithReload(() => import('./routes/PlacesEditor'));
 const PhotoSorter = lazyWithReload(() => import('./routes/PhotoSorter'));
+const Trash = lazyWithReload(() => import('./routes/Trash'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -64,9 +67,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <Suspense fallback={<FullScreenMessage>Loading…</FullScreenMessage>}>
-      <LocationTracker />
-      <Routes>
+    <ErrorBoundary>
+      <Suspense fallback={<FullScreenMessage>Loading…</FullScreenMessage>}>
+        <LocationTracker />
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
@@ -165,8 +169,18 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/trash"
+          element={
+            <RequireAuth>
+              <Trash />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Suspense>
+      <Snackbar />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

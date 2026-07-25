@@ -380,14 +380,16 @@ export async function uploadPhoto(
   return (await res.json()) as UploadResult;
 }
 
+/** Soft-delete: moves the photo to the trash (restorable for 30 days). The R2
+ *  object + hash blocklist happen only on the 30-day permanent purge, so an
+ *  Undo/restore brings the photo back untouched. */
 export async function deletePhoto(photoId: string): Promise<void> {
-  if (!photosEnabled()) throw new Error('Photo deletion is not configured yet.');
-  const token = await accessToken();
-  const res = await fetch(`${GATEWAY}/delete/${photoId}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+  const { error } = await supabase.rpc('soft_delete_photo', { p_id: photoId });
+  if (error) throw error;
+}
+export async function restorePhoto(photoId: string): Promise<void> {
+  const { error } = await supabase.rpc('restore_photo', { p_id: photoId });
+  if (error) throw error;
 }
 
 /** Fetch photo bytes as an object URL (caller must revoke on unmount). Retries,

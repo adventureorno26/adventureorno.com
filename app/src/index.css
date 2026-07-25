@@ -2014,6 +2014,77 @@ a {
   padding: 5px 8px;
 }
 
+/* Undo snackbar (global). */
+.snackbar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #12131a;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 8px 28px rgba(2, 8, 23, 0.5);
+  color: #fff;
+  font-size: 13.5px;
+}
+.snackbar button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Trash page. */
+.trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: rgba(19, 31, 54, 0.4);
+}
+.trash-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: none;
+}
+.trash-badge {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  flex: none;
+}
+.trash-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* New-place draft (explicit; nothing saved until Save). */
 .npd-overlay {
   position: fixed;

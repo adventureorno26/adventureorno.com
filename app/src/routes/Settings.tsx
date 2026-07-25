@@ -953,6 +953,9 @@ export default function Settings() {
               <Link to="/photos/sort">
                 <button>Sort photos into places</button>
               </Link>
+              <Link to="/trash">
+                <button>Trash</button>
+              </Link>
             </div>
           </div>
         </>

@@ -1223,7 +1223,7 @@ export default function MapView() {
       // Nothing added — say exactly why so it's never a silent failure.
       const labels: Record<string, string> = {
         duplicate: 'already on the map',
-        deleted: 'previously deleted (can’t be re-added)',
+        deleted: 'previously deleted (auto-import skips it; re-upload on purpose to add it back)',
         error: 'upload error',
         undecodable: 'couldn’t read the image',
       };

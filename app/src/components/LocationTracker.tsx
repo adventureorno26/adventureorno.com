@@ -6,9 +6,10 @@ import { startTracking, stopTracking, trackingPref } from '../lib/tracking';
  *  Settings toggle starts/stops it live; this just restores the preference. */
 export default function LocationTracker() {
   const { profile } = useAuth();
+  const profileId = profile?.id;
   useEffect(() => {
-    if (profile && trackingPref()) startTracking(profile.id);
+    if (profileId && trackingPref()) startTracking(profileId);
     return () => stopTracking();
-  }, [profile?.id]);
+  }, [profileId]);
   return null;
 }

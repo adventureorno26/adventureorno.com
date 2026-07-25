@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   deletePhoto,
+  restorePhoto,
   fetchPhotoObjectUrl,
   fetchPhotosForPlace,
   fetchPhotosForPlaceOnDay,
@@ -11,6 +12,7 @@ import {
   setPhotoDate,
   uploadPhoto,
 } from '../lib/photos';
+import { showSnack } from '../lib/snackbar';
 import { updatePlace } from '../lib/data';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
@@ -31,7 +33,7 @@ interface Props {
 }
 
 const SKIP_LABELS: Record<string, string> = {
-  deleted: 'was deleted before and can’t be re-added',
+  deleted: 'was deleted before (skipped by auto-import; re-upload it on purpose to add it back)',
   duplicate: 'is already here',
   no_gps: 'has no GPS location',
   screenshot: 'looks like a screenshot',
@@ -209,11 +211,19 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }
 
   async function remove(p: Photo) {
-    if (!confirm('Delete this photo permanently? It can never be re-added.')) return;
     try {
       await deletePhoto(p.id);
       setPhotos((prev) => (prev ?? []).filter((x) => x.id !== p.id));
       setLightIdx(null);
+      showSnack({
+        message: 'Photo moved to trash',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void restorePhoto(p.id)
+            .then(() => load().then((rows) => setPhotos(rows)))
+            .catch(() => undefined);
+        },
+      });
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Delete failed');
     }

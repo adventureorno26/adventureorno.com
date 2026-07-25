@@ -90,9 +90,28 @@ export async function updatePlace(
   return data as Place;
 }
 
+/** Soft-delete: moves the place to the trash (restorable for 30 days). */
 export async function deletePlace(id: string): Promise<void> {
-  const { error } = await supabase.from('places').delete().eq('id', id);
+  const { error } = await supabase.rpc('soft_delete_place', { p_id: id });
   if (error) throw error;
+}
+export async function restorePlace(id: string): Promise<void> {
+  const { error } = await supabase.rpc('restore_place', { p_id: id });
+  if (error) throw error;
+}
+
+export interface TrashItem {
+  kind: 'place' | 'photo';
+  id: string;
+  label: string;
+  deleted_at: string;
+  place_id: string | null;
+}
+/** Everything in the trash (last 30 days) the caller may see. */
+export async function fetchTrash(): Promise<TrashItem[]> {
+  const { data, error } = await supabase.rpc('list_trash');
+  if (error) return [];
+  return (data ?? []) as TrashItem[];
 }
 
 /** Want-to-go places (the Bucket List page), newest first. */

@@ -90,7 +90,10 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
 (or delete) as they ship. Tier 0 is correctness/security and should come first.
 
 ### Tier 0 — Security & correctness (do first)
-- [ ] **Audit SECURITY DEFINER functions (CRITICAL).** `match_photo` (`0082_photo_matching.sql:11`)
+- [~] **Audit SECURITY DEFINER functions (CRITICAL).** DONE: `match_photo` (migration 0087) now
+  requires `is_member()` and only reads the caller's own pings/activities + visible places;
+  `ai-suggest` now verifies an owner/editor profile row. TODO: review the remaining ~66 SECDEF fns.
+- [ ] _(original) Audit SECURITY DEFINER functions (CRITICAL)._ `match_photo` (`0082_photo_matching.sql:11`)
   is SECURITY DEFINER, granted to all `authenticated`, does NOT check `is_member()`, and searches
   ALL pings/activities regardless of person. Require `is_member()`, accept/derive the relevant
   profile, filter pings/activities by attribution, add negative tests for revoked users + viewers.
@@ -112,12 +115,35 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   coordinates null; match by capture time vs location history/activities; show likely places; let the
   user search / drop a pin / pick an existing place; store coords only when explicitly confirmed.
   (Partially addressed in the Sorter — audit all upload paths.)
-- [ ] **Fix lint + CI trust.** LocationTracker has a `react-hooks/exhaustive-deps` warning; both Vitest
+- [x] **Fix lint + CI trust.** LocationTracker has a `react-hooks/exhaustive-deps` warning; both Vitest
   commands stalled locally (test runner / env / OneDrive-backed workspace?) — diagnose before treating
   CI as dependable.
+- [x] **Strengthen CI.** Run on pushes to `main` (not only PRs); add DB migration + pgTAP jobs; add
+  Playwright smoke tests; add dependency/security scanning; stop hiding the Worker dry-run failure
+  behind `|| echo`; add a preview-deployment smoke test; require CI before merge; replace the generic
+  auto-commit messages with descriptive commits.
+- [x] **Fix product-copy inconsistencies.** Business rule allows deliberate manual re-upload after
+  deletion, but the UI says a deleted photo "can never be re-added" (`PhotoGallery.tsx:211`). Align the
+  copy (a deleted photo CAN be re-added by a deliberate manual upload), plus Worker comments, skip
+  labels, confirmation dialogs, and docs.
+- [~] **Observability & error boundaries.** React error boundary; structured error codes instead of
+  swallowed `catch`; Sentry/OpenTelemetry destination; metrics for upload latency, decode failure,
+  duplicate, matching-confidence, orphan objects; privacy filters so coordinates / tokens / photo URLs
+  never enter logs.
+
+### Reference projects (design inspiration — mind licenses)
+- **Immich** — mobile backup, semantic search, duplicates, map, multi-user albums (large system; use as
+  a design reference, review its license).
+- **PhotoPrism** — labels, metadata filters, maps, face/content recognition (feature reference, not a dep).
+- **Uppy** — upload queue, progress, metadata editing, resumability (R2 integration still needs backend).
+- **Transformers.js** — private browser-side embeddings / classification / detection (test model
+  download + mobile perf).
+- **ExifTool** — comprehensive EXIF/XMP/video metadata (not usable directly inside a CF Worker).
+- **MapLibre geocoder** — reusable search/typeahead (MapTiler adapter still supplies results).
+- **Playwright** — cross-browser E2E + traces.
 
 ### Tier 1 — Ingestion pipeline & dedup
-- [ ] **Type-aware duplicate-place warning before creation.** Show existing places within
+- [~] **Type-aware duplicate-place warning before creation.** Show existing places within
   configurable, type-aware radii: ~100 m dining/winery, 1–3 km parks/attractions, larger for
   trails/cities/containers. Offer "use existing", "create separate", "merge". (The current pipeline
   can attach photos to a place up to 30 km away — type-aware matching fixes that.)
@@ -135,7 +161,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   "best shot" stacks.
 
 ### Tier 2 — Soft delete & curation UX
-- [ ] **Undo + trash (replace permanent delete).** Soft-delete window for places/photos/visits: undo
+- [x] **Undo + trash (replace permanent delete).** Soft-delete window for places/photos/visits: undo
   snackbar immediately, a Trash page with 30-day retention, restore to original place. Keep the
   automated re-import blocklist SEPARATE from ordinary recovery. Safer than browser confirm dialogs,
   esp. on mobile.

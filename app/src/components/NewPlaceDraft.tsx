@@ -11,6 +11,27 @@ import type { Place } from '../lib/types';
 
 type Who = 'both' | 'mine' | 'josh';
 
+// How close another place must be to count as a possible duplicate, by type.
+// Tight for point venues (a restaurant next door is a different place); wide for
+// parks/trails/areas. Fixes photos attaching to a place tens of km away.
+const TYPE_RADIUS_M: Record<string, number> = {
+  dining: 100,
+  winery: 100,
+  brewery: 100,
+  stay: 120,
+  sunrise: 400,
+  sunset: 400,
+  beach: 1500,
+  viewpoint: 2000,
+  camping: 2000,
+  jeeping: 3000,
+  trail: 5000,
+};
+function dupeRadius(tags: string[]): number {
+  if (tags.length === 0) return 300;
+  return Math.max(...tags.map((t) => TYPE_RADIUS_M[t] ?? 300));
+}
+
 /** Explicit draft for a NEW place — nothing is written to the database until you
  *  press Save. Search or start from a clicked point, review the coordinates and
  *  any nearby duplicates, add photos + a visit date + tags + who, then Save once.
@@ -60,15 +81,21 @@ export default function NewPlaceDraft({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Possible duplicates: saved places within ~200 m.
+  // Possible duplicates: saved places within a type-aware radius of this spot.
+  const radius = dupeRadius(tags);
   const dupes = useMemo(
     () =>
       places
         .filter(
-          (p) => p.saved && haversineMeters({ lat, lng }, { lat: p.lat, lng: p.lng }) <= 200,
+          (p) => p.saved && haversineMeters({ lat, lng }, { lat: p.lat, lng: p.lng }) <= radius,
         )
-        .slice(0, 4),
-    [places, lat, lng],
+        .sort(
+          (a, b) =>
+            haversineMeters({ lat, lng }, { lat: a.lat, lng: a.lng }) -
+            haversineMeters({ lat, lng }, { lat: b.lat, lng: b.lng }),
+        )
+        .slice(0, 5),
+    [places, lat, lng, radius],
   );
 
   function pickLocation(r: SearchResult) {
@@ -141,12 +168,17 @@ export default function NewPlaceDraft({
 
         {dupes.length > 0 && (
           <div className="npd-dupes">
-            <b>Possible duplicate{dupes.length > 1 ? 's' : ''} nearby:</b>
+            <b>
+              Possible duplicate{dupes.length > 1 ? 's' : ''} within{' '}
+              {radius >= 1000 ? `${(radius / 1000).toFixed(radius % 1000 ? 1 : 0)} km` : `${radius} m`}:
+            </b>
             {dupes.map((p) => (
               <button key={p.id} className="npd-dupe" onClick={() => onSaved(p.id)}>
-                {p.name} — open instead
+                {p.name} · {Math.round(haversineMeters({ lat, lng }, { lat: p.lat, lng: p.lng }))} m —
+                use this
               </button>
             ))}
+            <span className="label">…or fill in the fields below and Save to create a separate place.</span>
           </div>
         )}
 

@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -24,6 +26,9 @@ jobs:
       - name: App — test
         working-directory: app
         run: npm run test
+      - name: App — production build
+        working-directory: app
+        run: npm run build
 
       - name: Worker — typecheck
         working-directory: workers/photo-gateway
@@ -31,9 +36,34 @@ jobs:
       - name: Worker — test
         working-directory: workers/photo-gateway
         run: npm run test
-
-      # Build-only check of the worker (no deploy). Skips gracefully if it needs
-      # secrets/account that CI doesn't have.
+      # Real build check of the worker (no deploy). A dry-run only bundles, so it
+      # must succeed — no more hiding failures behind `|| echo`.
       - name: Worker — wrangler dry-run
         working-directory: workers/photo-gateway
-        run: npx wrangler deploy --dry-run --outdir /tmp/wrangler-dry || echo "wrangler dry-run skipped (needs account/secrets)"
+        run: npx wrangler deploy --dry-run --outdir /tmp/wrangler-dry
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Dependency/security scan. Surfaces advisories; not a hard gate yet because
+      # transitive deps can carry unfixable highs — tighten to `--audit-level=high`
+      # blocking once the tree is clean.
+      - name: npm audit (report)
+        run: npm audit --audit-level=high || true
+
+  # ---------------------------------------------------------------------------
+  # TODO (scaffolding — need infra/secrets before enabling as required checks):
+  #   * db-migrations + pgTAP: spin up `supabase start`, apply migrations, run
+  #     pgTAP tests for RLS / triggers / RPC authorization / attribution / matching.
+  #   * playwright: build + preview the app, run smoke flows (login, create place,
+  #     upload, sort, merge, delete/restore, mobile layout) with traces on failure.
+  #   * preview-deploy smoke test: curl the Pages preview URL for 200 + key routes.
+  # Make `build` (and later these) required checks in branch protection so CI
+  # gates merges. Commit messages should be descriptive, not the generic
+  # "auto: save" — see CLAUDE.md conventions.

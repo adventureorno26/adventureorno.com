@@ -40,6 +40,15 @@ Deno.serve(async (req) => {
   });
   const { data: me } = await asUser.auth.getUser();
   if (!me?.user) return json({ error: 'not authorized' }, 401);
+  // Verify a profiles row with an owner/editor role — an Auth user alone isn't enough.
+  const { data: prof } = await asUser
+    .from('profiles')
+    .select('role')
+    .eq('id', me.user.id)
+    .maybeSingle();
+  if (!prof || (prof.role !== 'owner' && prof.role !== 'editor')) {
+    return json({ error: 'not authorized' }, 403);
+  }
 
   let body: { name?: string; category?: string; lat?: number; lng?: number;
     address?: string; nearby?: string; activityType?: string } = {};
