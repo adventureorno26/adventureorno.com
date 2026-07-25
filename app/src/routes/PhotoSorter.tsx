@@ -3,18 +3,27 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { createPlace, fetchMapPeople, fetchPlaces, matchPhoto } from '../lib/data';
 import type { MapPerson } from '../lib/data';
-import { mapPool, readGps, readTakenAt, uploadPhoto } from '../lib/photos';
+import {
+  assignPhotoToPlace,
+  fetchUnassignedPhotos,
+  mapPool,
+  readGps,
+  readTakenAt,
+  uploadPhoto,
+} from '../lib/photos';
 import { reverseGeocode } from '../lib/maptiler';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import PlaceQuickEdit from '../components/PlaceQuickEdit';
+import AuthedImg from '../components/AuthedImg';
 import type { Place } from '../lib/types';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
 
 interface Item {
   id: string;
-  file: File;
-  url: string;
+  file?: File; // picked-file / Google Photos items (need uploading)
+  photoId?: string; // already-uploaded inbox items (need assigning)
+  url?: string; // object URL for file items
   takenAt?: string;
   lat?: number;
   lng?: number;
@@ -38,6 +47,7 @@ export default function PhotoSorter() {
   const [editing, setEditing] = useState<string | null>(null); // placeId whose editor is open
   const [note, setNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [inboxCount, setInboxCount] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -45,9 +55,50 @@ export default function PhotoSorter() {
       .then((r) => setPlaces([...r].sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => undefined);
     fetchMapPeople().then(setPeople).catch(() => undefined);
-    return () => items.forEach((it) => URL.revokeObjectURL(it.url));
+    // Inbox = your own already-uploaded photos not yet sorted onto a place (RLS
+    // limits this to your uploads) — the landing spot for phone auto-uploads.
+    fetchUnassignedPhotos()
+      .then((ps) => setInboxCount(ps.length))
+      .catch(() => setInboxCount(0));
+    return () => items.forEach((it) => it.url && URL.revokeObjectURL(it.url));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load the inbox (uploaded-but-unsorted photos) → matched items to sort.
+  async function ingestInbox() {
+    setPhase('reading');
+    setNote('Loading your unsorted photos…');
+    const photos = await fetchUnassignedPhotos().catch(() => []);
+    if (photos.length === 0) {
+      setNote('Nothing to sort — your inbox is empty.');
+      setPhase('idle');
+      return;
+    }
+    let done = 0;
+    const built = await mapPool(
+      photos,
+      async (ph): Promise<Item> => {
+        const cands = await matchPhoto(ph.taken_at ?? null, ph.lat, ph.lng).catch(() => []);
+        const top = cands[0];
+        done++;
+        setNote(`Matching ${done} of ${photos.length}…`);
+        return {
+          id: ph.id,
+          photoId: ph.id,
+          takenAt: ph.taken_at ?? undefined,
+          lat: ph.lat,
+          lng: ph.lng,
+          reason: top?.reason ?? '',
+          placeId: top?.place_id ?? null,
+          placeName: top?.name ?? '',
+        };
+      },
+      6,
+    );
+    setItems(built.filter((x): x is Item => x != null));
+    setNote(null);
+    setPhase('review');
+  }
 
   // A place was edited inline — reflect its new name/fields in state + group labels.
   function onPlaceUpdated(p: Place) {
@@ -167,7 +218,13 @@ export default function PhotoSorter() {
       async (it) => {
         n++;
         setNote(`Adding ${n} of ${ready.length}…`);
-        return uploadPhoto(it.file, {
+        // Inbox items are already uploaded → just assign; picked files → upload.
+        if (it.photoId) {
+          return assignPhotoToPlace(it.photoId, it.placeId!)
+            .then(() => ({ ok: true }))
+            .catch(() => null);
+        }
+        return uploadPhoto(it.file!, {
           placeId: it.placeId!,
           lat: it.lat,
           lng: it.lng,
@@ -212,7 +269,23 @@ export default function PhotoSorter() {
             that moment (from your location history and activities), then groups them by place so you
             can confirm each in one tap. No looking up dates.
           </p>
-          <div className="btn-row">
+          {inboxCount != null && inboxCount > 0 && (
+            <div className="ps-inbox">
+              <b>
+                {inboxCount} photo{inboxCount === 1 ? '' : 's'} waiting in your inbox
+              </b>
+              <span className="label">
+                {' '}
+                (auto-uploaded from your phone, or added without a place)
+              </span>
+              <div style={{ marginTop: 8 }}>
+                <button className="primary" onClick={() => void ingestInbox()}>
+                  Sort my inbox
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="btn-row" style={{ marginTop: inboxCount ? 10 : 0 }}>
             {googlePhotosEnabled() && (
               <button className="primary" onClick={() => void fromGoogle()}>
                 Import from Google Photos
@@ -259,9 +332,13 @@ export default function PhotoSorter() {
                   </div>
                 </div>
                 <div className="ps-thumbs">
-                  {gi.slice(0, 12).map((it) => (
-                    <img key={it.id} src={it.url} alt="" />
-                  ))}
+                  {gi.slice(0, 12).map((it) =>
+                    it.photoId ? (
+                      <AuthedImg key={it.id} photoId={it.photoId} size="thumb" alt="" />
+                    ) : (
+                      <img key={it.id} src={it.url} alt="" />
+                    ),
+                  )}
                   {gi.length > 12 && <span className="ps-more">+{gi.length - 12}</span>}
                 </div>
                 <div className="ps-group-actions">
@@ -330,7 +407,7 @@ export default function PhotoSorter() {
           <div className="btn-row">
             <button
               onClick={() => {
-                items.forEach((it) => URL.revokeObjectURL(it.url));
+                items.forEach((it) => it.url && URL.revokeObjectURL(it.url));
                 setItems([]);
                 setSummary(null);
                 setPhase('idle');

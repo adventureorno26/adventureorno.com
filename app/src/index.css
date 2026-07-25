@@ -1944,6 +1944,13 @@ a {
   padding: 12px 0 calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(0deg, var(--bg) 60%, transparent);
 }
+.ps-inbox {
+  padding: 12px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
 .ps-edit {
   margin-top: 8px;
 }
