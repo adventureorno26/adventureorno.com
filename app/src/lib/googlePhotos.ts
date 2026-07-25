@@ -3,8 +3,12 @@
 // the selected items and hand them back as File[] for the normal upload path.
 // Only the public Client ID is used (no secret) — this is a browser token flow.
 
+import { supabase } from './supabase';
+
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 const SCOPE = 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 export const googlePhotosEnabled = (): boolean => Boolean(CLIENT_ID);
 
@@ -16,6 +20,13 @@ interface GoogleOAuth2 {
     callback: (r: { access_token?: string; expires_in?: number }) => void;
     error_callback?: (e: { message?: string }) => void;
   }): { requestAccessToken: (overrides?: { prompt?: string }) => void };
+  initCodeClient(cfg: {
+    client_id: string;
+    scope: string;
+    ux_mode?: 'popup' | 'redirect';
+    callback: (r: { code?: string; error?: string }) => void;
+    error_callback?: (e: { message?: string }) => void;
+  }): { requestCode: () => void };
 }
 declare global {
   interface Window {
@@ -80,9 +91,76 @@ function storeToken(token: string, expiresInS?: number): void {
   }
 }
 
+// Persistent path: ask our edge function for an access token minted from a stored
+// refresh token. null = function unavailable → fall back to the in-browser flow.
+async function serverToken(
+  code?: string,
+): Promise<{ token?: string; needsConsent?: boolean } | null> {
+  const { data } = await supabase.auth.getSession();
+  const jwt = data.session?.access_token;
+  if (!jwt || !SUPABASE_URL) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/google-photos-token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        apikey: SUPABASE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(code ? { code } : {}),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      access_token?: string;
+      expires_in?: number;
+      needsConsent?: boolean;
+    };
+    if (j.needsConsent) return { needsConsent: true };
+    if (j.access_token) {
+      storeToken(j.access_token, j.expires_in);
+      return { token: j.access_token };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// One-time Google consent → an auth CODE, exchanged server-side for a lasting
+// refresh token. Popup; only shown the first time (or after a revoke).
+async function runConsent(): Promise<string> {
+  await loadGis();
+  return new Promise((resolve, reject) => {
+    const oauth2 = window.google?.accounts?.oauth2;
+    if (!oauth2 || !CLIENT_ID) return reject(new Error('Google Photos not configured'));
+    const client = oauth2.initCodeClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      ux_mode: 'popup',
+      callback: (r) =>
+        r.code ? resolve(r.code) : reject(new Error(r.error ?? 'Google sign-in cancelled')),
+      error_callback: (e) => reject(new Error(e?.message ?? 'Google sign-in failed')),
+    });
+    client.requestCode();
+  });
+}
+
 async function getAccessToken(): Promise<string> {
   const cached = validCached();
   if (cached) return cached;
+  // 1) Persistent server path — no prompt after the first connect.
+  const s = await serverToken();
+  if (s?.token) return s.token;
+  if (s?.needsConsent) {
+    const code = await runConsent();
+    const c = await serverToken(code);
+    if (c?.token) return c.token;
+  }
+  // 2) Fallback: the in-browser implicit token (short-lived; pre-persistence path).
+  return getImplicitToken();
+}
+
+async function getImplicitToken(): Promise<string> {
   await loadGis();
   return new Promise((resolve, reject) => {
     const oauth2 = window.google?.accounts?.oauth2;

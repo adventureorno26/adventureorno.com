@@ -454,6 +454,16 @@ export async function fetchPlaceIdsForView(profileId: string | null): Promise<Se
   ));
 }
 
+/** Every visit across all places (for the bulk editor's per-visit dropdowns). */
+export async function fetchAllVisits(): Promise<Visit[]> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select(VISIT_COLS)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Visit[];
+}
+
 export async function fetchVisits(placeId: string): Promise<Visit[]> {
   const { data, error } = await supabase
     .from('visits')
