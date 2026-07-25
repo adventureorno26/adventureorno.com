@@ -1147,6 +1147,7 @@ export default function MapView() {
           admin1: null,
           lat,
           lng,
+          saved: true, // deliberate manual add — save it (auto clusters stay unsaved/private)
         });
         newPlaceId = created.id;
         for (const f of noLoc) {
@@ -1215,6 +1216,7 @@ export default function MapView() {
         address: geo.address,
         lng: geo.lng,
         lat: geo.lat,
+        saved: true, // typed-in address = deliberate manual add — save it
       });
       setPlaces((prev) => [...prev, created]);
       pendingRef.current.add(created.id);
