@@ -3395,6 +3395,14 @@ textarea {
 .visit-row .visit-main:hover {
   text-decoration: underline;
 }
+/* Peaks & climbing list: let full summit names wrap instead of the generic
+   visit-row ellipsis truncation (names like "Washington Monument" were cut off). */
+.peak-row .visit-main {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  color: var(--text);
+}
 .visit-row .visit-main .visit-date,
 .visit-row .visit-main .muted {
   color: var(--accent);

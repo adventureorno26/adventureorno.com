@@ -537,7 +537,7 @@ function PeaksCard() {
         ) : (
           <div className="visit-list">
             {peaks.map((p) => (
-              <div key={p.id} className="visit-row">
+              <div key={p.id} className="visit-row peak-row">
                 <span className="visit-main">{p.name}</span>
                 {p.ele_ft ? (
                   <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
