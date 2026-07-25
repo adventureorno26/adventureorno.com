@@ -240,8 +240,14 @@ export async function fetchUnassignedPhotos(): Promise<Photo[]> {
   return (data ?? []) as Photo[];
 }
 
-export async function assignPhotoToPlace(photoId: string, placeId: string | null): Promise<void> {
-  const { error } = await supabase.from('photos').update({ place_id: placeId }).eq('id', photoId);
+export async function assignPhotoToPlace(
+  photoId: string,
+  placeId: string | null,
+  takenAt?: string,
+): Promise<void> {
+  const patch: { place_id: string | null; taken_at?: string } = { place_id: placeId };
+  if (takenAt) patch.taken_at = takenAt;
+  const { error } = await supabase.from('photos').update(patch).eq('id', photoId);
   if (error) throw error;
 }
 

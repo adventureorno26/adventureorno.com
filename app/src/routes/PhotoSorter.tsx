@@ -81,6 +81,7 @@ export default function PhotoSorter() {
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [editing, setEditing] = useState<string | null>(null); // groupId whose place editor is open
   const [groupWho, setGroupWho] = useState<Record<string, Who>>({});
+  const [groupDate, setGroupDate] = useState<Record<string, string>>({}); // optional date override
   const [note, setNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [inboxCount, setInboxCount] = useState<number | null>(null);
@@ -280,13 +281,17 @@ export default function PhotoSorter() {
     let n = 0;
     for (const g of ready) {
       const pl = places.find((p) => p.id === g.placeId);
+      // Optional date override → stamps the photos so the derived visit lands on
+      // the date you chose (visits are rebuilt from photo dates).
+      const override = groupDate[g.id];
+      const takenAt = override ? `${override}T12:00:00Z` : undefined;
       const results = await mapPool(
         g.items,
         async (it) => {
           n++;
           setNote(`Adding ${n} of ${total}…`);
           if (it.photoId) {
-            return assignPhotoToPlace(it.photoId, g.placeId!)
+            return assignPhotoToPlace(it.photoId, g.placeId!, takenAt)
               .then(() => ({ ok: true }))
               .catch(() => null);
           }
@@ -296,6 +301,7 @@ export default function PhotoSorter() {
             placeId: g.placeId!,
             lat: it.lat ?? pl?.lat,
             lng: it.lng ?? pl?.lng,
+            takenAt,
             override: true,
           }).catch(() => null);
         },
@@ -308,12 +314,13 @@ export default function PhotoSorter() {
       // per-date visits via a trigger; attribute the ones in this month.
       const who = groupWho[g.id] ?? 'both';
       const profileId = who === 'both' ? null : who === 'mine' ? meId : joshId;
-      if (g.ym !== 'nodate') {
+      const targetYm = override ? override.slice(0, 7) : g.ym;
+      if (targetYm !== 'nodate') {
         try {
           const visits = await fetchVisits(g.placeId!);
           await Promise.all(
             visits
-              .filter((v) => v.start_date.slice(0, 7) === g.ym)
+              .filter((v) => v.start_date.slice(0, 7) === targetYm)
               .map((v) => setVisitSolo(v.id, profileId ?? null)),
           );
         } catch {
@@ -460,6 +467,20 @@ export default function PhotoSorter() {
                 ) : (
                   <>
                     <div className="ps-who">
+                      <span className="label">Visit date</span>
+                      <input
+                        type="date"
+                        className="ps-date"
+                        value={groupDate[g.id] ?? ''}
+                        onChange={(e) =>
+                          setGroupDate((d) => ({ ...d, [g.id]: e.target.value }))
+                        }
+                      />
+                      <span className="label">
+                        {groupDate[g.id] ? '(overrides the photo dates)' : `from photos: ${dateRangeLabel(g.items)}`}
+                      </span>
+                    </div>
+                    <div className="ps-who">
                       <span className="label">Who was on this visit?</span>
                       <div className="ps-who-toggle">
                         {(['both', 'mine', 'josh'] as const).map((k) => (
@@ -539,6 +560,7 @@ export default function PhotoSorter() {
                 setItems([]);
                 setSummary(null);
                 setGroupWho({});
+                setGroupDate({});
                 setPhase('idle');
               }}
             >

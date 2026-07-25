@@ -2009,6 +2009,95 @@ a {
   flex-wrap: wrap;
   margin-top: 8px;
 }
+.ps-date {
+  font-size: 13px;
+  padding: 5px 8px;
+}
+
+/* New-place draft (explicit; nothing saved until Save). */
+.npd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(20px + env(safe-area-inset-top)) 12px 20px;
+  background: rgba(6, 10, 20, 0.55);
+  overflow-y: auto;
+}
+.npd-card {
+  width: min(460px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.npd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.npd-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.npd-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.npd-row > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.npd-row input,
+.npd-row select {
+  font-size: 14px;
+  padding: 7px 9px;
+  box-sizing: border-box;
+}
+.npd-row .map-search {
+  position: static;
+  transform: none;
+  width: 100%;
+  top: auto;
+  left: auto;
+  z-index: auto;
+}
+.npd-row .map-search-box {
+  height: 36px;
+}
+.npd-coords {
+  font-size: 12px;
+}
+.npd-dupes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #d9a441;
+  background: rgba(217, 164, 65, 0.12);
+  font-size: 13px;
+}
+.npd-dupe {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 0;
+}
 .ps-who-toggle {
   display: inline-flex;
   gap: 2px;

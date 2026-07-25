@@ -26,6 +26,7 @@ import {
 } from '../lib/data';
 import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
 import { fetchVideoCovers, fetchVideoPosterUrl } from '../lib/videos';
+import NewPlaceDraft from '../components/NewPlaceDraft';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import {
   createManualActivity,
@@ -224,6 +225,10 @@ export default function MapView() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  // Explicit new-place draft (map click / search) — nothing saved until Save.
+  const [draft, setDraft] = useState<{ lat: number; lng: number; presetName?: string } | null>(
+    null,
+  );
   const [activitySub, setActivitySub] = useState(false);
   const [activityFilter, setActivityFilter] = useState('');
   const [photoSub, setPhotoSub] = useState(false);
@@ -1080,28 +1085,14 @@ export default function MapView() {
     setDrawMode(true);
   }
 
-  async function handleAddAt(lng: number, lat: number, presetName?: string) {
+  // Map click / search → open an explicit DRAFT (nothing hits the DB until Save).
+  function handleAddAt(lng: number, lat: number, presetName?: string) {
     setAddMode(false);
-    setBanner('Adding that place…');
-    const geo = presetName ? null : await reverseGeocode(lng, lat);
-    try {
-      const created = await createPlace({
-        name: presetName ?? geo?.name ?? 'New place',
-        country: geo?.country ?? null,
-        admin1: geo?.admin1 ?? null,
-        lng,
-        lat,
-      });
-      setPlaces((prev) => [...prev, created]);
-      pendingRef.current.add(created.id); // remove on close if left empty
-      setBanner(null);
-      navigate(`/place/${created.id}`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Could not create place');
-    }
+    setBanner(null);
+    setDraft({ lat, lng, presetName });
   }
 
-  // Close the card; if it was a placeholder pin left with no info, delete it.
+  // Close the card. (No throwaway cleanup — new places are explicit drafts now.)
   async function handleCloseCard(id: string | undefined) {
     navigate('/');
     if (!id || !pendingRef.current.has(id)) return;
@@ -1121,25 +1112,11 @@ export default function MapView() {
     setPlaces((prev) => prev.filter((x) => x.id !== id));
   }
 
-  // Search a location and drop a card there (auto-removes on close if left empty).
-  async function handleSearchPick(r: SearchResult) {
-    try {
-      const created = await createPlace({
-        name: r.name,
-        country: r.country,
-        admin1: r.admin1,
-        address: r.address,
-        lng: r.lng,
-        lat: r.lat,
-      });
-      setPlaces((prev) => [...prev, created]);
-      pendingRef.current.add(created.id);
-      setBanner(null);
-      mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: 12 });
-      navigate(`/place/${created.id}`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Could not add place');
-    }
+  // Search a location → open the new-place draft there (nothing saved until Save).
+  function handleSearchPick(r: SearchResult) {
+    mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: 12 });
+    setBanner(null);
+    setDraft({ lat: r.lat, lng: r.lng, presetName: r.name });
   }
 
   // Add photos: geotagged ones auto-place by GPS; photos WITHOUT a location get
@@ -1269,26 +1246,11 @@ export default function MapView() {
       setSearching(false);
       return;
     }
-    try {
-      const created = await createPlace({
-        name: geo.name,
-        country: geo.country,
-        admin1: geo.admin1,
-        address: geo.address,
-        lng: geo.lng,
-        lat: geo.lat,
-        saved: true, // typed-in address = deliberate manual add — save it
-      });
-      setPlaces((prev) => [...prev, created]);
-      pendingRef.current.add(created.id);
-      setAddress('');
-      setAddMode(false);
-      setBanner(null);
-      mapRef.current?.flyTo({ center: [geo.lng, geo.lat], zoom: 12 });
-      navigate(`/place/${created.id}`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Could not create place');
-    }
+    setAddress('');
+    setAddMode(false);
+    setBanner(null);
+    mapRef.current?.flyTo({ center: [geo.lng, geo.lat], zoom: 12 });
+    setDraft({ lat: geo.lat, lng: geo.lng, presetName: geo.name });
     setSearching(false);
   }
 
@@ -1336,6 +1298,25 @@ export default function MapView() {
         >
           Add Trail on Map
         </button>
+      )}
+
+      {draft && (
+        <NewPlaceDraft
+          initialLat={draft.lat}
+          initialLng={draft.lng}
+          presetName={draft.presetName}
+          places={places}
+          people={people}
+          meId={profile?.id ?? null}
+          onSaved={(placeId) => {
+            setDraft(null);
+            void fetchPlaces()
+              .then(setPlaces)
+              .catch(() => undefined);
+            navigate(`/place/${placeId}`);
+          }}
+          onCancel={() => setDraft(null)}
+        />
       )}
 
       <PersonFilter
