@@ -229,8 +229,11 @@ export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Prom
     const p = (await pRes.json()) as { mediaItemsSet?: boolean };
     picked = p.mediaItemsSet === true;
   }
+  // Close the Google Photos tab and pull focus back to the app (so you land back
+  // in AdventureOrNo after picking, not stranded on the Google tab).
   try {
     win?.close();
+    window.focus();
   } catch {
     /* ignore */
   }

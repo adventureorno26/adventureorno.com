@@ -40,6 +40,10 @@ async function capturePoster(
       v.currentTime = Math.min(1, (v.duration || 2) / 2);
       setTimeout(res, 3000);
     });
+    // Wait for the seeked frame to actually paint before drawing (two rAFs) —
+    // without this the canvas is often captured black/blank.
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (!v.videoWidth || !v.videoHeight) return { poster: null, duration };
     const max = 1280;
     const scale = Math.min(1, max / Math.max(v.videoWidth || 1, v.videoHeight || 1));
     const w = Math.max(1, Math.round((v.videoWidth || 640) * scale));
