@@ -1951,6 +1951,57 @@ a {
   border: 1px solid var(--accent);
   background: var(--accent-soft);
 }
+.ps-choose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ps-choose-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ps-choose-row select {
+  flex: 1;
+  min-width: 170px;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.ps-choose-row button {
+  font-size: 12px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+/* MapSearch reused outside the map (sorter + quick-edit) must flow in place, not
+   float pinned to the map viewport. */
+.ps-choose .map-search,
+.pqe .map-search {
+  position: static;
+  transform: none;
+  width: 100%;
+  top: auto;
+  left: auto;
+  z-index: auto;
+}
+.ps-choose .map-search-box,
+.pqe .map-search-box {
+  height: 36px;
+}
+.pqe .map-search {
+  position: relative;
+}
+.pqe .map-search-list,
+.ps-choose .map-search-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+.ps-choose {
+  position: relative;
+}
 .ps-edit {
   margin-top: 8px;
 }

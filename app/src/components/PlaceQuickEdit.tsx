@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { setPlaceSolo, updatePlace } from '../lib/data';
 import type { MapPerson } from '../lib/data';
-import { forwardGeocode } from '../lib/maptiler';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
+import MapSearch from './MapSearch';
 import type { Place } from '../lib/types';
 
 type Who = 'both' | 'mine' | 'josh';
@@ -22,7 +22,6 @@ export default function PlaceQuickEdit({
   onUpdated: (p: Place) => void;
 }) {
   const [name, setName] = useState(place.name);
-  const [addr, setAddr] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const joshId = people.find((p) => p.id !== meId)?.id ?? null;
 
@@ -35,30 +34,6 @@ export default function PlaceQuickEdit({
       /* ignore */
     }
     setBusy(null);
-  }
-
-  async function searchAddress() {
-    const q = addr.trim();
-    if (!q) return;
-    setBusy('Finding that place…');
-    const geo = await forwardGeocode(q).catch(() => null);
-    if (!geo) {
-      setBusy(null);
-      return;
-    }
-    setName(geo.name);
-    await patch(
-      {
-        name: geo.name,
-        admin1: geo.admin1,
-        country: geo.country,
-        address: geo.address,
-        lat: geo.lat,
-        lng: geo.lng,
-      },
-      'Setting location…',
-    );
-    setAddr('');
   }
 
   function who(): Who {
@@ -96,20 +71,26 @@ export default function PlaceQuickEdit({
       </label>
 
       <div className="pqe-row">
-        <span>Address</span>
-        <div className="pqe-addr">
-          <input
-            value={addr}
-            onChange={(e) => setAddr(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && void searchAddress()}
-            placeholder="Search an address or place to set the location…"
-          />
-          <button type="button" onClick={() => void searchAddress()}>
-            Set
-          </button>
-        </div>
+        <span>Location</span>
+        <MapSearch
+          placeholder="Search an address or place to set the location…"
+          onPick={(r) => {
+            setName(r.name);
+            void patch(
+              {
+                name: r.name,
+                admin1: r.admin1,
+                country: r.country,
+                address: r.address,
+                lat: r.lat,
+                lng: r.lng,
+              },
+              'Setting location…',
+            );
+          }}
+        />
+        {place.address && <div className="pqe-current label">{place.address}</div>}
       </div>
-      {place.address && <div className="pqe-current label">{place.address}</div>}
 
       <div className="pqe-row">
         <span>Tags</span>

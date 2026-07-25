@@ -11,9 +11,10 @@ import {
   readTakenAt,
   uploadPhoto,
 } from '../lib/photos';
-import { reverseGeocode } from '../lib/maptiler';
+import { reverseGeocode, type SearchResult } from '../lib/maptiler';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import PlaceQuickEdit from '../components/PlaceQuickEdit';
+import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
 import type { Place } from '../lib/types';
 
@@ -179,6 +180,28 @@ export default function PhotoSorter() {
     );
   }
 
+  // Create a place from a searched address/place result and assign the group to it.
+  async function createFromSearch(key: string, r: SearchResult) {
+    setNote('Creating that place…');
+    try {
+      const created = await createPlace({
+        name: r.name,
+        country: r.country,
+        admin1: r.admin1,
+        address: r.address,
+        lat: r.lat,
+        lng: r.lng,
+        saved: true,
+      });
+      setPlaces((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
+      reassign(key, created.id, created.name);
+      setEditing(created.id);
+      setNote(null);
+    } catch {
+      setNote('Could not create that place.');
+    }
+  }
+
   async function newPlaceForGroup(key: string, groupItems: Item[]) {
     const withGps = groupItems.find((it) => it.lat != null && it.lng != null);
     if (!withGps || withGps.lat == null || withGps.lng == null) {
@@ -341,53 +364,80 @@ export default function PhotoSorter() {
                   )}
                   {gi.length > 12 && <span className="ps-more">+{gi.length - 12}</span>}
                 </div>
-                <div className="ps-group-actions">
-                  <select
-                    value={unassigned ? '' : gi[0].placeId ?? ''}
-                    onChange={(e) => {
-                      const pl = places.find((p) => p.id === e.target.value);
-                      if (pl) reassign(key, pl.id, pl.name);
-                    }}
-                  >
-                    <option value="">Change place…</option>
-                    {places.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                        {p.admin1 ? ` — ${p.admin1}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={() => void newPlaceForGroup(key, gi)}>New place here</button>
-                  {!unassigned && (
-                    <button className="ps-skip" onClick={() => reassign(key, null, '')}>
-                      Not here
-                    </button>
-                  )}
-                </div>
-                {!unassigned &&
-                  (() => {
-                    const pl = places.find((p) => p.id === key);
-                    if (!pl) return null;
-                    return (
-                      <div className="ps-edit">
-                        <button
-                          type="button"
-                          className="ps-edit-toggle"
-                          onClick={() => setEditing(editing === key ? null : key)}
-                        >
-                          {editing === key ? 'Hide details' : 'Edit name, address, tags…'}
+                {unassigned ? (
+                  // No place yet: create one by searching, pick an existing one, or
+                  // (if the photos have GPS) drop it at the photos' own location.
+                  <div className="ps-choose">
+                    <MapSearch
+                      placeholder="Search an address or place to create it…"
+                      onPick={(r) => void createFromSearch(key, r)}
+                    />
+                    <div className="ps-choose-row">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const pl = places.find((p) => p.id === e.target.value);
+                          if (pl) reassign(key, pl.id, pl.name);
+                        }}
+                      >
+                        <option value="">…or pick an existing place</option>
+                        {places.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.admin1 ? ` — ${p.admin1}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {gi.some((it) => it.lat != null) && (
+                        <button type="button" onClick={() => void newPlaceForGroup(key, gi)}>
+                          Use photos’ location
                         </button>
-                        {editing === key && (
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  // Assigned: edit the card, change the place, or drop it back out.
+                  <div className="ps-edit">
+                    <div className="ps-group-actions">
+                      <button
+                        type="button"
+                        className="ps-edit-toggle"
+                        onClick={() => setEditing(editing === key ? null : key)}
+                      >
+                        {editing === key ? 'Hide details' : 'Edit details'}
+                      </button>
+                      <select
+                        value={gi[0].placeId ?? ''}
+                        onChange={(e) => {
+                          const pl = places.find((p) => p.id === e.target.value);
+                          if (pl) reassign(key, pl.id, pl.name);
+                        }}
+                      >
+                        {places.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.admin1 ? ` — ${p.admin1}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="ps-skip" onClick={() => reassign(key, null, '')}>
+                        Not here
+                      </button>
+                    </div>
+                    {editing === key &&
+                      (() => {
+                        const pl = places.find((p) => p.id === key);
+                        return pl ? (
                           <PlaceQuickEdit
                             place={pl}
                             people={people}
                             meId={profile?.id ?? null}
                             onUpdated={onPlaceUpdated}
                           />
-                        )}
-                      </div>
-                    );
-                  })()}
+                        ) : null;
+                      })()}
+                  </div>
+                )}
               </div>
             );
           })}
