@@ -820,6 +820,21 @@ export default function Settings() {
         </Link>
       </div>
 
+      {(profile?.role === 'owner' || profile?.role === 'editor') && (
+        <>
+          <h2 style={{ marginTop: 28 }}>Edit all places</h2>
+          <div className="card">
+            <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+              One table for every place — rename, fix the city/state/country, retag, rate, set visit
+              dates and who was there, and add photos straight from Google Photos.
+            </p>
+            <Link to="/places/edit">
+              <button className="primary">Open the places table</button>
+            </Link>
+          </div>
+        </>
+      )}
+
       <h2 style={{ marginTop: 28 }}>Tags</h2>
       <TagsCard />
 

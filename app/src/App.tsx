@@ -37,6 +37,7 @@ function lazyWithReload<T extends ComponentType<unknown>>(factory: () => Promise
 const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
 const DayView = lazyWithReload(() => import('./routes/DayView'));
 const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
+const PlacesEditor = lazyWithReload(() => import('./routes/PlacesEditor'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -118,6 +119,14 @@ export default function App() {
           element={
             <RequireAuth>
               <PlacesList />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/places/edit"
+          element={
+            <RequireAuth>
+              <PlacesEditor />
             </RequireAuth>
           }
         />

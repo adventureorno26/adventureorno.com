@@ -200,8 +200,9 @@ export default function MapView() {
   const [activityFilter, setActivityFilter] = useState('');
   const [photoSub, setPhotoSub] = useState(false);
   const addFileRef = useRef<HTMLInputElement | null>(null);
-  // Google Photos import is owner-only (Erica), web, and only if configured.
-  const canGooglePhotos = profile?.role === 'owner' && googlePhotosEnabled();
+  // Google Photos import is a manual upload — Erica AND Josh (editor) can use it,
+  // each from their own Google account. Only the automated device ingest is Erica-only.
+  const canGooglePhotos = canEdit && googlePhotosEnabled();
 
   async function importGooglePhotos() {
     setPhotoSub(false);

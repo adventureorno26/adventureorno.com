@@ -80,7 +80,10 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }, [place.id, day]);
 
   const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
-  const canGoogle = profile?.role === 'owner' && googlePhotosEnabled();
+  // Google Photos import is a deliberate manual upload — editors (Josh) can use
+  // it too, from their own Google account. (The Erica-only rule is the automated
+  // nightly device ingest, not hand-picking photos in the app.)
+  const canGoogle = canUpload && googlePhotosEnabled();
   const canDelete = (p: Photo): boolean =>
     profile?.role === 'owner' || p.uploaded_by === profile?.id;
 
