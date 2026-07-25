@@ -1944,6 +1944,65 @@ a {
   padding: 12px 0 calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(0deg, var(--bg) 60%, transparent);
 }
+.ps-edit {
+  margin-top: 8px;
+}
+.ps-edit-toggle {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+/* Inline place editor (PlaceQuickEdit) — used in the photo sorter. */
+.pqe {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: rgba(19, 31, 54, 0.35);
+}
+.pqe-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pqe-row > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.pqe-row input,
+.pqe-row select {
+  font-size: 13px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+.pqe-addr {
+  display: flex;
+  gap: 6px;
+}
+.pqe-addr input {
+  flex: 1;
+}
+.pqe-addr button {
+  font-size: 12px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+.pqe-current {
+  font-size: 12px;
+}
+.pqe-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 /* ---------- Find button + category sheet ---------- */
 .add-bar {

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { createPlace, fetchPlaces, matchPhoto } from '../lib/data';
+import { createPlace, fetchMapPeople, fetchPlaces, matchPhoto } from '../lib/data';
+import type { MapPerson } from '../lib/data';
 import { mapPool, readGps, readTakenAt, uploadPhoto } from '../lib/photos';
 import { reverseGeocode } from '../lib/maptiler';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
+import PlaceQuickEdit from '../components/PlaceQuickEdit';
 import type { Place } from '../lib/types';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
@@ -32,6 +34,8 @@ export default function PhotoSorter() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [items, setItems] = useState<Item[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const [editing, setEditing] = useState<string | null>(null); // placeId whose editor is open
   const [note, setNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -40,9 +44,19 @@ export default function PhotoSorter() {
     fetchPlaces()
       .then((r) => setPlaces([...r].sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => undefined);
+    fetchMapPeople().then(setPeople).catch(() => undefined);
     return () => items.forEach((it) => URL.revokeObjectURL(it.url));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A place was edited inline — reflect its new name/fields in state + group labels.
+  function onPlaceUpdated(p: Place) {
+    setPlaces((cur) => {
+      const has = cur.some((x) => x.id === p.id);
+      return has ? cur.map((x) => (x.id === p.id ? p : x)) : [...cur, p];
+    });
+    setItems((cur) => cur.map((it) => (it.placeId === p.id ? { ...it, placeName: p.name } : it)));
+  }
 
   async function ingest(files: File[]) {
     if (files.length === 0) return;
@@ -273,6 +287,30 @@ export default function PhotoSorter() {
                     </button>
                   )}
                 </div>
+                {!unassigned &&
+                  (() => {
+                    const pl = places.find((p) => p.id === key);
+                    if (!pl) return null;
+                    return (
+                      <div className="ps-edit">
+                        <button
+                          type="button"
+                          className="ps-edit-toggle"
+                          onClick={() => setEditing(editing === key ? null : key)}
+                        >
+                          {editing === key ? 'Hide details' : 'Edit name, address, tags…'}
+                        </button>
+                        {editing === key && (
+                          <PlaceQuickEdit
+                            place={pl}
+                            people={people}
+                            meId={profile?.id ?? null}
+                            onUpdated={onPlaceUpdated}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
               </div>
             );
           })}
