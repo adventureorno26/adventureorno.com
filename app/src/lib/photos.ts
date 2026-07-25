@@ -7,6 +7,13 @@ import exifr from 'exifr';
 import { supabase } from './supabase';
 import type { Photo } from './types';
 
+/** SHA-256 (hex) of a blob's bytes — used to hash a photo's ORIGINAL bytes before
+ *  the browser resizes them, so dedup/blocklist is stable across browsers. */
+async function sha256Hex(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Read a photo's GPS coordinates (or null) — used to decide auto-place vs. a
  *  "set a location" card. */
 export async function readGps(file: File): Promise<{ lat: number; lng: number } | null> {
@@ -342,6 +349,10 @@ export async function uploadPhoto(
   }
   const takenAt = opts.takenAt ?? (await readTakenAt(file).catch(() => undefined));
 
+  // Hash the ORIGINAL bytes now, before prepareUpload resizes/re-encodes them —
+  // so dedup + the deletion blocklist identify the same original across browsers.
+  const origSha = await sha256Hex(file).catch(() => null);
+
   const prep = await prepareUpload(file);
 
   // Every call here is a DELIBERATE manual pick in the UI — so by default we
@@ -364,6 +375,7 @@ export async function uploadPhoto(
   if (lng != null) form.set('lng', String(lng));
   if (override) form.set('override', 'true');
   if (takenAt) form.set('taken_at', takenAt);
+  if (origSha) form.set('orig_sha', origSha);
 
   const res = await postWithRetry(`${GATEWAY}/upload`, {
     method: 'POST',

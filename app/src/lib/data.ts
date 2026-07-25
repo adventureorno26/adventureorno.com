@@ -384,6 +384,92 @@ export async function matchPhoto(
   return (data ?? []) as PhotoSuggestion[];
 }
 
+export interface Attention {
+  unassignedPhotos: number;
+  photosNoDate: number;
+  unnamedPlaces: number;
+  missingCategories: number;
+  missingDates: number;
+  activitiesNoPlace: number;
+  suggestedTrips: number;
+}
+/** Counts for the "needs attention" dashboard (all RLS-scoped to what you can see). */
+export async function fetchAttention(): Promise<Attention> {
+  const places = await fetchPlaces().catch(() => [] as Place[]);
+  const saved = places.filter((p) => p.saved && !p.bucket && !p.holds_children);
+  const unnamedPlaces = saved.filter(
+    (p) => !p.name || p.name.trim() === '' || p.name === 'New place',
+  ).length;
+  const missingCategories = saved.filter(
+    (p) => (p.categories?.length ?? 0) === 0 && (p.activity_categories?.length ?? 0) === 0 && !p.is_trail,
+  ).length;
+  const missingDates = saved.filter((p) => !p.first_visit).length;
+  const suggestedTrips = places.filter((p) => p.suggested).length;
+  const [unassigned, actNoPlace, noDate] = await Promise.all([
+    supabase.from('photos').select('*', { count: 'exact', head: true }).is('place_id', null),
+    supabase.from('activities').select('*', { count: 'exact', head: true }).is('place_id', null),
+    supabase.from('photos').select('*', { count: 'exact', head: true }).is('taken_at', null),
+  ]);
+  return {
+    unassignedPhotos: unassigned.count ?? 0,
+    photosNoDate: noDate.count ?? 0,
+    unnamedPlaces,
+    missingCategories,
+    missingDates,
+    activitiesNoPlace: actNoPlace.count ?? 0,
+    suggestedTrips,
+  };
+}
+
+export interface TimelineDay {
+  date: string; // YYYY-MM-DD
+  photos: number;
+  activities: { name: string; type: string; place_id: string | null; miles: number }[];
+  placeIds: string[];
+}
+/** Chronological roll-up of photos + activities by day (newest first) for the
+ *  timeline view. RLS-scoped, non-deleted. */
+export async function fetchTimeline(): Promise<TimelineDay[]> {
+  const [ph, ac] = await Promise.all([
+    supabase.from('photos').select('taken_at, place_id').not('taken_at', 'is', null),
+    supabase
+      .from('activities')
+      .select('start_date, name, type, place_id, distance')
+      .not('start_date', 'is', null),
+  ]);
+  const days = new Map<string, TimelineDay>();
+  const get = (d: string): TimelineDay => {
+    let x = days.get(d);
+    if (!x) {
+      x = { date: d, photos: 0, activities: [], placeIds: [] };
+      days.set(d, x);
+    }
+    return x;
+  };
+  for (const p of (ph.data ?? []) as { taken_at: string; place_id: string | null }[]) {
+    const d = get(p.taken_at.slice(0, 10));
+    d.photos++;
+    if (p.place_id && !d.placeIds.includes(p.place_id)) d.placeIds.push(p.place_id);
+  }
+  for (const a of (ac.data ?? []) as {
+    start_date: string;
+    name: string | null;
+    type: string;
+    place_id: string | null;
+    distance: number;
+  }[]) {
+    const d = get(a.start_date.slice(0, 10));
+    d.activities.push({
+      name: a.name ?? a.type,
+      type: a.type,
+      place_id: a.place_id,
+      miles: Math.round((a.distance / 1609.34) * 10) / 10,
+    });
+    if (a.place_id && !d.placeIds.includes(a.place_id)) d.placeIds.push(a.place_id);
+  }
+  return [...days.values()].sort((x, y) => y.date.localeCompare(x.date));
+}
+
 export async function fetchEntries(placeId: string): Promise<Entry[]> {
   const { data, error } = await supabase
     .from('entries')

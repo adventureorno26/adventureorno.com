@@ -82,6 +82,10 @@ async function readImageBytes(req: Request): Promise<{
   placeId: string | null;
   override: boolean;
   takenAt: string | null;
+  // SHA-256 of the ORIGINAL file, computed client-side before it resizes/re-encodes.
+  // Dedup + the deletion blocklist key off this so the same original is recognised
+  // regardless of which browser resized it. Null → hash the received bytes (old path).
+  origSha: string | null;
 }> {
   const ct = req.headers.get('Content-Type') ?? '';
   if (ct.includes('multipart/form-data')) {
@@ -103,6 +107,7 @@ async function readImageBytes(req: Request): Promise<{
       placeId: (form.get('place_id') as string | null) || null,
       override: form.get('override') === 'true',
       takenAt: (form.get('taken_at') as string | null) || null,
+      origSha: (form.get('orig_sha') as string | null) || null,
     };
   }
   // Raw body (the iOS Shortcut posts the JPEG as the request body).
@@ -122,6 +127,7 @@ async function readImageBytes(req: Request): Promise<{
     placeId: url.searchParams.get('place_id'),
     override: url.searchParams.get('override') === 'true',
     takenAt: url.searchParams.get('taken_at'),
+    origSha: url.searchParams.get('orig_sha'),
   };
 }
 
@@ -137,11 +143,13 @@ async function runPipeline(
   uploadedBy: string | null,
   allowOverride: boolean,
 ): Promise<IngestOutcome> {
-  const { bytes, thumbBytes, w: formW, h: formH, lat: formLat, lng: formLng, placeId, override, takenAt } =
+  const { bytes, thumbBytes, w: formW, h: formH, lat: formLat, lng: formLng, placeId, override, takenAt, origSha } =
     await readImageBytes(req);
   if (bytes.byteLength === 0) return { status: 400, body: { error: 'empty body' } };
 
-  const sha = await sha256Hex(bytes);
+  // Prefer the client's hash of the ORIGINAL bytes (stable across browsers/resizes);
+  // fall back to hashing what we received.
+  const sha = (origSha && /^[0-9a-f]{64}$/i.test(origSha) ? origSha.toLowerCase() : null) ?? (await sha256Hex(bytes));
   const isDeleted = await hashIsDeleted(env, sha);
   const isDuplicate = isDeleted ? false : await findPhotoByHash(env, sha);
 

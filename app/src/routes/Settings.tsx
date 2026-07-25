@@ -953,6 +953,15 @@ export default function Settings() {
               <Link to="/photos/sort">
                 <button>Sort photos into places</button>
               </Link>
+              <Link to="/attention">
+                <button>Needs attention</button>
+              </Link>
+              <Link to="/albums">
+                <button>Smart albums</button>
+              </Link>
+              <Link to="/timeline">
+                <button>Timeline</button>
+              </Link>
               <Link to="/trash">
                 <button>Trash</button>
               </Link>

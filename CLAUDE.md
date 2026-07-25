@@ -100,7 +100,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   Review all ~66 SECURITY DEFINER occurrences the same way. The `ai-suggest` edge function's comment
   says owner/editor-only but it only checks that an Auth user exists — verify a profile + role
   before expanding AI usage.
-- [ ] **Preserve source identity.** The browser resizes/re-encodes before the Worker computes SHA-256
+- [x] **Preserve source identity.** The browser resizes/re-encodes before the Worker computes SHA-256
   (`app/src/lib/photos.ts:310`, worker `index.ts:133`), so the same original hashes differently across
   browsers and a manual resize won't dedupe against the Shortcut's original. Hash the ORIGINAL bytes
   client-side before conversion; optionally keep a second stored-object hash.
@@ -147,7 +147,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   configurable, type-aware radii: ~100 m dining/winery, 1–3 km parks/attractions, larger for
   trails/cities/containers. Offer "use existing", "create separate", "merge". (The current pipeline
   can attach photos to a place up to 30 km away — type-aware matching fixes that.)
-- [ ] **Multi-place batch completion screen.** A geotagged batch can touch several places, but the map
+- [x] **Multi-place batch completion screen.** A geotagged batch can touch several places, but the map
   upload flow only remembers the first. Show "N photos added across M places", one row per place with
   added/skipped/duplicated/uncertain counts, and a "review all" action.
 - [ ] **Split "upload" from "process".** State machine: queued → uploading → stored → metadata
@@ -171,7 +171,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   trails/badges; Viewpoint: sunrise/sunset orientation.
 - [ ] **Batch metadata drawer.** Multi-select → apply-to-all: date/time + timezone correction, place
   reassignment, caption, people, tags, rotation, cover-photo selection.
-- [ ] **Attention-needed dashboard.** One page: unassigned photos, low-confidence matches, unnamed
+- [x] **Attention-needed dashboard.** One page: unassigned photos, low-confidence matches, unnamed
   places, places missing categories/visit dates, suspected duplicate places, suspected duplicate
   photos, failed uploads, photos with missing dates, activities without places, trips awaiting
   confirmation.
@@ -180,9 +180,9 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   disconnect/reconnect controls.
 
 ### Tier 3 — Views & enrichment
-- [ ] **Smart albums (rule-based):** national parks; beaches/sunsets; hikes > 5 mi; favorites per trip;
+- [x] **Smart albums (rule-based):** national parks; beaches/sunsets; hikes > 5 mi; favorites per trip;
   unreviewed; "both of us"; new places this year; repeat visits.
-- [ ] **Calendar / continuous timeline** — unified chronological view of photos, visits, routes, notes,
+- [x] **Calendar / continuous timeline** — unified chronological view of photos, visits, routes, notes,
   weather, trips (complements the map).
 - [ ] **Before/after & repeat-visit comparison** — side-by-side visits, route/mileage changes,
   same-viewpoint photos, "what changed" summary.

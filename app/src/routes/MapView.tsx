@@ -229,6 +229,12 @@ export default function MapView() {
   const [draft, setDraft] = useState<{ lat: number; lng: number; presetName?: string } | null>(
     null,
   );
+  // Completion report after a batch upload touched several places.
+  const [uploadReport, setUploadReport] = useState<{
+    added: number;
+    skipped: number;
+    rows: { id: string; name: string; n: number }[];
+  } | null>(null);
   const [activitySub, setActivitySub] = useState(false);
   const [activityFilter, setActivityFilter] = useState('');
   const [photoSub, setPhotoSub] = useState(false);
@@ -1126,6 +1132,7 @@ export default function MapView() {
     let added = 0;
     let geoPlaceId: string | null = null; // place the (first) geotagged photo landed on
     const skips: Record<string, number> = {};
+    const perPlace = new Map<string, number>(); // place_id → photos added there
 
     // Read GPS for all files first, then upload the geotagged ones in parallel (4×).
     const withGps = await mapPool(
@@ -1148,6 +1155,7 @@ export default function MapView() {
       else if (r.ok) {
         added++;
         if (!geoPlaceId && r.place_id) geoPlaceId = r.place_id;
+        if (r.place_id) perPlace.set(r.place_id, (perPlace.get(r.place_id) ?? 0) + 1);
       } else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
     });
 
@@ -1208,6 +1216,22 @@ export default function MapView() {
       })
       .catch(() => undefined);
     setTrayNonce((n) => n + 1);
+
+    // A batch that touched several places → show a completion report (which places
+    // got photos + what was skipped) instead of jumping to just the first one.
+    if (perPlace.size > 1) {
+      const skipCount = Object.values(skips).reduce((a, b) => a + b, 0);
+      const report = {
+        added,
+        skipped: skipCount,
+        rows: [...perPlace.entries()]
+          .map(([pid, n]) => ({ id: pid, name: rows.find((r) => r.id === pid)?.name ?? 'Place', n }))
+          .sort((a, b) => b.n - a.n),
+      };
+      setUploadReport(report);
+      setBanner(null);
+      return;
+    }
 
     if (newPlaceId) {
       setBanner('Set this place’s location using the address box on the card.');
@@ -1298,6 +1322,50 @@ export default function MapView() {
         >
           Add Trail on Map
         </button>
+      )}
+
+      {uploadReport && (
+        <div className="npd-overlay" role="dialog" onClick={() => setUploadReport(null)}>
+          <div className="npd-card" onClick={(e) => e.stopPropagation()}>
+            <div className="npd-head">
+              <b>
+                {uploadReport.added} photo{uploadReport.added === 1 ? '' : 's'} across{' '}
+                {uploadReport.rows.length} places
+              </b>
+              <button className="npd-x" onClick={() => setUploadReport(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            {uploadReport.skipped > 0 && (
+              <div className="label">
+                {uploadReport.skipped} skipped (duplicates / no location / errors)
+              </div>
+            )}
+            <div className="trash-list">
+              {uploadReport.rows.map((row) => (
+                <div key={row.id} className="trash-row">
+                  <div className="trash-main">
+                    <b>{row.name}</b>
+                    <span className="label">
+                      {row.n} photo{row.n === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUploadReport(null);
+                      navigate(`/place/${row.id}`);
+                    }}
+                  >
+                    Review
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="btn-row" style={{ marginTop: 8 }}>
+              <button onClick={() => setUploadReport(null)}>Done</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {draft && (
