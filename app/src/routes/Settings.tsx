@@ -804,19 +804,17 @@ export default function Settings() {
       <h2 style={{ marginTop: 28 }}>Account</h2>
       <button onClick={() => void signOut()}>Sign out</button>
 
-      <h2 style={{ marginTop: 28 }}>Our stats</h2>
+      <h2 style={{ marginTop: 28 }}>Stats</h2>
       <div className="stats-row">
         <OurStatsCard />
         <PlacesByStateCard />
         <NationalParksCard />
         <PeaksCard />
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-        <Link to="/trips">
-          <button>Our Trips</button>
+        <Link className="card stat-navcard" to="/trips">
+          Trips
         </Link>
-        <Link to="/wrapped">
-          <button>Our Years</button>
+        <Link className="card stat-navcard" to="/wrapped">
+          Years
         </Link>
       </div>
 
@@ -828,9 +826,14 @@ export default function Settings() {
               One table for every place — rename, fix the city/state/country, retag, rate, set visit
               dates and who was there, and add photos straight from Google Photos.
             </p>
-            <Link to="/places/edit">
-              <button className="primary">Open the places table</button>
-            </Link>
+            <div className="btn-row" style={{ marginTop: 4 }}>
+              <Link to="/places/edit">
+                <button className="primary">Open the places table</button>
+              </Link>
+              <Link to="/photos/sort">
+                <button>Sort photos into places</button>
+              </Link>
+            </div>
           </div>
         </>
       )}

@@ -9,11 +9,12 @@ import {
   setPlaceSolo,
   updatePlace,
 } from '../lib/data';
+import type { MapPerson } from '../lib/data';
 import { mapPool, uploadPhoto } from '../lib/photos';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import PhotoMatchReview from '../components/PhotoMatchReview';
-import type { MapPerson, Place } from '../lib/types';
+import type { Place } from '../lib/types';
 
 type PersonKey = 'all' | 'mine' | 'josh' | 'both';
 type RowStatus = 'saving' | 'saved' | 'error' | undefined;

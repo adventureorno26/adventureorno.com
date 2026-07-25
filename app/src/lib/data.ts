@@ -324,6 +324,32 @@ export async function fetchAllEntries(): Promise<
   return (data ?? []) as Pick<Entry, 'id' | 'place_id' | 'title' | 'body' | 'kind'>[];
 }
 
+export interface PhotoSuggestion {
+  place_id: string;
+  name: string;
+  meters: number;
+  reason: string; // plain-language: 'photo location', 'you were here then', …
+  score: number;
+}
+
+/** Timeline matcher: propose the place a photo belongs to from its timestamp
+ *  (and optional GPS), cross-referenced against pings/activities/visit windows.
+ *  Returns ranked candidates — [0] is the best guess. Empty if nothing matched. */
+export async function matchPhoto(
+  takenAt: string | null,
+  lat?: number | null,
+  lng?: number | null,
+): Promise<PhotoSuggestion[]> {
+  if (!takenAt) return [];
+  const { data, error } = await supabase.rpc('match_photo', {
+    p_taken_at: takenAt,
+    p_lat: lat ?? null,
+    p_lng: lng ?? null,
+  });
+  if (error) return [];
+  return (data ?? []) as PhotoSuggestion[];
+}
+
 export async function fetchEntries(placeId: string): Promise<Entry[]> {
   const { data, error } = await supabase
     .from('entries')

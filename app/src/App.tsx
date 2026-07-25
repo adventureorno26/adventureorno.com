@@ -38,6 +38,7 @@ const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
 const DayView = lazyWithReload(() => import('./routes/DayView'));
 const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
 const PlacesEditor = lazyWithReload(() => import('./routes/PlacesEditor'));
+const PhotoSorter = lazyWithReload(() => import('./routes/PhotoSorter'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -127,6 +128,14 @@ export default function App() {
           element={
             <RequireAuth>
               <PlacesEditor />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/photos/sort"
+          element={
+            <RequireAuth>
+              <PhotoSorter />
             </RequireAuth>
           }
         />

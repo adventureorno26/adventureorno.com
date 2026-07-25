@@ -1825,6 +1825,66 @@ a {
   color: #f87171;
 }
 
+/* ---------- Sort photos into places (/photos/sort) ---------- */
+.photo-sorter {
+  max-width: 760px;
+  margin: 20px auto;
+  padding: 0 16px calc(60px + env(safe-area-inset-bottom));
+}
+.ps-summary {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 6px 0 10px;
+}
+.ps-group.ps-none {
+  border-color: #d9a441;
+}
+.ps-group-head {
+  margin-bottom: 8px;
+}
+.ps-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.ps-thumbs img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.ps-more {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 4px;
+}
+.ps-group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ps-group-actions select {
+  max-width: 240px;
+  font-size: 13px;
+  padding: 5px 8px;
+}
+.ps-skip {
+  font-size: 12px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+}
+.ps-footer {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0 calc(8px + env(safe-area-inset-bottom));
+  background: linear-gradient(0deg, var(--bg) 60%, transparent);
+}
+
 /* ---------- Find button + category sheet ---------- */
 .add-bar {
   top: calc(58px + env(safe-area-inset-top)); /* filter bar moved to bottom */
@@ -3380,6 +3440,18 @@ textarea {
   margin: 0;
   padding: 9px 12px;
   min-width: 0;
+}
+/* Trips / Years as uniform nav pills sitting in the same grid as the stat cards. */
+.stats-row > .stat-navcard {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.stats-row > .stat-navcard:hover {
+  border-color: var(--accent);
 }
 .stats-dropdown > summary {
   font-size: 13px;
