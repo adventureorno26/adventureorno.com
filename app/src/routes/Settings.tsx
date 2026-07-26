@@ -965,6 +965,9 @@ export default function Settings() {
               <Link to="/duplicates">
                 <button>Duplicate places</button>
               </Link>
+              <Link to="/health">
+                <button>Data health</button>
+              </Link>
               <Link to="/trash">
                 <button>Trash</button>
               </Link>

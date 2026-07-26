@@ -470,6 +470,14 @@ export async function fetchTimeline(): Promise<TimelineDay[]> {
   return [...days.values()].sort((x, y) => y.date.localeCompare(x.date));
 }
 
+export type DataHealth = Record<string, number>;
+/** Whole-dataset counts + integrity signals for the data-health center. */
+export async function fetchDataHealth(): Promise<DataHealth | null> {
+  const { data, error } = await supabase.rpc('data_health');
+  if (error || !data) return null;
+  return data as DataHealth;
+}
+
 export async function fetchEntries(placeId: string): Promise<Entry[]> {
   const { data, error } = await supabase
     .from('entries')

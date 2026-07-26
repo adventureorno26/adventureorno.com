@@ -370,7 +370,6 @@ export default function PhotoSorter() {
               <b>
                 {inboxCount} photo{inboxCount === 1 ? '' : 's'} waiting in your inbox
               </b>
-              <span className="label"> (auto-uploaded from your phone, or added without a place)</span>
               <div style={{ marginTop: 8 }}>
                 <button className="primary" onClick={() => void ingestInbox()}>
                   Sort my inbox
@@ -500,7 +499,7 @@ export default function PhotoSorter() {
                   // shown or edited here; only this visit's date + who.
                   <div className="ps-visitform">
                     <label className="ps-field">
-                      <span>Place (this visit is added here)</span>
+                      <span>Place</span>
                       <select
                         value={g.placeId ?? ''}
                         onChange={(e) => {
@@ -518,7 +517,7 @@ export default function PhotoSorter() {
                     </label>
                     <div className="ps-row2">
                       <label className="ps-field">
-                        <span>Visit date (from the photos — edit if wrong)</span>
+                        <span>Visit date</span>
                         <input
                           type="date"
                           className="ps-date"

@@ -197,7 +197,7 @@ export default function NewPlaceDraft({
         )}
 
         <div className="npd-row">
-          <span>Official details (OpenStreetMap)</span>
+          <span>Official details</span>
           <button type="button" onClick={() => void lookupPoi()} disabled={!!busy}>
             Look up name &amp; website
           </button>

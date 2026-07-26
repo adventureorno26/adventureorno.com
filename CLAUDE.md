@@ -92,7 +92,13 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
 ### Tier 0 — Security & correctness (do first)
 - [~] **Audit SECURITY DEFINER functions (CRITICAL).** DONE: `match_photo` (migration 0087) now
   requires `is_member()` and only reads the caller's own pings/activities + visible places;
-  `ai-suggest` now verifies an owner/editor profile row. TODO: review the remaining ~66 SECDEF fns.
+  `ai-suggest` now verifies an owner/editor profile row. DONE (migration 0093): audited all 83
+  public SECDEF functions — 42 were `anon`-EXECUTE-able (readable with just the client-bundle anon
+  key, no login), a direct rule-#8 violation. Revoked EXECUTE from `anon` + PUBLIC on every public
+  SECDEF function (each keeps its explicit `authenticated` grant, so the SPA is unaffected); trigger
+  functions revoked from `authenticated` too. Verified: 0 anon-executable SECDEF fns remain.
+  TODO (defense in depth): add `is_member()` body guards to the ~25 client read RPCs so a
+  logged-in-but-not-yet-member session (mid join-flow) also can't read via these RLS-bypassing fns.
 - [ ] _(original) Audit SECURITY DEFINER functions (CRITICAL)._ `match_photo` (`0082_photo_matching.sql:11`)
   is SECURITY DEFINER, granted to all `authenticated`, does NOT check `is_member()`, and searches
   ALL pings/activities regardless of person. Require `is_member()`, accept/derive the relevant
@@ -225,5 +231,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
 - [ ] **Expand testing:** pgTAP for RLS/triggers/RPC authz/deletion/attribution/matching; Worker
   integration tests (mocked R2 + Supabase); Playwright flows (login, create place, upload, sort, merge,
   delete/restore, mobile layout); axe-core accessibility.
-- [ ] **Backup & data-health center:** scheduled DB export, R2 inventory/reconciliation, orphan/missing
-  object detection, full export (JSON/CSV/GeoJSON/GPX), documented restore rehearsal.
+- [~] **Backup & data-health center:** DONE: `/health` page (migration 0092 `data_health()` RPC,
+  member-gated) shows whole-dataset counts (places/photos/visits/activities/videos/pings), integrity
+  signals (orphaned photos, posterless videos, placeless activities), and GPX/KML/CSV export. TODO:
+  scheduled DB export, R2↔DB reconciliation, GeoJSON/JSON export, documented restore rehearsal.

@@ -49,6 +49,7 @@ const SmartAlbums = lazyWithReload(() => import('./routes/SmartAlbums'));
 const Timeline = lazyWithReload(() => import('./routes/Timeline'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
+const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -220,6 +221,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Compare />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/health"
+          element={
+            <RequireAuth>
+              <DataHealth />
             </RequireAuth>
           }
         />
