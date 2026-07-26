@@ -2419,6 +2419,13 @@ a {
   cursor: pointer;
 }
 
+/* "Log a visit" — the primary Place-card action. */
+.log-visit-btn {
+  width: 100%;
+  margin-top: 10px;
+  font-weight: 700;
+}
+
 /* Data health center. */
 .dh-issues {
   padding: 10px 12px;

@@ -25,6 +25,7 @@ import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '..
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
+import { showSnack } from '../lib/snackbar';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
@@ -138,6 +139,7 @@ export default function PlacePanel({
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
+  const [vWho, setVWho] = useState(''); // '' = both; else a profile id
   const [merging, setMerging] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
@@ -373,12 +375,16 @@ export default function PlacePanel({
     const end = vMulti && vEnd ? vEnd : vStart;
     if (!start) return;
     try {
-      await addVisit(place.id, start, end < start ? start : end);
+      const v = await addVisit(place.id, start, end < start ? start : end);
+      // Carry "who was there" onto the new visit (attribution is per-visit).
+      if (vWho) await setVisitSolo(v.id, vWho).catch(() => undefined);
       setAddingVisit(false);
       setVStart('');
       setVEnd('');
       setVMulti(false);
+      setVWho('');
       await reloadVisits();
+      showSnack({ message: 'Visit logged.' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add visit');
     }
@@ -1001,7 +1007,7 @@ export default function PlacePanel({
               .map((v) => ({
                 key: v.id,
                 date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
-                sub: null as string | null,
+                sub: (v.note ?? null) as string | null,
                 to: `/place/${place.id}/day/${v.start_date}`,
                 del: v.id as string | null,
                 start: v.start_date as string,
@@ -1066,13 +1072,13 @@ export default function PlacePanel({
 
             {canEdit && !addingVisit && (
               <button
-                className="link-btn"
+                className="primary log-visit-btn"
                 onClick={() => {
                   setAddingVisit(true);
                   setVStart(new Date().toISOString().slice(0, 10));
                 }}
               >
-                ＋ Add a visit
+                {visitCount > 0 ? 'Log another visit' : 'Log a visit'}
               </button>
             )}
 
@@ -1095,11 +1101,35 @@ export default function PlacePanel({
                   />
                   Multiple days
                 </label>
+                {people.length >= 2 && (
+                  <>
+                    <label>Who was there</label>
+                    <select
+                      className="attribution-select"
+                      value={vWho}
+                      onChange={(e) => setVWho(e.target.value)}
+                    >
+                      <option value="">Both of us</option>
+                      {people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <div className="btn-row">
                   <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
-                    Add visit
+                    Save visit
                   </button>
-                  <button onClick={() => setAddingVisit(false)}>Cancel</button>
+                  <button
+                    onClick={() => {
+                      setAddingVisit(false);
+                      setVWho('');
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             )}
@@ -1359,7 +1389,7 @@ export default function PlacePanel({
 
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
-          <button onClick={() => setMerging((v) => !v)}>Part of…</button>
+          <button onClick={() => setMerging((v) => !v)}>Add to a trip or trail</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete
           </button>

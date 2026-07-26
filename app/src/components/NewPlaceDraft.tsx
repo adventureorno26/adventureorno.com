@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPlace, fetchPoiDetails, setPlaceSolo, type PoiDetails } from '../lib/data';
+import {
+  addVisit,
+  createPlace,
+  fetchPoiDetails,
+  setPlaceSolo,
+  setVisitSolo,
+  type PoiDetails,
+} from '../lib/data';
 import type { MapPerson } from '../lib/data';
 import { mapPool, uploadPhoto } from '../lib/photos';
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
@@ -157,6 +164,42 @@ export default function NewPlaceDraft({
     }
   }
 
+  // Picking a nearby duplicate should NOT throw away what you already entered —
+  // carry the visit date, who, and photos onto the existing place as a NEW visit,
+  // then open it. (Attribution here is per-visit, matching the model.)
+  async function addToExisting(p: Place) {
+    if (busy) return;
+    setBusy('Adding your visit…');
+    try {
+      if (visitDate) {
+        const v = await addVisit(p.id, visitDate, visitDate);
+        if (who !== 'both') {
+          const pid = who === 'mine' ? meId : joshId;
+          if (pid) await setVisitSolo(v.id, pid).catch(() => undefined);
+        }
+      }
+      if (files.length) {
+        setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
+        const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
+        await mapPool(
+          files,
+          (f) =>
+            uploadPhoto(f, {
+              placeId: p.id,
+              lat: p.lat,
+              lng: p.lng,
+              takenAt,
+              override: true,
+            }).catch(() => null),
+          4,
+        );
+      }
+      onSaved(p.id);
+    } catch {
+      setBusy(null);
+    }
+  }
+
   const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug));
 
   return (
@@ -195,9 +238,9 @@ export default function NewPlaceDraft({
               :
             </b>
             {dupes.map((p) => (
-              <button key={p.id} className="npd-dupe" onClick={() => onSaved(p.id)}>
+              <button key={p.id} className="npd-dupe" onClick={() => void addToExisting(p)}>
                 {p.name} · {Math.round(haversineMeters({ lat, lng }, { lat: p.lat, lng: p.lng }))} m
-                — use this
+                — {visitDate || files.length ? 'add my visit here' : 'use this'}
               </button>
             ))}
             <span className="label">
@@ -223,7 +266,7 @@ export default function NewPlaceDraft({
                   Use website: {poi.website}
                 </button>
               )}
-              {poi.category && <div className="label">OSM type: {poi.category}</div>}
+              {poi.category && <div className="label">Type: {poi.category}</div>}
             </div>
           ) : poiChecked ? (
             <div className="label">No extra details found for this spot.</div>

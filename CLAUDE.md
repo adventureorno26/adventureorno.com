@@ -197,6 +197,27 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   More; no icons per Erica). `/places` was previously unreachable — now linked. `/add` hub. Settings
   maintenance grid relabeled "Manage data", separate from preferences. Deployed 2026-07-26.
 
+### UX/UX-workflow phase (Erica, 2026-07-26) — IN PROGRESS
+- [x] **Phase 1 nav** (above).
+- [x] **Phase 2 — Google Photos robust return** (above under "import improvements").
+- [~] **Phase 3 — Place/Visit card + guided Add.** DONE (Slice 3a, deployed): "Log a visit" is now the
+  primary Place-card action (`.log-visit-btn`, label "Log a visit"/"Log another visit"), the visit
+  form captures Who (per-visit attribution via set_visit_solo), visit rows now show their note,
+  picking a duplicate place in NewPlaceDraft PRESERVES entered date/who/photos as a new visit on the
+  existing place (`addToExisting`) instead of discarding them, and DB terms fixed ("Part of…" →
+  "Add to a trip or trail", "OSM type" → "Type"). TODO: enrich visit rows with people/rating/photo+
+  video counts (needs a per-visit join RPC); unify the PlacePanel `addSpot` create path with the
+  dedupe-aware NewPlaceDraft; full multi-step guided Add wizard on /add (currently a launcher).
+- [ ] **Phase 4 — Map UX.** Preserve map position/filters across card open/close; highlight new/
+  visited places; visit-count badges on repeat markers; map/list toggle; active-filter chips + Reset;
+  empty-filtered-state explanations; consistent person attribution.
+- [ ] **Phase 5 — Feedback/safety + a11y + Playwright.** Visible errors + Retry (no swallowed
+  catches); success toasts; undo for assignments/deletes; unsaved-form guards + draft retention;
+  helpful empty states; focus trap/Escape/dialog semantics/keyboard/SR announcements/focus-visible/
+  touch targets/axe-core; the 9 Playwright acceptance flows.
+- Search RPC `search_photos` (migration 0094, member-gated) landed to back "search existing places
+  before creating"; NL-search edge fn + UI still to wire.
+
 ### Tier 3 — Views & enrichment
 - [x] **Smart albums (rule-based):** national parks; beaches/sunsets; hikes > 5 mi; favorites per trip;
   unreviewed; "both of us"; new places this year; repeat visits.
