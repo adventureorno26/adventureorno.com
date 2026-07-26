@@ -52,6 +52,15 @@ interface Group {
 
 const ym = (iso?: string): string => (iso ? iso.slice(0, 7) : 'nodate');
 
+// Earliest photo date in a group, as YYYY-MM-DD (prefills the editable visit date).
+function groupDay(its: Item[]): string {
+  const ds = its
+    .map((i) => i.takenAt)
+    .filter((x): x is string => !!x)
+    .sort();
+  return ds.length ? ds[0].slice(0, 10) : '';
+}
+
 function dateRangeLabel(items: Item[]): string {
   const ds = items
     .map((it) => it.takenAt)
@@ -79,7 +88,6 @@ export default function PhotoSorter() {
   const [items, setItems] = useState<Item[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
   const [people, setPeople] = useState<MapPerson[]>([]);
-  const [editing, setEditing] = useState<string | null>(null); // groupId whose place editor is open
   const [groupWho, setGroupWho] = useState<Record<string, Who>>({});
   const [groupDate, setGroupDate] = useState<Record<string, string>>({}); // optional date override
   const [note, setNote] = useState<string | null>(null);
@@ -241,7 +249,6 @@ export default function PhotoSorter() {
       });
       setPlaces((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
       reassign(groupId, created.id, created.name);
-      setEditing(groupId);
       setNote(null);
     } catch {
       setNote('Could not create that place.');
@@ -447,9 +454,21 @@ export default function PhotoSorter() {
                 <div className="ps-thumbs">
                   {g.items.slice(0, 12).map((it) =>
                     it.photoId ? (
-                      <AuthedImg key={it.id} photoId={it.photoId} size="thumb" alt="" />
+                      <AuthedImg
+                        key={it.id}
+                        photoId={it.photoId}
+                        size="thumb"
+                        alt=""
+                        className="ps-thumb-img"
+                      />
                     ) : (
-                      <img key={it.id} src={it.url} alt="" />
+                      // Inline size so thumbnails stay small even if the CSS is slow to load.
+                      <img
+                        key={it.id}
+                        src={it.url}
+                        alt=""
+                        style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }}
+                      />
                     ),
                   )}
                   {g.items.length > 12 && <span className="ps-more">+{g.items.length - 12}</span>}
@@ -485,77 +504,51 @@ export default function PhotoSorter() {
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <div className="ps-who">
-                      <span className="label">Visit date</span>
+                  // All the visit + place info, editable right here below the photos.
+                  <div className="ps-visitform">
+                    <label className="ps-field">
+                      <span>Visit date (from the photos — edit if needed)</span>
                       <input
                         type="date"
                         className="ps-date"
-                        value={groupDate[g.id] ?? ''}
-                        onChange={(e) =>
-                          setGroupDate((d) => ({ ...d, [g.id]: e.target.value }))
-                        }
+                        value={groupDate[g.id] ?? groupDay(g.items)}
+                        onChange={(e) => setGroupDate((d) => ({ ...d, [g.id]: e.target.value }))}
                       />
-                      <span className="label">
-                        {groupDate[g.id] ? '(overrides the photo dates)' : `from photos: ${dateRangeLabel(g.items)}`}
-                      </span>
-                    </div>
-                    <div className="ps-who">
-                      <span className="label">Who was on this visit?</span>
-                      <div className="ps-who-toggle">
-                        {(['both', 'mine', 'josh'] as const).map((k) => (
-                          <button
-                            key={k}
-                            type="button"
-                            className={who === k ? 'on' : ''}
-                            onClick={() => setGroupWho((w) => ({ ...w, [g.id]: k }))}
-                          >
-                            {k === 'both' ? 'Both' : k === 'mine' ? 'Just me' : 'Just Josh'}
-                          </button>
+                    </label>
+                    <label className="ps-field">
+                      <span>Place</span>
+                      <select
+                        value={g.placeId ?? ''}
+                        onChange={(e) => {
+                          const pl = places.find((p) => p.id === e.target.value);
+                          if (pl) reassign(g.id, pl.id, pl.name);
+                        }}
+                      >
+                        {places.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {p.admin1 ? ` — ${p.admin1}` : ''}
+                          </option>
                         ))}
-                      </div>
-                    </div>
-                    <div className="ps-edit">
-                      <div className="ps-group-actions">
-                        <button
-                          type="button"
-                          className="ps-edit-toggle"
-                          onClick={() => setEditing(editing === g.id ? null : g.id)}
-                        >
-                          {editing === g.id ? 'Hide place details' : 'Edit place details'}
-                        </button>
-                        <select
-                          value={g.placeId ?? ''}
-                          onChange={(e) => {
-                            const pl = places.find((p) => p.id === e.target.value);
-                            if (pl) reassign(g.id, pl.id, pl.name);
-                          }}
-                        >
-                          {places.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                              {p.admin1 ? ` — ${p.admin1}` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="ps-skip" onClick={() => reassign(g.id, null, '')}>
-                          Not here
-                        </button>
-                      </div>
-                      {editing === g.id &&
-                        (() => {
-                          const pl = places.find((p) => p.id === g.placeId);
-                          return pl ? (
-                            <PlaceQuickEdit
-                              place={pl}
-                              people={people}
-                              meId={meId}
-                              onUpdated={onPlaceUpdated}
-                            />
-                          ) : null;
-                        })()}
-                    </div>
-                  </>
+                      </select>
+                    </label>
+                    {(() => {
+                      const pl = places.find((p) => p.id === g.placeId);
+                      return pl ? (
+                        <PlaceQuickEdit
+                          place={pl}
+                          people={people}
+                          meId={meId}
+                          onUpdated={onPlaceUpdated}
+                          visitWho={who}
+                          onVisitWho={(w) => setGroupWho((cur) => ({ ...cur, [g.id]: w }))}
+                        />
+                      ) : null;
+                    })()}
+                    <button className="ps-skip" onClick={() => reassign(g.id, null, '')}>
+                      Remove this place
+                    </button>
+                  </div>
                 )}
               </div>
             );

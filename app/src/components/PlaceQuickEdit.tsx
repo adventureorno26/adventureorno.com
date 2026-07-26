@@ -15,11 +15,19 @@ export default function PlaceQuickEdit({
   people,
   meId,
   onUpdated,
+  hideWho,
+  visitWho,
+  onVisitWho,
 }: {
   place: Place;
   people: MapPerson[];
   meId: string | null;
   onUpdated: (p: Place) => void;
+  hideWho?: boolean; // hide the who control entirely
+  // When provided, the Who dropdown is wired to a per-VISIT value instead of the
+  // place-level attribution (used by the photo sorter).
+  visitWho?: Who;
+  onVisitWho?: (w: Who) => void;
 }) {
   const [name, setName] = useState(place.name);
   const [busy, setBusy] = useState<string | null>(null);
@@ -92,7 +100,8 @@ export default function PlaceQuickEdit({
         {place.address && <div className="pqe-current label">{place.address}</div>}
       </div>
 
-      <div className="pqe-row">
+      <div className="pqe-inline">
+      <div className="pqe-row pqe-tagcol">
         <span>Tags</span>
         <div className="pqe-tags">
           <div className="pe-chips">
@@ -130,7 +139,7 @@ export default function PlaceQuickEdit({
         </div>
       </div>
 
-      <div className="pqe-row">
+      <div className="pqe-row pqe-ratecol">
         <span>Rating</span>
         <select
           value={place.rating ?? 0}
@@ -145,13 +154,24 @@ export default function PlaceQuickEdit({
         </select>
       </div>
 
-      <div className="pqe-row">
-        <span>Who</span>
-        <select value={who()} onChange={(e) => void setWho(e.target.value as Who)}>
-          <option value="both">Both</option>
-          <option value="mine">Just me</option>
-          <option value="josh">Just Josh</option>
-        </select>
+      {!hideWho && (
+        <div className="pqe-row pqe-whocol">
+          <span>Who</span>
+          {onVisitWho ? (
+            <select value={visitWho ?? 'both'} onChange={(e) => onVisitWho(e.target.value as Who)}>
+              <option value="both">Both</option>
+              <option value="mine">Just me</option>
+              <option value="josh">Just Josh</option>
+            </select>
+          ) : (
+            <select value={who()} onChange={(e) => void setWho(e.target.value as Who)}>
+              <option value="both">Both</option>
+              <option value="mine">Just me</option>
+              <option value="josh">Just Josh</option>
+            </select>
+          )}
+        </div>
+      )}
       </div>
 
       {busy && <div className="label">{busy}</div>}

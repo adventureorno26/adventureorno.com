@@ -1948,11 +1948,35 @@ a {
   gap: 4px;
   margin-bottom: 10px;
 }
-.ps-thumbs img {
+.ps-thumbs img,
+.ps-thumbs .ps-thumb-img {
   width: 56px;
   height: 56px;
   object-fit: cover;
   border-radius: 8px;
+  flex: none;
+}
+/* The full editable visit form shown inline below each visit's photos. */
+.ps-visitform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.ps-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ps-field > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.ps-field input,
+.ps-field select {
+  font-size: 13px;
+  padding: 6px 8px;
+  box-sizing: border-box;
 }
 .ps-more {
   align-self: center;
@@ -2588,6 +2612,29 @@ a {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+/* Tags + Rating + Who on one line (instead of stacked full-width). */
+.pqe-inline {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.pqe-inline .pqe-row {
+  margin: 0;
+}
+.pqe-tagcol {
+  flex: 2 1 150px;
+  min-width: 0;
+}
+.pqe-ratecol,
+.pqe-whocol {
+  flex: 1 1 92px;
+  min-width: 84px;
+}
+.pqe-ratecol select,
+.pqe-whocol select {
+  width: 100%;
 }
 
 /* ---------- Find button + category sheet ---------- */
