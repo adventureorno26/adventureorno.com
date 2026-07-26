@@ -1978,6 +1978,14 @@ a {
   padding: 6px 8px;
   box-sizing: border-box;
 }
+.ps-row2 {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ps-row2 > .ps-field {
+  flex: 1 1 160px;
+}
 .ps-more {
   align-self: center;
   color: var(--muted);

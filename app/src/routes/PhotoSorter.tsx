@@ -20,7 +20,6 @@ import {
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
 import { cancelGooglePick, googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { enqueueUpload } from '../lib/uploadQueue';
-import PlaceQuickEdit from '../components/PlaceQuickEdit';
 import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
 import type { Place } from '../lib/types';
@@ -110,14 +109,6 @@ export default function PhotoSorter() {
     return () => items.forEach((it) => it.url && URL.revokeObjectURL(it.url));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function onPlaceUpdated(p: Place) {
-    setPlaces((cur) => {
-      const has = cur.some((x) => x.id === p.id);
-      return has ? cur.map((x) => (x.id === p.id ? p : x)) : [...cur, p];
-    });
-    setItems((cur) => cur.map((it) => (it.placeId === p.id ? { ...it, placeName: p.name } : it)));
-  }
 
   async function ingest(files: File[]) {
     if (files.length === 0) return;
@@ -504,19 +495,12 @@ export default function PhotoSorter() {
                     </div>
                   </div>
                 ) : (
-                  // All the visit + place info, editable right here below the photos.
+                  // JUST the visit — this adds a new visit to the chosen place. The
+                  // place's own info (name/tags/rating from other visits) is NOT
+                  // shown or edited here; only this visit's date + who.
                   <div className="ps-visitform">
                     <label className="ps-field">
-                      <span>Visit date (from the photos — edit if needed)</span>
-                      <input
-                        type="date"
-                        className="ps-date"
-                        value={groupDate[g.id] ?? groupDay(g.items)}
-                        onChange={(e) => setGroupDate((d) => ({ ...d, [g.id]: e.target.value }))}
-                      />
-                    </label>
-                    <label className="ps-field">
-                      <span>Place</span>
+                      <span>Place (this visit is added here)</span>
                       <select
                         value={g.placeId ?? ''}
                         onChange={(e) => {
@@ -532,19 +516,30 @@ export default function PhotoSorter() {
                         ))}
                       </select>
                     </label>
-                    {(() => {
-                      const pl = places.find((p) => p.id === g.placeId);
-                      return pl ? (
-                        <PlaceQuickEdit
-                          place={pl}
-                          people={people}
-                          meId={meId}
-                          onUpdated={onPlaceUpdated}
-                          visitWho={who}
-                          onVisitWho={(w) => setGroupWho((cur) => ({ ...cur, [g.id]: w }))}
+                    <div className="ps-row2">
+                      <label className="ps-field">
+                        <span>Visit date (from the photos — edit if wrong)</span>
+                        <input
+                          type="date"
+                          className="ps-date"
+                          value={groupDate[g.id] ?? groupDay(g.items)}
+                          onChange={(e) => setGroupDate((d) => ({ ...d, [g.id]: e.target.value }))}
                         />
-                      ) : null;
-                    })()}
+                      </label>
+                      <label className="ps-field">
+                        <span>Who was on this visit?</span>
+                        <select
+                          value={who}
+                          onChange={(e) =>
+                            setGroupWho((cur) => ({ ...cur, [g.id]: e.target.value as Who }))
+                          }
+                        >
+                          <option value="both">Both</option>
+                          <option value="mine">Just me</option>
+                          <option value="josh">Just Josh</option>
+                        </select>
+                      </label>
+                    </div>
                     <button className="ps-skip" onClick={() => reassign(g.id, null, '')}>
                       Remove this place
                     </button>
