@@ -404,6 +404,13 @@ export async function restorePhoto(photoId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Bulk-set the capture date on several photos (batch metadata edit). */
+export async function setPhotosTakenAt(ids: string[], iso: string): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('photos').update({ taken_at: iso }).in('id', ids);
+  if (error) throw error;
+}
+
 /** Fetch photo bytes as an object URL (caller must revoke on unmount). Retries,
  *  since a dropped fetch on mobile leaves a cover-photo marker blank. */
 export async function fetchPhotoObjectUrl(

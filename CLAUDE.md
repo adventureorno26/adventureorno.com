@@ -169,7 +169,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   elevation/difficulty/route/trailhead; Restaurant: meal/cuisine/reservation link/dish photos;
   Winery/brewery: tasting notes/favorites; Accommodation: dates/booking ref; Park: park system/pass/
   trails/badges; Viewpoint: sunrise/sunset orientation.
-- [ ] **Batch metadata drawer.** Multi-select → apply-to-all: date/time + timezone correction, place
+- [~] **Batch metadata drawer.** Multi-select → apply-to-all: date/time + timezone correction, place
   reassignment, caption, people, tags, rotation, cover-photo selection.
 - [x] **Attention-needed dashboard.** One page: unassigned photos, low-confidence matches, unnamed
   places, places missing categories/visit dates, suspected duplicate places, suspected duplicate

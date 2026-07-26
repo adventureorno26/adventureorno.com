@@ -1866,6 +1866,46 @@ a {
   object-fit: cover;
   border-radius: 8px;
 }
+.pe-photo-cell {
+  cursor: pointer;
+}
+.pe-photo-cell.sel img {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.pe-photo-check {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06121f;
+  font-size: 12px;
+  font-weight: 700;
+}
+.pe-batchbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid var(--accent);
+  font-size: 13px;
+}
+.pe-batchbar input,
+.pe-batchbar select,
+.pe-batchbar button {
+  font-size: 12px;
+  padding: 5px 8px;
+}
 .pe-photo-del {
   position: absolute;
   top: 3px;

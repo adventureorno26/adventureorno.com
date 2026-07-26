@@ -13,7 +13,15 @@ import {
   updatePlace,
 } from '../lib/data';
 import type { MapPerson } from '../lib/data';
-import { deletePhoto, fetchPhotosForPlace, mapPool, restorePhoto, uploadPhoto } from '../lib/photos';
+import {
+  assignPhotoToPlace,
+  deletePhoto,
+  fetchPhotosForPlace,
+  mapPool,
+  restorePhoto,
+  setPhotosTakenAt,
+  uploadPhoto,
+} from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
@@ -60,6 +68,8 @@ export default function PlacesEditor() {
   // Existing-photos panel (view + delete before adding more).
   const [photoPanel, setPhotoPanel] = useState<Place | null>(null);
   const [panelPhotos, setPanelPhotos] = useState<Photo[] | null>(null);
+  const [selPhotos, setSelPhotos] = useState<Set<string>>(new Set());
+  const [batchDate, setBatchDate] = useState('');
 
   const serverById = useRef<Map<string, Place>>(new Map());
 
@@ -211,9 +221,53 @@ export default function PlacesEditor() {
   function openPhotos(p: Place) {
     setPhotoPanel(p);
     setPanelPhotos(null);
+    setSelPhotos(new Set());
+    setBatchDate('');
     fetchPhotosForPlace(p.id)
       .then(setPanelPhotos)
       .catch(() => setPanelPhotos([]));
+  }
+  function togglePhoto(id: string) {
+    setSelPhotos((cur) => {
+      const n = new Set(cur);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  async function batchSetDate() {
+    const ids = [...selPhotos];
+    if (ids.length === 0 || !batchDate) return;
+    try {
+      await setPhotosTakenAt(ids, `${batchDate}T12:00:00Z`);
+      if (photoPanel) openPhotos(photoPanel);
+    } catch {
+      setNote('Could not set the dates.');
+    }
+  }
+  async function batchMove(placeId: string) {
+    const ids = [...selPhotos];
+    if (ids.length === 0) return;
+    await mapPool(ids, (id) => assignPhotoToPlace(id, placeId).catch(() => null), 4);
+    setPanelPhotos((cur) => (cur ? cur.filter((p) => !selPhotos.has(p.id)) : cur));
+    setSelPhotos(new Set());
+    showSnack({ message: `Moved ${ids.length} photo${ids.length === 1 ? '' : 's'}.` });
+  }
+  async function batchDelete() {
+    const ids = [...selPhotos];
+    if (ids.length === 0) return;
+    await mapPool(ids, (id) => deletePhoto(id).catch(() => null), 4);
+    setPanelPhotos((cur) => (cur ? cur.filter((p) => !ids.includes(p.id)) : cur));
+    setSelPhotos(new Set());
+    showSnack({
+      message: `${ids.length} photo${ids.length === 1 ? '' : 's'} to trash`,
+      actionLabel: 'Undo',
+      onAction: () => {
+        void mapPool(ids, (id) => restorePhoto(id).catch(() => null), 4).then(
+          () => photoPanel && openPhotos(photoPanel),
+        );
+      },
+    });
   }
   async function removePhoto(id: string) {
     try {
@@ -489,21 +543,63 @@ export default function PlacesEditor() {
               </span>
             </div>
             {panelPhotos && panelPhotos.length > 0 ? (
-              <div className="pe-photo-grid">
-                {panelPhotos.map((ph) => (
-                  <div key={ph.id} className="pe-photo-cell">
-                    <AuthedImg photoId={ph.id} size="thumb" alt="" />
-                    <button
-                      type="button"
-                      className="pe-photo-del"
-                      title="Delete photo"
-                      onClick={() => void removePhoto(ph.id)}
-                    >
-                      ×
+              <>
+                {selPhotos.size > 0 && (
+                  <div className="pe-batchbar">
+                    <b>{selPhotos.size} selected</b>
+                    <input
+                      type="date"
+                      value={batchDate}
+                      onChange={(e) => setBatchDate(e.target.value)}
+                    />
+                    <button disabled={!batchDate} onClick={() => void batchSetDate()}>
+                      Set date
                     </button>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) void batchMove(e.target.value);
+                      }}
+                    >
+                      <option value="">Move to…</option>
+                      {places
+                        .filter((p) => p.id !== photoPanel?.id)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </select>
+                    <button className="pe-del" onClick={() => void batchDelete()}>
+                      Delete
+                    </button>
+                    <button onClick={() => setSelPhotos(new Set())}>Clear</button>
                   </div>
-                ))}
-              </div>
+                )}
+                <div className="pe-photo-grid">
+                  {panelPhotos.map((ph) => (
+                    <div
+                      key={ph.id}
+                      className={`pe-photo-cell ${selPhotos.has(ph.id) ? 'sel' : ''}`}
+                      onClick={() => togglePhoto(ph.id)}
+                    >
+                      <AuthedImg photoId={ph.id} size="thumb" alt="" />
+                      {selPhotos.has(ph.id) && <span className="pe-photo-check">✓</span>}
+                      <button
+                        type="button"
+                        className="pe-photo-del"
+                        title="Delete photo"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void removePhoto(ph.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : panelPhotos ? (
               <p className="label" style={{ margin: '6px 0 12px' }}>
                 No photos here yet.
