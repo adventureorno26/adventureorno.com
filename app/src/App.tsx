@@ -52,7 +52,7 @@ const Timeline = lazyWithReload(() => import('./routes/Timeline'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
-const AddHub = lazyWithReload(() => import('./routes/AddHub'));
+const AddWizard = lazyWithReload(() => import('./routes/AddWizard'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
@@ -240,7 +240,7 @@ export default function App() {
             path="/add"
             element={
               <RequireAuth>
-                <AddHub />
+                <AddWizard />
               </RequireAuth>
             }
           />

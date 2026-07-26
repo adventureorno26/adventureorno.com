@@ -205,9 +205,12 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   form captures Who (per-visit attribution via set_visit_solo), visit rows now show their note,
   picking a duplicate place in NewPlaceDraft PRESERVES entered date/who/photos as a new visit on the
   existing place (`addToExisting`) instead of discarding them, and DB terms fixed ("Part of…" →
-  "Add to a trip or trail", "OSM type" → "Type"). TODO: enrich visit rows with people/rating/photo+
-  video counts (needs a per-visit join RPC); unify the PlacePanel `addSpot` create path with the
-  dedupe-aware NewPlaceDraft; full multi-step guided Add wizard on /add (currently a launcher).
+  "Add to a trip or trail", "OSM type" → "Type"). DONE (Slice 3b, deployed): full 5-step guided Add
+  wizard at `/add` (`AddWizard.tsx`, replaced the launcher) — search existing place OR create new
+  (search-before-create + nearby-dupe detection) → date/who → tags/rating/notes → photos → review &
+  save; non-destructive on existing places (merges tags, won't clobber a review); reuses createPlace/
+  addVisit/setVisitSolo/setMyRating/uploadPhoto. TODO: enrich visit rows with people/rating/photo+
+  video counts (needs a per-visit join RPC); unify the PlacePanel `addSpot` create path.
 - [~] **Phase 4 — Map UX.** DONE (deployed): active-filter chips + Reset (`FilterChips`, shows
   category+person filters with ×), empty-filtered-state message, visit-count "×N" text badges on
   repeat-visit markers (`place-visit-badge` symbol layer; text not icon per Erica). Preserve map
@@ -217,9 +220,10 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
 - [~] **Phase 5 — Feedback/safety + a11y + Playwright.** DONE (deployed): reusable `useDialog` hook
   (focus-into-dialog on open, Escape-to-close, Tab focus-trap, restore focus on close) wired into the
   New Place modal with proper role="dialog"/aria-modal + backdrop-click close; unsaved-form guard
-  (confirm before discarding a dirty draft); "Visit logged" success toast. TODO: extend dialog a11y
-  to other modals; more success toasts + undo snackbars for assignments/deletes; SR progress
-  announcements; axe-core + the 9 Playwright acceptance flows (no Playwright harness yet).
+  (confirm before discarding a dirty draft); "Visit logged"/"Saved!" success toasts; visit-delete now
+  an **Undo snackbar** (recreates dates + attribution) instead of a browser confirm. TODO: extend
+  dialog a11y to other modals; more undo snackbars; SR progress announcements; axe-core + the 9
+  Playwright acceptance flows — these need a Playwright harness stood up first (distinct infra task).
 - Search RPC `search_photos` (migration 0094, member-gated) landed to back "search existing places
   before creating"; NL-search edge fn + UI still to wire.
 

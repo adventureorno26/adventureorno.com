@@ -652,6 +652,19 @@ export async function fetchVisits(placeId: string): Promise<Visit[]> {
   return (data ?? []) as Visit[];
 }
 
+/** Per-visit photo/video counts for a place (keyed by visit id). */
+export async function fetchPlaceVisitStats(
+  placeId: string,
+): Promise<Record<string, { photos: number; videos: number }>> {
+  const { data, error } = await supabase.rpc('place_visit_stats', { p_place: placeId });
+  if (error || !data) return {};
+  const out: Record<string, { photos: number; videos: number }> = {};
+  for (const r of data as { visit_id: string; photos: number; videos: number }[]) {
+    out[r.visit_id] = { photos: r.photos, videos: r.videos };
+  }
+  return out;
+}
+
 export async function addVisit(placeId: string, start: string, end: string): Promise<Visit> {
   const { data, error } = await supabase
     .from('visits')

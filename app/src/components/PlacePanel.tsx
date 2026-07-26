@@ -12,6 +12,7 @@ import {
   fetchMapPeople,
   fetchPlace,
   fetchPlaceRatings,
+  fetchPlaceVisitStats,
   fetchSpatialMembers,
   fetchVisits,
   setCityBoundary,
@@ -131,6 +132,9 @@ export default function PlacePanel({
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [visitStats, setVisitStats] = useState<Record<string, { photos: number; videos: number }>>(
+    {},
+  );
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
   const [spots, setSpots] = useState<Entry[] | null>(null);
@@ -174,6 +178,7 @@ export default function PlacePanel({
 
   async function reloadVisits() {
     setVisits(await fetchVisits(place.id).catch(() => []));
+    setVisitStats(await fetchPlaceVisitStats(place.id).catch(() => ({})));
   }
 
   async function reloadActs() {
@@ -282,6 +287,9 @@ export default function PlacePanel({
     fetchVisits(place.id)
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
+    fetchPlaceVisitStats(place.id)
+      .then((s) => active && setVisitStats(s))
+      .catch(() => active && setVisitStats({}));
     fetchEntries(place.id)
       .then((rows) => active && setSpots(rows))
       .catch(() => active && setSpots([]));
@@ -390,10 +398,26 @@ export default function PlacePanel({
     }
   }
   async function removeVisit(id: string) {
-    if (!confirm('Delete this visit?')) return;
+    // Soft UX: remove immediately, offer Undo (recreates the visit with the same
+    // dates + attribution) — friendlier than a browser confirm, esp. on mobile.
+    const v = (visits ?? []).find((x) => x.id === id);
     try {
       await deleteVisit(id);
       await reloadVisits();
+      showSnack({
+        message: 'Visit removed.',
+        actionLabel: 'Undo',
+        onAction: async () => {
+          if (!v) return;
+          try {
+            const nv = await addVisit(place.id, v.start_date, v.end_date);
+            if (v.solo_profile) await setVisitSolo(nv.id, v.solo_profile).catch(() => undefined);
+            await reloadVisits();
+          } catch {
+            /* ignore */
+          }
+        },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete visit');
     }
@@ -1007,7 +1031,14 @@ export default function PlacePanel({
               .map((v) => ({
                 key: v.id,
                 date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
-                sub: (v.note ?? null) as string | null,
+                sub:
+                  [
+                    v.note ?? '',
+                    visitStats[v.id]?.photos ? `${visitStats[v.id].photos} photos` : '',
+                    visitStats[v.id]?.videos ? `${visitStats[v.id].videos} videos` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || null,
                 to: `/place/${place.id}/day/${v.start_date}`,
                 del: v.id as string | null,
                 start: v.start_date as string,
