@@ -49,7 +49,9 @@ export default function BucketList() {
     try {
       await toggleWish(placeId);
     } finally {
-      fetchWishes().then(setWishes).catch(() => undefined); // reconcile "everyone"
+      fetchWishes()
+        .then(setWishes)
+        .catch(() => undefined); // reconcile "everyone"
     }
   }
 

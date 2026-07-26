@@ -35,7 +35,13 @@ let last: { t: number; lat: number; lng: number } | null = null;
 async function insertPing(profileId: string, lat: number, lng: number): Promise<void> {
   await supabase
     .from('location_pings')
-    .insert({ profile_id: profileId, lat, lng, recorded_at: new Date().toISOString(), source: 'app' })
+    .insert({
+      profile_id: profileId,
+      lat,
+      lng,
+      recorded_at: new Date().toISOString(),
+      source: 'app',
+    })
     .then(
       () => undefined,
       () => undefined,

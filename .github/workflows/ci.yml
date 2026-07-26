@@ -57,6 +57,34 @@ jobs:
       - name: npm audit (report)
         run: npm audit --audit-level=high || true
 
+  db-types-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Regenerate app/src/lib/database.types.ts from the live schema and fail if
+      # it differs from what's committed — i.e. a migration changed the schema but
+      # the checked-in types weren't refreshed (`npm run gen:types`). Only runs
+      # when the token secret is configured; otherwise it's a no-op so forks/PRs
+      # without the secret don't fail spuriously.
+      - name: Check DB types are in sync
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN not set — skipping DB types drift check."
+            exit 0
+          fi
+          npm run gen:types
+          if ! git diff --exit-code -- app/src/lib/database.types.ts; then
+            echo "::error::database.types.ts is stale. Run 'npm run gen:types' and commit the result."
+            exit 1
+          fi
+
   # ---------------------------------------------------------------------------
   # TODO (scaffolding — need infra/secrets before enabling as required checks):
   #   * db-migrations + pgTAP: spin up `supabase start`, apply migrations, run

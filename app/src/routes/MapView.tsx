@@ -1208,7 +1208,11 @@ export default function MapView() {
         added,
         skipped: skipCount,
         rows: [...perPlace.entries()]
-          .map(([pid, n]) => ({ id: pid, name: rows.find((r) => r.id === pid)?.name ?? 'Place', n }))
+          .map(([pid, n]) => ({
+            id: pid,
+            name: rows.find((r) => r.id === pid)?.name ?? 'Place',
+            n,
+          }))
           .sort((a, b) => b.n - a.n),
       };
       setUploadReport(report);

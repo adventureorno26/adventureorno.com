@@ -81,8 +81,12 @@ export default function PlacesEditor() {
         serverById.current = new Map(sorted.map((p) => [p.id, p]));
       })
       .catch(() => setNote('Could not load places'));
-    fetchMapPeople().then(setPeople).catch(() => undefined);
-    fetchPlacePeople().then(setPlacePeople).catch(() => undefined);
+    fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
+    fetchPlacePeople()
+      .then(setPlacePeople)
+      .catch(() => undefined);
     fetchAllVisits()
       .then((vs) => {
         const m = new Map<string, Visit[]>();
@@ -372,7 +376,12 @@ export default function PlacesEditor() {
         />
         <div className="pe-personfilter">
           {(['all', 'mine', 'josh', 'both'] as const).map((k) => (
-            <button key={k} className={person === k ? 'on' : ''} onClick={() => setPerson(k)} type="button">
+            <button
+              key={k}
+              className={person === k ? 'on' : ''}
+              onClick={() => setPerson(k)}
+              type="button"
+            >
               {k === 'all' ? 'All' : k === 'mine' ? 'Just me' : k === 'josh' ? 'Just Josh' : 'Both'}
             </button>
           ))}
@@ -517,7 +526,12 @@ export default function PlacesEditor() {
                     </button>
                   </td>
                   <td>
-                    <button type="button" className="pe-del" onClick={() => void onDelete(p)} title="Delete place">
+                    <button
+                      type="button"
+                      className="pe-del"
+                      onClick={() => void onDelete(p)}
+                      title="Delete place"
+                    >
                       Delete
                     </button>
                   </td>

@@ -70,7 +70,13 @@ export default function RoutesView() {
       return (Math.atan2(y, x) * 180) / Math.PI;
     };
     const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    map.easeTo({ center: wp[0], zoom: 14, pitch: 68, bearing: bearing(wp[0], wp[1] ?? wp[0]), duration: 1600 });
+    map.easeTo({
+      center: wp[0],
+      zoom: 14,
+      pitch: 68,
+      bearing: bearing(wp[0], wp[1] ?? wp[0]),
+      duration: 1600,
+    });
     await wait(1700);
     for (let i = 1; i < wp.length && mapRef.current; i++) {
       map.easeTo({

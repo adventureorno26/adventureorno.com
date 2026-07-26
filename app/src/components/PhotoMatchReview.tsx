@@ -128,9 +128,7 @@ export default function PhotoMatchReview({
                 <span className="photo-match-meta">
                   <span>{fmtDate(it.takenAt)}</span>
                   <span
-                    className={
-                      it.distM == null ? 'muted' : it.near ? 'match-near' : 'match-far'
-                    }
+                    className={it.distM == null ? 'muted' : it.near ? 'match-near' : 'match-far'}
                   >
                     {it.distM == null
                       ? 'No location'

@@ -17,13 +17,7 @@ const TYPE_COLORS: Record<string, string> = {
  *  plus a dot at its location, zoomed to the whole trail. Members-only (not all
  *  hikes everywhere). Tapping a dot opens that section. Renders nothing until it
  *  has at least one section to plot. */
-export default function TrailSectionsMap({
-  trail,
-  sections,
-}: {
-  trail: Place;
-  sections: Place[];
-}) {
+export default function TrailSectionsMap({ trail, sections }: { trail: Place; sections: Place[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const navigate = useNavigate();

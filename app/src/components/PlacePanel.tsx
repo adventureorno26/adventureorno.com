@@ -21,12 +21,7 @@ import {
   type MapPerson,
 } from '../lib/data';
 import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
-import {
-  CATEGORIES,
-  categoryIcon,
-  categoryLabel,
-  effectiveCategories,
-} from '../lib/categories';
+import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
@@ -258,7 +253,9 @@ export default function PlacePanel({
       await setMyRating(place.id, n);
     } catch {
       /* revert-free: reload on failure */
-      fetchPlaceRatings(place.id).then(setRatings).catch(() => undefined);
+      fetchPlaceRatings(place.id)
+        .then(setRatings)
+        .catch(() => undefined);
     }
   }
 
@@ -555,10 +552,8 @@ export default function PlacePanel({
       : profile
         ? [{ id: profile.id, display_name: profile.display_name ?? 'You', role: profile.role }]
         : [];
-  const bothRated =
-    raters.length >= 2 && raters.every((p) => ratings[p.id] != null);
-  const agree =
-    bothRated && new Set(raters.map((p) => ratings[p.id])).size === 1;
+  const bothRated = raters.length >= 2 && raters.every((p) => ratings[p.id] != null);
+  const agree = bothRated && new Set(raters.map((p) => ratings[p.id])).size === 1;
   const ratingEl =
     raters.length >= 2 ? (
       <div className="dual-rating">
@@ -715,9 +710,7 @@ export default function PlacePanel({
                 edit
               </button>
             )}
-            {visits &&
-              visitCount > 0 &&
-              ` · ${visitCount} visit${visitCount > 1 ? 's' : ''}`}
+            {visits && visitCount > 0 && ` · ${visitCount} visit${visitCount > 1 ? 's' : ''}`}
             {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
           </span>
         )}
@@ -777,17 +770,29 @@ export default function PlacePanel({
                 {spatialCount != null &&
                   ` · ${spatialCount} place${spatialCount === 1 ? '' : 's'} inside`}
               </span>
-              <button className="link-btn" disabled={cityBusy} onClick={() => void removeCityRegion()}>
+              <button
+                className="link-btn"
+                disabled={cityBusy}
+                onClick={() => void removeCityRegion()}
+              >
                 {cityBusy ? '…' : 'remove'}
               </button>
             </div>
           ) : (
             <div className="city-region-row">
               <span className="city-region-label">Make this a</span>
-              <button className="link-btn" disabled={cityBusy} onClick={() => void makeCityRegion('city')}>
+              <button
+                className="link-btn"
+                disabled={cityBusy}
+                onClick={() => void makeCityRegion('city')}
+              >
                 City
               </button>
-              <button className="link-btn" disabled={cityBusy} onClick={() => void makeCityRegion('region')}>
+              <button
+                className="link-btn"
+                disabled={cityBusy}
+                onClick={() => void makeCityRegion('region')}
+              >
                 Region
               </button>
               {cityBusy && <span className="muted"> fetching boundary…</span>}
@@ -974,16 +979,16 @@ export default function PlacePanel({
         const actRows = isRollup
           ? []
           : acts.map((a) => ({
-          key: a.id,
-          date: fmtRunDate(a.start_date),
-          sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-          to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
-          del: null as string | null,
-          start: '' as string,
-          sort: (a.start_date ?? '').slice(0, 10),
-          solo: a.solo_profile as string | null,
-          target: { type: 'activity' as const, id: a.id },
-        }));
+              key: a.id,
+              date: fmtRunDate(a.start_date),
+              sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+              to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
+              del: null as string | null,
+              start: '' as string,
+              sort: (a.start_date ?? '').slice(0, 10),
+              solo: a.solo_profile as string | null,
+              target: { type: 'activity' as const, id: a.id },
+            }));
         const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
         // Non-trail places also surface visit rows an activity doesn't already
         // cover: multi-day trips, and single days with photos/entries but no run.

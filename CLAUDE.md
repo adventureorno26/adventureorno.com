@@ -123,7 +123,9 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   (Partially addressed in the Sorter — audit all upload paths.)
 - [x] **Fix lint + CI trust.** LocationTracker has a `react-hooks/exhaustive-deps` warning; both Vitest
   commands stalled locally (test runner / env / OneDrive-backed workspace?) — diagnose before treating
-  CI as dependable.
+  CI as dependable. UPDATE (2026-07-26): `npm run lint` now fully green — ran `npm run format` to clear
+  ~20 files of pre-existing prettier drift that were silently failing the CI lint step. eslint clean;
+  `tsc -b` clean. Lint is now safe to promote to a required check.
 - [x] **Strengthen CI.** Run on pushes to `main` (not only PRs); add DB migration + pgTAP jobs; add
   Playwright smoke tests; add dependency/security scanning; stop hiding the Worker dry-run failure
   behind `|| echo`; add a preview-deployment smoke test; require CI before merge; replace the generic
@@ -226,8 +228,13 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   photo markers, panels; feature-specific CSS / CSS modules.
 - [ ] **Centralize server state (TanStack Query):** dedup requests, cache invalidation, retry, optimistic
   updates w/ rollback, consistent loading/error states — replaces the manual refetch-and-setState.
-- [ ] **Generate DB types** from the Supabase schema instead of hand-maintained column strings /
-  duplicated interfaces; catch migration↔frontend drift in CI.
+- [~] **Generate DB types** from the Supabase schema. DONE: `app/src/lib/database.types.ts`
+  generated from the live schema (committed), deterministic `npm run gen:types`
+  (`scripts/gen-types.mjs`), and a secret-guarded CI job (`db-types-drift`) that regenerates +
+  `git diff --exit-code`s to fail when a migration changed the schema without refreshing the types.
+  Excluded from eslint/prettier. TODO (incremental): flip `createClient<Database>` and adopt the
+  generated Row/Insert types in `data.ts`/`strava.ts` — currently surfaces 24 real nullability
+  drift errors in the hand-written interfaces that need per-site reconciliation.
 - [ ] **Expand testing:** pgTAP for RLS/triggers/RPC authz/deletion/attribution/matching; Worker
   integration tests (mocked R2 + Supabase); Playwright flows (login, create place, upload, sort, merge,
   delete/restore, mobile layout); axe-core accessibility.

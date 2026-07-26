@@ -102,7 +102,9 @@ export default function PhotoSorter() {
     fetchPlaces()
       .then((r) => setPlaces([...r].sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => undefined);
-    fetchMapPeople().then(setPeople).catch(() => undefined);
+    fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
     fetchUnassignedPhotos()
       .then((ps) => setInboxCount(ps.length))
       .catch(() => setInboxCount(0));
@@ -421,8 +423,8 @@ export default function PhotoSorter() {
       {phase === 'review' && (
         <>
           <div className="ps-summary">
-            {groups.length} visit{groups.length === 1 ? '' : 's'} · {assignedPhotos} of {items.length}{' '}
-            photos placed
+            {groups.length} visit{groups.length === 1 ? '' : 's'} · {assignedPhotos} of{' '}
+            {items.length} photos placed
           </div>
           {groups.map((g) => {
             const unassigned = g.placeId == null;
@@ -548,7 +550,11 @@ export default function PhotoSorter() {
             );
           })}
           <div className="ps-footer">
-            <button className="primary" disabled={assignedPhotos === 0} onClick={() => void addAll()}>
+            <button
+              className="primary"
+              disabled={assignedPhotos === 0}
+              onClick={() => void addAll()}
+            >
               Add {assignedPhotos} photo{assignedPhotos === 1 ? '' : 's'}
             </button>
           </div>

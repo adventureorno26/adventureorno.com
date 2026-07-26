@@ -557,7 +557,8 @@ function TrackingCard({ myId }: { myId: string }) {
       <b>Location tracking</b>
       <p className="label" style={{ margin: '6px 0 10px' }}>
         Records your location while the app is open — powers the map fog, heatmap, and matching
-        photos to places. Phones only track while the app is open (no background tracking on iPhone).
+        photos to places. Phones only track while the app is open (no background tracking on
+        iPhone).
       </p>
       {trackingSupported() ? (
         <button className={on ? 'primary' : ''} onClick={toggle}>
@@ -622,12 +623,16 @@ function PeaksCard({ personId }: { personId: string | null }) {
               p.place_id ? (
                 <Link key={p.id} className="visit-row peak-row" to={`/place/${p.place_id}`}>
                   <span className="visit-main">{p.name}</span>
-                  {p.ele_ft ? <span className="label"> · {p.ele_ft.toLocaleString()} ft</span> : null}
+                  {p.ele_ft ? (
+                    <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
+                  ) : null}
                 </Link>
               ) : (
                 <div key={p.id} className="visit-row peak-row">
                   <span className="visit-main">{p.name}</span>
-                  {p.ele_ft ? <span className="label"> · {p.ele_ft.toLocaleString()} ft</span> : null}
+                  {p.ele_ft ? (
+                    <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
+                  ) : null}
                 </div>
               ),
             )}
@@ -645,14 +650,22 @@ function StatsSection() {
   const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
   const [person, setPerson] = useState<string | null>(null); // null = Both
   useEffect(() => {
-    fetchMapPeople().then(setPeople).catch(() => undefined);
-    fetchPlacePeople().then(setPlacePeople).catch(() => undefined);
+    fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
+    fetchPlacePeople()
+      .then(setPlacePeople)
+      .catch(() => undefined);
   }, []);
   const real = people.filter((p) => p.display_name !== 'Test Bot');
   return (
     <>
       <div className="stats-toggle">
-        <button className={person === null ? 'on' : ''} onClick={() => setPerson(null)} type="button">
+        <button
+          className={person === null ? 'on' : ''}
+          onClick={() => setPerson(null)}
+          type="button"
+        >
           Both
         </button>
         {real.map((pp) => (
@@ -797,8 +810,8 @@ function GarminImportCard() {
       <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
         Strava only lets one athlete connect, so bring your Garmin activities in as files instead.
         You can upload the <b>.FIT</b> files straight from your watch/Garmin Connect, or export an
-        activity as GPX/TCX (gear icon → <b>Export</b>). They're attributed to you, and importing the
-        same file twice is safe.
+        activity as GPX/TCX (gear icon → <b>Export</b>). They're attributed to you, and importing
+        the same file twice is safe.
       </div>
       <button className="primary" disabled={busy} onClick={() => fileRef.current?.click()}>
         {busy ? 'Importing…' : 'Choose GPX / TCX / FIT files'}

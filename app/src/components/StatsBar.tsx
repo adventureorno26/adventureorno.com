@@ -160,9 +160,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
   const closeType = () => setTypeList(null);
 
   const placesHeadline = wander ? wander.places_count : placesTotal;
-  const totalMiles = wander
-    ? wander.miles
-    : mileage.reduce((sum, r) => sum + Number(r.miles), 0);
+  const totalMiles = wander ? wander.miles : mileage.reduce((sum, r) => sum + Number(r.miles), 0);
   const animated = useCountUp(totalMiles);
 
   return (
@@ -297,11 +295,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
                   .map((r) => {
                     const n = Number(r.activity_count);
                     return (
-                      <button
-                        key={r.type}
-                        className="mi-row"
-                        onClick={() => openType(r.type)}
-                      >
+                      <button key={r.type} className="mi-row" onClick={() => openType(r.type)}>
                         <span className="mi-count">
                           {n} {activityNoun(r.type, n)}
                         </span>

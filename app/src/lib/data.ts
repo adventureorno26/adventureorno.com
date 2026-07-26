@@ -401,7 +401,10 @@ export async function fetchAttention(): Promise<Attention> {
     (p) => !p.name || p.name.trim() === '' || p.name === 'New place',
   ).length;
   const missingCategories = saved.filter(
-    (p) => (p.categories?.length ?? 0) === 0 && (p.activity_categories?.length ?? 0) === 0 && !p.is_trail,
+    (p) =>
+      (p.categories?.length ?? 0) === 0 &&
+      (p.activity_categories?.length ?? 0) === 0 &&
+      !p.is_trail,
   ).length;
   const missingDates = saved.filter((p) => !p.first_visit).length;
   const suggestedTrips = places.filter((p) => p.suggested).length;
@@ -537,7 +540,9 @@ export async function fetchCityBoundary(query: string): Promise<string | null> {
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) return null;
     const rows = (await res.json()) as Array<{ geojson?: { type?: string } }>;
-    const hit = rows.find((r) => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon');
+    const hit = rows.find(
+      (r) => r.geojson?.type === 'Polygon' || r.geojson?.type === 'MultiPolygon',
+    );
     return hit?.geojson ? JSON.stringify(hit.geojson) : null;
   } catch {
     return null;
@@ -616,11 +621,15 @@ export async function fetchSpatialMembers(containerId: string): Promise<string[]
 
 /** Place ids that should show for a person view (null = Both, post-cutoff only). */
 export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
-  const { data, error } = await supabase.rpc('place_ids_for_view', { p_profile: profileId ?? null });
+  const { data, error } = await supabase.rpc('place_ids_for_view', {
+    p_profile: profileId ?? null,
+  });
   if (error) throw error;
-  return new Set((data ?? []).map((r: { place_ids_for_view: string } | string) =>
-    typeof r === 'string' ? r : r.place_ids_for_view,
-  ));
+  return new Set(
+    (data ?? []).map((r: { place_ids_for_view: string } | string) =>
+      typeof r === 'string' ? r : r.place_ids_for_view,
+    ),
+  );
 }
 
 /** Every visit across all places (for the bulk editor's per-visit dropdowns). */
@@ -704,7 +713,8 @@ export async function fetchDismissedDupes(): Promise<Set<string>> {
   const s = new Set<string>();
   const { data, error } = await supabase.from('dup_dismissed').select('place_a, place_b');
   if (error || !data) return s;
-  for (const r of data as { place_a: string; place_b: string }[]) s.add(`${r.place_a}|${r.place_b}`);
+  for (const r of data as { place_a: string; place_b: string }[])
+    s.add(`${r.place_a}|${r.place_b}`);
   return s;
 }
 /** Remember that two places are NOT duplicates (stops the suggestion). */

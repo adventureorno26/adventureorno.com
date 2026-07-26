@@ -1,0 +1,3 @@
+dist
+# Generated from the live Supabase schema — never hand-formatted.
+src/lib/database.types.ts

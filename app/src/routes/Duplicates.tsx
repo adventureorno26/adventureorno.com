@@ -30,9 +30,13 @@ export default function Duplicates() {
 
   function load() {
     fetchPlaces()
-      .then((r) => setPlaces(r.filter((p) => p.saved && !p.bucket && !p.holds_children && !p.is_trail)))
+      .then((r) =>
+        setPlaces(r.filter((p) => p.saved && !p.bucket && !p.holds_children && !p.is_trail)),
+      )
       .catch(() => setPlaces([]));
-    fetchDismissedDupes().then(setDismissed).catch(() => undefined);
+    fetchDismissedDupes()
+      .then(setDismissed)
+      .catch(() => undefined);
   }
   useEffect(load, []);
 

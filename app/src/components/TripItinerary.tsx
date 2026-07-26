@@ -75,7 +75,11 @@ export default function TripItinerary({ tripId, canEdit }: { tripId: string; can
               <div key={n.id} className="itin-note">
                 <span>{n.note}</span>
                 {canEdit && (
-                  <button className="itin-del" title="Delete note" onClick={() => void delNote(n.id)}>
+                  <button
+                    className="itin-del"
+                    title="Delete note"
+                    onClick={() => void delNote(n.id)}
+                  >
                     ×
                   </button>
                 )}

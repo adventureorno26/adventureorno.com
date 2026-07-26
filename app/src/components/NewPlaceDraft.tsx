@@ -140,7 +140,10 @@ export default function NewPlaceDraft({
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
         await mapPool(
           files,
-          (f) => uploadPhoto(f, { placeId: created.id, lat, lng, takenAt, override: true }).catch(() => null),
+          (f) =>
+            uploadPhoto(f, { placeId: created.id, lat, lng, takenAt, override: true }).catch(
+              () => null,
+            ),
           4,
         );
       }
@@ -176,7 +179,9 @@ export default function NewPlaceDraft({
           <MapSearch placeholder="Search an address or place…" onPick={pickLocation} />
           <div className="npd-coords label">
             {lat.toFixed(5)}, {lng.toFixed(5)}
-            {[admin1, country].filter(Boolean).length ? ` · ${[admin1, country].filter(Boolean).join(', ')}` : ''}
+            {[admin1, country].filter(Boolean).length
+              ? ` · ${[admin1, country].filter(Boolean).join(', ')}`
+              : ''}
           </div>
         </div>
 
@@ -184,15 +189,20 @@ export default function NewPlaceDraft({
           <div className="npd-dupes">
             <b>
               Possible duplicate{dupes.length > 1 ? 's' : ''} within{' '}
-              {radius >= 1000 ? `${(radius / 1000).toFixed(radius % 1000 ? 1 : 0)} km` : `${radius} m`}:
+              {radius >= 1000
+                ? `${(radius / 1000).toFixed(radius % 1000 ? 1 : 0)} km`
+                : `${radius} m`}
+              :
             </b>
             {dupes.map((p) => (
               <button key={p.id} className="npd-dupe" onClick={() => onSaved(p.id)}>
-                {p.name} · {Math.round(haversineMeters({ lat, lng }, { lat: p.lat, lng: p.lng }))} m —
-                use this
+                {p.name} · {Math.round(haversineMeters({ lat, lng }, { lat: p.lat, lng: p.lng }))} m
+                — use this
               </button>
             ))}
-            <span className="label">…or fill in the fields below and Save to create a separate place.</span>
+            <span className="label">
+              …or fill in the fields below and Save to create a separate place.
+            </span>
           </div>
         )}
 
@@ -209,11 +219,7 @@ export default function NewPlaceDraft({
                 </button>
               )}
               {poi.website && (
-                <button
-                  type="button"
-                  className="npd-dupe"
-                  onClick={() => setWebsite(poi.website)}
-                >
+                <button type="button" className="npd-dupe" onClick={() => setWebsite(poi.website)}>
                   Use website: {poi.website}
                 </button>
               )}
@@ -245,7 +251,10 @@ export default function NewPlaceDraft({
             ))}
           </div>
           {avail.length > 0 && (
-            <select value="" onChange={(e) => e.target.value && setTags((t) => [...t, e.target.value])}>
+            <select
+              value=""
+              onChange={(e) => e.target.value && setTags((t) => [...t, e.target.value])}
+            >
               <option value="">+ tag</option>
               {avail.map((c) => (
                 <option key={c.slug} value={c.slug}>
@@ -260,7 +269,12 @@ export default function NewPlaceDraft({
           <span>Who was there</span>
           <div className="ps-who-toggle">
             {(['both', 'mine', 'josh'] as const).map((k) => (
-              <button key={k} type="button" className={who === k ? 'on' : ''} onClick={() => setWho(k)}>
+              <button
+                key={k}
+                type="button"
+                className={who === k ? 'on' : ''}
+                onClick={() => setWho(k)}
+              >
                 {k === 'both' ? 'Both' : k === 'mine' ? 'Just me' : 'Just Josh'}
               </button>
             ))}

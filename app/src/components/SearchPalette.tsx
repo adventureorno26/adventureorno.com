@@ -140,12 +140,14 @@ export default function SearchPalette({ places }: { places: Place[] }) {
       activeCats.size === 0 || it.cats.some((c) => activeCats.has(c));
     const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (tokens.length === 0)
-      return items
-        // With a category filter on, show every matching item (places + spots);
-        // with no filter and no query, just the places.
-        .filter((i) => (activeCats.size ? true : i.kind === 'place') && catOk(i))
-        .sort((a, b) => a.label.localeCompare(b.label))
-        .slice(0, activeCats.size ? 80 : 30);
+      return (
+        items
+          // With a category filter on, show every matching item (places + spots);
+          // with no filter and no query, just the places.
+          .filter((i) => (activeCats.size ? true : i.kind === 'place') && catOk(i))
+          .sort((a, b) => a.label.localeCompare(b.label))
+          .slice(0, activeCats.size ? 80 : 30)
+      );
     const scored: { item: SearchItem; score: number }[] = [];
     for (const item of items) {
       if (!catOk(item)) continue;

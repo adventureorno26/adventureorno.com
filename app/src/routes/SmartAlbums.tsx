@@ -93,9 +93,7 @@ export default function SmartAlbums() {
       (places ?? []).length
         ? ALBUMS.map((a) => ({
             ...a,
-            places: (places ?? [])
-              .filter(a.match)
-              .sort((x, y) => x.name.localeCompare(y.name)),
+            places: (places ?? []).filter(a.match).sort((x, y) => x.name.localeCompare(y.name)),
           })).filter((a) => a.places.length > 0)
         : [],
     [places],
@@ -115,10 +113,7 @@ export default function SmartAlbums() {
         <div className="album-list">
           {albums.map((a) => (
             <div key={a.key} className="album">
-              <button
-                className="album-head"
-                onClick={() => setOpen(open === a.key ? null : a.key)}
-              >
+              <button className="album-head" onClick={() => setOpen(open === a.key ? null : a.key)}>
                 <div>
                   <b>{a.title}</b> <span className="label">· {a.places.length}</span>
                   <div className="label">{a.hint}</div>

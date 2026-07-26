@@ -100,9 +100,7 @@ let BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
 
 /** Replace the runtime category list from DB rows (public.place_categories). */
 export function applyCategories(
-  rows: Array<
-    Category & { is_auto?: boolean; is_container?: boolean; sort_order?: number }
-  >,
+  rows: Array<Category & { is_auto?: boolean; is_container?: boolean; sort_order?: number }>,
 ): void {
   if (!rows || rows.length === 0) return;
   CATEGORIES = rows.map((r) => ({
