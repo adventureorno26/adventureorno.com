@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchPlaces, mergePlaces } from '../lib/data';
+import {
+  dismissDuplicate,
+  dupeKey,
+  fetchDismissedDupes,
+  fetchPlaces,
+  mergePlaces,
+} from '../lib/data';
 import { haversineMeters } from '../lib/geo';
 import { showSnack } from '../lib/snackbar';
 import type { Place } from '../lib/types';
@@ -19,12 +25,14 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  *  one (the more-visited one wins). */
 export default function Duplicates() {
   const [places, setPlaces] = useState<Place[] | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
 
   function load() {
     fetchPlaces()
       .then((r) => setPlaces(r.filter((p) => p.saved && !p.bucket && !p.holds_children && !p.is_trail)))
       .catch(() => setPlaces([]));
+    fetchDismissedDupes().then(setDismissed).catch(() => undefined);
   }
   useEffect(load, []);
 
@@ -35,6 +43,7 @@ export default function Duplicates() {
       for (let j = i + 1; j < ps.length; j++) {
         const p = ps[i];
         const q = ps[j];
+        if (dismissed.has(dupeKey(p.id, q.id))) continue; // kept separate — hide it
         const m = haversineMeters({ lat: p.lat, lng: p.lng }, { lat: q.lat, lng: q.lng });
         const sameName = !!p.name && norm(p.name) === norm(q.name);
         if (m <= 150 || (sameName && m <= 3000)) {
@@ -45,7 +54,19 @@ export default function Duplicates() {
       }
     }
     return out.sort((x, y) => x.meters - y.meters);
-  }, [places]);
+  }, [places, dismissed]);
+
+  async function keepSeparate(pair: Pair) {
+    setBusy(pair.b.id);
+    try {
+      await dismissDuplicate(pair.a.id, pair.b.id);
+      setDismissed((cur) => new Set(cur).add(dupeKey(pair.a.id, pair.b.id)));
+      showSnack({ message: 'Kept separate — won’t suggest these again.' });
+    } catch {
+      showSnack({ message: 'Could not save that.' });
+    }
+    setBusy(null);
+  }
 
   async function merge(pair: Pair) {
     setBusy(pair.b.id);
@@ -91,9 +112,22 @@ export default function Duplicates() {
                   {pair.meters} m apart
                 </span>
               </div>
-              <button disabled={busy === pair.b.id} onClick={() => void merge(pair)}>
-                Merge
-              </button>
+              <div className="dup-actions">
+                <button
+                  className="dup-btn"
+                  disabled={busy === pair.b.id}
+                  onClick={() => void merge(pair)}
+                >
+                  Merge
+                </button>
+                <button
+                  className="dup-btn dup-keep"
+                  disabled={busy === pair.b.id}
+                  onClick={() => void keepSeparate(pair)}
+                >
+                  Keep separate
+                </button>
+              </div>
             </div>
           ))}
         </div>

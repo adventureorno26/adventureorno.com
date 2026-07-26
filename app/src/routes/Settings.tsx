@@ -946,7 +946,7 @@ export default function Settings() {
               One table for every place — rename, fix the city/state/country, retag, rate, set visit
               dates and who was there, and add photos straight from Google Photos.
             </p>
-            <div className="btn-row" style={{ marginTop: 4 }}>
+            <div className="settings-tools">
               <Link to="/places/edit">
                 <button className="primary">Open the places table</button>
               </Link>

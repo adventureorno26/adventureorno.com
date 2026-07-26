@@ -691,6 +691,22 @@ export async function mergePlaces(loserId: string, winnerId: string): Promise<vo
   if (error) throw error;
 }
 
+/** Pairs the user marked "keep separate" — normalized keys `${minId}|${maxId}`. */
+export async function fetchDismissedDupes(): Promise<Set<string>> {
+  const s = new Set<string>();
+  const { data, error } = await supabase.from('dup_dismissed').select('place_a, place_b');
+  if (error || !data) return s;
+  for (const r of data as { place_a: string; place_b: string }[]) s.add(`${r.place_a}|${r.place_b}`);
+  return s;
+}
+/** Remember that two places are NOT duplicates (stops the suggestion). */
+export async function dismissDuplicate(a: string, b: string): Promise<void> {
+  const { error } = await supabase.rpc('dismiss_duplicate', { p_a: a, p_b: b });
+  if (error) throw error;
+}
+/** Order-independent key matching how dismissals are stored (least|greatest). */
+export const dupeKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
 export interface HomeZone {
   lat: number;
   lng: number;

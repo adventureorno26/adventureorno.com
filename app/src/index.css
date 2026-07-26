@@ -2173,6 +2173,20 @@ a {
   padding: 0;
 }
 
+/* Uniform grid of tool buttons inside the "Edit all places" card (no overflow). */
+.settings-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.settings-tools > a {
+  display: block;
+}
+.settings-tools > a > button {
+  width: 100%;
+}
+
 /* Duplicate places. */
 .dup-list {
   display: flex;
@@ -2198,6 +2212,23 @@ a {
 .dup-main a {
   color: var(--accent);
   text-decoration: none;
+}
+.dup-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dup-btn {
+  min-width: 118px;
+  font-size: 12px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.dup-keep {
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--text);
 }
 
 /* Timeline. */
