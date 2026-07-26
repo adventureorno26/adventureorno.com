@@ -110,10 +110,12 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   (`app/src/lib/photos.ts:310`, worker `index.ts:133`), so the same original hashes differently across
   browsers and a manual resize won't dedupe against the Shortcut's original. Hash the ORIGINAL bytes
   client-side before conversion; optionally keep a second stored-object hash.
-- [ ] **Harden photo/video ingestion.** Validate max byte size, allowed MIME types, finite/valid
-  lat-lng, pixel dimensions, image-decode success before commit, video duration/type/size, valid
-  UUID/place ownership; add per-profile rate limits. Stop returning raw internal error detail
-  (Worker currently returns `String(err).slice(0,200)`).
+- [~] **Harden photo/video ingestion.** DONE (Worker redeployed 2026-07-26,
+  version c9382fbe, /health 200): stopped leaking raw internal error detail — the top-level catch
+  now logs the full error server-side under a short `ref` and returns only `{error, ref}` (no SQL/
+  token/coord text); added a 64 MiB max-upload guard (413) above the empty-body check. TODO:
+  allowed-MIME allowlist, finite/valid lat-lng range check, pixel-dimension bounds, video
+  duration/type/size, valid-UUID/place-ownership checks, per-profile rate limits.
 - [ ] **Transaction & idempotency.** R2 writes and DB writes are separate → orphaned objects/rows on
   failure. Add a client upload-id/idempotency key, an upload-attempt table with explicit states,
   duplicate-request short-circuit, compensating deletes, and periodic R2↔DB reconciliation.
@@ -232,12 +234,19 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   generated from the live schema (committed), deterministic `npm run gen:types`
   (`scripts/gen-types.mjs`), and a secret-guarded CI job (`db-types-drift`) that regenerates +
   `git diff --exit-code`s to fail when a migration changed the schema without refreshing the types.
-  Excluded from eslint/prettier. TODO (incremental): flip `createClient<Database>` and adopt the
-  generated Row/Insert types in `data.ts`/`strava.ts` — currently surfaces 24 real nullability
-  drift errors in the hand-written interfaces that need per-site reconciliation.
-- [ ] **Expand testing:** pgTAP for RLS/triggers/RPC authz/deletion/attribution/matching; Worker
-  integration tests (mocked R2 + Supabase); Playwright flows (login, create place, upload, sort, merge,
-  delete/restore, mobile layout); axe-core accessibility.
+  Excluded from eslint/prettier. TODO (low priority): flipping `createClient<Database>` surfaces 24
+  errors in `data.ts`/`strava.ts`, but on inspection ~9 are FALSE POSITIVES (Supabase's generator
+  types SQL function args as non-null even when the fn accepts null — our `p_profile ?? null` is
+  correct) and the rest are harmless type-lies the code already coalesces at runtime (no actual
+  bugs). Not worth the cast noise now; revisit only if adopting generated Row types wholesale. The
+  committed types + drift CI already deliver the schema-safety win.
+- [~] **Expand testing:** DONE: vitest confirmed healthy (was stalling — environmental, not the runner;
+  26 tests green). Added `exports.test.ts` (10 tests) after extracting pure `placesToCsv/Gpx/Kml`
+  builders from the DOM `download()` — covers exportable-filtering, name sort, CSV quote/comma/newline
+  escaping, XML entity escaping, coordinate order, empty-input well-formedness. Protects the data-
+  recovery/export path used by the new Data Health page. TODO: pgTAP for RLS/triggers/RPC authz/
+  deletion/attribution/matching; Worker integration tests (mocked R2 + Supabase); Playwright flows
+  (login, create place, upload, sort, merge, delete/restore, mobile layout); axe-core accessibility.
 - [~] **Backup & data-health center:** DONE: `/health` page (migration 0092 `data_health()` RPC,
   member-gated) shows whole-dataset counts (places/photos/visits/activities/videos/pings), integrity
   signals (orphaned photos, posterless videos, placeless activities), and GPX/KML/CSV export. TODO:

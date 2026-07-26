@@ -146,6 +146,11 @@ async function runPipeline(
   const { bytes, thumbBytes, w: formW, h: formH, lat: formLat, lng: formLng, placeId, override, takenAt, origSha } =
     await readImageBytes(req);
   if (bytes.byteLength === 0) return { status: 400, body: { error: 'empty body' } };
+  // Upper bound so a malformed/hostile request can't force a huge decode/store.
+  // 64 MiB is far above any real photo (even a raw iPhone HEIC/large JPEG), so
+  // this never rejects a legitimate upload.
+  const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) return { status: 413, body: { error: 'file too large' } };
 
   // Prefer the client's hash of the ORIGINAL bytes (stable across browsers/resizes);
   // fall back to hashing what we received.
@@ -503,8 +508,12 @@ export default {
       if (path === '/health') return json({ ok: true }, 200, cors);
       return json({ error: 'not found' }, 404, cors);
     } catch (err) {
-      // Never leak coordinates/tokens in error text.
-      return json({ error: 'internal error', detail: String(err).slice(0, 200) }, 500, cors);
+      // Never leak internal error text to the client — it can carry SQL detail,
+      // tokens, or coordinates. Log the full error server-side (Worker logs) under
+      // a short ref and hand the client only that ref for support/debugging.
+      const ref = crypto.randomUUID().slice(0, 8);
+      console.error(`[${ref}]`, err);
+      return json({ error: 'internal error', ref }, 500, cors);
     }
   },
 };
