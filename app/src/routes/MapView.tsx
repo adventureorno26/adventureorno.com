@@ -1159,33 +1159,13 @@ export default function MapView() {
       } else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
     });
 
-    // Photos with no location → one new card at the map center to place manually.
-    let newPlaceId: string | null = null;
+    // Photos with no location → upload them WITHOUT coordinates or a place. They
+    // land unassigned in the Sorter inbox, to be placed by capture time — no more
+    // fabricating a location at the map center.
+    let inboxAdded = 0;
     if (noLoc.length > 0) {
-      const ctr = mapRef.current?.getCenter();
-      const lat = ctr?.lat ?? 39;
-      const lng = ctr?.lng ?? -77;
-      try {
-        const created = await createPlace({
-          name: 'New place',
-          country: null,
-          admin1: null,
-          lat,
-          lng,
-          // No GPS on these — the map centre is a GUESS, not real coordinates, so
-          // leave it an unsaved private draft until the location is confirmed
-          // (rather than publishing a fabricated location to the other person).
-          saved: false,
-        });
-        newPlaceId = created.id;
-        for (const f of noLoc) {
-          await uploadPhoto(f, { placeId: created.id, lat, lng, override: true }).catch(
-            () => undefined,
-          );
-        }
-      } catch {
-        /* ignore */
-      }
+      const res = await mapPool(noLoc, (f) => uploadPhoto(f, { override: true }).catch(() => null), 4);
+      inboxAdded = res.filter((r) => r && r.ok).length;
     }
 
     if (added > 0) await triggerGeocode().catch(() => undefined);
@@ -1236,16 +1216,20 @@ export default function MapView() {
       return;
     }
 
-    if (newPlaceId) {
-      setBanner('Set this place’s location using the address box on the card.');
-      navigate(`/place/${newPlaceId}`);
-    } else if (geoPlaceId) {
+    if (geoPlaceId) {
       // Geotagged photo(s) auto-placed — open the card so the location/name/tags
       // can be adjusted just like any other place.
       setBanner(added > 1 ? `Added ${added} photos. Review the location and details here.` : null);
       navigate(`/place/${geoPlaceId}`);
+    } else if (inboxAdded > 0 && added === 0) {
+      // Only no-GPS photos → they're in the inbox to sort by date.
+      setBanner(
+        `${inboxAdded} photo${inboxAdded > 1 ? 's' : ''} had no location — added to your inbox. Sort them in Settings → Sort photos into places.`,
+      );
     } else if (added > 0) {
-      setBanner(`Added ${added} photo${added > 1 ? 's' : ''} to the map.`);
+      setBanner(
+        `Added ${added} photo${added > 1 ? 's' : ''} to the map${inboxAdded ? ` · ${inboxAdded} with no location went to your inbox` : ''}.`,
+      );
     } else {
       // Nothing added — say exactly why so it's never a silent failure.
       const labels: Record<string, string> = {

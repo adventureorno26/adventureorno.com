@@ -85,8 +85,8 @@ export type PhotoSource = 'shortcut' | 'manual';
 export interface Photo {
   id: string;
   place_id: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null; // null = no GPS (stored unassigned → Sorter inbox)
+  lng: number | null;
   taken_at: string | null;
   width: number | null;
   height: number | null;

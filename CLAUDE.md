@@ -111,7 +111,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
 - [ ] **Transaction & idempotency.** R2 writes and DB writes are separate → orphaned objects/rows on
   failure. Add a client upload-id/idempotency key, an upload-attempt table with explicit states,
   duplicate-request short-circuit, compensating deletes, and periodic R2↔DB reconciliation.
-- [ ] **No-GPS handling (don't fabricate coords).** Never store the map-center as a photo's GPS. Keep
+- [x] **No-GPS handling (don't fabricate coords).** Never store the map-center as a photo's GPS. Keep
   coordinates null; match by capture time vs location history/activities; show likely places; let the
   user search / drop a pin / pick an existing place; store coords only when explicitly confirmed.
   (Partially addressed in the Sorter — audit all upload paths.)

@@ -140,8 +140,8 @@ export async function removeDeletedHash(env: Env, sha256: string): Promise<void>
 
 export interface PhotoRow {
   place_id: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null; // null = no GPS → stored unassigned (Sorter inbox)
+  lng: number | null;
   taken_at: string | null;
   r2_key: string;
   thumb_key: string;

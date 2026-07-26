@@ -38,6 +38,7 @@ export default function UnassignedTray({ places, onChanged }: Props) {
   if (!photosEnabled() || photos.length === 0) return null;
 
   function nearestPlaceId(p: Photo): string | null {
+    if (p.lat == null || p.lng == null) return null; // no GPS → no nearest place
     let best: { id: string; d: number } | null = null;
     for (const pl of places) {
       const d = haversineMeters({ lat: p.lat, lng: p.lng }, { lat: pl.lat, lng: pl.lng });

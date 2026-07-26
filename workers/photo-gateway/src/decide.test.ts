@@ -43,10 +43,16 @@ describe('ingestDecision', () => {
     ).toBeNull();
   });
 
-  it('never stores a photo with no coordinates, even with override', () => {
+  it('rejects a no-coordinates photo on the automated path', () => {
+    expect(ingestDecision({ ...base, hasCoords: false, gate: 'no_gps', manual: false })).toBe(
+      'no_gps',
+    );
+  });
+
+  it('stores a no-coordinates photo on the manual path (unassigned → inbox)', () => {
     expect(
-      ingestDecision({ ...base, hasCoords: false, gate: 'no_gps', manual: true, override: true }),
-    ).toBe('no_gps');
+      ingestDecision({ ...base, hasCoords: false, gate: null, manual: true, override: true }),
+    ).toBeNull();
   });
 });
 

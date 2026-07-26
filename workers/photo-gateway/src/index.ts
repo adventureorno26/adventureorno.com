@@ -170,7 +170,9 @@ async function runPipeline(
   const skip = ingestDecision({
     isDeleted,
     isDuplicate,
-    gate: allowOverride ? (hasCoords ? null : 'no_gps') : screenshotGate(exif, hasCoords),
+    // Manual uploads are deliberate — no screenshot/make-model gate (and no-coords
+    // is allowed, landing the photo unassigned). The Shortcut path keeps the gate.
+    gate: allowOverride ? null : screenshotGate(exif, hasCoords),
     hasCoords,
     inZone,
     manual: allowOverride,
@@ -195,9 +197,10 @@ async function runPipeline(
     }
   }
 
-  // Auto-place the photo by its GPS when the caller didn't pick a place.
+  // Auto-place the photo by its GPS when the caller didn't pick a place. With no
+  // coordinates it stays unassigned (place_id null) → the Sorter inbox.
   let finalPlaceId = placeId;
-  if (!finalPlaceId) finalPlaceId = await assignPlace(env, lat!, lng!);
+  if (!finalPlaceId && hasCoords) finalPlaceId = await assignPlace(env, lat!, lng!);
 
   const uuid = crypto.randomUUID();
   const r2Key = `photos/${uuid}.jpg`;
@@ -211,8 +214,8 @@ async function runPipeline(
 
   const id = await insertPhoto(env, {
     place_id: finalPlaceId,
-    lat: lat!,
-    lng: lng!,
+    lat: lat ?? null,
+    lng: lng ?? null,
     // Day-view uploads pin the photo to a chosen date; otherwise use EXIF.
     taken_at: takenAt ?? exif.takenAt,
     r2_key: r2Key,
