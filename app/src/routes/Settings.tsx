@@ -962,6 +962,9 @@ export default function Settings() {
               <Link to="/timeline">
                 <button>Timeline</button>
               </Link>
+              <Link to="/duplicates">
+                <button>Duplicate places</button>
+              </Link>
               <Link to="/trash">
                 <button>Trash</button>
               </Link>

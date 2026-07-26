@@ -175,7 +175,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   places, places missing categories/visit dates, suspected duplicate places, suspected duplicate
   photos, failed uploads, photos with missing dates, activities without places, trips awaiting
   confirmation.
-- [ ] **Google Photos import improvements.** Cancelable polling, download progress + failed-item retry,
+- [~] **Google Photos import improvements.** Cancelable polling, download progress + failed-item retry,
   album/date filters before download, duplicate previews before transferring bytes, token
   disconnect/reconnect controls.
 

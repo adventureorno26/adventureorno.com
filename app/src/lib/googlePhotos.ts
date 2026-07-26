@@ -186,9 +186,16 @@ async function getImplicitToken(): Promise<string> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Lets the UI cancel a long pick/download (the picker polls for up to ~6 min).
+let cancelRequested = false;
+export function cancelGooglePick(): void {
+  cancelRequested = true;
+}
+
 /** Full picker flow → returns the chosen photos as File[]. onStatus reports progress. */
 export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Promise<File[]> {
   if (!CLIENT_ID) throw new Error('Google Photos is not configured.');
+  cancelRequested = false;
 
   onStatus?.('Opening Google Photos…');
   // Try with the cached token; if it was revoked/expired early (401), drop it and
@@ -222,6 +229,14 @@ export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Prom
   for (let i = 0; i < 180 && !picked; i++) {
     // ~6 min max
     await sleep(2000);
+    if (cancelRequested) {
+      try {
+        win?.close();
+      } catch {
+        /* ignore */
+      }
+      throw new Error('Cancelled.');
+    }
     const pRes = await fetch(`https://photospicker.googleapis.com/v1/sessions/${session.id}`, {
       headers: auth,
     });
@@ -243,6 +258,7 @@ export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Prom
   const files: File[] = [];
   let pageToken: string | undefined;
   do {
+    if (cancelRequested) throw new Error('Cancelled.');
     const url = new URL('https://photospicker.googleapis.com/v1/mediaItems');
     url.searchParams.set('sessionId', session.id);
     url.searchParams.set('pageSize', '100');

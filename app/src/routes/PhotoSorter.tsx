@@ -19,7 +19,7 @@ import {
   uploadPhoto,
 } from '../lib/photos';
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
-import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
+import { cancelGooglePick, googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import PlaceQuickEdit from '../components/PlaceQuickEdit';
 import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
@@ -85,6 +85,7 @@ export default function PhotoSorter() {
   const [note, setNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [inboxCount, setInboxCount] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const meId = profile?.id ?? null;
@@ -183,11 +184,14 @@ export default function PhotoSorter() {
   }
 
   async function fromGoogle() {
+    setImporting(true);
     setNote('Opening Google Photos…');
     try {
       const files = await pickFromGooglePhotos((s) => setNote(s));
+      setImporting(false);
       await ingest(files);
     } catch (e) {
+      setImporting(false);
       setNote(e instanceof Error ? e.message : 'Google Photos import failed.');
       setPhase('idle');
     }
@@ -399,7 +403,23 @@ export default function PhotoSorter() {
         </div>
       )}
 
-      {note && <div className="banner">{note}</div>}
+      {note && (
+        <div className="banner">
+          {note}
+          {importing && (
+            <button
+              className="ps-cancel"
+              onClick={() => {
+                cancelGooglePick();
+                setImporting(false);
+                setNote(null);
+              }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
 
       {phase === 'review' && (
         <>

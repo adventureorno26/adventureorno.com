@@ -2013,6 +2013,16 @@ a {
   font-size: 13px;
   padding: 5px 8px;
 }
+.ps-cancel {
+  margin-left: 10px;
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+}
 
 /* Undo snackbar (global). */
 .snackbar {
@@ -2041,6 +2051,33 @@ a {
   font-size: 13.5px;
   cursor: pointer;
   padding: 0;
+}
+
+/* Duplicate places. */
+.dup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: rgba(19, 31, 54, 0.4);
+}
+.dup-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dup-main a {
+  color: var(--accent);
+  text-decoration: none;
 }
 
 /* Timeline. */

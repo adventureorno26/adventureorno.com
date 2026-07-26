@@ -1172,7 +1172,10 @@ export default function MapView() {
           admin1: null,
           lat,
           lng,
-          saved: true, // deliberate manual add — save it (auto clusters stay unsaved/private)
+          // No GPS on these — the map centre is a GUESS, not real coordinates, so
+          // leave it an unsaved private draft until the location is confirmed
+          // (rather than publishing a fabricated location to the other person).
+          saved: false,
         });
         newPlaceId = created.id;
         for (const f of noLoc) {

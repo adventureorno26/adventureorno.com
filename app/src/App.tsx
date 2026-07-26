@@ -46,6 +46,7 @@ const Trash = lazyWithReload(() => import('./routes/Trash'));
 const AttentionDashboard = lazyWithReload(() => import('./routes/AttentionDashboard'));
 const SmartAlbums = lazyWithReload(() => import('./routes/SmartAlbums'));
 const Timeline = lazyWithReload(() => import('./routes/Timeline'));
+const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -201,6 +202,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Timeline />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/duplicates"
+          element={
+            <RequireAuth>
+              <Duplicates />
             </RequireAuth>
           }
         />
