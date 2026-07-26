@@ -2330,6 +2330,76 @@ a {
   font-size: 14px;
 }
 
+/* Active map-filter chips + empty-filtered-state. */
+.filter-chips {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+}
+.fc-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.fc-chip,
+.fc-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-soft);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fc-chip {
+  border-color: var(--accent);
+}
+.fc-chip span {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.fc-reset {
+  color: var(--muted);
+}
+.fc-reset.inline {
+  min-height: 0;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  backdrop-filter: none;
+  text-decoration: underline;
+  color: var(--accent-hover);
+}
+.fc-empty {
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .filter-chips {
+    top: calc(env(safe-area-inset-top, 0px) + 96px);
+  }
+}
+
 /* Google Photos import — completion route + resume banner. */
 .import-complete {
   max-width: 520px;
@@ -3157,6 +3227,7 @@ a {
   .map-root.card-open .places-search-btn,
   .map-root.card-open .add-trail-btn,
   .map-root.card-open .person-filter,
+  .map-root.card-open .filter-chips,
   .map-root.card-open .on-this-day {
     display: none;
   }

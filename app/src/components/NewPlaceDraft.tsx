@@ -14,6 +14,7 @@ import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { haversineMeters } from '../lib/geo';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import MapSearch from './MapSearch';
+import { useDialog } from '../lib/useDialog';
 import type { Place } from '../lib/types';
 
 type Who = 'both' | 'mine' | 'josh';
@@ -202,12 +203,33 @@ export default function NewPlaceDraft({
 
   const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug));
 
+  // Guard against losing entered work: confirm before closing a dirty draft.
+  const dirty = !!name.trim() || files.length > 0 || !!visitDate || tags.length > 0 || !!website;
+  function requestCancel() {
+    if (busy) return;
+    if (dirty && !confirm('Discard this new place and everything you’ve entered?')) return;
+    onCancel();
+  }
+  const cardRef = useDialog<HTMLDivElement>(requestCancel);
+
   return (
-    <div className="npd-overlay" role="dialog" aria-label="New place">
-      <div className="npd-card">
+    <div
+      className="npd-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) requestCancel();
+      }}
+    >
+      <div
+        className="npd-card"
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New place"
+        tabIndex={-1}
+      >
         <div className="npd-head">
           <b>New place</b>
-          <button className="npd-x" onClick={onCancel} aria-label="Cancel">
+          <button className="npd-x" onClick={requestCancel} aria-label="Cancel">
             ×
           </button>
         </div>
@@ -362,7 +384,7 @@ export default function NewPlaceDraft({
           <button className="primary" disabled={!!busy} onClick={() => void save()}>
             Save place
           </button>
-          <button onClick={onCancel} disabled={!!busy}>
+          <button onClick={requestCancel} disabled={!!busy}>
             Cancel
           </button>
         </div>

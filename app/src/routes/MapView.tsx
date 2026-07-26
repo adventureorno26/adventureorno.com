@@ -51,6 +51,7 @@ import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import OnThisDay from '../components/OnThisDay';
 import PersonFilter from '../components/PersonFilter';
+import FilterChips from '../components/FilterChips';
 import SearchPalette from '../components/SearchPalette';
 import MemoryBanner from '../components/MemoryBanner';
 
@@ -106,6 +107,7 @@ function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON
         properties: {
           id: p.id,
           photo: icon ? 1 : 0,
+          visits: p.visit_count ?? 0,
           icon,
           color: categoryColor(primary),
           // White type indicator on no-photo pins (R=Restaurant, W=Winery, …).
@@ -623,6 +625,29 @@ export default function MapView() {
           'icon-size': 1,
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
+        },
+      });
+      // Repeat-visit badge: a small "×N" over any marker visited more than once
+      // (text, not an icon — keeps to Erica's no-icons rule). Drawn last so it
+      // sits above the cover photos.
+      map.addLayer({
+        id: 'place-visit-badge',
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['all', ['!', ['has', 'point_count']], ['>', ['get', 'visits'], 1]],
+        layout: {
+          'text-field': ['concat', '×', ['to-string', ['get', 'visits']]],
+          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-size': 11,
+          'text-offset': [1.1, -1.1],
+          'text-anchor': 'center',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#fff',
+          'text-halo-color': '#2563eb',
+          'text-halo-width': 2.5,
         },
       });
       map.on('styleimagemissing', (e) => {
@@ -1386,6 +1411,20 @@ export default function MapView() {
       />
 
       <StatsBar places={places} onFilterCategory={setFilterCat} personFilter={personFilter} />
+
+      <FilterChips
+        filterCat={filterCat}
+        personFilter={personFilter}
+        people={filterPeople}
+        meId={profile?.id}
+        visibleCount={visiblePlaces.length}
+        onClearCat={() => setFilterCat(null)}
+        onClearPerson={() => setPersonFilter(null)}
+        onReset={() => {
+          setFilterCat(null);
+          setPersonFilter(null);
+        }}
+      />
 
       <div className="layers-control">
         {(['fog', 'heat', 'none'] as const).map((l) => (
