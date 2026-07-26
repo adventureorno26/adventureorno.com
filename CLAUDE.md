@@ -280,3 +280,62 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   member-gated) shows whole-dataset counts (places/photos/visits/activities/videos/pings), integrity
   signals (orphaned photos, posterless videos, placeless activities), and GPX/KML/CSV export. TODO:
   scheduled DB export, R2↔DB reconciliation, GeoJSON/JSON export, documented restore rehearsal.
+
+## Commercial multi-tenant + Space branding plan (PROPOSED 2026-07-26 — NOT started)
+
+Erica's directive to build a commercial, multi-tenant SaaS version ("Spaces") from this codebase.
+A full written proposal was delivered in chat; this is the durable capture. **Do not start until
+Erica approves a phase.** Guardrails from her brief:
+
+**Repository strategy**
+- KEEP this repo + deployment as the private Erica/Josh system; do NOT rewrite its migration history
+  or point commercial customers at its DB.
+- NEW commercial repo with NO inherited git history; new domain, Supabase project, R2 buckets,
+  Workers, OAuth clients, payment resources, deploy envs.
+- Do NOT copy personal data, credentials, home-zone values, names, special dates, or personal
+  cleanup migrations. Reuse UI/domain code only after removing household assumptions.
+- Design so the household can later be migrated in as the FIRST Space; keep the old deploy as a
+  rollback until migration is verified. Do NOT maintain two permanently diverging feature codebases
+  (the endgame is the household running ON the commercial platform as Space #1).
+
+**Space branding** — Space-scoped settings: display name, short installed name, slug, icon type
+(product|letter|photo), icon letter, icon bg color, icon photo, theme color, brand version. Branding
+screen: live app-header preview, Home-Screen icon preview, maskable/rounded preview, letter+color
+picker, photo upload/crop, "Restore Product Branding", install instructions.
+
+**Icon processing** — validate bytes/dims/MIME/size; NO arbitrary SVG; strip EXIF/metadata; fix
+orientation; crop square; generate 192 / 512 / maskable-512 / Apple-touch / favicon; store keys under
+Space namespace; immutable versioned URLs; safe delete of old derivatives after replace; default to a
+generated letter icon; warn a photo icon shows on the device Home Screen.
+
+**Dynamic install** — Space-specific install route + dynamic manifest (stable Space id, Space
+start_url, name/short_name, versioned icon URLs, display standalone, theme/bg colors, correct
+content-type). Don't expose private Space names/photos via predictable public URLs. Revocable
+high-entropy install token OR authenticated delivery (threat-model token leakage + caching). Cache
+keys MUST include Space + brand version. Install flows for iPhone Safari, Android Chrome, desktop
+Chrome/Edge/Safari, no-prompt fallback, already-installed, post-install icon/name change (explain
+some platforms need remove+reinstall to update).
+
+**PWA** — replace the current SW-unregistration behavior with: versioned SW, update notification,
+offline shell, offline drafts, resumable upload queue, strict Space-specific cache isolation, logout
+cache cleanup, no private media in shared caches. NEVER cache authed API responses unless the cache
+identity includes user + Space + permissions + version.
+
+**Acceptance tests (10):** two Spaces distinct name/icon; each installed app opens its Space; Space A
+can't get Space B manifest/icons/branding; letter icons at all sizes; photo metadata stripped;
+branding change updates web UI immediately; UI warns when reinstall required; revoking an install
+token blocks manifest/icon retrieval without breaking authed in-app use; logout clears private cached
+Space content; real-device iPhone+Android install flows.
+
+**Report delivered (summary):** monorepo (`apps/web`, `apps/workers/*`, `packages/core|ui|tenancy|
+branding|db`, `supabase/`); SAFE-to-extract modules = geo, exports, categories, uploadQueue, snackbar,
+maptiler, walks/timeline pure helpers, AuthedImg, worker image pipeline (decide/cache/render);
+REWRITE = auth→org/Space membership + roles + billing, all RLS to be space_id-scoped, home-zone as
+per-Space config, attribution (2-person Me/Josh/Both → N-member), Strava/Garmin/Google OAuth to
+per-Space clients, ingest tokens per Space, service worker + manifest. Top risks = cross-tenant
+leakage (RLS + every query space-scoped; SECDEF fns must filter by space), and cache poisoning across
+tenants (Space+brand-version in every cache key; no private media in shared caches; authed manifest/
+icon delivery). Migration = stand up commercial platform empty → import household as Space #1 via an
+ETL that maps profiles→members and strips home-zone/personal cleanup → verify → cut DNS → keep old
+deploy as rollback. Phases: P0 tenancy foundation, P1 branding+icon pipeline, P2 dynamic manifest+
+install, P3 commercial PWA, P4 billing/onboarding, P5 household migration, P6 retire old deploy.
