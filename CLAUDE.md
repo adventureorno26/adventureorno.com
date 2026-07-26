@@ -184,9 +184,9 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   unreviewed; "both of us"; new places this year; repeat visits.
 - [x] **Calendar / continuous timeline** — unified chronological view of photos, visits, routes, notes,
   weather, trips (complements the map).
-- [ ] **Before/after & repeat-visit comparison** — side-by-side visits, route/mileage changes,
+- [~] **Before/after & repeat-visit comparison** — side-by-side visits, route/mileage changes,
   same-viewpoint photos, "what changed" summary.
-- [ ] **POI enrichment (OSM/Wikidata):** suggest official name, website, hours, park/trail membership,
+- [~] **POI enrichment (OSM/Wikidata):** suggest official name, website, hours, park/trail membership,
   nearby peaks/landmarks, Wikipedia blurb. Confirm, never overwrite curated data.
 - [ ] **Route planning (OSRM/Valhalla/OpenRouteService):** itineraries, travel time between places,
   optimize a day's stop order, suggest nearby bucket-list places, GPX export.

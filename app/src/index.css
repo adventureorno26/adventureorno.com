@@ -2200,6 +2200,51 @@ a {
   padding: 1px 8px;
 }
 
+/* Compare visits (side-by-side). */
+.cmp-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.cmp-cols {
+  display: flex;
+  gap: 10px;
+}
+.cmp-col {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: rgba(19, 31, 54, 0.4);
+  text-decoration: none;
+  color: var(--text);
+}
+.cmp-col:hover {
+  border-color: var(--accent);
+}
+.cmp-date {
+  font-weight: 700;
+  font-size: 13px;
+}
+.cmp-label {
+  font-size: 12.5px;
+  color: var(--accent);
+}
+.cmp-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cmp-open {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
 /* Smart albums. */
 .album-list {
   display: flex;
@@ -2385,6 +2430,12 @@ a {
   font-size: 13px;
   cursor: pointer;
   padding: 2px 0;
+}
+.npd-poi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
 }
 .ps-who-toggle {
   display: inline-flex;

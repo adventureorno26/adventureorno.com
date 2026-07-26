@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPlace, setPlaceSolo } from '../lib/data';
+import { createPlace, fetchPoiDetails, setPlaceSolo, type PoiDetails } from '../lib/data';
 import type { MapPerson } from '../lib/data';
 import { mapPool, uploadPhoto } from '../lib/photos';
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
@@ -64,7 +64,10 @@ export default function NewPlaceDraft({
   const [tags, setTags] = useState<string[]>([]);
   const [visitDate, setVisitDate] = useState('');
   const [who, setWho] = useState<Who>('both');
+  const [website, setWebsite] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [poi, setPoi] = useState<PoiDetails | null>(null);
+  const [poiChecked, setPoiChecked] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const joshId = people.find((p) => p.id !== meId)?.id ?? null;
@@ -105,6 +108,16 @@ export default function NewPlaceDraft({
     setAdmin1(r.admin1);
     setCountry(r.country);
     setAddress(r.address);
+    setPoi(null);
+    setPoiChecked(false);
+  }
+
+  async function lookupPoi() {
+    setBusy('Looking up on OpenStreetMap…');
+    const d = await fetchPoiDetails(lat, lng);
+    setPoi(d);
+    setPoiChecked(true);
+    setBusy(null);
   }
 
   async function save() {
@@ -119,6 +132,7 @@ export default function NewPlaceDraft({
         lat,
         lng,
         categories: tags,
+        website,
         saved: true,
       });
       if (files.length) {
@@ -181,6 +195,35 @@ export default function NewPlaceDraft({
             <span className="label">…or fill in the fields below and Save to create a separate place.</span>
           </div>
         )}
+
+        <div className="npd-row">
+          <span>Official details (OpenStreetMap)</span>
+          <button type="button" onClick={() => void lookupPoi()} disabled={!!busy}>
+            Look up name &amp; website
+          </button>
+          {poi && (poi.name || poi.website || poi.category) ? (
+            <div className="npd-poi">
+              {poi.name && poi.name !== name && (
+                <button type="button" className="npd-dupe" onClick={() => setName(poi.name!)}>
+                  Use name: {poi.name}
+                </button>
+              )}
+              {poi.website && (
+                <button
+                  type="button"
+                  className="npd-dupe"
+                  onClick={() => setWebsite(poi.website)}
+                >
+                  Use website: {poi.website}
+                </button>
+              )}
+              {poi.category && <div className="label">OSM type: {poi.category}</div>}
+            </div>
+          ) : poiChecked ? (
+            <div className="label">No extra details found for this spot.</div>
+          ) : null}
+          {website && <div className="npd-current label">Website: {website}</div>}
+        </div>
 
         <div className="npd-row">
           <span>Visit date</span>

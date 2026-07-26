@@ -128,10 +128,17 @@ export default function SmartAlbums() {
               {open === a.key && (
                 <div className="visit-list" style={{ marginTop: 6 }}>
                   {a.places.map((p) => (
-                    <Link key={p.id} className="visit-row" to={`/place/${p.id}`}>
-                      <span className="visit-main">{p.name}</span>
-                      {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
-                    </Link>
+                    <div key={p.id} className="visit-row">
+                      <Link className="visit-main" to={`/place/${p.id}`}>
+                        {p.name}
+                        {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
+                      </Link>
+                      {a.key === 'repeat' && (
+                        <Link className="label" to={`/place/${p.id}/compare`}>
+                          compare
+                        </Link>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}

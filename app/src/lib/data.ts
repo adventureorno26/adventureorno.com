@@ -536,6 +536,47 @@ export async function fetchCityBoundary(query: string): Promise<string | null> {
   }
 }
 
+export interface PoiDetails {
+  name: string | null;
+  website: string | null;
+  wikipedia: string | null; // "en:Article Title" form from OSM
+  category: string | null; // OSM class/type, e.g. "tourism/museum"
+}
+/** Look up a place's official details from OpenStreetMap (Nominatim reverse with
+ *  extra tags). Suggestions only — the caller confirms before applying. */
+export async function fetchPoiDetails(lat: number, lng: number): Promise<PoiDetails | null> {
+  try {
+    const url =
+      'https://nominatim.openstreetmap.org/reverse?' +
+      new URLSearchParams({
+        lat: String(lat),
+        lon: String(lng),
+        format: 'json',
+        extratags: '1',
+        namedetails: '1',
+        zoom: '18',
+      });
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const d = (await res.json()) as {
+      name?: string;
+      namedetails?: { name?: string };
+      class?: string;
+      type?: string;
+      extratags?: Record<string, string>;
+    };
+    const ex = d.extratags ?? {};
+    return {
+      name: d.namedetails?.name || d.name || null,
+      website: ex.website || ex['contact:website'] || ex.url || null,
+      wikipedia: ex.wikipedia || null,
+      category: d.class && d.type ? `${d.class}/${d.type}` : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Mark a place as a city/region container with a boundary polygon (GeoJSON). */
 export async function setCityBoundary(
   placeId: string,
