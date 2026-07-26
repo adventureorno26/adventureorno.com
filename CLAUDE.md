@@ -185,9 +185,17 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   places, places missing categories/visit dates, suspected duplicate places, suspected duplicate
   photos, failed uploads, photos with missing dates, activities without places, trips awaiting
   confirmation.
-- [~] **Google Photos import improvements.** Cancelable polling, download progress + failed-item retry,
-  album/date filters before download, duplicate previews before transferring bytes, token
+- [~] **Google Photos import improvements.** DONE (2026-07-26): robust return flow — persist only the
+  picker session id + return context in localStorage (NOT the access token; token now memory-only,
+  re-minted from the server refresh path), named popup, `/photos/import/complete` route + resume
+  banner survive a backgrounded/reloaded tab (fixes mobile stranding), uploads go to the global
+  queue (return immediately), completion shows added/duplicate/failed/to-sort counts + Return button.
+  TODO: album/date filters before download, duplicate previews before transferring bytes, token
   disconnect/reconnect controls.
+
+- [x] **Primary navigation shell (UX phase 1).** Persistent bottom text nav (Map/Places/Add/Timeline/
+  More; no icons per Erica). `/places` was previously unreachable — now linked. `/add` hub. Settings
+  maintenance grid relabeled "Manage data", separate from preferences. Deployed 2026-07-26.
 
 ### Tier 3 — Views & enrichment
 - [x] **Smart albums (rule-based):** national parks; beaches/sunsets; hikes > 5 mi; favorites per trip;

@@ -13,6 +13,8 @@ import LocationTracker from './components/LocationTracker';
 import ErrorBoundary from './components/ErrorBoundary';
 import Snackbar from './components/Snackbar';
 import UploadQueue from './components/UploadQueue';
+import PrimaryNav from './components/PrimaryNav';
+import ImportResumeBanner from './components/ImportResumeBanner';
 
 // After a redeploy, a browser holding a STALE index.html asks for old chunk
 // hashes that no longer exist (404) → the dynamic import rejects and the page
@@ -50,6 +52,8 @@ const Timeline = lazyWithReload(() => import('./routes/Timeline'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
+const AddHub = lazyWithReload(() => import('./routes/AddHub'));
+const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -232,8 +236,26 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/add"
+            element={
+              <RequireAuth>
+                <AddHub />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/photos/import/complete"
+            element={
+              <RequireAuth>
+                <ImportComplete />
+              </RequireAuth>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <PrimaryNav />
+        <ImportResumeBanner />
         <Snackbar />
         <UploadQueue />
       </Suspense>

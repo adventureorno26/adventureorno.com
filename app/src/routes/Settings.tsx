@@ -935,7 +935,7 @@ export default function Settings() {
   return (
     <div
       className="settings-page"
-      style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}
+      style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px 96px' }}
     >
       <Link className="back-bar" to="/">
         <span>Map</span>
@@ -953,15 +953,15 @@ export default function Settings() {
 
       {(profile?.role === 'owner' || profile?.role === 'editor') && (
         <>
-          <h2 style={{ marginTop: 28 }}>Edit all places</h2>
+          <h2 style={{ marginTop: 28 }}>Manage data</h2>
           <div className="card">
             <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
-              One table for every place — rename, fix the city/state/country, retag, rate, set visit
-              dates and who was there, and add photos straight from Google Photos.
+              Tools for tidying everything up — edit every place in one table, sort photos, review
+              what needs attention, merge duplicates, and check the health of your data.
             </p>
             <div className="settings-tools">
               <Link to="/places/edit">
-                <button className="primary">Open the places table</button>
+                <button className="primary">Edit all places</button>
               </Link>
               <Link to="/photos/sort">
                 <button>Sort photos into places</button>

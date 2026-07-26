@@ -1,7 +1,15 @@
-// Google Photos import (owner-only, web) via the Google Photos Picker API. The
+// Google Photos import (owner/editor, web) via the Google Photos Picker API. The
 // user picks in Google's own hosted picker; we poll the session, then download
 // the selected items and hand them back as File[] for the normal upload path.
 // Only the public Client ID is used (no secret) — this is a browser token flow.
+//
+// Robust return flow: opening Google's picker (especially as a full tab on
+// mobile) can strand the user on the Google page — win.close()/focus() are
+// unreliable there. So we PERSIST the picker session id + where to return
+// (localStorage, NOT the access token) before opening. Any tab — even after a
+// full reload — can then resume: re-mint a token from the server refresh path,
+// read the picked items off the still-live session, and finish the upload. A
+// resume banner + the /photos/import/complete route are the safety net.
 
 import { supabase } from './supabase';
 
@@ -50,13 +58,11 @@ function loadGis(): Promise<void> {
   return gisPromise;
 }
 
-// Keep the granted access token around (it's good for ~1h) so repeated imports —
-// picking photos for one place after another on the map or in the table — don't
-// pop the Google sign-in every time. Cached in memory + localStorage; a valid
-// one is reused, otherwise we request silently (no consent screen after the
-// first grant). The full never-sign-in-again flow needs a server-side refresh
-// token — that's the next step; this already removes the per-import prompt.
-const TOKEN_KEY = 'aon_gphotos_token';
+// The granted access token is kept in MEMORY ONLY (good ~1h). It is deliberately
+// NOT written to localStorage — a Google OAuth token in web storage is an
+// unnecessary exposure, and the server refresh-token path (google-photos-token
+// edge fn) re-mints one silently after a reload. So persistence across reloads
+// comes from the server, not the browser.
 interface CachedToken {
   token: string;
   exp: number; // epoch ms this token stops being usable
@@ -64,31 +70,12 @@ interface CachedToken {
 let memToken: CachedToken | null = null;
 
 function validCached(): string | null {
-  const fresh = (c: CachedToken | null): c is CachedToken => !!c && c.exp > Date.now() + 60_000;
-  if (fresh(memToken)) return memToken.token;
-  try {
-    const raw = localStorage.getItem(TOKEN_KEY);
-    if (raw) {
-      const c = JSON.parse(raw) as CachedToken;
-      if (fresh(c)) {
-        memToken = c;
-        return c.token;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
+  if (memToken && memToken.exp > Date.now() + 60_000) return memToken.token;
   return null;
 }
 
 function storeToken(token: string, expiresInS?: number): void {
-  const exp = Date.now() + ((expiresInS ?? 3600) - 120) * 1000;
-  memToken = { token, exp };
-  try {
-    localStorage.setItem(TOKEN_KEY, JSON.stringify(memToken));
-  } catch {
-    /* ignore */
-  }
+  memToken = { token, exp: Date.now() + ((expiresInS ?? 3600) - 120) * 1000 };
 }
 
 // Persistent path: ask our edge function for an access token minted from a stored
@@ -192,14 +179,55 @@ export function cancelGooglePick(): void {
   cancelRequested = true;
 }
 
-/** Full picker flow → returns the chosen photos as File[]. onStatus reports progress. */
-export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Promise<File[]> {
-  if (!CLIENT_ID) throw new Error('Google Photos is not configured.');
-  cancelRequested = false;
+// ---------------------------------------------------------------------------
+// Persisted import context — the key to a robust return. We store the picker
+// session id and where to send the user back, so ANY tab can finish the import
+// even if the original one was backgrounded/discarded. We never store the Google
+// access token here (re-minted from the server refresh path on resume).
+// ---------------------------------------------------------------------------
+const PENDING_KEY = 'ao.import.pending';
 
-  onStatus?.('Opening Google Photos…');
-  // Try with the cached token; if it was revoked/expired early (401), drop it and
-  // request a fresh one once before giving up.
+export interface PendingImport {
+  sessionId: string;
+  returnTo: string; // route to restore after finishing (e.g. /photos/sort, /place/:id)
+  placeId?: string | null; // upload target; null/absent → lands unassigned (inbox)
+  label?: string; // friendly name for the "Return to …" button
+  startedAt: number; // epoch ms — used to expire stale sessions
+}
+
+export function readPendingImport(): PendingImport | null {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PendingImport;
+    // Picker sessions live ~1 day; drop anything older so a stale banner can't linger.
+    if (!p.sessionId || Date.now() - p.startedAt > 24 * 3600 * 1000) {
+      clearPendingImport();
+      return null;
+    }
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+export function savePendingImport(p: PendingImport): void {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearPendingImport(): void {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function createSession(): Promise<{ id: string; pickerUri: string }> {
   const startSession = async (): Promise<Response> => {
     const token = await getAccessToken();
     return fetch('https://photospicker.googleapis.com/v1/sessions', {
@@ -210,57 +238,35 @@ export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Prom
   };
   let sRes = await startSession();
   if (sRes.status === 401) {
-    memToken = null;
-    try {
-      localStorage.removeItem(TOKEN_KEY);
-    } catch {
-      /* ignore */
-    }
+    memToken = null; // drop the stale token and retry once
     sRes = await startSession();
   }
   if (!sRes.ok) throw new Error(`Couldn't start Google Photos (${sRes.status})`);
+  return (await sRes.json()) as { id: string; pickerUri: string };
+}
+
+/** Whether the user has finished picking in this session. */
+async function isPicked(sessionId: string): Promise<boolean> {
+  const token = await getAccessToken();
+  const res = await fetch(`https://photospicker.googleapis.com/v1/sessions/${sessionId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return false;
+  const p = (await res.json()) as { mediaItemsSet?: boolean };
+  return p.mediaItemsSet === true;
+}
+
+/** Download every picked photo in a session → File[]. Reusable by the live flow
+ *  AND by the completion route resuming after a reload. */
+async function downloadSession(sessionId: string, onStatus?: (s: string) => void): Promise<File[]> {
   const token = await getAccessToken();
   const auth = { Authorization: `Bearer ${token}` };
-  const session = (await sRes.json()) as { id: string; pickerUri: string };
-  const win = window.open(session.pickerUri, '_blank');
-
-  onStatus?.('Waiting for you to pick photos…');
-  let picked = false;
-  for (let i = 0; i < 180 && !picked; i++) {
-    // ~6 min max
-    await sleep(2000);
-    if (cancelRequested) {
-      try {
-        win?.close();
-      } catch {
-        /* ignore */
-      }
-      throw new Error('Cancelled.');
-    }
-    const pRes = await fetch(`https://photospicker.googleapis.com/v1/sessions/${session.id}`, {
-      headers: auth,
-    });
-    if (!pRes.ok) continue;
-    const p = (await pRes.json()) as { mediaItemsSet?: boolean };
-    picked = p.mediaItemsSet === true;
-  }
-  // Close the Google Photos tab and pull focus back to the app (so you land back
-  // in AdventureOrNo after picking, not stranded on the Google tab).
-  try {
-    win?.close();
-    window.focus();
-  } catch {
-    /* ignore */
-  }
-  if (!picked) throw new Error('No photos were picked (timed out).');
-
-  onStatus?.('Downloading your photos…');
   const files: File[] = [];
   let pageToken: string | undefined;
   do {
     if (cancelRequested) throw new Error('Cancelled.');
     const url = new URL('https://photospicker.googleapis.com/v1/mediaItems');
-    url.searchParams.set('sessionId', session.id);
+    url.searchParams.set('sessionId', sessionId);
     url.searchParams.set('pageSize', '100');
     if (pageToken) url.searchParams.set('pageToken', pageToken);
     const mRes = await fetch(url.toString(), { headers: auth });
@@ -286,13 +292,108 @@ export async function pickFromGooglePhotos(onStatus?: (s: string) => void): Prom
     }
     pageToken = m.nextPageToken;
   } while (pageToken);
+  return files;
+}
 
-  // Best-effort cleanup of the picker session.
-  void fetch(`https://photospicker.googleapis.com/v1/sessions/${session.id}`, {
-    method: 'DELETE',
-    headers: auth,
-  }).catch(() => undefined);
+/** Best-effort cleanup of a picker session (safe to call more than once). */
+export function deleteGoogleSession(sessionId: string): void {
+  void getAccessToken()
+    .then((token) =>
+      fetch(`https://photospicker.googleapis.com/v1/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/**
+ * Live picker flow → returns the chosen photos as File[]. onStatus reports
+ * progress. `ctx` (returnTo/placeId/label) is persisted so the import can be
+ * resumed from the completion route if this tab is backgrounded or reloaded —
+ * on mobile the picker often opens full-tab and the caller never resumes here.
+ * The pending context is cleared on success/cancel; if this call is interrupted
+ * it stays, and the resume banner offers to finish it.
+ */
+export async function pickFromGooglePhotos(
+  onStatus?: (s: string) => void,
+  ctx?: { returnTo?: string; placeId?: string | null; label?: string },
+): Promise<File[]> {
+  if (!CLIENT_ID) throw new Error('Google Photos is not configured.');
+  cancelRequested = false;
+
+  onStatus?.('Opening Google Photos…');
+  const session = await createSession();
+
+  // Persist BEFORE opening the picker so an interrupted flow is recoverable.
+  savePendingImport({
+    sessionId: session.id,
+    returnTo: ctx?.returnTo ?? window.location.pathname + window.location.search,
+    placeId: ctx?.placeId ?? null,
+    label: ctx?.label,
+    startedAt: Date.now(),
+  });
+
+  // Named popup (not a bare _blank) so we keep a handle and can close it. On
+  // mobile this may still open as a full tab — the resume path covers that.
+  const win = window.open(session.pickerUri, 'ao-gphotos');
+
+  onStatus?.('Waiting for you to pick photos…');
+  let picked = false;
+  try {
+    for (let i = 0; i < 180 && !picked; i++) {
+      // ~6 min max
+      await sleep(2000);
+      if (cancelRequested) {
+        try {
+          win?.close();
+        } catch {
+          /* ignore */
+        }
+        clearPendingImport();
+        throw new Error('Cancelled.');
+      }
+      picked = await isPicked(session.id);
+    }
+  } catch (e) {
+    if ((e as Error).message === 'Cancelled.') throw e;
+    // A transient poll error shouldn't nuke a recoverable import.
+    throw e;
+  }
+  // Close the Google tab and pull focus back (best-effort — unreliable on mobile,
+  // which is exactly why the resume path exists).
+  try {
+    win?.close();
+    window.focus();
+  } catch {
+    /* ignore */
+  }
+  if (!picked) throw new Error('No photos were picked (timed out).');
+
+  onStatus?.('Downloading your photos…');
+  const files = await downloadSession(session.id, onStatus);
+
+  deleteGoogleSession(session.id);
+  clearPendingImport();
 
   if (files.length === 0) throw new Error('Nothing came back from Google Photos.');
+  return files;
+}
+
+/**
+ * Resume a persisted import from the completion route. Verifies the session was
+ * picked, downloads the items, and returns them (the caller enqueues uploads).
+ * Returns null if the session isn't ready yet (still on the Google page).
+ */
+export async function resumePendingImport(
+  pending: PendingImport,
+  onStatus?: (s: string) => void,
+): Promise<File[] | null> {
+  cancelRequested = false;
+  onStatus?.('Checking your selection…');
+  if (!(await isPicked(pending.sessionId))) return null;
+  onStatus?.('Downloading your photos…');
+  const files = await downloadSession(pending.sessionId, onStatus);
+  deleteGoogleSession(pending.sessionId);
   return files;
 }

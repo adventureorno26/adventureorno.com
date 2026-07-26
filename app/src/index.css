@@ -2219,6 +2219,206 @@ a {
   width: 100%;
 }
 
+/* Primary navigation — persistent bottom glass pill, text only (no icons, per
+   Erica's standing preference). Sits below the place panel (z-index 60) so a
+   full-screen mobile card covers it; on desktop the 420px drawer leaves it in view. */
+.primary-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 45;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  max-width: calc(100vw - 20px);
+}
+.pnav-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.pnav-tab:hover {
+  color: var(--text);
+}
+.pnav-tab.active {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+/* Add is the primary CTA — filled accent even when inactive. */
+.pnav-add:not(.active) {
+  color: #fff;
+  background: var(--accent);
+}
+.pnav-add.active {
+  color: #fff;
+  background: var(--accent-hover);
+}
+.pnav-tab:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+@media (max-width: 400px) {
+  .pnav-tab {
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+}
+
+/* Add hub (/add) — simple launcher of the ways to add to the map. */
+.add-hub {
+  max-width: 560px;
+  margin: 20px auto;
+  padding: 0 16px 96px;
+}
+.add-hub-sub {
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+.add-hub-grid {
+  display: grid;
+  gap: 12px;
+}
+.add-hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  text-decoration: none;
+  color: var(--text);
+  transition:
+    border-color 0.15s,
+    transform 0.05s;
+}
+.add-hub-card:hover {
+  border-color: var(--accent);
+}
+.add-hub-card:active {
+  transform: scale(0.995);
+}
+.add-hub-card.primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.add-hub-card > b {
+  font-size: 16px;
+}
+.add-hub-card > span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Google Photos import — completion route + resume banner. */
+.import-complete {
+  max-width: 520px;
+  margin: 24px auto;
+  padding: 0 16px 96px;
+}
+.ic-card {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+.ic-err {
+  color: #fca5a5;
+  margin: 0;
+}
+.ic-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ic-spin 0.8s linear infinite;
+}
+@keyframes ic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ic-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ic-count {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+}
+.ic-count.ok {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.3);
+}
+.ic-count.bad {
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+.import-resume {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 16px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--accent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  max-width: calc(100vw - 20px);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ir-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ir-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 6px 8px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
 /* Data health center. */
 .dh-issues {
   padding: 10px 12px;

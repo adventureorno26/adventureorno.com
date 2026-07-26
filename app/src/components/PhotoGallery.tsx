@@ -107,7 +107,11 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   // Import straight from Google Photos → File[] → the review/upload path.
   async function addFromGoogle() {
     try {
-      const files = await pickFromGooglePhotos((s) => setNote(s));
+      const files = await pickFromGooglePhotos((s) => setNote(s), {
+        returnTo: `/place/${place.id}`,
+        placeId: place.id,
+        label: place.name,
+      });
       setNote(null);
       if (files.length) handlePicked(files);
     } catch (e) {

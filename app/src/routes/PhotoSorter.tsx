@@ -188,7 +188,10 @@ export default function PhotoSorter() {
     setImporting(true);
     setNote('Opening Google Photos…');
     try {
-      const files = await pickFromGooglePhotos((s) => setNote(s));
+      const files = await pickFromGooglePhotos((s) => setNote(s), {
+        returnTo: '/photos/sort',
+        label: 'sorting',
+      });
       setImporting(false);
       await ingest(files);
     } catch (e) {
