@@ -153,7 +153,7 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
 - [ ] **Split "upload" from "process".** State machine: queued → uploading → stored → metadata
   extracted → matched → ready for review → accepted. Makes failures recoverable and unblocks future
   OCR / AI tagging / perceptual dedup / face blur without the browser waiting.
-- [ ] **Persistent upload queue.** Survive navigation + connection loss: per-file progress, pause /
+- [~] **Persistent upload queue.** Survive navigation + connection loss: per-file progress, pause /
   resume / retry / cancel, background continuation while the PWA is active, retry only failed files,
   clear per-photo skip reasons, final server reconciliation.
 - [ ] **Similar-photo review (perceptual).** SHA-256 misses edited/cropped/re-downloaded/burst/

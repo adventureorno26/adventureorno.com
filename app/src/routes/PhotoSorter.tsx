@@ -16,10 +16,10 @@ import {
   mapPool,
   readGps,
   readTakenAt,
-  uploadPhoto,
 } from '../lib/photos';
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
 import { cancelGooglePick, googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
+import { enqueueUpload } from '../lib/uploadQueue';
 import PlaceQuickEdit from '../components/PlaceQuickEdit';
 import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
@@ -299,9 +299,9 @@ export default function PhotoSorter() {
               .then(() => ({ ok: true }))
               .catch(() => null);
           }
-          // No-GPS photos fall back to the assigned place's coordinates, else the
-          // upload gate (which requires coordinates) rejects them.
-          return uploadPhoto(it.file!, {
+          // Through the global upload queue (progress + retry). No-GPS photos fall
+          // back to the assigned place's coordinates.
+          return enqueueUpload(it.file!, {
             placeId: g.placeId!,
             lat: it.lat ?? pl?.lat,
             lng: it.lng ?? pl?.lng,

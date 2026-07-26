@@ -24,8 +24,9 @@ import {
   triggerGeocode,
   type MapPerson,
 } from '../lib/data';
-import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
+import { fetchPhotoObjectUrl, mapPool, readGps } from '../lib/photos';
 import { fetchVideoCovers, fetchVideoPosterUrl } from '../lib/videos';
+import { enqueueUpload } from '../lib/uploadQueue';
 import NewPlaceDraft from '../components/NewPlaceDraft';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import {
@@ -1145,10 +1146,9 @@ export default function MapView() {
     );
     const noLoc = withGps.filter((x) => x && !x.gps).map((x) => x!.f);
 
-    const results = await mapPool(
-      geo,
-      ({ f, gps }) => uploadPhoto(f, { lat: gps.lat, lng: gps.lng }),
-      4,
+    // Through the global upload queue: progress + pause/retry, survives navigation.
+    const results = await Promise.all(
+      geo.map(({ f, gps }) => enqueueUpload(f, { lat: gps.lat, lng: gps.lng })),
     );
     results.forEach((r) => {
       if (!r) skips.error = (skips.error ?? 0) + 1;
@@ -1164,7 +1164,7 @@ export default function MapView() {
     // fabricating a location at the map center.
     let inboxAdded = 0;
     if (noLoc.length > 0) {
-      const res = await mapPool(noLoc, (f) => uploadPhoto(f, { override: true }).catch(() => null), 4);
+      const res = await Promise.all(noLoc.map((f) => enqueueUpload(f, { override: true })));
       inboxAdded = res.filter((r) => r && r.ok).length;
     }
 

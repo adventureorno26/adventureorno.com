@@ -12,6 +12,7 @@ import MapView from './routes/MapView';
 import LocationTracker from './components/LocationTracker';
 import ErrorBoundary from './components/ErrorBoundary';
 import Snackbar from './components/Snackbar';
+import UploadQueue from './components/UploadQueue';
 
 // After a redeploy, a browser holding a STALE index.html asks for old chunk
 // hashes that no longer exist (404) → the dynamic import rejects and the page
@@ -216,6 +217,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Snackbar />
+      <UploadQueue />
       </Suspense>
     </ErrorBoundary>
   );
