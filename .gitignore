@@ -25,6 +25,11 @@ supabase/.temp
 # test coverage
 coverage/
 
+# Playwright e2e artifacts
+app/playwright-report/
+app/test-results/
+app/.playwright/
+
 # Google Timeline Takeout dumps / partial downloads (never commit — huge)
 app/TimlineTakeout/
 TimlineTakeout/

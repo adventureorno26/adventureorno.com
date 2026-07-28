@@ -85,13 +85,45 @@ jobs:
             exit 1
           fi
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: App — build (preview target for e2e)
+        working-directory: app
+        run: npm run build
+      - name: Install Playwright browsers
+        working-directory: app
+        run: npx playwright install --with-deps chromium webkit
+      - name: Playwright e2e (public + authed-if-secrets)
+        working-directory: app
+        # The authed specs SKIP when TEST_BOT_* aren't set, so this passes on
+        # forks/PRs without secrets and runs the full suite when they're present.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TEST_BOT_EMAIL: ${{ secrets.TEST_BOT_EMAIL }}
+          TEST_BOT_PASSWORD: ${{ secrets.TEST_BOT_PASSWORD }}
+        run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: app/playwright-report/
+          retention-days: 7
+
   # ---------------------------------------------------------------------------
   # TODO (scaffolding — need infra/secrets before enabling as required checks):
   #   * db-migrations + pgTAP: spin up `supabase start`, apply migrations, run
   #     pgTAP tests for RLS / triggers / RPC authorization / attribution / matching.
-  #   * playwright: build + preview the app, run smoke flows (login, create place,
-  #     upload, sort, merge, delete/restore, mobile layout) with traces on failure.
+  #   * MUTATING acceptance flows (create place, log two visits, duplicate handling,
+  #     upload retry) — need a dedicated TEST TENANT so they don't write to the
+  #     household DB. Blocked on the commercial multi-tenant work (Space isolation).
   #   * preview-deploy smoke test: curl the Pages preview URL for 200 + key routes.
-  # Make `build` (and later these) required checks in branch protection so CI
-  # gates merges. Commit messages should be descriptive, not the generic
-  # "auto: save" — see CLAUDE.md conventions.
+  #   * real-device iPhone/Android install-flow checks (acceptance #10) — manual.
+  # Make `build`/`e2e` required checks in branch protection so CI gates merges.

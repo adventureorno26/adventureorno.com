@@ -209,8 +209,9 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   wizard at `/add` (`AddWizard.tsx`, replaced the launcher) — search existing place OR create new
   (search-before-create + nearby-dupe detection) → date/who → tags/rating/notes → photos → review &
   save; non-destructive on existing places (merges tags, won't clobber a review); reuses createPlace/
-  addVisit/setVisitSolo/setMyRating/uploadPhoto. TODO: enrich visit rows with people/rating/photo+
-  video counts (needs a per-visit join RPC); unify the PlacePanel `addSpot` create path.
+  addVisit/setVisitSolo/setMyRating/uploadPhoto. DONE (per-visit enrichment): migration 0095
+  `place_visit_stats(place)` (member-gated, anon-revoked) → `fetchPlaceVisitStats` → visit rows now
+  show note + "N photos · N videos". TODO: people/rating per visit row; unify PlacePanel `addSpot`.
 - [~] **Phase 4 — Map UX.** DONE (deployed): active-filter chips + Reset (`FilterChips`, shows
   category+person filters with ×), empty-filtered-state message, visit-count "×N" text badges on
   repeat-visit markers (`place-visit-badge` symbol layer; text not icon per Erica). Preserve map
@@ -221,9 +222,15 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   (focus-into-dialog on open, Escape-to-close, Tab focus-trap, restore focus on close) wired into the
   New Place modal with proper role="dialog"/aria-modal + backdrop-click close; unsaved-form guard
   (confirm before discarding a dirty draft); "Visit logged"/"Saved!" success toasts; visit-delete now
-  an **Undo snackbar** (recreates dates + attribution) instead of a browser confirm. TODO: extend
-  dialog a11y to other modals; more undo snackbars; SR progress announcements; axe-core + the 9
-  Playwright acceptance flows — these need a Playwright harness stood up first (distinct infra task).
+  an **Undo snackbar** (recreates dates + attribution) instead of a browser confirm. DONE (Playwright
+  harness): `app/playwright.config.ts` (4 device projects: desktop Chrome/Safari, iPhone 13, Pixel 7),
+  `e2e/fixtures.ts` (test-bot session injection via password grant → localStorage; SKIPS cleanly
+  without TEST_BOT_* secrets), non-destructive specs `e2e/public.spec.ts` + `e2e/app.spec.ts` (nav,
+  Add-wizard steps, keyboard, "Manage data", axe-core critical-violation scans). Public suite VERIFIED
+  passing (3/3 on chromium + real preview). CI `e2e` job wired (builds, installs chromium+webkit, runs
+  suite, uploads report). `npm run e2e`. TODO: extend dialog a11y to other modals; SR progress
+  announcements; the MUTATING acceptance flows (create place / two visits / duplicate / upload retry)
+  need a dedicated TEST TENANT (blocked on multi-tenant Space isolation); real-device #10 is manual.
 - Search RPC `search_photos` (migration 0094, member-gated) landed to back "search existing places
   before creating"; NL-search edge fn + UI still to wire.
 
