@@ -33,17 +33,21 @@ export default function UploadQueue() {
   const inflight = items.filter((i) => i.state === 'uploading' || i.state === 'queued').length;
   const total = items.length;
   const pct = Math.round((done / total) * 100);
+  const summary =
+    inflight > 0
+      ? `${paused ? 'Paused' : 'Uploading'} · ${done}/${total}`
+      : failed > 0
+        ? `${failed} failed · ${done} done`
+        : `Uploaded ${done}`;
 
   return (
     <div className="uq">
+      {/* Screen-reader progress: announces the coarse status politely. */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {summary}
+      </div>
       <button className="uq-head" onClick={() => setOpen((o) => !o)}>
-        <b>
-          {inflight > 0
-            ? `${paused ? 'Paused' : 'Uploading'} · ${done}/${total}`
-            : failed > 0
-              ? `${failed} failed · ${done} done`
-              : `Uploaded ${done}`}
-        </b>
+        <b>{summary}</b>
         <span>{open ? '▾' : '▸'}</span>
       </button>
       <div className="uq-bar">

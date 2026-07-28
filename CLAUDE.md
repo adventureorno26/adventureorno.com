@@ -228,9 +228,12 @@ Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check
   without TEST_BOT_* secrets), non-destructive specs `e2e/public.spec.ts` + `e2e/app.spec.ts` (nav,
   Add-wizard steps, keyboard, "Manage data", axe-core critical-violation scans). Public suite VERIFIED
   passing (3/3 on chromium + real preview). CI `e2e` job wired (builds, installs chromium+webkit, runs
-  suite, uploads report). `npm run e2e`. TODO: extend dialog a11y to other modals; SR progress
-  announcements; the MUTATING acceptance flows (create place / two visits / duplicate / upload retry)
-  need a dedicated TEST TENANT (blocked on multi-tenant Space isolation); real-device #10 is manual.
+  suite, uploads report). `npm run e2e`. DONE (a11y polish, deployed): `.sr-only` util + global
+  `:where(...):focus-visible` visible-focus outline; upload-queue progress announced via an
+  aria-live="polite" role="status" region. TODO: the MUTATING acceptance flows (create place / two
+  visits / duplicate / upload retry) need a dedicated TEST TENANT (blocked on multi-tenant Space
+  isolation); real-device #10 is manual; unify the PlacePanel `addSpot` create path (deferred — risky
+  refactor of the child-place/container flow).
 - Search RPC `search_photos` (migration 0094, member-gated) landed to back "search existing places
   before creating"; NL-search edge fn + UI still to wire.
 
