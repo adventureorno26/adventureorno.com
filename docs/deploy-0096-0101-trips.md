@@ -31,12 +31,19 @@ is finished and not mid-flight before deploying `0100`, or the two will collide.
 **1. Snapshot.** Take a fresh production DB backup (Supabase dashboard → Database →
 Backups, or `pg_dump`). This deploy is additive/reversible, but snapshot first.
 
-**2. Confirm the pending set.** From the repo root, on the branch holding these
-migrations:
-```
-supabase migration list        # expect 0096,0097,0098,0099,0100,0101 as REMOTE-pending
-```
-If anything other than exactly those six is pending, STOP and tell Claude.
+**2. Deploy method — DIRECT SQL, not `supabase db push`.** Production's
+`supabase_migrations.schema_migrations` tracking table is **empty** (this project's
+migrations have always been applied directly, per the "drive Supabase directly"
+ops model). So `supabase db push` / `supabase migration list` are unusable here —
+they would try to replay the whole chain from `0001` against the already-populated
+schema and fail. Apply the six files **directly**, in numeric order, via the
+Supabase **dashboard SQL editor** (or `psql` with the prod connection string).
+
+Prod already has `place_membership` (231 rows) and the full pre-trips schema; it does
+**not** have `trips`/`trip_stops`/`trip_migration_exceptions`. Because `0096`
+canonicalizes an already-existing `place_membership`, run each file and watch for
+"already exists" errors — if `0096`'s constraints are already present, that file is a
+partial no-op; the `trips`/`trip_stops` files (`0097`,`0099`) create fresh tables.
 
 **3. Provision the Vault secret (BEFORE the push).** `0100`'s preflight raises if
 `aon_edge_secret_key` is absent. Its value must equal the edge functions'
