@@ -192,3 +192,27 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
 
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
   Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date' | 'address' | 'lat' | 'lng'>>;
+
+// A Trip is a named date range (planning + journal container). Places "belong" to
+// a trip when their first_visit falls in the range (computed, not stored). This is
+// the first-class Trip entity from ADR 0001 (Option A). `part_of`/container-Place
+// trips remain as a compatibility representation until the UI is migrated.
+export type TripStatus = 'taken' | 'upcoming';
+
+export interface Trip {
+  id: string;
+  name: string;
+  start_date: string | null; // date; null = an undated draft
+  end_date: string | null; // date
+  status: TripStatus;
+  created_at: string;
+}
+
+// Aggregate stats for a trip (from the trip_stats RPC), over the places whose
+// first_visit falls within the trip's date range.
+export interface TripStats {
+  places: number;
+  visits: number;
+  miles: number;
+  days: number | null;
+}

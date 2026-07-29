@@ -18,11 +18,16 @@ export interface Caller {
 }
 
 function restHeaders(env: Env): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
     'Content-Type': 'application/json',
   };
+  // Supabase's modern sb_secret_ keys belong only in apikey; legacy JWT keys
+  // also need Authorization until the deployment has been migrated.
+  if (!env.SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_secret_')) {
+    headers.Authorization = `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`;
+  }
+  return headers;
 }
 
 /** SHA-256 hex of a byte buffer (content hash used for dedupe + deletion). */
@@ -69,25 +74,6 @@ export async function resolveSession(env: Env, jwt: string): Promise<Caller | nu
   const role = rows[0]?.role;
   if (!role) return null;
   return { userId: user.id, role };
-}
-
-export interface HomeZone {
-  lat: number;
-  lng: number;
-  radius_m: number;
-}
-
-export async function getHomeZone(env: Env): Promise<HomeZone> {
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/settings?select=value&key=eq.home_zone&limit=1`,
-    { headers: restHeaders(env) },
-  );
-  if (res.ok) {
-    const rows = (await res.json()) as Array<{ value: HomeZone }>;
-    if (rows[0]?.value) return rows[0].value;
-  }
-  // Fallback matches the seeded value; never leaves the zone unenforced.
-  return { lat: 39.1157, lng: -77.5636, radius_m: 24140 };
 }
 
 export async function hashIsDeleted(env: Env, sha256: string): Promise<boolean> {

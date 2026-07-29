@@ -95,8 +95,8 @@ export default function PeopleCard({ meId }: { meId: string }) {
       </div>
       <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 6 }}>
         Editors can add places, entries, and upload/delete their own photos. Viewers can only look.
-        Neither can change settings, the home zone, invites, or Strava — and no one but you can
-        issue a device upload token.
+        Neither can change settings, invites, or Strava — and no one but you can issue a device
+        upload token.
       </div>
       {msg && (
         <div className="banner" style={{ marginTop: 8 }}>

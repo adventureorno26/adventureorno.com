@@ -5,7 +5,6 @@ import {
   addCategory,
   fetchClimbingStats,
   fetchGeoCoverage,
-  fetchHomeZone,
   fetchMapPeople,
   fetchPeaksBagged,
   fetchPlacePeople,
@@ -17,9 +16,7 @@ import {
   fetchTrackingStatus,
   setMapProjection,
   triggerGeocode,
-  updateHomeZone,
   type GeoCoverage,
-  type HomeZone,
   type MapProjection,
   type SettingsStats,
   type TrackingStatus,
@@ -45,8 +42,6 @@ import {
   fetchPendingJoinRequests,
   type JoinRequest,
 } from '../lib/join';
-
-const METERS_PER_MILE = 1609.344;
 
 const TAG_COLORS = [
   '#38bdf8',
@@ -208,94 +203,6 @@ function JoinRequestsCard() {
       )}
       {msg && (
         <div className="banner" style={{ marginTop: 10 }}>
-          {msg}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HomeZoneCard() {
-  const [zone, setZone] = useState<HomeZone | null>(null);
-  const [miles, setMiles] = useState('15');
-  const [lat, setLat] = useState('');
-  const [lng, setLng] = useState('');
-  const [msg, setMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchHomeZone()
-      .then((z) => {
-        setZone(z);
-        setLat(String(z.lat));
-        setLng(String(z.lng));
-        setMiles((z.radius_m / METERS_PER_MILE).toFixed(1));
-      })
-      .catch(() => setMsg('Could not load home zone'));
-  }, []);
-
-  async function save() {
-    setMsg(null);
-    try {
-      const next: HomeZone = {
-        lat: Number(lat),
-        lng: Number(lng),
-        radius_m: Math.round(Number(miles) * METERS_PER_MILE),
-      };
-      await updateHomeZone(next);
-      setZone(next);
-      setMsg('Saved. New ingests use this immediately.');
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not save');
-    }
-  }
-
-  if (!zone) return <div className="card">Loading home zone…</div>;
-  return (
-    <div className="card">
-      <b>Home exclusion zone</b>
-      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 8px' }}>
-        A fixed spot — it does <b>not</b> follow you around. Photos and pings within this radius are
-        never stored (Strava Hike/Walk/Run are the only exception). Set it once from where you live.
-      </div>
-      <div className="btn-row" style={{ marginTop: 0, marginBottom: 4 }}>
-        <button
-          onClick={() => {
-            setMsg('Getting your location…');
-            navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                setLat(pos.coords.latitude.toFixed(6));
-                setLng(pos.coords.longitude.toFixed(6));
-                setMsg('Filled in your current location — tap Save home zone to confirm.');
-              },
-              () => setMsg('Could not get your location. Allow location access and try again.'),
-              { enableHighAccuracy: true },
-            );
-          }}
-        >
-          📍 Use my current location
-        </button>
-      </div>
-      <div className="field-row">
-        <div>
-          <label>Center latitude</label>
-          <input value={lat} onChange={(e) => setLat(e.target.value)} />
-        </div>
-        <div>
-          <label>Center longitude</label>
-          <input value={lng} onChange={(e) => setLng(e.target.value)} />
-        </div>
-        <div>
-          <label>Radius (miles)</label>
-          <input value={miles} onChange={(e) => setMiles(e.target.value)} />
-        </div>
-      </div>
-      <div className="btn-row">
-        <button className="primary" onClick={() => void save()}>
-          Save home zone
-        </button>
-      </div>
-      {msg && (
-        <div className="banner" style={{ marginTop: 8 }}>
           {msg}
         </div>
       )}
@@ -1029,7 +936,6 @@ export default function Settings() {
           <PeopleCard meId={profile.id} />
 
           <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
-          <HomeZoneCard />
           <GeocodeCard />
         </>
       )}

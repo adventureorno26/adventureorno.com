@@ -11,6 +11,10 @@ select cron.schedule(
       url:='https://aanfyhsjbtnqzphuoiem.supabase.co/functions/v1/geocode-new-places',
       headers:=jsonb_build_object(
         'Content-Type','application/json',
-        'Authorization','Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhbmZ5aHNqYnRucXpwaHVvaWVtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDM4NjU0NiwiZXhwIjoyMDk5OTYyNTQ2fQ.KlCDGZ1YYqfoEjje3TcHFRRLZwAaMxiLSU-ytfSHsi4'),
+        'apikey',(
+          select decrypted_secret
+          from vault.decrypted_secrets
+          where name = 'aon_edge_secret_key'
+        )),
       body:='{}'::jsonb)$cmd$
 );

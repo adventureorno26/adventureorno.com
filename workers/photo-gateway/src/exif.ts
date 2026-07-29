@@ -57,7 +57,7 @@ export async function readExif(bytes: Uint8Array): Promise<ExifInfo> {
   };
 }
 
-export type SkipReason = 'no_gps' | 'screenshot' | 'home_zone' | 'deleted' | 'duplicate';
+export type SkipReason = 'no_gps' | 'screenshot' | 'deleted' | 'duplicate';
 
 /** The format/GPS/camera gate. Returns a skip reason or null if the image passes.
  *  `noGps` is only a hard failure when coordinates can't be supplied another way

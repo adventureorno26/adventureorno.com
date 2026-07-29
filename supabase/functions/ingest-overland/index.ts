@@ -3,8 +3,8 @@
 // either as `Authorization: Bearer <token>` or `?token=<token>` (Overland can
 // append query params but not custom headers on every build).
 //
-// Rules: drop points inside the home zone; drop points with horizontal accuracy
-// > 200 m; return Overland's expected {"result":"ok"} so the app clears its queue.
+// Rules: drop points with horizontal accuracy > 200 m; return Overland's expected
+// {"result":"ok"} so the app clears its queue.
 //
 // verify_jwt = false for this function (device-token auth, not a Supabase JWT).
 // Deploy: supabase functions deploy ingest-overland --no-verify-jwt
@@ -12,9 +12,9 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SERVICE_ROLE_KEY =
+  Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ACCURACY_MAX_M = 200;
-const EARTH_RADIUS_M = 6371008.8;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -28,16 +28,6 @@ function json(body: unknown, status = 200): Response {
 async function sha256Hex(s: string): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-const toRad = (d: number): number => (d * Math.PI) / 180;
-function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 interface OverlandFeature {
@@ -86,17 +76,6 @@ Deno.serve(async (req) => {
   }
   const isOwnTracks = typeof payload._type === 'string';
 
-  const { data: setting } = await admin
-    .from('settings')
-    .select('value')
-    .eq('key', 'home_zone')
-    .maybeSingle();
-  const zone = (setting?.value ?? { lat: 39.1157, lng: -77.5636, radius_m: 24140 }) as {
-    lat: number;
-    lng: number;
-    radius_m: number;
-  };
-
   interface Row {
     lat: number;
     lng: number;
@@ -104,8 +83,9 @@ Deno.serve(async (req) => {
     source: string;
     accuracy: number | null;
   }
-  const keep = (lat: number, lng: number, acc: number | null): boolean =>
-    !(acc != null && acc > ACCURACY_MAX_M) && haversineM(lat, lng, zone.lat, zone.lng) > zone.radius_m;
+  // Keep every point with usable accuracy, regardless of location.
+  const keep = (_lat: number, _lng: number, acc: number | null): boolean =>
+    !(acc != null && acc > ACCURACY_MAX_M);
 
   const rows: Row[] = [];
 

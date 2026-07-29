@@ -824,18 +824,35 @@ export type Database = {
           child_id: string
           created_at: string
           parent_id: string
+          relationship_type: string
         }
         Insert: {
           child_id: string
           created_at?: string
           parent_id: string
+          relationship_type?: string
         }
         Update: {
           child_id?: string
           created_at?: string
           parent_id?: string
+          relationship_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "place_membership_child_fk"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "place_membership_child_fk"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "place_membership_child_id_fkey"
             columns: ["child_id"]
@@ -846,6 +863,20 @@ export type Database = {
           {
             foreignKeyName: "place_membership_child_id_fkey"
             columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "place_membership_parent_fk"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "place_membership_parent_fk"
+            columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "places"
             referencedColumns: ["id"]
@@ -865,6 +896,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      place_membership_exceptions: {
+        Row: {
+          child_id: string | null
+          detected_at: string
+          parent_id: string | null
+          reason: string
+        }
+        Insert: {
+          child_id?: string | null
+          detected_at?: string
+          parent_id?: string | null
+          reason: string
+        }
+        Update: {
+          child_id?: string | null
+          detected_at?: string
+          parent_id?: string | null
+          reason?: string
+        }
+        Relationships: []
       }
       place_ratings: {
         Row: {
@@ -1251,6 +1303,27 @@ export type Database = {
           },
         ]
       }
+      trip_migration_exceptions: {
+        Row: {
+          detected_at: string
+          parent_trip_place_id: string | null
+          place_id: string | null
+          reason: string
+        }
+        Insert: {
+          detected_at?: string
+          parent_trip_place_id?: string | null
+          place_id?: string | null
+          reason: string
+        }
+        Update: {
+          detected_at?: string
+          parent_trip_place_id?: string | null
+          place_id?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
       trip_notes: {
         Row: {
           created_at: string
@@ -1278,12 +1351,122 @@ export type Database = {
             foreignKeyName: "trip_notes_trip_id_fkey"
             columns: ["trip_id"]
             isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_stops: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          place_id: string
+          sort_order: number
+          status: string
+          trip_id: string
+          visit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          place_id: string
+          sort_order?: number
+          status?: string
+          trip_id: string
+          visit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          place_id?: string
+          sort_order?: number
+          status?: string
+          trip_id?: string
+          visit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_stops_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
             referencedRelation: "place_counts"
             referencedColumns: ["place_id"]
           },
           {
-            foreignKeyName: "trip_notes_trip_id_fkey"
+            foreignKeyName: "trip_stops_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_stops_trip_id_fkey"
             columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_stops_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trips: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          id: string
+          name: string
+          source_place_id: string | null
+          start_date: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          source_place_id?: string | null
+          start_date?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          source_place_id?: string | null
+          start_date?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trips_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trips_source_place_id_fkey"
+            columns: ["source_place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "trips_source_place_id_fkey"
+            columns: ["source_place_id"]
             isOneToOne: false
             referencedRelation: "places"
             referencedColumns: ["id"]
@@ -1900,6 +2083,7 @@ export type Database = {
         Args: { p_loser: string; p_winner: string }
         Returns: undefined
       }
+      migrate_container_place_trips: { Args: never; Returns: undefined }
       mileage_by_person: {
         Args: { p_profile?: string }
         Returns: {
@@ -1975,6 +2159,14 @@ export type Database = {
           rating: number
         }[]
       }
+      place_visit_stats: {
+        Args: { p_place: string }
+        Returns: {
+          photos: number
+          videos: number
+          visit_id: string
+        }[]
+      }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
         | { Args: { use_typmod?: boolean }; Returns: string }
@@ -2015,6 +2207,10 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      promote_trip_stops_for_place: {
+        Args: { p_place: string }
+        Returns: undefined
+      }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
       race_stats: {
@@ -2050,6 +2246,18 @@ export type Database = {
       restore_photo: { Args: { p_id: string }; Returns: undefined }
       restore_place: { Args: { p_id: string }; Returns: undefined }
       revealed_area_geojson: { Args: never; Returns: Json }
+      search_photos: {
+        Args: { p_filter: Json }
+        Returns: {
+          caption: string
+          category: string
+          city: string
+          photo_id: string
+          place_id: string
+          place_name: string
+          taken_at: string
+        }[]
+      }
       set_activity_race: {
         Args: { p_activity: string; p_is_race: boolean }
         Returns: undefined
@@ -2695,6 +2903,8 @@ export type Database = {
           profile_id: string
         }[]
       }
+      trip_place_ids: { Args: { p_trip: string }; Returns: string[] }
+      trip_stats: { Args: { p_trip: string }; Returns: Json }
       trip_timeline: {
         Args: { p_trip: string }
         Returns: {

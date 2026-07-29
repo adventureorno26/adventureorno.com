@@ -7,7 +7,6 @@ const base: DecideInput = {
   isDuplicate: false,
   gate: null,
   hasCoords: true,
-  inZone: false,
   manual: false,
   override: false,
 };
@@ -28,12 +27,9 @@ describe('ingestDecision', () => {
     expect(ingestDecision({ ...base, isDuplicate: true })).toBe('duplicate');
   });
 
-  it('skips a home-zone photo on the automated path', () => {
-    expect(ingestDecision({ ...base, inZone: true })).toBe('home_zone');
-  });
-
-  it('lets a manual override store a home-zone photo', () => {
-    expect(ingestDecision({ ...base, inZone: true, manual: true, override: true })).toBeNull();
+  it('stores a geotagged photo regardless of location (no home-zone filter)', () => {
+    expect(ingestDecision({ ...base, hasCoords: true })).toBeNull();
+    expect(ingestDecision({ ...base, manual: true })).toBeNull();
   });
 
   it('skips a screenshot on ingest but allows a deliberate manual override', () => {

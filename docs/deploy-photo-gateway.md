@@ -53,8 +53,8 @@ cd .. && CLOUDFLARE_ACCOUNT_ID=9bed5239120cee4e9e7d46fa69ef4784 \
 - `curl -H "Authorization: Bearer $ERICA_DEVICE_INGEST_TOKEN" --data-binary @geotagged.jpg \
    -H "Content-Type: image/jpeg" https://<gateway>/ingest` → `{"ok":true,"id":...}`;
   photo shows in the unassigned tray, ≤ 2400 px, no GPS in the served file's EXIF.
-- POST a screenshot PNG → `{"skipped":"screenshot"}`; a Leesburg-radius photo →
-  `{"skipped":"home_zone"}`.
+- POST a screenshot PNG → `{"skipped":"screenshot"}`. (There is no location filter —
+  a geotagged photo taken at home is stored like any other.)
 - Delete it in the UI, re-POST the same bytes → `{"skipped":"deleted"}` (rule #6).
 - `/ingest` with a bad/absent token → 401. A partner session can `/upload` but
   never `/ingest`.

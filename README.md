@@ -40,8 +40,8 @@ and no commercial/multi-tenant functionality.
 - **AI is disabled by default and local-first.** Private photos, notes,
   coordinates, identifiers, tokens, or signed URLs are never sent to an external
   provider, log, fixture, or telemetry endpoint.
-- A home-exclusion zone rejects ingest near the household's home (a privacy rule;
-  being made fully data-driven — see the entity/ADR work).
+- There is no location-based ingest filter: outings everywhere (including at home)
+  are stored and counted. (The former home-exclusion zone was removed in `0102`.)
 
 ## Domain concepts (canonical model — ADR pending)
 

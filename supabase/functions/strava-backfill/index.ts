@@ -1,6 +1,6 @@
 // strava-backfill — pull historical activities for a date range, one page per
 // invocation so the SPA can show progress and pace itself under Strava's rate
-// limit (100 req / 15 min). Applies rule #2 via ingestActivity.
+// limit (100 req / 15 min). Every activity with a start point is ingested.
 //
 // verify_jwt = true — owner only. Body: { after?: unix, before?: unix, page?: 1 }.
 // Response: { processed, stored, skipped, page, hasMore }.
@@ -9,7 +9,6 @@
 import {
   adminClient,
   getAllAccounts,
-  getHomeZone,
   getValidAccessTokenFor,
   ingestActivity,
   type StravaActivity,
@@ -17,7 +16,8 @@ import {
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const ANON_KEY =
+  Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
 const PER_PAGE = 100;
 
 function json(body: unknown, status = 200): Response {
@@ -75,7 +75,6 @@ Deno.serve(async (req) => {
   const page = Math.max(1, body.page ?? 1);
 
   try {
-    const zone = await getHomeZone(admin);
     const accounts = await getAllAccounts(admin);
     if (accounts.length === 0) return json({ error: 'no connected Strava account' }, 400);
 
@@ -99,7 +98,7 @@ Deno.serve(async (req) => {
       processed += activities.length;
       if (activities.length === PER_PAGE) hasMore = true;
       for (const a of activities) {
-        const outcome = await ingestActivity(admin, a, zone, acct.athlete_id);
+        const outcome = await ingestActivity(admin, a, acct.athlete_id);
         if (outcome === 'stored') stored++;
         else skipped++;
       }

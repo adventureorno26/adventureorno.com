@@ -6,3 +6,17 @@ major_version = 15
 
 [functions.invite]
 verify_jwt = true
+
+# These functions perform their own request authentication because modern
+# Supabase sb_secret_ keys are valid only in the apikey header, not as JWTs.
+[functions.detect-trips]
+verify_jwt = false
+
+[functions.geocode-new-places]
+verify_jwt = false
+
+[functions.ingest-overland]
+verify_jwt = false
+
+[functions.strava-webhook]
+verify_jwt = false

@@ -1,7 +1,7 @@
 // strava-webhook — Strava push subscription endpoint.
 //   GET  ?hub.challenge&hub.verify_token → echo challenge if the token matches
 //        our STRAVA_VERIFY_TOKEN (handshake when the subscription is created).
-//   POST event → for activity create/update fetch the activity + upsert (rule #2);
+//   POST event → for activity create/update fetch the activity + upsert;
 //        for delete, remove the row.
 //
 // verify_jwt = false (Strava calls this, no Supabase JWT).
@@ -10,7 +10,6 @@
 
 import {
   adminClient,
-  getHomeZone,
   getValidAccessTokenFor,
   ingestActivity,
   type StravaActivity,
@@ -72,15 +71,14 @@ Deno.serve(async (req) => {
     }
 
     // create | update → fetch the full activity using the OWNER's token, then
-    // apply rule #2 and attribute it to that athlete.
+    // ingest it and attribute it to that athlete.
     const access = await getValidAccessTokenFor(admin, event.owner_id);
     const res = await fetch(`https://www.strava.com/api/v3/activities/${event.object_id}`, {
       headers: { Authorization: `Bearer ${access}` },
     });
     if (!res.ok) return json({ ok: false, error: `fetch activity ${res.status}` });
     const activity = (await res.json()) as StravaActivity;
-    const zone = await getHomeZone(admin);
-    const outcome = await ingestActivity(admin, activity, zone, event.owner_id);
+    const outcome = await ingestActivity(admin, activity, event.owner_id);
     if (outcome === 'stored') await admin.rpc('dedupe_shared_outings').catch(() => undefined);
     return json({ ok: true, outcome });
   } catch (e) {

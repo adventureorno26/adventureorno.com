@@ -1,27 +1,9 @@
-// Pure geo helpers. The home-exclusion zone is enforced authoritatively at
-// ingest (server-side) using the `settings` table, but the client mirrors the
-// math to warn before a manual "add place" lands inside the zone.
+// Pure geo helpers.
 
 export interface LngLat {
   lng: number;
   lat: number;
 }
-
-export interface HomeZone {
-  lat: number;
-  lng: number;
-  radiusMeters: number;
-}
-
-// Home-exclusion zone: 3 statute miles around the house in Leesburg, VA. This
-// is a client-side fallback default only — the server reads the live value from
-// the `settings` table (kept in sync there). Manual place-adds are NOT blocked
-// by this on the client anymore; it only informs the automated-ingest gate.
-export const DEFAULT_HOME_ZONE: HomeZone = {
-  lat: 39.110924,
-  lng: -77.509204,
-  radiusMeters: 4828, // 3 miles
-};
 
 const EARTH_RADIUS_M = 6371008.8; // mean Earth radius (IUGG)
 
@@ -38,11 +20,6 @@ export function haversineMeters(a: LngLat, b: LngLat): number {
   const sinDLng = Math.sin(dLng / 2);
   const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-/** True when the point falls inside (or on) the home-exclusion zone. */
-export function isInHomeZone(point: LngLat, zone: HomeZone = DEFAULT_HOME_ZONE): boolean {
-  return haversineMeters(point, { lng: zone.lng, lat: zone.lat }) <= zone.radiusMeters;
 }
 
 export const METERS_PER_MILE = 1609.344;
