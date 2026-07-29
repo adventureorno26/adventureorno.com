@@ -26,48 +26,54 @@ begin
   end if;
 end $$;
 
+-- Negative assertions use an ok-flag set INSIDE the handler and checked OUTSIDE, so
+-- the 'FAIL' raise can never be swallowed by the same handler.
 -- Container enforcement: a NON-container parent (leaf) is rejected.
 do $$
+declare ok boolean := false;
 begin
   begin
     insert into public.place_membership (child_id, parent_id)
     values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000003');
-    raise exception 'FAIL: non-container parent was allowed';
-  exception when raise_exception then null; -- expected (trigger)
+  exception when raise_exception then ok := true;
   end;
+  if not ok then raise exception 'FAIL: non-container parent was allowed'; end if;
 end $$;
 
--- Self-reference rejected (Park is a container → passes container check, hits self-ref).
+-- Self-reference rejected.
 do $$
+declare ok boolean := false;
 begin
   begin
     insert into public.place_membership (child_id, parent_id)
     values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001');
-    raise exception 'FAIL: self-reference was allowed';
-  exception when raise_exception then null;
+  exception when raise_exception then ok := true;
   end;
+  if not ok then raise exception 'FAIL: self-reference was allowed'; end if;
 end $$;
 
 -- Duplicate pair rejected (unique).
 do $$
+declare ok boolean := false;
 begin
   begin
     insert into public.place_membership (child_id, parent_id)
     values ('aaaaaaaa-0000-0000-0000-000000000002','aaaaaaaa-0000-0000-0000-000000000001');
-    raise exception 'FAIL: duplicate pair was allowed';
-  exception when unique_violation then null;
+  exception when unique_violation then ok := true;
   end;
+  if not ok then raise exception 'FAIL: duplicate pair was allowed'; end if;
 end $$;
 
 -- Cycle rejected: Park under Region (both containers) would close Region←Park.
 do $$
+declare ok boolean := false;
 begin
   begin
     insert into public.place_membership (child_id, parent_id)
     values ('aaaaaaaa-0000-0000-0000-000000000001','aaaaaaaa-0000-0000-0000-000000000002');
-    raise exception 'FAIL: cycle edge was allowed';
-  exception when raise_exception then null;
+  exception when raise_exception then ok := true;
   end;
+  if not ok then raise exception 'FAIL: cycle edge was allowed'; end if;
 end $$;
 
 -- FKs exist AND are validated (the container trigger fires before the FK, so this

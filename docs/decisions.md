@@ -41,6 +41,19 @@ timer (`geocode-new-places-nightly`, hourly geocode).
 - **Action required (owner):** rotate the exposed service_role key (see below). Not
   rotated automatically — dashboard-only, and per instruction.
 
+## 2026-07-29 — DOCUMENTED EXCEPTION: sanitizing applied migrations 0057 & 0071
+
+`0057_geocode_cron.sql` and `0071_geocode_hourly.sql` embedded a live service_role
+JWT (see below). They were edited **in place** to remove it and instead source the
+key from `vault.decrypted_secrets` (name `aon_edge_secret_key`, provisioned out of
+band). This is a **deliberate, documented exception** to the standing rule "never
+edit an applied migration," justified solely by the credential exposure — it is the
+ONLY sanctioned edit of an old migration.
+- **The revoked JWT must never be reintroduced** to any file, fixture, log, or test.
+- The disposable-DB bootstrap is network-isolated (unschedules cron), so these
+  migrations' `net.http_post` can never fire from a dev/CI database.
+- The exposed key still requires rotation in the Supabase dashboard.
+
 ## 2026-07-29 — Security incident: service_role key in migrations
 
 - Migrations `0057_geocode_cron.sql` / `0071_geocode_hourly.sql` embed a hardcoded

@@ -16,21 +16,40 @@
 --   drop function if exists public.trip_stats(uuid);
 --   drop table if exists public.trips;   -- (cascades its policies)
 
+-- `places.suggested` is a drifted column (created out-of-band; reconciled in 0098).
+-- The draft-privacy policy below references it, so ensure it exists here first
+-- (idempotent — no-op in production and once 0098 has run).
+alter table public.places add column if not exists suggested boolean not null default false;
+
 create table if not exists public.trips (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   start_date date,
   end_date date,
   status text not null default 'taken' check (status in ('taken', 'upcoming')),
+  -- Provenance for the container-Place backfill (0099). Deletion-safe: purging the
+  -- source place nulls the link (the trip survives).
+  source_place_id uuid references public.places(id) on delete set null,
   created_by uuid references public.profiles(id) default auth.uid(),
   created_at timestamptz not null default now()
 );
+create unique index if not exists trips_source_place_uidx
+  on public.trips (source_place_id) where source_place_id is not null;
 
 alter table public.trips enable row level security;
 
 drop policy if exists trips_select on public.trips;
+-- Draft privacy: editors/owners see all trips; viewers only see trips whose source
+-- place (if any) is saved + not deleted/suggested — so a hidden draft Place/Trip
+-- identifier can't be discovered by a viewer.
 create policy trips_select on public.trips
-  for select using (public.is_member());
+  for select using (
+    public.is_editor_or_owner()
+    or (public.is_member() and (
+      source_place_id is null
+      or exists (select 1 from public.places p where p.id = trips.source_place_id
+                 and p.deleted_at is null and p.saved and not p.suggested)))
+  );
 
 drop policy if exists trips_insert on public.trips;
 create policy trips_insert on public.trips

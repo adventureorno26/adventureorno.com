@@ -51,7 +51,14 @@ create unique index if not exists trip_stops_trip_place_planned_uidx
 
 alter table public.trip_stops enable row level security;
 drop policy if exists trip_stops_select on public.trip_stops;
-create policy trip_stops_select on public.trip_stops for select using (public.is_member());
+-- Draft privacy: editors/owners see all stops; viewers only stops whose Place is
+-- saved + not deleted/suggested (can't discover hidden Place/Visit identifiers).
+create policy trip_stops_select on public.trip_stops for select using (
+  public.is_editor_or_owner()
+  or (public.is_member() and exists (
+    select 1 from public.places p where p.id = trip_stops.place_id
+      and p.deleted_at is null and p.saved and not p.suggested))
+);
 drop policy if exists trip_stops_insert on public.trip_stops;
 create policy trip_stops_insert on public.trip_stops for insert with check (public.is_editor_or_owner());
 drop policy if exists trip_stops_update on public.trip_stops;
@@ -70,10 +77,9 @@ alter table public.trip_migration_exceptions enable row level security;
 drop policy if exists trip_migration_exceptions_select on public.trip_migration_exceptions;
 create policy trip_migration_exceptions_select on public.trip_migration_exceptions for select using (public.is_editor_or_owner());
 
--- 3) Provenance for idempotent + reversible backfill.
-alter table public.trips add column if not exists source_place_id uuid references public.places(id);
-create unique index if not exists trips_source_place_uidx
-  on public.trips (source_place_id) where source_place_id is not null;
+-- 3) Provenance column `trips.source_place_id` + its unique index are defined in
+--    0097 (they must exist before 0097's draft-privacy RLS references them). Nothing
+--    to add here.
 
 -- 4) The migration/backfill as a reusable, IDEMPOTENT function so the migration and
 --    the tests exercise the SAME logic (no duplicated SQL). Quarantines ambiguous
@@ -82,25 +88,31 @@ create or replace function public.migrate_container_place_trips()
 returns void language plpgsql security definer set search_path = public
 as $$
 begin
-  -- a) Quarantine ambiguous container-Place trips: suggested / deleted / undated.
+  -- a) Quarantine ambiguous container-Place trips: suggested / deleted / missing or
+  --    reversed date range. (Null-category places aren't trips, so aren't touched.)
   insert into public.trip_migration_exceptions (place_id, reason)
   select p.id, case when p.deleted_at is not null then 'trip_deleted'
                     when p.suggested then 'trip_suggested_draft'
-                    else 'trip_undated' end
+                    when p.first_visit is null or p.last_visit is null then 'trip_undated'
+                    else 'trip_reversed_range' end
   from public.places p
   where p.category = 'trip'
-    and (p.deleted_at is not null or p.suggested or p.first_visit is null)
+    and (p.deleted_at is not null or p.suggested
+         or p.first_visit is null or p.last_visit is null
+         or p.first_visit > p.last_visit)
     and not exists (select 1 from public.trip_migration_exceptions e
                     where e.place_id = p.id and e.parent_trip_place_id is null);
 
-  -- b) Migrate only CLEAN trips (dated, not suggested, not deleted).
+  -- b) Migrate only CLEAN trips: not deleted, not suggested, both dates present and
+  --    ordered.
   insert into public.trips (name, start_date, end_date, status, source_place_id, created_by)
   select p.name, p.first_visit, p.last_visit,
          case when p.first_visit > current_date then 'upcoming' else 'taken' end,
          p.id, p.created_by
   from public.places p
   where p.category = 'trip' and p.deleted_at is null and not p.suggested
-    and p.first_visit is not null
+    and p.first_visit is not null and p.last_visit is not null
+    and p.first_visit <= p.last_visit
     and not exists (select 1 from public.trips t where t.source_place_id = p.id);
 
   -- c) Quarantine ambiguous members (nested/container, deleted, suggested, unsaved).
@@ -184,11 +196,14 @@ as $$
   select case when public.is_member() then json_build_object(
     'places',  (select count(distinct place_id) from completed),
     'visits',  (select count(*) from completed),
-    'miles',   (select coalesce(round(sum(a.distance) / 1609.344), 0)
-                from public.activities a
-                join completed c on c.place_id = a.place_id
-                where a.start_date is not null
-                  and a.start_date::date >= c.start_date and a.start_date::date <= c.end_date),
+    -- Each Activity counted at most ONCE even if it falls in overlapping Visits.
+    'miles',   (select coalesce(round(sum(d.distance) / 1609.344), 0) from (
+                  select distinct a.id, a.distance
+                  from public.activities a
+                  join completed c on c.place_id = a.place_id
+                  where a.start_date is not null
+                    and a.start_date::date >= c.start_date and a.start_date::date <= c.end_date
+                ) d),
     'days',    (select (end_date - start_date) + 1 from public.trips where id = p_trip)
   ) else null end;
 $$;
