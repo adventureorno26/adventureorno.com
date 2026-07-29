@@ -175,3 +175,34 @@ Places mapped into `trips`. All reversible.
 
 *(or "…with Trip Option B" to keep trips as container-Places).* Implementation is
 Prompt 2B and must not start before this phrase.
+
+## Implementation status (2026-07-29) — Option A approved
+
+Verified on a disposable local Supabase stack (never production); not deployed.
+
+**Backend — DONE:**
+- `place_membership` canonicalized (`0096`): FKs, unique, cycle-prevention,
+  exceptions quarantine.
+- First-class `trips` table + RLS (`0097`).
+- **`trip_stops`** table (planned/completed/skipped) + **migration of the 33
+  container-Place trips** into `trips`+`trip_stops` (`0099`): additive, idempotent
+  (`trips.source_place_id`), reversible. Read-only preflight vs prod: **0 → 33
+  trips, 221 trip_stops, 25 undated, 1 nested-trip exception**.
+- **Compatibility read** `trip_place_ids(trip)` = explicit stops ∪ date-range
+  **leaf** places (containers excluded), DISTINCT — so reads work for
+  stops-only, date-range-only, or both.
+- **Overlap-safe `trip_stats`** (`0099`) recomputes over that DISTINCT union,
+  **superseding the naive date-range `trip_stats` from `0097`** (which
+  double-counted on overlap). Both are member-gated + anon-revoked.
+
+**Still container-Place based (transition pending):** the entire UI —
+`routes/Trips.tsx` (filters Places by `categories∋'trip'`), the trip card
+(PlacePanel, members via `part_of`), and `components/TripItinerary.tsx` — plus
+`trip_timeline`/`trip_notes`, which key on the **container-Place id**. The
+new-model `lib/trips.ts` is currently unwired.
+
+**Transition follow-up (separate, planned):** point `Trips.tsx`, the trip card,
+and "+ Add → Trip" at the `trips` table; wire `lib/trips.ts`; re-point
+`trip_timeline`/`trip_notes` from the container-Place id to the `trips` id
+(**id-space hazard** — those RPCs/tables take a `places.id` today). Retire the
+container-Place representation only after the UI fully reads the `trips` table.
