@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { confirmSuggestedTrip, fetchSuggestedTripDrafts, fetchTrips } from '../lib/trips';
+import { fetchSuggestedTripDrafts, fetchTrips } from '../lib/trips';
 import { resolveSuggestedTrip } from '../lib/data';
 import type { Place, Trip } from '../lib/types';
 
@@ -43,17 +43,6 @@ export default function Trips() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  async function confirm(p: Place) {
-    setBusy(p.id);
-    try {
-      const id = await confirmSuggestedTrip(p.id);
-      if (id) navigate(`/trip/${id}`);
-      else await load(); // couldn't migrate (e.g. no dates) — refresh the queue
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function dismiss(p: Place) {
     setBusy(p.id);
@@ -110,10 +99,10 @@ export default function Trips() {
                 <button
                   className="primary"
                   disabled={busy === p.id}
-                  onClick={() => void confirm(p)}
+                  onClick={() => navigate(`/trips/review/${p.id}`)}
                   style={{ marginLeft: 8 }}
                 >
-                  Confirm
+                  Review
                 </button>
                 <button
                   disabled={busy === p.id}

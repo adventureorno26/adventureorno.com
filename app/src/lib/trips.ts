@@ -44,6 +44,35 @@ export async function confirmSuggestedTrip(placeId: string): Promise<string | nu
   return (data as unknown as string) ?? null;
 }
 
+/** One place by id (used to load a suggested draft for review). */
+export async function fetchPlaceById(id: string): Promise<Place | null> {
+  const { data } = await supabase.from('places').select(PLACE_COLS).eq('id', id).maybeSingle();
+  return (data as unknown as Place) ?? null;
+}
+
+/** The member places of a container draft (leaf places whose part_of includes it). */
+export async function fetchDraftMembers(draftId: string): Promise<Place[]> {
+  const { data, error } = await supabase
+    .from('places')
+    .select(PLACE_COLS)
+    .contains('part_of', [draftId])
+    .is('deleted_at', null)
+    .order('first_visit', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown as Place[]).filter(
+    (p) => p.category !== 'trip' && !p.holds_children,
+  );
+}
+
+/** Remove a member from a draft (keeps part_of + place_membership in sync). */
+export async function removeDraftMember(childId: string, draftId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_from_container', {
+    p_child: childId,
+    p_parent: draftId,
+  });
+  if (error) throw error;
+}
+
 /** The canonical Trip a migrated container-Place became (via source_place_id), if
  *  any — used to redirect old /place/:containerId links to /trip/:id. */
 export async function fetchTripBySourcePlace(placeId: string): Promise<Trip | null> {
