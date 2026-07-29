@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { fetchTrips } from '../lib/trips';
-import type { Trip } from '../lib/types';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthProvider';
+import { confirmSuggestedTrip, fetchSuggestedTripDrafts, fetchTrips } from '../lib/trips';
+import { resolveSuggestedTrip } from '../lib/data';
+import type { Place, Trip } from '../lib/types';
 
 // Trips are a first-class entity (trips table). A trip is a trip TO one or more
-// places. Listed newest first, grouped by month + year.
+// places. Listed newest first, grouped by month + year. Auto-detected drafts are
+// shown separately as suggestions to confirm or dismiss — never as trips.
 function monthYear(iso: string | null): string {
   if (!iso) return 'Undated';
   return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
@@ -13,9 +16,7 @@ function monthYear(iso: string | null): string {
   });
 }
 
-function fmtRange(t: Trip): string {
-  const s = t.start_date;
-  const e = t.end_date;
+function fmtRange(s: string | null, e: string | null): string {
   if (!s) return '';
   const d = (iso: string) =>
     new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -23,13 +24,46 @@ function fmtRange(t: Trip): string {
 }
 
 export default function Trips() {
+  const navigate = useNavigate();
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [trips, setTrips] = useState<Trip[] | null>(null);
+  const [suggested, setSuggested] = useState<Place[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const [t, s] = await Promise.all([
+      fetchTrips().catch(() => []),
+      canEdit ? fetchSuggestedTripDrafts().catch(() => []) : Promise.resolve([]),
+    ]);
+    setTrips(t);
+    setSuggested(s);
+  }, [canEdit]);
 
   useEffect(() => {
-    fetchTrips()
-      .then(setTrips)
-      .catch(() => setTrips([]));
-  }, []);
+    void load();
+  }, [load]);
+
+  async function confirm(p: Place) {
+    setBusy(p.id);
+    try {
+      const id = await confirmSuggestedTrip(p.id);
+      if (id) navigate(`/trip/${id}`);
+      else await load(); // couldn't migrate (e.g. no dates) — refresh the queue
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function dismiss(p: Place) {
+    setBusy(p.id);
+    try {
+      await resolveSuggestedTrip(p.id, false);
+      setSuggested((prev) => prev.filter((x) => x.id !== p.id));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   // Preserve fetch order (newest first) while grouping by month/year.
   const groups: { label: string; trips: Trip[] }[] = [];
@@ -52,6 +86,48 @@ export default function Trips() {
         </p>
       )}
 
+      {canEdit && suggested.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h2 style={{ marginBottom: 8 }}>Suggested — review to confirm</h2>
+          <div className="trip-places">
+            {suggested.map((p) => (
+              <div
+                key={p.id}
+                className="trip-place"
+                style={{ display: 'flex', alignItems: 'center' }}
+              >
+                <span style={{ flex: 1 }}>
+                  {p.name || 'Possible trip'}
+                  {fmtRange(p.first_visit, p.last_visit) && (
+                    <span
+                      className="place-row-cats"
+                      style={{ marginLeft: 8, color: 'var(--muted)' }}
+                    >
+                      {fmtRange(p.first_visit, p.last_visit)}
+                    </span>
+                  )}
+                </span>
+                <button
+                  className="primary"
+                  disabled={busy === p.id}
+                  onClick={() => void confirm(p)}
+                  style={{ marginLeft: 8 }}
+                >
+                  Confirm
+                </button>
+                <button
+                  disabled={busy === p.id}
+                  onClick={() => void dismiss(p)}
+                  style={{ marginLeft: 6 }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {trips === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
       ) : trips.length === 0 ? (
@@ -66,12 +142,12 @@ export default function Trips() {
               {g.trips.map((t) => (
                 <Link key={t.id} className="trip-place" to={`/trip/${t.id}`}>
                   {t.name || 'Untitled trip'}
-                  {fmtRange(t) && (
+                  {fmtRange(t.start_date, t.end_date) && (
                     <span
                       className="place-row-cats"
                       style={{ marginLeft: 8, color: 'var(--muted)' }}
                     >
-                      {fmtRange(t)}
+                      {fmtRange(t.start_date, t.end_date)}
                     </span>
                   )}
                 </Link>

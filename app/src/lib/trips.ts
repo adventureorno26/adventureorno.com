@@ -22,6 +22,39 @@ export async function fetchTrips(): Promise<Trip[]> {
   return (data ?? []) as Trip[];
 }
 
+/** Auto-detected trip DRAFTS awaiting your review. These are NOT trips — they only
+ *  become trips if you confirm one. */
+export async function fetchSuggestedTripDrafts(): Promise<Place[]> {
+  const { data, error } = await supabase
+    .from('places')
+    .select(PLACE_COLS)
+    .eq('category', 'trip')
+    .eq('suggested', true)
+    .is('deleted_at', null)
+    .order('first_visit', { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as Place[];
+}
+
+/** Confirm a suggested draft into a canonical Trip. Returns the new trip id (or null
+ *  if it couldn't be migrated, e.g. it has no dates). */
+export async function confirmSuggestedTrip(placeId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('confirm_suggested_trip', { p_place: placeId });
+  if (error) throw error;
+  return (data as unknown as string) ?? null;
+}
+
+/** The canonical Trip a migrated container-Place became (via source_place_id), if
+ *  any — used to redirect old /place/:containerId links to /trip/:id. */
+export async function fetchTripBySourcePlace(placeId: string): Promise<Trip | null> {
+  const { data } = await supabase
+    .from('trips')
+    .select(TRIP_COLS)
+    .eq('source_place_id', placeId)
+    .maybeSingle();
+  return (data as Trip) ?? null;
+}
+
 /** Trips whose stops include this Place — powers "Trips to this place" on a place
  *  card. A Place can appear on a trip via several stops; dedupe to one row per trip. */
 export async function fetchTripsForPlace(placeId: string): Promise<Trip[]> {

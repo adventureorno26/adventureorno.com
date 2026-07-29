@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   addVisit,
   clearCity,
@@ -22,7 +22,7 @@ import {
   type MapPerson,
 } from '../lib/data';
 import type { Activity, Entry, NewEntry, Place, Trip, Visit } from '../lib/types';
-import { fetchTripsForPlace } from '../lib/trips';
+import { fetchTripBySourcePlace, fetchTripsForPlace } from '../lib/trips';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
@@ -131,6 +131,22 @@ export default function PlacePanel({
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
+  const navigate = useNavigate();
+
+  // A confirmed container-Place trip now lives as a canonical Trip — send old
+  // /place/:containerId links to /trip/:id (suggested drafts stay as-is).
+  useEffect(() => {
+    if (place.category !== 'trip' || place.suggested) return;
+    let active = true;
+    fetchTripBySourcePlace(place.id)
+      .then((t) => {
+        if (active && t) navigate(`/trip/${t.id}`, { replace: true });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [place.id, place.category, place.suggested, navigate]);
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [tripsHere, setTripsHere] = useState<Trip[]>([]);
