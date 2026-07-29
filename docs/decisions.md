@@ -10,6 +10,23 @@ Short, dated notes on choices made while building. Newest first.
   creation contract, and decides whether Trip becomes a first-class entity
   (Option A) or stays a container-Place (Option B). Implement only after approval.
 
+## 2026-07-29 — Migration chain does not replay fresh; schema drift
+
+The historical migrations cannot be applied strictly in-order to a fresh DB, so
+`supabase db reset` fails (blocking type generation + CI):
+- **`0001_init.sql`** defines `language sql` helpers (`is_member`, …) referencing
+  `public.profiles` before it's created → fails unless `check_function_bodies=off`.
+- **`0044`** backfills `places.city` from `places.address` — but **no migration
+  creates `places.address`** (nor `places.suggested`); both exist in production,
+  added out-of-band (**schema drift**).
+- Interim fix: **`scripts/db-bootstrap.sh`** builds a disposable local DB by
+  applying the chain in one session with body-checks off (tolerating the one benign
+  0044 error); **`0098`** reconciles the two drifted `places` columns (idempotent —
+  no-op in prod). Verified: bootstrapped `places` = 39 cols, matching production.
+- **Only the `places` table was drift-audited.** A full drift audit of all tables
+  + the proper long-term fix (a squashed re-baseline so `db reset` works, done with
+  Erica's approval) is Prompt 8 / Prompt 11 scope. Old migrations are never edited.
+
 ## 2026-07-29 — Security incident: service_role key in migrations
 
 - Migrations `0057_geocode_cron.sql` / `0071_geocode_hourly.sql` embed a hardcoded
