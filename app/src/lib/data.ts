@@ -827,30 +827,6 @@ export async function triggerGeocode(): Promise<{ named: number; considered: num
   return (await res.json()) as { named: number; considered: number };
 }
 
-/** Run trip auto-detection (drafts suggested trips from photos + Strava). */
-export async function detectTrips(): Promise<{
-  suggested: number;
-  trips: { name: string; start: string; end: string; attached: number }[];
-}> {
-  const { data: sess } = await supabase.auth.getSession();
-  const token = sess.session?.access_token;
-  if (!token) throw new Error('Not signed in');
-  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/detect-trips`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: '{}',
-  });
-  if (!res.ok) throw new Error(`Trip detection failed (${res.status})`);
-  return (await res.json()) as {
-    suggested: number;
-    trips: { name: string; start: string; end: string; attached: number }[];
-  };
-}
-
 /** Confirm a suggested trip (keep it) or reject it (unlink members + delete). */
 export async function resolveSuggestedTrip(id: string, keep: boolean): Promise<void> {
   if (keep) {

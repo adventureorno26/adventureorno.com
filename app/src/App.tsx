@@ -56,6 +56,7 @@ const AddWizard = lazyWithReload(() => import('./routes/AddWizard'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
+const TripView = lazyWithReload(() => import('./routes/TripView'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
 const BucketList = lazyWithReload(() => import('./routes/BucketList'));
 const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
@@ -121,6 +122,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Trips />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/trip/:id"
+            element={
+              <RequireAuth>
+                <TripView />
               </RequireAuth>
             }
           />

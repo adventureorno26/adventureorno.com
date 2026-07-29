@@ -10,6 +10,7 @@ import {
   snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
+import { createTrip } from '../lib/trips';
 import {
   createPlace,
   updatePlace,
@@ -262,6 +263,17 @@ export default function MapView() {
   async function addTagged(tag: string) {
     setAddMenuOpen(false);
     setActivitySub(false);
+    // A Trip is a first-class entity now (not a Place). Create it and open its view;
+    // dates + places are added there.
+    if (tag === 'trip') {
+      try {
+        const t = await createTrip('', null, null);
+        navigate(`/trip/${t.id}`);
+      } catch {
+        setBanner('Could not add — try again.');
+      }
+      return;
+    }
     const c = mapRef.current?.getCenter();
     try {
       const p = await createPlace({

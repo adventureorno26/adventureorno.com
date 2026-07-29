@@ -47,7 +47,7 @@ export default function Wrapped() {
         .filter(Boolean),
     );
     const countries = new Set(inYear.map((p) => p.country).filter(Boolean));
-    const trips = inYear.filter((p) => (p.categories ?? []).includes('trip'));
+    const trips = inYear.filter((p) => (p.categories ?? []).includes('trip') && !p.suggested);
     const parks = inYear.filter((p) =>
       /national (park|monument|forest|seashore|recreation area|historic)/i.test(p.name),
     );

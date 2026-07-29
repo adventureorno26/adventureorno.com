@@ -1,39 +1,78 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { fetchPlaces } from '../lib/data';
-import type { Place } from '../lib/types';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthProvider';
+import { confirmSuggestedTrip, fetchSuggestedTripDrafts, fetchTrips } from '../lib/trips';
+import { resolveSuggestedTrip } from '../lib/data';
+import type { Place, Trip } from '../lib/types';
 
-// Trips are just places tagged "trip" (the unified model). This page is a simple
-// list — each opens its normal place card with its city-grouped members.
-const CUTOFF = '2025-12-21';
+// Trips are a first-class entity (trips table). A trip is a trip TO one or more
+// places. Listed newest first, grouped by month + year. Auto-detected drafts are
+// shown separately as suggestions to confirm or dismiss — never as trips.
+function monthYear(iso: string | null): string {
+  if (!iso) return 'Undated';
+  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
-function fmtRange(p: Place): string {
-  const s = p.first_visit;
-  const e = p.last_visit;
+function fmtRange(s: string | null, e: string | null): string {
   if (!s) return '';
   const d = (iso: string) =>
-    new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return e && e !== s ? `${d(s)} – ${d(e)}` : d(s);
 }
 
 export default function Trips() {
-  const [places, setPlaces] = useState<Place[] | null>(null);
+  const navigate = useNavigate();
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
+  const [trips, setTrips] = useState<Trip[] | null>(null);
+  const [suggested, setSuggested] = useState<Place[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  function load() {
-    fetchPlaces()
-      .then(setPlaces)
-      .catch(() => setPlaces([]));
+  const load = useCallback(async () => {
+    const [t, s] = await Promise.all([
+      fetchTrips().catch(() => []),
+      canEdit ? fetchSuggestedTripDrafts().catch(() => []) : Promise.resolve([]),
+    ]);
+    setTrips(t);
+    setSuggested(s);
+  }, [canEdit]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function confirm(p: Place) {
+    setBusy(p.id);
+    try {
+      const id = await confirmSuggestedTrip(p.id);
+      if (id) navigate(`/trip/${id}`);
+      else await load(); // couldn't migrate (e.g. no dates) — refresh the queue
+    } finally {
+      setBusy(null);
+    }
   }
-  useEffect(load, []);
 
-  const trips = (places ?? [])
-    .filter((p) => (p.categories ?? []).includes('trip') && !p.suggested)
-    .filter((p) => !p.first_visit || p.first_visit >= CUTOFF)
-    .sort((a, b) => (b.first_visit ?? '').localeCompare(a.first_visit ?? ''));
+  async function dismiss(p: Place) {
+    setBusy(p.id);
+    try {
+      await resolveSuggestedTrip(p.id, false);
+      setSuggested((prev) => prev.filter((x) => x.id !== p.id));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Preserve fetch order (newest first) while grouping by month/year.
+  const groups: { label: string; trips: Trip[] }[] = [];
+  for (const t of trips ?? []) {
+    const label = monthYear(t.start_date);
+    const g = groups.find((x) => x.label === label);
+    if (g) g.trips.push(t);
+    else groups.push({ label, trips: [t] });
+  }
 
   return (
     <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
@@ -41,31 +80,81 @@ export default function Trips() {
         <span>Map</span>
       </Link>
       <h1 className="bucket-title">Our Trips</h1>
-      {places !== null && (
+      {trips !== null && (
         <p style={{ color: 'var(--muted)', marginTop: 2 }}>
           <b>{trips.length}</b> trip{trips.length === 1 ? '' : 's'}
         </p>
       )}
 
-      {places === null ? (
+      {canEdit && suggested.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h2 style={{ marginBottom: 8 }}>Suggested — review to confirm</h2>
+          <div className="trip-places">
+            {suggested.map((p) => (
+              <div
+                key={p.id}
+                className="trip-place"
+                style={{ display: 'flex', alignItems: 'center' }}
+              >
+                <span style={{ flex: 1 }}>
+                  {p.name || 'Possible trip'}
+                  {fmtRange(p.first_visit, p.last_visit) && (
+                    <span
+                      className="place-row-cats"
+                      style={{ marginLeft: 8, color: 'var(--muted)' }}
+                    >
+                      {fmtRange(p.first_visit, p.last_visit)}
+                    </span>
+                  )}
+                </span>
+                <button
+                  className="primary"
+                  disabled={busy === p.id}
+                  onClick={() => void confirm(p)}
+                  style={{ marginLeft: 8 }}
+                >
+                  Confirm
+                </button>
+                <button
+                  disabled={busy === p.id}
+                  onClick={() => void dismiss(p)}
+                  style={{ marginLeft: 6 }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {trips === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
       ) : trips.length === 0 ? (
         <p style={{ color: 'var(--muted)' }}>
           No trips yet. Add one with <b>+ Add → Trip</b> on the map.
         </p>
       ) : (
-        <div className="trip-places" style={{ marginTop: 14 }}>
-          {trips.map((t) => (
-            <Link key={t.id} className="trip-place" to={`/place/${t.id}`}>
-              {t.name || 'Untitled trip'}
-              {fmtRange(t) && (
-                <span className="place-row-cats" style={{ marginLeft: 8, color: 'var(--muted)' }}>
-                  {fmtRange(t)}
-                </span>
-              )}
-            </Link>
-          ))}
-        </div>
+        groups.map((g) => (
+          <div key={g.label} style={{ marginTop: 18 }}>
+            <h2 style={{ marginBottom: 8 }}>{g.label}</h2>
+            <div className="trip-places">
+              {g.trips.map((t) => (
+                <Link key={t.id} className="trip-place" to={`/trip/${t.id}`}>
+                  {t.name || 'Untitled trip'}
+                  {fmtRange(t.start_date, t.end_date) && (
+                    <span
+                      className="place-row-cats"
+                      style={{ marginLeft: 8, color: 'var(--muted)' }}
+                    >
+                      {fmtRange(t.start_date, t.end_date)}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
