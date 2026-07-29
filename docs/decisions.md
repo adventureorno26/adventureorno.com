@@ -2,6 +2,22 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## Architecture Decision Records (ADRs)
+
+- [ADR 0001 — Canonical Place / Visit / Entry / Trip model](adr/0001-place-visit-entry-trip-model.md)
+  — **Proposed, DECISION NEEDED.** Makes `place_membership` the single canonical
+  hierarchy (retiring `part_of`), defines the one idempotent `addExperience`
+  creation contract, and decides whether Trip becomes a first-class entity
+  (Option A) or stays a container-Place (Option B). Implement only after approval.
+
+## 2026-07-29 — Security incident: service_role key in migrations
+
+- Migrations `0057_geocode_cron.sql` / `0071_geocode_hourly.sql` embed a hardcoded
+  Supabase **service_role JWT** (full RLS bypass). It is in git history and the
+  current tree. **Action required: rotate the service-role key in the dashboard**
+  (history rewrite cannot revoke it). Removal from history is the deferred scrub
+  phase; old migrations must not be edited. See `README.md` → Incident response.
+
 ## 2026-07-18 — Phase 6: backfill the past year
 
 - **Strava backfill reuses the Phase 4 driver** (`/settings → Backfill last 12
