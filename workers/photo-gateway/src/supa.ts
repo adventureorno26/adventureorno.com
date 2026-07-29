@@ -18,11 +18,16 @@ export interface Caller {
 }
 
 function restHeaders(env: Env): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
     'Content-Type': 'application/json',
   };
+  // Supabase's modern sb_secret_ keys belong only in apikey; legacy JWT keys
+  // also need Authorization until the deployment has been migrated.
+  if (!env.SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_secret_')) {
+    headers.Authorization = `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`;
+  }
+  return headers;
 }
 
 /** SHA-256 hex of a byte buffer (content hash used for dedupe + deletion). */

@@ -8,15 +8,18 @@
 //    before the invitee's first login; claim_invite() promotes it to a profile.
 //
 // Secrets (Supabase project secrets, never committed):
-//   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY  (auto-injected)
+//   SUPABASE_URL (auto-injected), AON_SUPABASE_PUBLISHABLE_KEY,
+//   AON_SUPABASE_SECRET_KEY
 //
 // Deploy: supabase functions deploy invite
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY =
+  Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
+const SERVICE_ROLE_KEY =
+  Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const cors = {
   'Access-Control-Allow-Origin': '*',

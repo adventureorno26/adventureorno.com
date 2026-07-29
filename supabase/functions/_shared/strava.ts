@@ -6,7 +6,8 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 export const STRAVA_CLIENT_ID = Deno.env.get('STRAVA_CLIENT_ID') ?? '';
 export const STRAVA_CLIENT_SECRET = Deno.env.get('STRAVA_CLIENT_SECRET') ?? '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SERVICE_ROLE_KEY =
+  Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // Rule #2: these are always ingested, even inside the home zone.
 const HOME_EXEMPT = new Set(['Hike', 'Walk', 'Run']);

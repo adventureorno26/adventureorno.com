@@ -14,14 +14,18 @@
 // Idempotent: skips a candidate whose date range overlaps an existing trip-place.
 // Only ever creates suggested drafts — never mutates a confirmed trip.
 //
-// Callers: nightly cron (service_role) or the owner from /settings.
-// Secret: MAPTILER_KEY. Deploy: supabase functions deploy detect-trips
+// Callers: nightly cron (AON_SUPABASE_SECRET_KEY in apikey) or the owner from
+// /settings. Custom auth requires verify_jwt=false.
+// Secrets: MAPTILER_KEY, AON_SUPABASE_SECRET_KEY.
+// Deploy: supabase functions deploy detect-trips --no-verify-jwt
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SERVICE_ROLE_KEY =
+  Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY =
+  Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
 const MAPTILER_KEY = Deno.env.get('MAPTILER_KEY')!;
 
 // Home center falls back to Leesburg; the real value comes from settings.home_zone.
@@ -88,14 +92,6 @@ async function reverseGeocode(
   }
 }
 
-function jwtRole(jwt: string): string | null {
-  try {
-    return JSON.parse(atob(jwt.split('.')[1])).role ?? null;
-  } catch {
-    return null;
-  }
-}
-
 interface Ev {
   t: number;
   lat: number;
@@ -105,11 +101,13 @@ interface Ev {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  // Authorize: service_role (cron) or an owner session.
+  // Modern Supabase secret keys are sent only as apikey and require
+  // verify_jwt=false; interactive calls still authenticate with a user JWT.
+  const isServiceCall = req.headers.get('apikey') === SERVICE_ROLE_KEY;
   const authHeader = req.headers.get('Authorization') ?? '';
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  if (!jwt) return json({ error: 'unauthenticated' }, 401);
-  if (jwtRole(jwt) !== 'service_role') {
+  if (!isServiceCall) {
+    if (!jwt) return json({ error: 'unauthenticated' }, 401);
     const asCaller = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });

@@ -2,18 +2,19 @@
 // call MapTiler, so cluster_unassigned() flags new places `needs_geocode`; this
 // reverse-geocodes each to a locality-level name + country + US state.
 //
-// Callers: the nightly cron (pg_net, Authorization: Bearer <service_role_key>),
-// or the owner from /settings ("Name new places now"). verify_jwt = true — a
-// valid Supabase JWT (service_role or an authenticated owner) is required.
+// Callers: the nightly cron (AON_SUPABASE_SECRET_KEY in apikey) or the owner
+// from /settings. Custom user-or-secret auth requires verify_jwt=false.
 //
 // Secret: MAPTILER_KEY (set via `supabase secrets set MAPTILER_KEY=...`).
-// Deploy: supabase functions deploy geocode-new-places
+// Deploy: supabase functions deploy geocode-new-places --no-verify-jwt
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SERVICE_ROLE_KEY =
+  Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const ANON_KEY =
+  Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
 const MAPTILER_KEY = Deno.env.get('MAPTILER_KEY')!;
 const FOURSQUARE_KEY = Deno.env.get('FOURSQUARE_KEY') ?? '';
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
@@ -194,25 +195,16 @@ async function reverseGeocode(lng: number, lat: number): Promise<Geo | null> {
   }
 }
 
-function jwtRole(jwt: string): string | null {
-  try {
-    const payload = JSON.parse(atob(jwt.split('.')[1]));
-    return typeof payload.role === 'string' ? payload.role : null;
-  } catch {
-    return null;
-  }
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  // Authorize: service_role (cron) or an owner session. The platform gateway
-  // (verify_jwt) has already validated the JWT signature, so we can trust its
-  // claims — service_role means the nightly cron; anything else must be an owner.
+  // Modern Supabase secret keys are sent only as apikey and require
+  // verify_jwt=false; interactive calls still authenticate with a user JWT.
+  const isServiceCall = req.headers.get('apikey') === SERVICE_ROLE_KEY;
   const authHeader = req.headers.get('Authorization') ?? '';
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  if (!jwt) return json({ error: 'unauthenticated' }, 401);
-  if (jwtRole(jwt) !== 'service_role') {
+  if (!isServiceCall) {
+    if (!jwt) return json({ error: 'unauthenticated' }, 401);
     const asCaller = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });

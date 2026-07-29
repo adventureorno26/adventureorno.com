@@ -43,6 +43,7 @@ psql_db() { docker exec -i "$DB" psql -U postgres -d postgres "$@"; }
 echo "Rebuilding disposable schema in $DB (LOCAL only) ..."
 psql_db -q -c "drop schema if exists public cascade; create schema public; grant all on schema public to postgres, anon, authenticated, service_role;" >/dev/null
 
+umask 077
 ERRLOG="$HERE/.db-bootstrap.errors.log"   # kept for inspection (gitignored)
 : > "$ERRLOG"
 { echo 'set check_function_bodies=off;'; for f in "$MIGR"/*.sql; do cat "$f"; echo; done; } \
