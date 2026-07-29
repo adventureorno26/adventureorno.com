@@ -21,7 +21,8 @@ import {
   updatePlace,
   type MapPerson,
 } from '../lib/data';
-import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
+import type { Activity, Entry, NewEntry, Place, Trip, Visit } from '../lib/types';
+import { fetchTripsForPlace } from '../lib/trips';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
@@ -132,6 +133,7 @@ export default function PlacePanel({
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [tripsHere, setTripsHere] = useState<Trip[]>([]);
   const [visitStats, setVisitStats] = useState<Record<string, { photos: number; videos: number }>>(
     {},
   );
@@ -284,6 +286,10 @@ export default function PlacePanel({
     let active = true;
     setVisits(null);
     setSpots(null);
+    setTripsHere([]);
+    fetchTripsForPlace(place.id)
+      .then((rows) => active && setTripsHere(rows))
+      .catch(() => active && setTripsHere([]));
     fetchVisits(place.id)
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
@@ -1172,6 +1178,27 @@ export default function PlacePanel({
         <>
           <h3 style={{ marginTop: 22 }}>Itinerary</h3>
           <TripItinerary tripId={place.id} canEdit={canEdit} />
+        </>
+      )}
+
+      {place.category !== 'trip' && tripsHere.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 22 }}>Trips to this place</h3>
+          <div className="trip-places">
+            {tripsHere.map((t) => (
+              <Link key={t.id} className="trip-place" to={`/trip/${t.id}`}>
+                {t.name || 'Untitled trip'}
+                {t.start_date && (
+                  <span className="place-row-cats" style={{ marginLeft: 8, color: 'var(--muted)' }}>
+                    {new Date(t.start_date + 'T00:00:00').toLocaleDateString(undefined, {
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
         </>
       )}
 

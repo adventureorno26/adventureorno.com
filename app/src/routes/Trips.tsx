@@ -1,39 +1,44 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchPlaces } from '../lib/data';
-import type { Place } from '../lib/types';
+import { fetchTrips } from '../lib/trips';
+import type { Trip } from '../lib/types';
 
-// Trips are just places tagged "trip" (the unified model). This page is a simple
-// list — each opens its normal place card with its city-grouped members.
-const CUTOFF = '2025-12-21';
+// Trips are a first-class entity (trips table). A trip is a trip TO one or more
+// places. Listed newest first, grouped by month + year.
+function monthYear(iso: string | null): string {
+  if (!iso) return 'Undated';
+  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
-function fmtRange(p: Place): string {
-  const s = p.first_visit;
-  const e = p.last_visit;
+function fmtRange(t: Trip): string {
+  const s = t.start_date;
+  const e = t.end_date;
   if (!s) return '';
   const d = (iso: string) =>
-    new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return e && e !== s ? `${d(s)} – ${d(e)}` : d(s);
 }
 
 export default function Trips() {
-  const [places, setPlaces] = useState<Place[] | null>(null);
+  const [trips, setTrips] = useState<Trip[] | null>(null);
 
-  function load() {
-    fetchPlaces()
-      .then(setPlaces)
-      .catch(() => setPlaces([]));
+  useEffect(() => {
+    fetchTrips()
+      .then(setTrips)
+      .catch(() => setTrips([]));
+  }, []);
+
+  // Preserve fetch order (newest first) while grouping by month/year.
+  const groups: { label: string; trips: Trip[] }[] = [];
+  for (const t of trips ?? []) {
+    const label = monthYear(t.start_date);
+    const g = groups.find((x) => x.label === label);
+    if (g) g.trips.push(t);
+    else groups.push({ label, trips: [t] });
   }
-  useEffect(load, []);
-
-  const trips = (places ?? [])
-    .filter((p) => (p.categories ?? []).includes('trip') && !p.suggested)
-    .filter((p) => !p.first_visit || p.first_visit >= CUTOFF)
-    .sort((a, b) => (b.first_visit ?? '').localeCompare(a.first_visit ?? ''));
 
   return (
     <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
@@ -41,31 +46,39 @@ export default function Trips() {
         <span>Map</span>
       </Link>
       <h1 className="bucket-title">Our Trips</h1>
-      {places !== null && (
+      {trips !== null && (
         <p style={{ color: 'var(--muted)', marginTop: 2 }}>
           <b>{trips.length}</b> trip{trips.length === 1 ? '' : 's'}
         </p>
       )}
 
-      {places === null ? (
+      {trips === null ? (
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
       ) : trips.length === 0 ? (
         <p style={{ color: 'var(--muted)' }}>
           No trips yet. Add one with <b>+ Add → Trip</b> on the map.
         </p>
       ) : (
-        <div className="trip-places" style={{ marginTop: 14 }}>
-          {trips.map((t) => (
-            <Link key={t.id} className="trip-place" to={`/place/${t.id}`}>
-              {t.name || 'Untitled trip'}
-              {fmtRange(t) && (
-                <span className="place-row-cats" style={{ marginLeft: 8, color: 'var(--muted)' }}>
-                  {fmtRange(t)}
-                </span>
-              )}
-            </Link>
-          ))}
-        </div>
+        groups.map((g) => (
+          <div key={g.label} style={{ marginTop: 18 }}>
+            <h2 style={{ marginBottom: 8 }}>{g.label}</h2>
+            <div className="trip-places">
+              {g.trips.map((t) => (
+                <Link key={t.id} className="trip-place" to={`/trip/${t.id}`}>
+                  {t.name || 'Untitled trip'}
+                  {fmtRange(t) && (
+                    <span
+                      className="place-row-cats"
+                      style={{ marginLeft: 8, color: 'var(--muted)' }}
+                    >
+                      {fmtRange(t)}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
