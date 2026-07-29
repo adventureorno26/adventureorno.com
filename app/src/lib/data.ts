@@ -738,31 +738,6 @@ export async function dismissDuplicate(a: string, b: string): Promise<void> {
 /** Order-independent key matching how dismissals are stored (least|greatest). */
 export const dupeKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
-export interface HomeZone {
-  lat: number;
-  lng: number;
-  radius_m: number;
-}
-
-export async function fetchHomeZone(): Promise<HomeZone> {
-  const { data, error } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'home_zone')
-    .single();
-  if (error) throw error;
-  return data.value as HomeZone;
-}
-
-/** Owner-only (RLS enforces). Updates the home-exclusion zone in `settings`. */
-export async function updateHomeZone(zone: HomeZone): Promise<void> {
-  const { error } = await supabase
-    .from('settings')
-    .update({ value: zone, updated_at: new Date().toISOString() })
-    .eq('key', 'home_zone');
-  if (error) throw error;
-}
-
 /** Fog of war: the revealed area (crisp 10km + soft 25km) as GeoJSON geometries. */
 export async function fetchFog(): Promise<{
   crisp: GeoJSON.MultiPolygon | null;

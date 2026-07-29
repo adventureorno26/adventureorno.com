@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_HOME_ZONE, haversineMeters, isInHomeZone, metersToMiles } from './geo';
+import { haversineMeters, metersToMiles } from './geo';
 
 describe('haversineMeters', () => {
   it('is ~0 for identical points', () => {
@@ -14,32 +14,6 @@ describe('haversineMeters', () => {
     const d = haversineMeters(leesburg, dc);
     expect(d).toBeGreaterThan(48_000);
     expect(d).toBeLessThan(58_000);
-  });
-});
-
-describe('isInHomeZone', () => {
-  it('rejects the home center itself', () => {
-    expect(isInHomeZone({ lng: DEFAULT_HOME_ZONE.lng, lat: DEFAULT_HOME_ZONE.lat })).toBe(true);
-  });
-
-  it('detects a point just inside 3 miles', () => {
-    // ~1.4 miles north of center
-    expect(isInHomeZone({ lng: DEFAULT_HOME_ZONE.lng, lat: DEFAULT_HOME_ZONE.lat + 0.02 })).toBe(
-      true,
-    );
-  });
-
-  it('allows a point well outside the zone (Lisbon)', () => {
-    expect(isInHomeZone({ lng: -9.1393, lat: 38.7223 })).toBe(false);
-  });
-
-  it('treats the radius edge as inside (<=)', () => {
-    // A point almost exactly at the boundary distance stays inside.
-    const edge = {
-      lng: DEFAULT_HOME_ZONE.lng,
-      lat: DEFAULT_HOME_ZONE.lat + DEFAULT_HOME_ZONE.radiusMeters / 111_320,
-    };
-    expect(isInHomeZone(edge)).toBe(true);
   });
 });
 

@@ -70,7 +70,7 @@ Every upload is content-hashed (SHA-256) in the Worker:
 
 - Already stored → `{"skipped":"duplicate"}` (nothing changes)
 - Previously deleted → `{"skipped":"deleted"}` (rule #6 — never reappears)
-- Screenshot / no-GPS / inside the home zone → skipped with that reason
+- Screenshot / no-GPS → skipped with that reason (there is no location filter)
 
 So overlapping runs, retries, and the two automations firing the same day all
 **self-heal** — you can't create duplicates and you can't resurrect a deleted

@@ -1,9 +1,9 @@
 // import-timeline — receives batches of {lat,lng,time} points parsed from a
-// Google Takeout / on-device Timeline export in the browser, and stores the
-// ones outside the home zone as location_pings (source='timeline'). Owner only.
+// Google Takeout / on-device Timeline export in the browser, and stores them as
+// location_pings (source='timeline'). Owner only.
 //
 // The client does the JSON parsing (files can be large) and posts points in
-// batches; this function is the home-zone backstop + writer.
+// batches; this function is the writer.
 //
 // verify_jwt = true (owner session). Deploy: supabase functions deploy import-timeline
 
@@ -14,7 +14,6 @@ const SERVICE_ROLE_KEY =
   Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY =
   Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
-const EARTH_RADIUS_M = 6371008.8;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -28,16 +27,6 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
-}
-
-const toRad = (d: number): number => (d * Math.PI) / 180;
-function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 interface Point {
@@ -72,24 +61,8 @@ Deno.serve(async (req) => {
   }
   const points = body.points ?? [];
 
-  const { data: setting } = await admin
-    .from('settings')
-    .select('value')
-    .eq('key', 'home_zone')
-    .maybeSingle();
-  const zone = (setting?.value ?? { lat: 39.1157, lng: -77.5636, radius_m: 24140 }) as {
-    lat: number;
-    lng: number;
-    radius_m: number;
-  };
-
   const rows = points
-    .filter(
-      (p) =>
-        typeof p.lat === 'number' &&
-        typeof p.lng === 'number' &&
-        haversineM(p.lat, p.lng, zone.lat, zone.lng) > zone.radius_m,
-    )
+    .filter((p) => typeof p.lat === 'number' && typeof p.lng === 'number')
     .map((p) => ({
       lat: p.lat,
       lng: p.lng,

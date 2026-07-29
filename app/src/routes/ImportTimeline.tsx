@@ -66,8 +66,8 @@ export default function ImportTimeline() {
       <p style={{ color: 'var(--muted)', lineHeight: 1.6 }}>
         Optional. If you had Google Maps Timeline / Location History, export it (Google Takeout →
         Location History, or Google Maps app → Settings → Your Timeline → Export) and drop the JSON
-        here. Points inside the home zone are skipped; the rest are clustered into places. If you
-        never used Google Timeline, skip this — photos + Strava already cover the year.
+        here. Points are clustered into places. If you never used Google Timeline, skip this —
+        photos + Strava already cover the year.
       </p>
 
       <div className="card" style={{ marginTop: 16 }}>

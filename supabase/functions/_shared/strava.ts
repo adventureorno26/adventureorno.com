@@ -9,40 +9,8 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY =
   Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Rule #2: these are always ingested, even inside the home zone.
-const HOME_EXEMPT = new Set(['Hike', 'Walk', 'Run']);
-const EARTH_RADIUS_M = 6371008.8;
-
 export function adminClient(): SupabaseClient {
   return createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-}
-
-const toRad = (d: number): number => (d * Math.PI) / 180;
-export function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-export interface HomeZone {
-  lat: number;
-  lng: number;
-  radius_m: number;
-}
-
-export async function getHomeZone(admin: SupabaseClient): Promise<HomeZone> {
-  const { data } = await admin.from('settings').select('value').eq('key', 'home_zone').maybeSingle();
-  return (data?.value ?? { lat: 39.1157, lng: -77.5636, radius_m: 24140 }) as HomeZone;
-}
-
-/** Rule #2: Hike/Walk/Run always; any other type only if the start point is
- *  outside the home zone. */
-export function shouldIngest(type: string, lat: number, lng: number, zone: HomeZone): boolean {
-  if (HOME_EXEMPT.has(type)) return true;
-  return haversineM(lat, lng, zone.lat, zone.lng) > zone.radius_m;
 }
 
 interface TokenResponse {
@@ -146,19 +114,17 @@ export interface StravaActivity {
   map?: { summary_polyline?: string | null };
 }
 
-/** Upsert one Strava activity, applying rule #2 and assigning a place. Returns
- *  'stored' | 'skipped'. */
+/** Upsert one Strava activity and assign a place. Every activity with a start
+ *  point is ingested regardless of location. Returns 'stored' | 'skipped'. */
 export async function ingestActivity(
   admin: SupabaseClient,
   a: StravaActivity,
-  zone: HomeZone,
   athleteId?: number,
 ): Promise<'stored' | 'skipped'> {
   const type = a.type ?? a.sport_type ?? 'Workout';
   const ll = a.start_latlng;
   if (!ll || ll.length < 2) return 'skipped'; // no start point → can't place it
   const [lat, lng] = ll;
-  if (!shouldIngest(type, lat, lng, zone)) return 'skipped';
 
   // If this activity already exists, sync only the Strava-owned fields (name,
   // type, distance…) and PRESERVE any manual place/trailhead assignment (e.g. a

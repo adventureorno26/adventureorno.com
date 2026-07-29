@@ -10,7 +10,6 @@ export interface DecideInput {
   isDuplicate: boolean; // sha256 already in photos
   gate: SkipReason | null; // screenshotGate() result: no_gps | screenshot | null
   hasCoords: boolean;
-  inZone: boolean; // inside the home-exclusion zone (rule #1)
   manual: boolean; // /upload (true) vs /ingest (false)
   override: boolean; // user asked to override warnings (manual only)
 }
@@ -23,19 +22,17 @@ export function ingestDecision(i: DecideInput): SkipReason | null {
   if (i.isDuplicate) return 'duplicate';
 
   if (!i.manual) {
-    // Automated ingest (the Shortcut) keeps the full gate: it must have real GPS,
-    // pass the screenshot/make-model check, and stay out of the home zone.
+    // Automated ingest (the Shortcut) keeps the format gate: it must have real
+    // GPS and pass the screenshot/make-model check. Location is not filtered.
     if (!i.hasCoords) return 'no_gps';
     if (i.gate === 'screenshot') return 'screenshot';
     if (i.gate === 'no_gps') return 'no_gps';
-    if (i.inZone) return 'home_zone';
     return null;
   }
 
   // Manual upload is deliberate. No coordinates is FINE — the photo is stored
   // unassigned (place_id null) and lands in the Sorter inbox to be placed by time.
-  // Screenshots still need an explicit override; home-zone is overridable.
+  // Screenshots still need an explicit override.
   if (i.gate === 'screenshot' && !i.override) return 'screenshot';
-  if (i.inZone && !i.override) return 'home_zone';
   return null;
 }

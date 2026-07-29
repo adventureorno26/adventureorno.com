@@ -2,6 +2,28 @@
 
 Short, dated notes on choices made while building. Newest first.
 
+## 2026-07-29 — Removed the home-exclusion zone entirely
+
+The 15-mile "home zone" around Leesburg is **gone**, at Erica's request. Local
+outings — photos, GPS pings, and every Strava activity — are now stored and counted
+like anywhere else; nothing is dropped or collapsed by location. This supersedes the
+earlier "Home-exclusion zone lives in `settings`" and Strava rule-#2 entries below.
+- **Migration `0102`** deletes the `home_zone` setting, strips the exclusion filter
+  from `cluster_unassigned()`, makes `assign_activity_place()` home-agnostic, and
+  dissolves the single "Leesburg" home place — re-scattering its activities to their
+  own places so each local run/walk/hike is visible and individually counted.
+- Enforcement removed from the client (`geo.ts` `isInHomeZone`/`DEFAULT_HOME_ZONE`,
+  `data.ts` `fetch/updateHomeZone`, Settings' Home-zone card), the photo-gateway
+  Worker (`getHomeZone`, the `home_zone` skip reason + `inZone` decision), and the
+  edge functions (`ingest-overland`, `import-timeline`, shared `strava.ts`
+  `shouldIngest`/`HOME_EXEMPT`, and both Strava callers).
+- **Stats:** the mileage functions never filtered by home zone, so stored miles were
+  always counted; the gap was activities *skipped at ingest* near home. After deploy,
+  re-run the Strava backfill to pull in any previously-skipped activities.
+- `detect-trips` keeps its own separate 3-mile filter (so neighborhood walks don't
+  register as *trips*) — that is trip-detection, not an ingest exclusion, and does not
+  drop any data. **Do not reintroduce the home zone anywhere.**
+
 ## Architecture Decision Records (ADRs)
 
 - [ADR 0001 — Canonical Place / Visit / Entry / Trip model](adr/0001-place-visit-entry-trip-model.md)

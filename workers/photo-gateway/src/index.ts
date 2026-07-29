@@ -6,7 +6,7 @@
 //   POST /delete/:id   Permanent, sticky deletion (rule #6).
 //
 // Pipeline (rules #4, #5, #6): hash → deleted? → duplicate? → EXIF gate →
-// home-zone → resize 2400/400 (strips EXIF) → R2 write → photos row.
+// resize 2400/400 (strips EXIF) → R2 write → photos row.
 
 import {
   assignPlace,
@@ -14,7 +14,6 @@ import {
   deleteVideoRow,
   findPhotoByHash,
   recomputePlace,
-  getHomeZone,
   getPhoto,
   getVideo,
   hashIsDeleted,
@@ -32,17 +31,6 @@ import { readExif, screenshotGate } from './exif';
 import { ingestDecision } from './decide';
 import { renderVariants } from './images';
 import { photoCacheKey, purgePhotoCache } from './cache';
-
-const EARTH_RADIUS_M = 6371008.8;
-const toRad = (d: number): number => (d * Math.PI) / 180;
-function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(s)));
-}
 
 function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const allowed = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
@@ -163,12 +151,8 @@ async function runPipeline(
   const lng = exif.lng ?? formLng;
   const hasCoords = lat != null && lng != null;
 
-  // Home-exclusion zone (rule #1) — only meaningful once we have coordinates.
-  const zone = await getHomeZone(env);
-  const inZone = hasCoords ? haversineM(lat!, lng!, zone.lat, zone.lng) <= zone.radius_m : false;
-
-  // Single ordered decision (rules #1, #5, #6). On /upload a deliberate override
-  // clears screenshot/home-zone warnings; deletion is never overridable.
+  // Single ordered decision (rules #5, #6). On /upload a deliberate override
+  // clears screenshot warnings; deletion is never overridable.
   // Manual uploads are deliberate — only require coordinates (a converted iPhone
   // photo has no camera EXIF, so we don't apply the screenshot/make-model gate).
   // The automated Shortcut path keeps the full gate.
@@ -179,7 +163,6 @@ async function runPipeline(
     // is allowed, landing the photo unassigned). The Shortcut path keeps the gate.
     gate: allowOverride ? null : screenshotGate(exif, hasCoords),
     hasCoords,
-    inZone,
     manual: allowOverride,
     override,
   });

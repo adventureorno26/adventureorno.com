@@ -11,7 +11,7 @@ adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventur
 - Backend: Supabase — Postgres 15 with PostGIS, Auth, Edge Functions (Deno), pg_cron.
 - Photo storage: Cloudflare R2, accessed only through the `photo-gateway` Worker (upload + signed reads).
 - Workers: Wrangler-managed, in `/workers`. Edge Functions in `/supabase/functions`.
-- Package manager: npm. Lint: eslint + prettier defaults. Tests: vitest for pure logic (EXIF parsing, clustering helpers, exclusion-zone math); no e2e framework.
+- Package manager: npm. Lint: eslint + prettier defaults. Tests: vitest for pure logic (EXIF parsing, clustering helpers, geo/mileage math); no e2e framework.
 
 ## Repository layout
 ```
@@ -23,13 +23,12 @@ adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventur
 ```
 
 ## Non-negotiable business rules
-1. **Home exclusion zone.** Photos and location pings whose coordinates fall within **15 statute
-   miles (24.14 km) of Leesburg, VA (39.1157, -77.5636)** are REJECTED at ingest (HTTP 200 with
-   `{"skipped":"home_zone"}`, nothing stored). Center + radius live in a `settings` table, not
-   hardcoded in logic.
-2. **Strava exemption.** Strava activities of type `Hike`, `Walk`, or `Run` are ALWAYS ingested,
-   including inside the home zone. All other Strava activity types are ingested only when their
-   start point is outside the home zone.
+1. **No home exclusion zone.** There is NO location-based ingest filter. Photos, location pings,
+   and Strava activities are stored regardless of where they were taken — including at home. (The
+   old 15-mile "home zone" around Leesburg was removed in migration `0102`; do not reintroduce it
+   anywhere — code, `settings`, docs, or UI.) Local outings ARE logged and counted.
+2. **Strava ingest.** Every Strava activity with a start point is ingested and placed, regardless
+   of type or location. (Hikes/Walks/Runs are no longer a special case — nothing is excluded.)
 3. **Mileage counter.** The stats bar shows total miles (sum of `activities.distance`, meters →
    miles, 1 decimal) across all stored Strava activities, plus a per-type breakdown on hover/tap.
 4. **Photo processing.** Server-side resize so the longest edge ≤ 2400 px (originals are NOT

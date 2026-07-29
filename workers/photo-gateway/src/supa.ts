@@ -76,25 +76,6 @@ export async function resolveSession(env: Env, jwt: string): Promise<Caller | nu
   return { userId: user.id, role };
 }
 
-export interface HomeZone {
-  lat: number;
-  lng: number;
-  radius_m: number;
-}
-
-export async function getHomeZone(env: Env): Promise<HomeZone> {
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/settings?select=value&key=eq.home_zone&limit=1`,
-    { headers: restHeaders(env) },
-  );
-  if (res.ok) {
-    const rows = (await res.json()) as Array<{ value: HomeZone }>;
-    if (rows[0]?.value) return rows[0].value;
-  }
-  // Fallback matches the seeded value; never leaves the zone unenforced.
-  return { lat: 39.1157, lng: -77.5636, radius_m: 24140 };
-}
-
 export async function hashIsDeleted(env: Env, sha256: string): Promise<boolean> {
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/deleted_hashes?select=sha256&sha256=eq.${sha256}&limit=1`,

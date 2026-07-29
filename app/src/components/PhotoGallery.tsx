@@ -37,11 +37,10 @@ const SKIP_LABELS: Record<string, string> = {
   duplicate: 'is already here',
   no_gps: 'has no GPS location',
   screenshot: 'looks like a screenshot',
-  home_zone: 'is inside the home zone',
   undecodable: 'could not be read as an image',
 };
 // Skips a deliberate manual upload is allowed to override.
-const OVERRIDABLE = new Set(['screenshot', 'home_zone']);
+const OVERRIDABLE = new Set(['screenshot']);
 
 export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const { profile } = useAuth();
