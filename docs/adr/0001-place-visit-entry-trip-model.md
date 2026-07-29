@@ -1,6 +1,9 @@
 # ADR 0001 — Canonical Place / Visit / Entry / Trip model
 
-- **Status:** Proposed — **DECISION NEEDED** (do not implement until approved).
+- **Status:** **Accepted — Trip Option A approved 2026-07-29** (implementation in
+  progress; NOT complete — see "Implementation status" at the end). The
+  "DECISION NEEDED" section below is retained as the historical record of the
+  choice that was made.
 - **Date:** 2026-07-29
 - **Scope:** Private two-person family app (Erica owner, Josh editor, children as
   people, viewers reaction-only). No commercial/multi-tenant abstractions.
@@ -176,33 +179,48 @@ Places mapped into `trips`. All reversible.
 *(or "…with Trip Option B" to keep trips as container-Places).* Implementation is
 Prompt 2B and must not start before this phrase.
 
-## Implementation status (2026-07-29) — Option A approved
+## Implementation status (2026-07-29) — Option A approved, NOT complete
 
-Verified on a disposable local Supabase stack (never production); not deployed.
+Migrations `0096`–`0099` + commits `a472179`, `a25bd87`, `edce236` are **unpublished
+DRAFT** work, verified only on a disposable local stack, **not applied to production
+and not deployed**. An earlier "Backend — DONE" claim here was **inaccurate** and is
+retracted. What actually exists is a preliminary schema + a risky backfill; the
+canonical creation flow, Visit linkage, privacy, people model, UI transition,
+reliable tests, and recovery path are **not** done.
 
-**Backend — DONE:**
-- `place_membership` canonicalized (`0096`): FKs, unique, cycle-prevention,
-  exceptions quarantine.
-- First-class `trips` table + RLS (`0097`).
-- **`trip_stops`** table (planned/completed/skipped) + **migration of the 33
-  container-Place trips** into `trips`+`trip_stops` (`0099`): additive, idempotent
-  (`trips.source_place_id`), reversible. Read-only preflight vs prod: **0 → 33
-  trips, 221 trip_stops, 25 undated, 1 nested-trip exception**.
-- **Compatibility read** `trip_place_ids(trip)` = explicit stops ∪ date-range
-  **leaf** places (containers excluded), DISTINCT — so reads work for
-  stops-only, date-range-only, or both.
-- **Overlap-safe `trip_stats`** (`0099`) recomputes over that DISTINCT union,
-  **superseding the naive date-range `trip_stats` from `0097`** (which
-  double-counted on overlap). Both are member-gated + anon-revoked.
+**Preliminary / drafted (needs correction before it can be trusted):**
+- `place_membership` constraints (`0096`) — **but** the exceptions table has no RLS,
+  the cycle test has false positives, container validity isn't enforced, and
+  remaining `part_of` callers aren't migrated.
+- `trips` table + `trip_stops` + a backfill of the 33 container-Place trips (`0097`,
+  `0099`) — **but** the backfill converts null-dated/suggested/deleted drafts by
+  guessing, marks every child "completed" regardless of dates/evidence, and doesn't
+  quarantine ambiguous records.
+- `trip_place_ids` / `trip_stats` reads — **but** they rely on date-range membership
+  (misses repeat visits, attaches unrelated Places), sum each Place's lifetime
+  visit_count + all household activity in range, and don't protect drafts from
+  viewers.
 
-**Still container-Place based (transition pending):** the entire UI —
-`routes/Trips.tsx` (filters Places by `categories∋'trip'`), the trip card
-(PlacePanel, members via `part_of`), and `components/TripItinerary.tsx` — plus
-`trip_timeline`/`trip_notes`, which key on the **container-Place id**. The
-new-model `lib/trips.ts` is currently unwired.
+**Required to actually complete Option A (remaining debt):**
+- `trip_stops` linking planned stops to **completed Visits**, supporting repeat
+  visits to the same Place; replace date-range inference with explicit Trip/stop/
+  Visit/Activity links; compute stats only from records linked to the trip.
+- Preserve + correctly migrate suggested drafts, deleted/private records, notes,
+  itinerary, people, dates; **quarantine ambiguous records without guessing**.
+- Draft-privacy inside the SECURITY DEFINER functions (viewer exposure).
+- Transactional, idempotent **`addExperience`** contract implemented **before** the
+  Trip UI is wired.
+- Migrate `Trips.tsx`, Add flows, PlacePanel, itinerary, notes, imports, exports,
+  deletion, Undo, merging to the canonical model (id-space hazard: `trip_timeline`/
+  `trip_notes` key on `places.id`).
+- Non-login **people** records (children) + viewer reaction-only.
+- **`entry_links`** (stories spanning Places).
+- Regenerate typed DB definitions for `0096`–`0099` and bind the client.
+- Rewrite the false-positive SQL tests; add owner/editor/viewer/draft-privacy/
+  repeat-visit/planned-to-completed/merge/rollback/browser coverage.
+- Strict, network-isolated disposable reset (partly done: `scripts/db-bootstrap.sh`
+  is now confirmation-gated + cron-unscheduled + fails on unexpected errors; the
+  fully-strict path still wants a squashed re-baseline).
 
-**Transition follow-up (separate, planned):** point `Trips.tsx`, the trip card,
-and "+ Add → Trip" at the `trips` table; wire `lib/trips.ts`; re-point
-`trip_timeline`/`trip_notes` from the container-Place id to the `trips` id
-(**id-space hazard** — those RPCs/tables take a `places.id` today). Retire the
-container-Place representation only after the UI fully reads the `trips` table.
+Nothing here is "done" until the visible app uses the new model end-to-end and every
+check passes.

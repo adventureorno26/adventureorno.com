@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # Build a fully-migrated DISPOSABLE local database for verification + type
-# generation. NEVER point this at production.
+# generation. STRICT and NETWORK-ISOLATED. NEVER production.
 #
-# Why not `supabase db reset`? The historical migration chain cannot be applied
-# strictly in-order on a fresh database:
-#   * 0001_init.sql defines `language sql` helpers that reference public.profiles
-#     before it exists (fails unless check_function_bodies=off), and
-#   * 0044 backfills places.city from a drifted places.address column that no
-#     migration creates (added out-of-band; reconciled by 0098).
-# This script applies the whole chain in ONE psql session with body checks off —
-# safe for a throwaway DB — and tolerates the single benign 0044 backfill error
-# (it runs before 0098 adds the column; harmless on an empty DB). The long-term
-# fix is a squashed re-baseline (see docs/decisions.md).
+# Safety properties:
+#   * Requires explicit confirmation before dropping the local schema
+#     (AON_BOOTSTRAP_CONFIRM=yes, or pass --yes). No silent destruction.
+#   * NETWORK ISOLATION: immediately unschedules ALL pg_cron jobs after apply, so
+#     no migration-scheduled job (e.g. 0057/0071's net.http_post to the PRODUCTION
+#     url + service_role key) can ever fire from the disposable DB. Migrations only
+#     REGISTER cron jobs during apply; they don't POST during apply.
+#   * FAILS ON ANY UNEXPECTED ERROR. Exactly one historical error is tolerated —
+#     0044 backfills places.city from a drifted places.address column that no
+#     migration creates (see docs/decisions.md; harmless on an empty DB). Any other
+#     error aborts with a non-zero exit. `check_function_bodies=off` is set for the
+#     one apply session to accommodate 0001's sql helpers defined before profiles.
+#   * Keeps the error log for inspection; never reports success on a partial apply.
 #
-# Prereq: `supabase start` (local Docker stack). Usage: scripts/db-bootstrap.sh
+# The long-term fix (so a plain `supabase db reset` works with zero tolerated
+# errors) is a squashed re-baseline — tracked as remaining debt.
+#
+# Prereq: `supabase start`. Usage: scripts/db-bootstrap.sh --yes
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,24 +27,46 @@ MIGR="$HERE/supabase/migrations"
 PROJECT="$(grep -E '^project_id' "$HERE/supabase/config.toml" | sed -E 's/.*"(.*)".*/\1/')"
 DB="supabase_db_${PROJECT}"
 
+if [ "${1:-}" != "--yes" ] && [ "${AON_BOOTSTRAP_CONFIRM:-}" != "yes" ]; then
+  echo "This DROPS and rebuilds the local '$DB' public schema." >&2
+  echo "Re-run with --yes (or AON_BOOTSTRAP_CONFIRM=yes) to confirm." >&2
+  exit 2
+fi
+
 docker inspect "$DB" >/dev/null 2>&1 || {
   echo "Local db container '$DB' not found. Run 'supabase start' first." >&2
   exit 1
 }
 
+psql_db() { docker exec -i "$DB" psql -U postgres -d postgres "$@"; }
+
 echo "Rebuilding disposable schema in $DB (LOCAL only) ..."
-docker exec -i "$DB" psql -U postgres -d postgres -q -c \
-  "drop schema if exists public cascade; create schema public; grant all on schema public to postgres, anon, authenticated, service_role;" >/dev/null
+psql_db -q -c "drop schema if exists public cascade; create schema public; grant all on schema public to postgres, anon, authenticated, service_role;" >/dev/null
 
-ERRLOG="$(mktemp)"
+ERRLOG="$HERE/.db-bootstrap.errors.log"   # kept for inspection (gitignored)
+: > "$ERRLOG"
 { echo 'set check_function_bodies=off;'; for f in "$MIGR"/*.sql; do cat "$f"; echo; done; } \
-  | docker exec -i "$DB" psql -U postgres -d postgres -q 2>"$ERRLOG" >/dev/null
+  | psql_db -q 2>"$ERRLOG" >/dev/null || true
 
-ERRS=$(grep -c '^ERROR' "$ERRLOG" 2>/dev/null || true)
-echo "Applied $(ls "$MIGR"/*.sql | wc -l | tr -d ' ') migrations. Non-notice errors: ${ERRS:-0}"
-if [ "${ERRS:-0}" != "0" ]; then
-  echo "--- errors (one benign 0044 'places.address' backfill is expected) ---"
-  grep '^ERROR' "$ERRLOG" || true
+# NETWORK ISOLATION: kill any scheduled job before it can POST to production.
+UNSCHED=$(psql_db -tA -c "select coalesce(count(*),0) from cron.job;" 2>/dev/null | tr -d ' ' || echo 0)
+psql_db -q -c "select cron.unschedule(jobid) from cron.job;" >/dev/null 2>&1 || true
+echo "Unscheduled ${UNSCHED} pg_cron job(s) (network-isolated: no prod HTTP can fire)."
+
+# Fail on any UNEXPECTED error. The only tolerated one is the known 0044 backfill.
+UNEXPECTED=$(grep '^ERROR' "$ERRLOG" | grep -v 'column pl.address does not exist' || true)
+TOTAL=$(grep -c '^ERROR' "$ERRLOG" || true)
+if [ -n "$UNEXPECTED" ]; then
+  echo "FAILED: unexpected migration error(s). See $ERRLOG:" >&2
+  echo "$UNEXPECTED" >&2
+  exit 1
 fi
-rm -f "$ERRLOG"
-echo "Disposable DB ready."
+
+# Verify the schema is actually complete (never report success on a partial apply).
+CORE=$(psql_db -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name in ('places','visits','entries','activities','photos','videos','profiles','place_membership','trips','trip_stops','settings','location_pings');" | tr -d ' ')
+if [ "$CORE" != "12" ]; then
+  echo "FAILED: expected 12 core tables, found $CORE. See $ERRLOG." >&2
+  exit 1
+fi
+
+echo "OK: applied $(ls "$MIGR"/*.sql | wc -l | tr -d ' ') migrations; ${TOTAL:-0} tolerated error(s) (0044 backfill only); ${CORE} core tables. Disposable DB ready."

@@ -27,6 +27,20 @@ The historical migrations cannot be applied strictly in-order to a fresh DB, so
   + the proper long-term fix (a squashed re-baseline so `db reset` works, done with
   Erica's approval) is Prompt 8 / Prompt 11 scope. Old migrations are never edited.
 
+## 2026-07-29 — Local cron could POST to production; disposable-DB isolation
+
+Standing up a local Supabase stack applied `0057`/`0071`, which `cron.schedule` a
+`net.http_post` to the **production** URL with the hardcoded **production
+service_role key**. So the disposable dev DB was scheduled to call production on a
+timer (`geocode-new-places-nightly`, hourly geocode).
+- Remediation: **unscheduled all 6 local pg_cron jobs** (nothing fires now), and
+  rewrote `scripts/db-bootstrap.sh` to be **confirmation-gated**, **network-isolated**
+  (unschedules cron immediately after apply so no scheduled prod HTTP can fire),
+  **strict** (fails on any unexpected error; only the known 0044 backfill tolerated),
+  keeps its error log, and verifies 12 core tables before reporting success.
+- **Action required (owner):** rotate the exposed service_role key (see below). Not
+  rotated automatically — dashboard-only, and per instruction.
+
 ## 2026-07-29 — Security incident: service_role key in migrations
 
 - Migrations `0057_geocode_cron.sql` / `0071_geocode_hourly.sql` embed a hardcoded
