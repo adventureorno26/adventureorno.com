@@ -23,8 +23,7 @@
 --   drop function if exists public.trip_place_ids(uuid);
 --   drop function if exists public.trip_stats(uuid);   -- (re-run 0097's trip_stats to restore)
 --   delete from public.trips where source_place_id is not null;  -- migrated trips only
---   drop index if exists trips_source_place_uidx;
---   alter table public.trips drop column if exists source_place_id;
+--   (trips.source_place_id + trips_source_place_uidx are OWNED by 0097 — roll back there)
 --   drop table if exists public.trip_stops;
 --   drop table if exists public.trip_migration_exceptions;
 

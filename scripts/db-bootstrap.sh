@@ -53,6 +53,16 @@ psql_db -q -c "
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 " >/dev/null
 
+# 0100's PREFLIGHT refuses to schedule the Edge Function cron jobs unless the Vault
+# secret exists. Provision a DUMMY on the disposable DB so 0100 applies; the value is
+# never used (all cron jobs are unscheduled immediately after apply — see below).
+psql_db -q -c "
+  do \$\$ begin
+    if not exists (select 1 from vault.decrypted_secrets where name='aon_edge_secret_key') then
+      perform vault.create_secret('disposable-local-only', 'aon_edge_secret_key');
+    end if;
+  end \$\$;" >/dev/null 2>&1 || true
+
 umask 077
 ERRLOG="$HERE/.db-bootstrap.errors.log"   # kept for inspection (gitignored)
 : > "$ERRLOG"
