@@ -1,6 +1,9 @@
 # ADR 0001 — Canonical Place / Visit / Entry / Trip model
 
-- **Status:** Proposed — **DECISION NEEDED** (do not implement until approved).
+- **Status:** **Accepted — Trip Option A approved 2026-07-29** (implementation in
+  progress; NOT complete — see "Implementation status" at the end). The
+  "DECISION NEEDED" section below is retained as the historical record of the
+  choice that was made.
 - **Date:** 2026-07-29
 - **Scope:** Private two-person family app (Erica owner, Josh editor, children as
   people, viewers reaction-only). No commercial/multi-tenant abstractions.
@@ -175,3 +178,49 @@ Places mapped into `trips`. All reversible.
 
 *(or "…with Trip Option B" to keep trips as container-Places).* Implementation is
 Prompt 2B and must not start before this phrase.
+
+## Implementation status (2026-07-29) — Option A approved, NOT complete
+
+Migrations `0096`–`0099` + commits `a472179`, `a25bd87`, `edce236` are **unpublished
+DRAFT** work, verified only on a disposable local stack, **not applied to production
+and not deployed**. An earlier "Backend — DONE" claim here was **inaccurate** and is
+retracted. What actually exists is a preliminary schema + a risky backfill; the
+canonical creation flow, Visit linkage, privacy, people model, UI transition,
+reliable tests, and recovery path are **not** done.
+
+**Preliminary / drafted (needs correction before it can be trusted):**
+- `place_membership` constraints (`0096`) — **but** the exceptions table has no RLS,
+  the cycle test has false positives, container validity isn't enforced, and
+  remaining `part_of` callers aren't migrated.
+- `trips` table + `trip_stops` + a backfill of the 33 container-Place trips (`0097`,
+  `0099`) — **but** the backfill converts null-dated/suggested/deleted drafts by
+  guessing, marks every child "completed" regardless of dates/evidence, and doesn't
+  quarantine ambiguous records.
+- `trip_place_ids` / `trip_stats` reads — **but** they rely on date-range membership
+  (misses repeat visits, attaches unrelated Places), sum each Place's lifetime
+  visit_count + all household activity in range, and don't protect drafts from
+  viewers.
+
+**Required to actually complete Option A (remaining debt):**
+- `trip_stops` linking planned stops to **completed Visits**, supporting repeat
+  visits to the same Place; replace date-range inference with explicit Trip/stop/
+  Visit/Activity links; compute stats only from records linked to the trip.
+- Preserve + correctly migrate suggested drafts, deleted/private records, notes,
+  itinerary, people, dates; **quarantine ambiguous records without guessing**.
+- Draft-privacy inside the SECURITY DEFINER functions (viewer exposure).
+- Transactional, idempotent **`addExperience`** contract implemented **before** the
+  Trip UI is wired.
+- Migrate `Trips.tsx`, Add flows, PlacePanel, itinerary, notes, imports, exports,
+  deletion, Undo, merging to the canonical model (id-space hazard: `trip_timeline`/
+  `trip_notes` key on `places.id`).
+- Non-login **people** records (children) + viewer reaction-only.
+- **`entry_links`** (stories spanning Places).
+- Regenerate typed DB definitions for `0096`–`0099` and bind the client.
+- Rewrite the false-positive SQL tests; add owner/editor/viewer/draft-privacy/
+  repeat-visit/planned-to-completed/merge/rollback/browser coverage.
+- Strict, network-isolated disposable reset (partly done: `scripts/db-bootstrap.sh`
+  is now confirmation-gated + cron-unscheduled + fails on unexpected errors; the
+  fully-strict path still wants a squashed re-baseline).
+
+Nothing here is "done" until the visible app uses the new model end-to-end and every
+check passes.

@@ -10,6 +10,50 @@ Short, dated notes on choices made while building. Newest first.
   creation contract, and decides whether Trip becomes a first-class entity
   (Option A) or stays a container-Place (Option B). Implement only after approval.
 
+## 2026-07-29 — Migration chain does not replay fresh; schema drift
+
+The historical migrations cannot be applied strictly in-order to a fresh DB, so
+`supabase db reset` fails (blocking type generation + CI):
+- **`0001_init.sql`** defines `language sql` helpers (`is_member`, …) referencing
+  `public.profiles` before it's created → fails unless `check_function_bodies=off`.
+- **`0044`** backfills `places.city` from `places.address` — but **no migration
+  creates `places.address`** (nor `places.suggested`); both exist in production,
+  added out-of-band (**schema drift**).
+- Interim fix: **`scripts/db-bootstrap.sh`** builds a disposable local DB by
+  applying the chain in one session with body-checks off (tolerating the one benign
+  0044 error); **`0098`** reconciles the two drifted `places` columns (idempotent —
+  no-op in prod). Verified: bootstrapped `places` = 39 cols, matching production.
+- **Only the `places` table was drift-audited.** A full drift audit of all tables
+  + the proper long-term fix (a squashed re-baseline so `db reset` works, done with
+  Erica's approval) is Prompt 8 / Prompt 11 scope. Old migrations are never edited.
+
+## 2026-07-29 — Local cron could POST to production; disposable-DB isolation
+
+Standing up a local Supabase stack applied `0057`/`0071`, which `cron.schedule` a
+`net.http_post` to the **production** URL with the hardcoded **production
+service_role key**. So the disposable dev DB was scheduled to call production on a
+timer (`geocode-new-places-nightly`, hourly geocode).
+- Remediation: **unscheduled all 6 local pg_cron jobs** (nothing fires now), and
+  rewrote `scripts/db-bootstrap.sh` to be **confirmation-gated**, **network-isolated**
+  (unschedules cron immediately after apply so no scheduled prod HTTP can fire),
+  **strict** (fails on any unexpected error; only the known 0044 backfill tolerated),
+  keeps its error log, and verifies 12 core tables before reporting success.
+- **Action required (owner):** rotate the exposed service_role key (see below). Not
+  rotated automatically — dashboard-only, and per instruction.
+
+## 2026-07-29 — DOCUMENTED EXCEPTION: sanitizing applied migrations 0057 & 0071
+
+`0057_geocode_cron.sql` and `0071_geocode_hourly.sql` embedded a live service_role
+JWT (see below). They were edited **in place** to remove it and instead source the
+key from `vault.decrypted_secrets` (name `aon_edge_secret_key`, provisioned out of
+band). This is a **deliberate, documented exception** to the standing rule "never
+edit an applied migration," justified solely by the credential exposure — it is the
+ONLY sanctioned edit of an old migration.
+- **The revoked JWT must never be reintroduced** to any file, fixture, log, or test.
+- The disposable-DB bootstrap is network-isolated (unschedules cron), so these
+  migrations' `net.http_post` can never fire from a dev/CI database.
+- The exposed key still requires rotation in the Supabase dashboard.
+
 ## 2026-07-29 — Security incident: service_role key in migrations
 
 - Migrations `0057_geocode_cron.sql` / `0071_geocode_hourly.sql` embed a hardcoded
