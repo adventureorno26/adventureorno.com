@@ -4,13 +4,15 @@
 
 begin;
 
--- Fictional identities (as superuser).
+-- Fictional identities (as superuser): owner, editor, viewer.
 insert into auth.users (id, email) values
   ('cccccccc-0000-0000-0000-0000000000a1','owner@example.test'),
-  ('cccccccc-0000-0000-0000-0000000000a2','viewer@example.test') on conflict do nothing;
+  ('cccccccc-0000-0000-0000-0000000000a2','viewer@example.test'),
+  ('cccccccc-0000-0000-0000-0000000000a3','editor@example.test') on conflict do nothing;
 insert into public.profiles (id, role, display_name) values
   ('cccccccc-0000-0000-0000-0000000000a1','owner','Owner'),
-  ('cccccccc-0000-0000-0000-0000000000a2','viewer','Viewer');
+  ('cccccccc-0000-0000-0000-0000000000a2','viewer','Viewer'),
+  ('cccccccc-0000-0000-0000-0000000000a3','editor','Editor');
 
 -- A SAVED source place (normal trip) and an UNSAVED source place (draft trip).
 insert into public.places (id,name,lat,lng,category,holds_children,saved,first_visit,last_visit) values
@@ -59,6 +61,24 @@ begin
 end $$;
 reset role;
 
-do $$ begin raise notice 'PASS: draft-privacy RLS (owner vs viewer)'; end $$;
+-- EDITOR (is_editor_or_owner) sees everything the owner does — both trips + stops.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-0000000000a3"}';
+do $$
+begin
+  if (select count(*) from public.trips) <> 2 then
+    raise exception 'FAIL: editor cannot see all trips (got %) — check grants/RLS', (select count(*) from public.trips);
+  end if;
+  if (select count(*) from public.trip_stops) <> 2 then
+    raise exception 'FAIL: editor cannot see all trip_stops (got %)', (select count(*) from public.trip_stops);
+  end if;
+  -- Editor can read the DRAFT trip's identifier (unlike a viewer).
+  if not exists (select 1 from public.trips where source_place_id='dddddddd-0000-0000-0000-0000000000a2') then
+    raise exception 'FAIL: editor cannot read the draft trip';
+  end if;
+end $$;
+reset role;
+
+do $$ begin raise notice 'PASS: draft-privacy RLS (owner, editor, viewer)'; end $$;
 
 rollback;
