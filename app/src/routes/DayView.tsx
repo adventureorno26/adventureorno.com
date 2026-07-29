@@ -323,20 +323,20 @@ export default function DayView() {
                               e.target.value && void moveToExisting(a, e.target.value)
                             }
                           >
-                            <option value="">Tie to a place, city, or trip…</option>
+                            <option value="">Tie to a place, city, or trail…</option>
                             {[...allPlaces]
-                              .filter((p) => p.id !== id)
+                              // A trip is not a place — activities tie to real places,
+                              // not to a Trip. Add a place to a trip from the trip page.
+                              .filter((p) => p.id !== id && p.category !== 'trip')
                               .sort((x, y) => x.name.localeCompare(y.name))
                               .map((p) => {
                                 const tag = p.is_trail
                                   ? ' (Trail)'
-                                  : p.category === 'trip'
-                                    ? ' (Trip)'
-                                    : p.category === 'city'
-                                      ? ' (City)'
-                                      : p.category === 'region'
-                                        ? ' (Region)'
-                                        : '';
+                                  : p.category === 'city'
+                                    ? ' (City)'
+                                    : p.category === 'region'
+                                      ? ' (Region)'
+                                      : '';
                                 return (
                                   <option key={p.id} value={p.id}>
                                     {p.name}

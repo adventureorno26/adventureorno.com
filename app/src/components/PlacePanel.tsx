@@ -36,7 +36,6 @@ import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
 import TrailSectionsMap from './TrailSectionsMap';
-import TripItinerary from './TripItinerary';
 import StarRating from './StarRating';
 
 interface Props {
@@ -1189,13 +1188,6 @@ export default function PlacePanel({
           </>
         );
       })()}
-
-      {place.category === 'trip' && (
-        <>
-          <h3 style={{ marginTop: 22 }}>Itinerary</h3>
-          <TripItinerary tripId={place.id} canEdit={canEdit} />
-        </>
-      )}
 
       {place.category !== 'trip' && tripsHere.length > 0 && (
         <>
