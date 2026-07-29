@@ -7,6 +7,13 @@ import exifr from 'exifr';
 import { supabase } from './supabase';
 import type { Photo } from './types';
 
+/** SHA-256 (hex) of a blob's bytes — used to hash a photo's ORIGINAL bytes before
+ *  the browser resizes them, so dedup/blocklist is stable across browsers. */
+async function sha256Hex(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Read a photo's GPS coordinates (or null) — used to decide auto-place vs. a
  *  "set a location" card. */
 export async function readGps(file: File): Promise<{ lat: number; lng: number } | null> {
@@ -32,6 +39,30 @@ export async function readTakenAt(file: File): Promise<string | undefined> {
     /* no date */
   }
   return undefined;
+}
+
+/** iPhone HEIC/HEIF — Safari can decode these in an <img>, but Chrome/Firefox
+ *  CANNOT, so the upload used to silently store undecodable bytes → broken photo.
+ *  Detect by MIME or extension (iOS files often have an empty `type`). */
+function isHeic(file: File): boolean {
+  const t = (file.type || '').toLowerCase();
+  if (t === 'image/heic' || t === 'image/heif') return true;
+  const n = (file.name || '').toLowerCase();
+  return n.endsWith('.heic') || n.endsWith('.heif');
+}
+
+/** Return a browser-decodable blob: HEIC → JPEG via heic2any (lazy-loaded so its
+ *  ~1.4 MB decoder only downloads when someone actually uploads a HEIC); anything
+ *  else passes through untouched. Falls back to the original on failure. */
+async function toDecodableBlob(file: File): Promise<Blob> {
+  if (!isHeic(file)) return file;
+  try {
+    const heic2any = (await import('heic2any')).default;
+    const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+    return Array.isArray(out) ? out[0] : (out as Blob);
+  } catch {
+    return file; // no worse than before if the decoder fails
+  }
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -85,7 +116,9 @@ const toBlob = (c: HTMLCanvasElement, q: number): Promise<Blob | null> =>
  *  the browser genuinely can't decode the file. */
 async function prepareUpload(file: File): Promise<Prepared> {
   try {
-    const url = URL.createObjectURL(file);
+    // HEIC → JPEG first (time-boxed; the decode can be slow on big photos).
+    const decodable = await withTimeout(toDecodableBlob(file), 20000);
+    const url = URL.createObjectURL(decodable);
     const img = await withTimeout(loadImage(url), 15000);
     URL.revokeObjectURL(url);
     const web = drawScaled(img, 2400);
@@ -124,7 +157,39 @@ export async function postWithRetry(url: string, init: RequestInit, tries = 3): 
 }
 
 const PHOTO_COLS =
-  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at';
+  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at, caption';
+
+export interface PhotoReaction {
+  emoji: string;
+  n: number;
+  who: string[];
+  mine: boolean;
+}
+
+/** Set or clear a photo's caption (owner/editor). */
+export async function setPhotoCaption(photoId: string, caption: string): Promise<void> {
+  const { error } = await supabase.rpc('set_photo_caption', {
+    p_photo: photoId,
+    p_caption: caption,
+  });
+  if (error) throw error;
+}
+
+/** Toggle the current user's emoji reaction on a photo. */
+export async function togglePhotoReaction(photoId: string, emoji: string): Promise<void> {
+  const { error } = await supabase.rpc('toggle_photo_reaction', {
+    p_photo: photoId,
+    p_emoji: emoji,
+  });
+  if (error) throw error;
+}
+
+/** Grouped reactions for a photo (emoji + count + who + whether mine). */
+export async function fetchPhotoReactions(photoId: string): Promise<PhotoReaction[]> {
+  const { data, error } = await supabase.rpc('photo_reactions_for', { p_photo: photoId });
+  if (error) return [];
+  return (data ?? []) as PhotoReaction[];
+}
 
 export async function fetchPhotosForEntry(entryId: string): Promise<Photo[]> {
   const { data, error } = await supabase
@@ -182,8 +247,14 @@ export async function fetchUnassignedPhotos(): Promise<Photo[]> {
   return (data ?? []) as Photo[];
 }
 
-export async function assignPhotoToPlace(photoId: string, placeId: string | null): Promise<void> {
-  const { error } = await supabase.from('photos').update({ place_id: placeId }).eq('id', photoId);
+export async function assignPhotoToPlace(
+  photoId: string,
+  placeId: string | null,
+  takenAt?: string,
+): Promise<void> {
+  const patch: { place_id: string | null; taken_at?: string } = { place_id: placeId };
+  if (takenAt) patch.taken_at = takenAt;
+  const { error } = await supabase.from('photos').update(patch).eq('id', photoId);
   if (error) throw error;
 }
 
@@ -278,6 +349,10 @@ export async function uploadPhoto(
   }
   const takenAt = opts.takenAt ?? (await readTakenAt(file).catch(() => undefined));
 
+  // Hash the ORIGINAL bytes now, before prepareUpload resizes/re-encodes them —
+  // so dedup + the deletion blocklist identify the same original across browsers.
+  const origSha = await sha256Hex(file).catch(() => null);
+
   const prep = await prepareUpload(file);
 
   // Every call here is a DELIBERATE manual pick in the UI — so by default we
@@ -300,6 +375,7 @@ export async function uploadPhoto(
   if (lng != null) form.set('lng', String(lng));
   if (override) form.set('override', 'true');
   if (takenAt) form.set('taken_at', takenAt);
+  if (origSha) form.set('orig_sha', origSha);
 
   const res = await postWithRetry(`${GATEWAY}/upload`, {
     method: 'POST',
@@ -316,14 +392,23 @@ export async function uploadPhoto(
   return (await res.json()) as UploadResult;
 }
 
+/** Soft-delete: moves the photo to the trash (restorable for 30 days). The R2
+ *  object + hash blocklist happen only on the 30-day permanent purge, so an
+ *  Undo/restore brings the photo back untouched. */
 export async function deletePhoto(photoId: string): Promise<void> {
-  if (!photosEnabled()) throw new Error('Photo deletion is not configured yet.');
-  const token = await accessToken();
-  const res = await fetch(`${GATEWAY}/delete/${photoId}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+  const { error } = await supabase.rpc('soft_delete_photo', { p_id: photoId });
+  if (error) throw error;
+}
+export async function restorePhoto(photoId: string): Promise<void> {
+  const { error } = await supabase.rpc('restore_photo', { p_id: photoId });
+  if (error) throw error;
+}
+
+/** Bulk-set the capture date on several photos (batch metadata edit). */
+export async function setPhotosTakenAt(ids: string[], iso: string): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('photos').update({ taken_at: iso }).in('id', ids);
+  if (error) throw error;
 }
 
 /** Fetch photo bytes as an object URL (caller must revoke on unmount). Retries,

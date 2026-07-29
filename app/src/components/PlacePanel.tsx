@@ -2,29 +2,31 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addVisit,
+  clearCity,
   createEntry,
   createPlace,
   deletePlace,
   deleteVisit,
+  fetchCityBoundary,
   fetchEntries,
   fetchMapPeople,
   fetchPlace,
+  fetchPlaceRatings,
+  fetchPlaceVisitStats,
+  fetchSpatialMembers,
   fetchVisits,
+  setCityBoundary,
+  setMyRating,
   setVisitSolo,
   updatePlace,
   type MapPerson,
 } from '../lib/data';
 import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
-import {
-  CATEGORIES,
-  categoryIcon,
-  categoryLabel,
-  categoryReviewLabel,
-  effectiveCategories,
-} from '../lib/categories';
+import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
+import { showSnack } from '../lib/snackbar';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
@@ -32,6 +34,8 @@ import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
+import TrailSectionsMap from './TrailSectionsMap';
+import TripItinerary from './TripItinerary';
 import StarRating from './StarRating';
 
 interface Props {
@@ -41,6 +45,7 @@ interface Props {
   onPlaceChanged: (place: Place) => void;
   onPlaceDeleted: (id: string) => void;
   onMerged: (loserId: string, winner: Place) => void;
+  onAddRoute?: (trailId: string, name: string) => void;
 }
 
 /** Prepend https:// when the user typed a bare domain, so the link works. */
@@ -121,11 +126,15 @@ export default function PlacePanel({
   onClose,
   onPlaceChanged,
   onPlaceDeleted,
+  onAddRoute,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
+  const [visitStats, setVisitStats] = useState<Record<string, { photos: number; videos: number }>>(
+    {},
+  );
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
   const [spots, setSpots] = useState<Entry[] | null>(null);
@@ -134,8 +143,8 @@ export default function PlacePanel({
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
+  const [vWho, setVWho] = useState(''); // '' = both; else a profile id
   const [merging, setMerging] = useState(false);
-  const [movingVisit, setMovingVisit] = useState<string | null>(null);
   const [addingMembers, setAddingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
@@ -150,6 +159,10 @@ export default function PlacePanel({
   const [editingAddress, setEditingAddress] = useState(false);
   const [coverPos, setCoverPos] = useState(place.cover_pos_y ?? 50);
   const [adjustCover, setAdjustCover] = useState(false);
+  const [cityBusy, setCityBusy] = useState(false);
+  const [cityMsg, setCityMsg] = useState<string | null>(null);
+  const [spatialCount, setSpatialCount] = useState<number | null>(null);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchMapPeople()
@@ -165,6 +178,7 @@ export default function PlacePanel({
 
   async function reloadVisits() {
     setVisits(await fetchVisits(place.id).catch(() => []));
+    setVisitStats(await fetchPlaceVisitStats(place.id).catch(() => ({})));
   }
 
   async function reloadActs() {
@@ -185,6 +199,7 @@ export default function PlacePanel({
       /* leave as-is on failure */
     }
   }
+
   async function reloadSpots() {
     setSpots(await fetchEntries(place.id).catch(() => []));
   }
@@ -221,6 +236,50 @@ export default function PlacePanel({
     await reloadSpots();
     await refreshPlace();
   }
+  // His/her star ratings for this place.
+  useEffect(() => {
+    let active = true;
+    fetchPlaceRatings(place.id)
+      .then((r) => active && setRatings(r))
+      .catch(() => active && setRatings({}));
+    return () => {
+      active = false;
+    };
+  }, [place.id]);
+
+  async function rateMine(n: number | null) {
+    const myId = profile?.id;
+    if (!myId) return;
+    setRatings((prev) => {
+      const next = { ...prev };
+      if (n == null) delete next[myId];
+      else next[myId] = n;
+      return next;
+    });
+    try {
+      await setMyRating(place.id, n);
+    } catch {
+      /* revert-free: reload on failure */
+      fetchPlaceRatings(place.id)
+        .then(setRatings)
+        .catch(() => undefined);
+    }
+  }
+
+  // How many leaf places fall inside this container's boundary (city/region).
+  useEffect(() => {
+    let active = true;
+    setSpatialCount(null);
+    if (place.category === 'city' || place.category === 'region') {
+      fetchSpatialMembers(place.id)
+        .then((ids) => active && setSpatialCount(ids.length))
+        .catch(() => active && setSpatialCount(null));
+    }
+    return () => {
+      active = false;
+    };
+  }, [place.id, place.category]);
+
   useEffect(() => {
     let active = true;
     setVisits(null);
@@ -228,6 +287,9 @@ export default function PlacePanel({
     fetchVisits(place.id)
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
+    fetchPlaceVisitStats(place.id)
+      .then((s) => active && setVisitStats(s))
+      .catch(() => active && setVisitStats({}));
     fetchEntries(place.id)
       .then((rows) => active && setSpots(rows))
       .catch(() => active && setSpots([]));
@@ -308,7 +370,7 @@ export default function PlacePanel({
       if (places.length || entries.length) {
         reviewGroups.push({
           key: k,
-          label: k === 'note' ? 'Notes' : k === 'place' ? 'Places' : categoryReviewLabel(k),
+          label: k === 'note' ? 'Notes' : k === 'place' ? 'Places' : categoryLabel(k),
           places,
           entries,
         });
@@ -321,56 +383,43 @@ export default function PlacePanel({
     const end = vMulti && vEnd ? vEnd : vStart;
     if (!start) return;
     try {
-      await addVisit(place.id, start, end < start ? start : end);
+      const v = await addVisit(place.id, start, end < start ? start : end);
+      // Carry "who was there" onto the new visit (attribution is per-visit).
+      if (vWho) await setVisitSolo(v.id, vWho).catch(() => undefined);
       setAddingVisit(false);
       setVStart('');
       setVEnd('');
       setVMulti(false);
+      setVWho('');
       await reloadVisits();
+      showSnack({ message: 'Visit logged.' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add visit');
     }
   }
   async function removeVisit(id: string) {
-    if (!confirm('Delete this visit?')) return;
+    // Soft UX: remove immediately, offer Undo (recreates the visit with the same
+    // dates + attribution) — friendlier than a browser confirm, esp. on mobile.
+    const v = (visits ?? []).find((x) => x.id === id);
     try {
       await deleteVisit(id);
       await reloadVisits();
+      showSnack({
+        message: 'Visit removed.',
+        actionLabel: 'Undo',
+        onAction: async () => {
+          if (!v) return;
+          try {
+            const nv = await addVisit(place.id, v.start_date, v.end_date);
+            if (v.solo_profile) await setVisitSolo(nv.id, v.solo_profile).catch(() => undefined);
+            await reloadVisits();
+          } catch {
+            /* ignore */
+          }
+        },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete visit');
-    }
-  }
-
-  // Add a specific stop to a city/town visit: create that place with its OWN
-  // address (part of this one), and give it its own visit on the same date — so
-  // the city visit stays AND the stop shows in Spots & Reviews and counts as a
-  // visit. e.g. our Washington DC visit → add "The Pocket" with its own address.
-  async function addStopAtVisit(visitDate: string, r: SearchResult) {
-    setError(null);
-    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
-    if (full.lat === 0 && full.lng === 0) {
-      setError("Couldn't resolve that place — try another.");
-      return;
-    }
-    try {
-      const address = full.address ?? full.label ?? null;
-      const admin1 = full.admin1 ?? place.admin1;
-      const spot = await createPlace({
-        name: full.name || 'New stop',
-        country: full.country ?? place.country,
-        admin1,
-        lat: full.lat,
-        lng: full.lng,
-        address,
-        city: parseCity(address, admin1),
-        saved: true,
-        part_of: [place.id], // grouped under this city/town
-      });
-      if (visitDate) await addVisit(spot.id, visitDate, visitDate);
-      onPlaceChanged(spot); // add the new place to the map
-      setMovingVisit(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not add that stop');
     }
   }
 
@@ -426,6 +475,42 @@ export default function PlacePanel({
     const cur = place.categories ?? [];
     const next = cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug];
     await patch({ categories: next });
+  }
+
+  // City/region: pull the real OSM boundary for this place, mark it a container,
+  // and let every leaf inside it roll up spatially (no manual "part of" needed).
+  async function makeCityRegion(kind: 'city' | 'region') {
+    setCityBusy(true);
+    setCityMsg(null);
+    try {
+      const query = [place.name, place.admin1, place.country].filter(Boolean).join(', ');
+      const geojson = await fetchCityBoundary(query);
+      if (!geojson) {
+        setCityMsg(
+          `No boundary found for “${place.name}” on OpenStreetMap. Use “edit” on the address to match a real place name, then try again.`,
+        );
+        return;
+      }
+      await setCityBoundary(place.id, geojson, kind);
+      await refreshPlace();
+    } catch (e) {
+      setCityMsg(e instanceof Error ? e.message : 'Could not fetch that boundary.');
+    } finally {
+      setCityBusy(false);
+    }
+  }
+
+  async function removeCityRegion() {
+    setCityBusy(true);
+    setCityMsg(null);
+    try {
+      await clearCity(place.id);
+      await refreshPlace();
+    } catch (e) {
+      setCityMsg(e instanceof Error ? e.message : 'Could not remove that.');
+    } finally {
+      setCityBusy(false);
+    }
   }
 
   // Add THIS place as a VISIT/stop of an existing place — NON-destructive: this
@@ -489,14 +574,43 @@ export default function PlacePanel({
     return 'Add a title';
   })();
 
-  const ratingEl = (
-    <StarRating
-      value={place.rating}
-      size={16}
-      readOnly={!canEdit}
-      onChange={(n) => void patch({ rating: n })}
-    />
-  );
+  // His/her ratings. With 2+ people, show a labeled row each (only YOURS is
+  // editable) + an "you agree" note when they match. Solo → a single rating.
+  const raters =
+    people.length >= 2
+      ? people
+      : profile
+        ? [{ id: profile.id, display_name: profile.display_name ?? 'You', role: profile.role }]
+        : [];
+  const bothRated = raters.length >= 2 && raters.every((p) => ratings[p.id] != null);
+  const agree = bothRated && new Set(raters.map((p) => ratings[p.id])).size === 1;
+  const ratingEl =
+    raters.length >= 2 ? (
+      <div className="dual-rating">
+        {raters.map((pers) => {
+          const mine = pers.id === profile?.id;
+          return (
+            <span key={pers.id} className="dual-rating-row">
+              <span className="dual-rating-who">{mine ? 'You' : pers.display_name}</span>
+              <StarRating
+                value={ratings[pers.id] ?? null}
+                size={15}
+                readOnly={!mine}
+                onChange={(n) => void rateMine(n)}
+              />
+            </span>
+          );
+        })}
+        {agree && <span className="dual-rating-agree">you agree</span>}
+      </div>
+    ) : (
+      <StarRating
+        value={ratings[profile?.id ?? ''] ?? place.rating}
+        size={16}
+        readOnly={!canEdit}
+        onChange={(n) => void rateMine(n)}
+      />
+    );
 
   // The place name, shown as the title on the photo. Click to edit it by hand;
   // the search below also fills it in.
@@ -536,6 +650,21 @@ export default function PlacePanel({
     `${place.lat},${place.lng}`;
   const dirHref = `https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${place.lng}&dirflg=d`;
   const regionText = [place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region';
+
+  // One visit count, shared by the header line AND the "Visits (N)" dropdown so
+  // they always agree. A visit = each activity row + any photo/entry-only visit
+  // day an activity doesn't already cover. Notes are entries, NOT visits, so they
+  // never count here. (Mirrors the row build inside the Visits section below.)
+  const _isTrailCard = place.is_trail;
+  const _isRollupCard = !!place.holds_children && !_isTrailCard;
+  const _actsForCount = trailActs ?? [];
+  const _actDaysForCount = new Set(_actsForCount.map((a) => (a.start_date ?? '').slice(0, 10)));
+  const visitCount = _isTrailCard
+    ? _actsForCount.length
+    : (_isRollupCard ? 0 : _actsForCount.length) +
+      (visits ?? []).filter(
+        (v) => _isRollupCard || v.is_trip || !_actDaysForCount.has(v.start_date),
+      ).length;
 
   // "Edit address" → a search pill that sets the address/pin (not the title).
   const addressSearch = (
@@ -611,12 +740,11 @@ export default function PlacePanel({
                 edit
               </button>
             )}
-            {visits &&
-              visits.length > 0 &&
-              ` · ${visits.length} visit${visits.length > 1 ? 's' : ''}`}
+            {visits && visitCount > 0 && ` · ${visitCount} visit${visitCount > 1 ? 's' : ''}`}
             {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
           </span>
         )}
+        {place.park && <div className="park-badge">In {place.park}</div>}
         {place.is_trail && trailMilesSummary(trailMiles) && (
           <span className="trail-miles">
             {trailMilesSummary(trailMiles)}
@@ -629,6 +757,13 @@ export default function PlacePanel({
           </span>
         )}
       </div>
+
+      {/* Empty trail → let the user draw its route right on the map. */}
+      {place.is_trail && canEdit && onAddRoute && (trailActs?.length ?? 0) === 0 && (
+        <button className="primary add-route-btn" onClick={() => onAddRoute(place.id, place.name)}>
+          + Add a route on the map
+        </button>
+      )}
 
       {!place.is_home && <WeatherLine lat={place.lat} lng={place.lng} />}
 
@@ -651,6 +786,49 @@ export default function PlacePanel({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* City / region: pull the real OSM boundary so leaves inside roll up. Not
+          offered on trails or trips (those group by explicit membership). */}
+      {canEdit && !place.is_trail && place.category !== 'trip' && (
+        <div className="city-region">
+          {place.category === 'city' || place.category === 'region' ? (
+            <div className="city-region-row">
+              <span>
+                {place.category === 'region' ? 'Region' : 'City'}
+                {spatialCount != null &&
+                  ` · ${spatialCount} place${spatialCount === 1 ? '' : 's'} inside`}
+              </span>
+              <button
+                className="link-btn"
+                disabled={cityBusy}
+                onClick={() => void removeCityRegion()}
+              >
+                {cityBusy ? '…' : 'remove'}
+              </button>
+            </div>
+          ) : (
+            <div className="city-region-row">
+              <span className="city-region-label">Make this a</span>
+              <button
+                className="link-btn"
+                disabled={cityBusy}
+                onClick={() => void makeCityRegion('city')}
+              >
+                City
+              </button>
+              <button
+                className="link-btn"
+                disabled={cityBusy}
+                onClick={() => void makeCityRegion('region')}
+              >
+                Region
+              </button>
+              {cityBusy && <span className="muted"> fetching boundary…</span>}
+            </div>
+          )}
+          {cityMsg && <div className="city-region-msg">{cityMsg}</div>}
         </div>
       )}
 
@@ -820,33 +998,47 @@ export default function PlacePanel({
           activity days here in the same style as places. */}
       {(() => {
         const isTrail = place.is_trail;
-        // Visits = actual times we went to THIS place. Every Strava/Garmin activity
-        // gets its own row (date · name · type · miles); photo/entry-only days and
-        // multi-day trips show as dated visit rows. Member places ("part of" this
-        // one) list under SPOTS AND REVIEWS instead.
+        // A trip/city/region rollup shows its FUSED visit(s) — one trip is ONE
+        // visit (e.g. "San Diego · Jul 11–16 · Trip"), never a row per activity.
+        // Only LEAF places break out each activity as its own dated row.
+        const isRollup = place.holds_children && !isTrail;
+        // Visits = actual times we went to THIS place. On a leaf, every Strava/
+        // Garmin activity gets its own row (date · name · type · miles); photo/
+        // entry-only days and multi-day trips show as dated visit rows.
         const acts = trailActs ?? [];
-        const actRows = acts.map((a) => ({
-          key: a.id,
-          date: fmtRunDate(a.start_date),
-          sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-          to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
-          del: null as string | null,
-          start: '' as string,
-          sort: (a.start_date ?? '').slice(0, 10),
-          solo: a.solo_profile as string | null,
-          target: { type: 'activity' as const, id: a.id },
-        }));
+        const actRows = isRollup
+          ? []
+          : acts.map((a) => ({
+              key: a.id,
+              date: fmtRunDate(a.start_date),
+              sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+              to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
+              del: null as string | null,
+              start: '' as string,
+              sort: (a.start_date ?? '').slice(0, 10),
+              solo: a.solo_profile as string | null,
+              target: { type: 'activity' as const, id: a.id },
+            }));
         const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
         // Non-trail places also surface visit rows an activity doesn't already
         // cover: multi-day trips, and single days with photos/entries but no run.
         const visitRows = isTrail
           ? []
           : (visits ?? [])
-              .filter((v) => v.is_trip || !actDays.has(v.start_date))
+              // Rollups show all their (fused) visits; leaves show trips + any
+              // photo/entry day an activity row doesn't already cover.
+              .filter((v) => isRollup || v.is_trip || !actDays.has(v.start_date))
               .map((v) => ({
                 key: v.id,
                 date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
-                sub: null as string | null,
+                sub:
+                  [
+                    v.note ?? '',
+                    visitStats[v.id]?.photos ? `${visitStats[v.id].photos} photos` : '',
+                    visitStats[v.id]?.videos ? `${visitStats[v.id].videos} videos` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || null,
                 to: `/place/${place.id}/day/${v.start_date}`,
                 del: v.id as string | null,
                 start: v.start_date as string,
@@ -893,15 +1085,6 @@ export default function PlacePanel({
                             ))}
                           </select>
                         )}
-                        {canEdit && r.start && (
-                          <button
-                            className="visit-stop"
-                            title="Add a specific stop on this day"
-                            onClick={() => setMovingVisit((cur) => (cur === r.key ? null : r.key))}
-                          >
-                            + stop
-                          </button>
-                        )}
                         {canEdit && r.del && (
                           <button
                             className="visit-del"
@@ -912,17 +1095,6 @@ export default function PlacePanel({
                           </button>
                         )}
                       </div>
-                      {canEdit && movingVisit === r.key && (
-                        <div className="entry" style={{ marginTop: 6 }}>
-                          <label>Add a stop on {r.date} — its own address, counts as a visit</label>
-                          <div className="spot-search bucket-search">
-                            <MapSearch
-                              onPick={(res) => void addStopAtVisit(r.start, res)}
-                              placeholder="Search the place you stopped…"
-                            />
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -931,13 +1103,13 @@ export default function PlacePanel({
 
             {canEdit && !addingVisit && (
               <button
-                className="link-btn"
+                className="primary log-visit-btn"
                 onClick={() => {
                   setAddingVisit(true);
                   setVStart(new Date().toISOString().slice(0, 10));
                 }}
               >
-                ＋ Add a visit
+                {visitCount > 0 ? 'Log another visit' : 'Log a visit'}
               </button>
             )}
 
@@ -960,17 +1132,48 @@ export default function PlacePanel({
                   />
                   Multiple days
                 </label>
+                {people.length >= 2 && (
+                  <>
+                    <label>Who was there</label>
+                    <select
+                      className="attribution-select"
+                      value={vWho}
+                      onChange={(e) => setVWho(e.target.value)}
+                    >
+                      <option value="">Both of us</option>
+                      {people.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <div className="btn-row">
                   <button className="primary" disabled={!vStart} onClick={() => void submitVisit()}>
-                    Add visit
+                    Save visit
                   </button>
-                  <button onClick={() => setAddingVisit(false)}>Cancel</button>
+                  <button
+                    onClick={() => {
+                      setAddingVisit(false);
+                      setVWho('');
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             )}
           </>
         );
       })()}
+
+      {place.category === 'trip' && (
+        <>
+          <h3 style={{ marginTop: 22 }}>Itinerary</h3>
+          <TripItinerary tripId={place.id} canEdit={canEdit} />
+        </>
+      )}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
@@ -986,6 +1189,33 @@ export default function PlacePanel({
               done)
             </span>
           </h3>
+          {/* Rollup: sections done · total miles · total visit-days across sections. */}
+          {(() => {
+            const done = trailSections.done;
+            const totalMiles = Object.values(trailMiles).reduce((s, m) => s + m, 0) / 1609.344;
+            const totalVisits = done.reduce((s, m) => s + (m.visit_count || 0), 0);
+            return (
+              <div className="our-stats" style={{ marginBottom: 12 }}>
+                <span className="stat">
+                  <b>{done.length}</b> <span className="label">sections done</span>
+                </span>
+                {totalMiles > 0 && (
+                  <span className="stat">
+                    <b>{totalMiles.toFixed(1)}</b> <span className="label">miles</span>
+                  </span>
+                )}
+                {totalVisits > 0 && (
+                  <span className="stat">
+                    <b>{totalVisits}</b> <span className="label">visits</span>
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+          {/* One fitted map of every done section along this trail. */}
+          {trailSections.done.length > 0 && (
+            <TrailSectionsMap trail={place} sections={trailSections.done} />
+          )}
           <div className="spot-groups">
             {trailSections.done.length > 0 && (
               <details className="spot-cat" open>
@@ -1030,7 +1260,7 @@ export default function PlacePanel({
         {canEdit && !addingSpot && (
           <span style={{ display: 'flex', gap: 12 }}>
             <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
-              + Add a spot
+              + Add a place here
             </button>
             <button className="add-spot-link" onClick={() => setAddingMembers((v) => !v)}>
               + Add existing places
@@ -1179,21 +1409,18 @@ export default function PlacePanel({
           ))}
         </div>
       ) : (
-        !addingSpot &&
-        cityGroups.length === 0 &&
-        activityMembers.length === 0 && (
-          <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
-        )
+        !addingSpot && <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
       )}
 
       <RouteMiniMap place={place} />
 
-      {/* Bottom line: Part of… · Delete · Save (green). Attribution (who was
-          here) lives on each VISIT now, not on the place as a whole — a place can
-          be visited solo one time and together the next. */}
+      {/* Attribution ("who was here") is NOT a place-level property — a place can
+          be visited solo one time and together another. It lives ONLY on each
+          visit row (the Me/Both/Josh chip in the Visits list above). No toggle here. */}
+
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
-          <button onClick={() => setMerging((v) => !v)}>Part of…</button>
+          <button onClick={() => setMerging((v) => !v)}>Add to a trip or trail</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete
           </button>

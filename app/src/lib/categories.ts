@@ -83,6 +83,8 @@ const BUILT_IN: Category[] = [
     review: 'Viewpoint Reviews',
   },
   { slug: 'stay', label: 'Hotel', icon: '🏨', color: '#6366f1', review: 'Hotel Reviews' },
+  // A race is its own place; each running is an activity under it. No icon.
+  { slug: 'race', label: 'Race', icon: '', color: '#f97316', review: 'Race Notes' },
   // Container kinds — a place that holds other places (its members via part_of).
   // No icon (per Erica). A Trip has dates; a Trail is a route.
   { slug: 'trip', label: 'Trip', icon: '', color: '#ec4899', review: 'Trip Notes' },
@@ -98,9 +100,7 @@ let BY_SLUG = new Map(CATEGORIES.map((c) => [c.slug, c]));
 
 /** Replace the runtime category list from DB rows (public.place_categories). */
 export function applyCategories(
-  rows: Array<
-    Category & { is_auto?: boolean; is_container?: boolean; sort_order?: number }
-  >,
+  rows: Array<Category & { is_auto?: boolean; is_container?: boolean; sort_order?: number }>,
 ): void {
   if (!rows || rows.length === 0) return;
   CATEGORIES = rows.map((r) => ({
@@ -121,8 +121,6 @@ export const isContainerSlug = (slug: string): boolean => CONTAINER_SLUGS.includ
 export const categoryColor = (slug: string): string => BY_SLUG.get(slug)?.color ?? '#38bdf8';
 export const categoryIcon = (slug: string): string => BY_SLUG.get(slug)?.icon ?? '📍';
 export const categoryLabel = (slug: string): string => BY_SLUG.get(slug)?.label ?? slug;
-export const categoryReviewLabel = (slug: string): string =>
-  BY_SLUG.get(slug)?.review ?? `${categoryLabel(slug)} Reviews`;
 
 /** All categories for a place: manual ∪ auto (deduped, in CATEGORIES order). */
 export function effectiveCategories(

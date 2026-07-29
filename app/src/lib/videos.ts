@@ -8,6 +8,23 @@ import type { Video } from './types';
 
 const VIDEO_COLS = 'id, place_id, poster_key, taken_at, duration_s, created_at';
 
+/** place_id → a video id (that has a poster) usable as a map marker when the
+ *  place has no cover photo. Newest first so the latest video wins. */
+export async function fetchVideoCovers(): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from('videos')
+    .select('id, place_id, taken_at')
+    .not('poster_key', 'is', null)
+    .not('place_id', 'is', null)
+    .order('taken_at', { ascending: false, nullsFirst: false });
+  const out = new Map<string, string>();
+  if (error || !data) return out;
+  for (const v of data as { id: string; place_id: string }[]) {
+    if (!out.has(v.place_id)) out.set(v.place_id, v.id);
+  }
+  return out;
+}
+
 export async function fetchVideosForPlace(placeId: string): Promise<Video[]> {
   const { data, error } = await supabase
     .from('videos')
@@ -40,6 +57,10 @@ async function capturePoster(
       v.currentTime = Math.min(1, (v.duration || 2) / 2);
       setTimeout(res, 3000);
     });
+    // Wait for the seeked frame to actually paint before drawing (two rAFs) —
+    // without this the canvas is often captured black/blank.
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (!v.videoWidth || !v.videoHeight) return { poster: null, duration };
     const max = 1280;
     const scale = Math.min(1, max / Math.max(v.videoWidth || 1, v.videoHeight || 1));
     const w = Math.max(1, Math.round((v.videoWidth || 640) * scale));

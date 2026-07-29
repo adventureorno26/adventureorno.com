@@ -41,8 +41,11 @@ export interface Place {
   website: string | null; // optional link for a bucket-list place
   categories: string[]; // manual tags
   activity_categories: string[]; // auto tags from Strava
-  solo_profile: string | null; // if set, this place belongs to just that person (else both)
+  solo_profile: string | null; // legacy place-level attribution (superseded by visit-level)
   favorite: string | null; // favorite wine / meal / beer at this place
+  holds_children: boolean; // container (trail/trip/city) — no attribution toggle
+  category: string | null; // normalized singular category
+  park: string | null; // national park / public land this place falls inside
   created_by: string | null;
   created_at: string;
 }
@@ -82,8 +85,8 @@ export type PhotoSource = 'shortcut' | 'manual';
 export interface Photo {
   id: string;
   place_id: string | null;
-  lat: number;
-  lng: number;
+  lat: number | null; // null = no GPS (stored unassigned → Sorter inbox)
+  lng: number | null;
   taken_at: string | null;
   width: number | null;
   height: number | null;
@@ -92,6 +95,7 @@ export interface Photo {
   uploaded_by: string | null;
   entry_id: string | null;
   created_at: string;
+  caption: string | null;
 }
 
 export interface Invite {
@@ -101,23 +105,6 @@ export interface Invite {
   accepted_at: string | null;
   created_at: string;
   expires_at: string;
-}
-
-export type TripStatus = 'taken' | 'upcoming';
-
-export interface Trip {
-  id: string;
-  name: string;
-  start_date: string | null;
-  end_date: string | null;
-  status: TripStatus;
-  created_at: string;
-}
-
-export interface TripStats {
-  places: number;
-  photos: number;
-  miles: number;
 }
 
 export interface Entry {
@@ -143,6 +130,7 @@ export interface Activity {
   name: string | null;
   distance: number; // meters
   elevation_gain: number | null; // meters (from Strava total_elevation_gain)
+  elevation_profile: number[] | null; // ~30 sampled elevations (m) for the chart
   moving_time: number | null; // seconds
   elapsed_time: number | null;
   start_date: string | null;
@@ -198,6 +186,7 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
       | 'saved'
       | 'categories'
       | 'part_of'
+      | 'needs_geocode'
     >
   >;
 

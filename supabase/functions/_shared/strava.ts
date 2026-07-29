@@ -189,13 +189,23 @@ export async function ingestActivity(
     const { error } = await admin.from('activities').update(stravaFields).eq('id', existing.id);
     if (error) throw new Error(`update activity failed: ${error.message}`);
   } else {
-    const { data: assigned } = await admin.rpc('assign_activity_place', { p_lat: lat, p_lng: lng });
+    // An activity gets its OWN leaf place at its start point (reusing a leaf
+    // within 150 m). No 30 km nearest-pin snapping.
+    const { data: assigned } = await admin.rpc('place_for_activity', {
+      p_lat: lat,
+      p_lng: lng,
+      p_type: a.type ?? null,
+      p_name: a.name ?? null,
+    });
     placeId = (assigned as string | null) ?? null;
     const { error } = await admin
       .from('activities')
       .insert({ strava_id: a.id, place_id: placeId, ...stravaFields });
     if (error) throw new Error(`insert activity failed: ${error.message}`);
   }
-  if (placeId) await admin.rpc('recompute_place_stats', { p_place: placeId });
+  if (placeId) {
+    await admin.rpc('recompute_place_stats', { p_place: placeId });
+    await admin.rpc('rebuild_place_visits', { p_place: placeId });
+  }
   return 'stored';
 }

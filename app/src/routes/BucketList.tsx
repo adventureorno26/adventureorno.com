@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { createPlace, fetchBucketPlaces } from '../lib/data';
+import {
+  createPlace,
+  dateNightPick,
+  fetchBucketPlaces,
+  fetchWishes,
+  toggleWish,
+  type WishInfo,
+} from '../lib/data';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import { categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import type { Place } from '../lib/types';
@@ -11,22 +18,57 @@ import BucketMap from '../components/BucketMap';
 
 export default function BucketList() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [wishes, setWishes] = useState<Record<string, WishInfo>>({});
+  const [onlyBoth, setOnlyBoth] = useState(false);
 
   function load() {
     fetchBucketPlaces()
       .then(setPlaces)
       .catch(() => setMsg('Could not load your bucket list'));
+    fetchWishes()
+      .then(setWishes)
+      .catch(() => undefined);
   }
   useEffect(load, []);
+
+  async function toggleWant(placeId: string) {
+    // optimistic: flip my membership in this place's wanters
+    const myId = profile?.id;
+    if (!myId) return;
+    setWishes((prev) => {
+      const cur = prev[placeId] ?? { wanters: [], n: 0, everyone: false };
+      const mine = cur.wanters.includes(myId);
+      const wanters = mine ? cur.wanters.filter((w) => w !== myId) : [...cur.wanters, myId];
+      return { ...prev, [placeId]: { ...cur, wanters, n: wanters.length } };
+    });
+    try {
+      await toggleWish(placeId);
+    } finally {
+      fetchWishes()
+        .then(setWishes)
+        .catch(() => undefined); // reconcile "everyone"
+    }
+  }
+
+  async function spin() {
+    setMsg(null);
+    const id = await dateNightPick();
+    if (id) navigate(`/place/${id}`);
+    else setMsg('Pick a place you both want to go first — tap “Want to go” on a few.');
+  }
+
+  const bothCount = Object.values(wishes).filter((w) => w.everyone).length;
 
   // Group by US state, or by country for everywhere else; both sorted A→Z.
   const groups = useMemo(() => {
     const map = new Map<string, { items: Place[]; isState: boolean }>();
     for (const p of places ?? []) {
+      if (onlyBoth && !wishes[p.id]?.everyone) continue;
       const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
       const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
       if (!map.has(key)) map.set(key, { items: [], isState: Boolean(isUS) });
@@ -42,7 +84,7 @@ export default function BucketList() {
         label,
         items: g.items.sort((x, y) => x.name.localeCompare(y.name)),
       }));
-  }, [places]);
+  }, [places, onlyBoth, wishes]);
 
   // Search → add a want-to-go place (flagged bucket = true; distinct map pin).
   async function addFromSearch(r: SearchResult) {
@@ -86,6 +128,18 @@ export default function BucketList() {
 
       <BucketMap places={places ?? []} onAdded={load} />
 
+      <div className="bucket-toolbar">
+        <button className="primary spin-btn" onClick={() => void spin()} disabled={bothCount === 0}>
+          🎲 Date night — surprise us
+        </button>
+        <button
+          className={`chip-toggle ${onlyBoth ? 'on' : ''}`}
+          onClick={() => setOnlyBoth((v) => !v)}
+        >
+          Both want to go{bothCount > 0 ? ` (${bothCount})` : ''}
+        </button>
+      </div>
+
       {canEdit && (
         <div className="card" style={{ margin: '14px 0 20px' }}>
           <div className="bucket-search">
@@ -106,21 +160,36 @@ export default function BucketList() {
           <section key={g.label} style={{ marginTop: 18 }}>
             <h3 className="bucket-group-head">{g.label}</h3>
             <div className="trip-places">
-              {g.items.map((p) => (
-                <Link key={p.id} className="trip-place" to={`/place/${p.id}`}>
-                  <span className="result-pin bucket">
-                    <PinIcon size={14} />
-                  </span>{' '}
-                  {p.name}
-                  <span className="place-row-cats" style={{ marginLeft: 6 }}>
-                    {effectiveCategories(p).map((s) => (
-                      <span key={s} title={categoryLabel(s)}>
-                        {categoryIcon(s)}
+              {g.items.map((p) => {
+                const w = wishes[p.id];
+                const mine = profile ? (w?.wanters.includes(profile.id) ?? false) : false;
+                return (
+                  <div key={p.id} className="bucket-row">
+                    <Link className="trip-place" to={`/place/${p.id}`}>
+                      <span className="result-pin bucket">
+                        <PinIcon size={14} />
+                      </span>{' '}
+                      {p.name}
+                      <span className="place-row-cats" style={{ marginLeft: 6 }}>
+                        {effectiveCategories(p).map((s) => (
+                          <span key={s} title={categoryLabel(s)}>
+                            {categoryIcon(s)}
+                          </span>
+                        ))}
                       </span>
-                    ))}
-                  </span>
-                </Link>
-              ))}
+                    </Link>
+                    {w?.everyone && <span className="both-badge">Both want to go</span>}
+                    {canEdit && (
+                      <button
+                        className={`want-btn ${mine ? 'on' : ''}`}
+                        onClick={() => void toggleWant(p.id)}
+                      >
+                        {mine ? '♥ Want to go' : 'Want to go'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         ))

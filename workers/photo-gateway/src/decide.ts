@@ -22,15 +22,20 @@ export function ingestDecision(i: DecideInput): SkipReason | null {
   if (i.isDeleted && !(i.manual && i.override)) return 'deleted';
   if (i.isDuplicate) return 'duplicate';
 
-  // No coordinates at all is always fatal — we can't place the photo.
-  if (!i.hasCoords) return 'no_gps';
+  if (!i.manual) {
+    // Automated ingest (the Shortcut) keeps the full gate: it must have real GPS,
+    // pass the screenshot/make-model check, and stay out of the home zone.
+    if (!i.hasCoords) return 'no_gps';
+    if (i.gate === 'screenshot') return 'screenshot';
+    if (i.gate === 'no_gps') return 'no_gps';
+    if (i.inZone) return 'home_zone';
+    return null;
+  }
 
-  // Screenshot/format gate. On the manual path a deliberate override clears it.
-  if (i.gate === 'screenshot' && !(i.manual && i.override)) return 'screenshot';
-  if (i.gate === 'no_gps') return 'no_gps';
-
-  // Home zone (rule #1). Overridable only on the deliberate manual path.
-  if (i.inZone && !(i.manual && i.override)) return 'home_zone';
-
+  // Manual upload is deliberate. No coordinates is FINE — the photo is stored
+  // unassigned (place_id null) and lands in the Sorter inbox to be placed by time.
+  // Screenshots still need an explicit override; home-zone is overridable.
+  if (i.gate === 'screenshot' && !i.override) return 'screenshot';
+  if (i.inZone && !i.override) return 'home_zone';
   return null;
 }

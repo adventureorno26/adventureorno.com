@@ -12,17 +12,22 @@ import {
 } from '../lib/maptiler';
 import {
   createPlace,
+  updatePlace,
   deletePlace,
   fetchFog,
   fetchMapPeople,
   fetchMapProjection,
   fetchPings,
+  fetchPlaceIdsForView,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
   type MapPerson,
 } from '../lib/data';
-import { fetchPhotoObjectUrl, mapPool, readGps, uploadPhoto } from '../lib/photos';
+import { fetchPhotoObjectUrl, mapPool, readGps } from '../lib/photos';
+import { fetchVideoCovers, fetchVideoPosterUrl } from '../lib/videos';
+import { enqueueUpload } from '../lib/uploadQueue';
+import NewPlaceDraft from '../components/NewPlaceDraft';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import {
   createManualActivity,
@@ -46,6 +51,7 @@ import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import OnThisDay from '../components/OnThisDay';
 import PersonFilter from '../components/PersonFilter';
+import FilterChips from '../components/FilterChips';
 import SearchPalette from '../components/SearchPalette';
 import MemoryBanner from '../components/MemoryBanner';
 
@@ -71,34 +77,43 @@ function inverseFog(mp: GeoJSON.MultiPolygon | null): GeoJSON.Feature<GeoJSON.Po
   };
 }
 
-// A place's effective cover photo — its own, or (for a trail) a trailhead's.
-function effectiveCover(p: Place, all: Place[]): string | null {
-  if (p.cover_photo_id) return p.cover_photo_id;
-  if (p.is_trail)
-    return (
-      all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id)?.cover_photo_id ?? null
-    );
-  return null;
+// place_id → a video id (with a poster) to use as the marker when there's no
+// cover photo. Populated by the map from fetchVideoCovers().
+const coverVideoByPlace = new Map<string, string>();
+
+// A place's marker image id: its cover photo (`ph-<id>`), a trailhead's photo,
+// else — if it has a video with a poster — that video's poster (`vid-<id>`),
+// else '' (a plain pin). Every marker still = a real photo/video frame.
+function coverIcon(p: Place, all: Place[]): string {
+  if (p.cover_photo_id) return `ph-${p.cover_photo_id}`;
+  if (p.is_trail) {
+    const th = all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id);
+    if (th?.cover_photo_id) return `ph-${th.cover_photo_id}`;
+  }
+  const vid = coverVideoByPlace.get(p.id);
+  if (vid) return `vid-${vid}`;
+  return '';
 }
 
 function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: 'FeatureCollection',
     features: places.map((p) => {
-      const cover = effectiveCover(p, places);
+      const icon = coverIcon(p, places);
       const primary = primaryCategory(p);
       return {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         properties: {
           id: p.id,
-          photo: cover ? 1 : 0,
-          icon: cover ? `ph-${cover}` : '',
+          photo: icon ? 1 : 0,
+          visits: p.visit_count ?? 0,
+          icon,
           color: categoryColor(primary),
           // White type indicator on no-photo pins (R=Restaurant, W=Winery, …).
           // Trails show no letter — their route line already identifies them.
           glyph:
-            cover || primary === 'default' || primary === 'trail'
+            icon || primary === 'default' || primary === 'trail'
               ? ''
               : primary.charAt(0).toUpperCase(),
         },
@@ -116,11 +131,29 @@ async function coverUrl(photoId: string): Promise<string> {
   coverUrlCache.set(photoId, url);
   return url;
 }
+const videoUrlCache = new Map<string, string>();
+async function videoCoverUrl(videoId: string): Promise<string> {
+  const cached = videoUrlCache.get(videoId);
+  if (cached) return cached;
+  const url = await fetchVideoPosterUrl(videoId);
+  videoUrlCache.set(videoId, url);
+  return url;
+}
 
 // Render a place's cover thumbnail into a circular map icon (white ring).
 async function circleIcon(photoId: string): Promise<ImageData | null> {
+  return circleIconFromUrl(await coverUrl(photoId));
+}
+// Same, from a video poster.
+async function videoCircleIcon(videoId: string): Promise<ImageData | null> {
   try {
-    const url = await coverUrl(photoId);
+    return circleIconFromUrl(await videoCoverUrl(videoId));
+  } catch {
+    return null;
+  }
+}
+async function circleIconFromUrl(url: string): Promise<ImageData | null> {
+  try {
     const img = new Image();
     img.src = url;
     await img.decode();
@@ -195,12 +228,23 @@ export default function MapView() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  // Explicit new-place draft (map click / search) — nothing saved until Save.
+  const [draft, setDraft] = useState<{ lat: number; lng: number; presetName?: string } | null>(
+    null,
+  );
+  // Completion report after a batch upload touched several places.
+  const [uploadReport, setUploadReport] = useState<{
+    added: number;
+    skipped: number;
+    rows: { id: string; name: string; n: number }[];
+  } | null>(null);
   const [activitySub, setActivitySub] = useState(false);
   const [activityFilter, setActivityFilter] = useState('');
   const [photoSub, setPhotoSub] = useState(false);
   const addFileRef = useRef<HTMLInputElement | null>(null);
-  // Google Photos import is owner-only (Erica), web, and only if configured.
-  const canGooglePhotos = profile?.role === 'owner' && googlePhotosEnabled();
+  // Google Photos import is a manual upload — Erica AND Josh (editor) can use it,
+  // each from their own Google account. Only the automated device ingest is Erica-only.
+  const canGooglePhotos = canEdit && googlePhotosEnabled();
 
   async function importGooglePhotos() {
     setPhotoSub(false);
@@ -302,6 +346,15 @@ export default function MapView() {
         countsRef.current = c;
       })
       .catch(() => undefined);
+    // Video covers: places with a video (but no cover photo) get the video's
+    // poster as their marker. Load once; re-sync if the map is already up.
+    fetchVideoCovers()
+      .then((m) => {
+        coverVideoByPlace.clear();
+        for (const [k, v] of m) coverVideoByPlace.set(k, v);
+        if (mapRef.current?.getSource(SOURCE_ID)) syncSource(placesRef.current);
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -389,20 +442,31 @@ export default function MapView() {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
-      map.addLayer({
-        id: 'fog-soft',
-        type: 'fill',
-        source: 'fog-soft',
-        layout: { visibility: 'none' },
-        paint: { 'fill-color': '#05070d', 'fill-opacity': 0.55 },
-      });
-      map.addLayer({
-        id: 'fog-crisp',
-        type: 'fill',
-        source: 'fog-crisp',
-        layout: { visibility: 'none' },
-        paint: { 'fill-color': '#05070d', 'fill-opacity': 0.3 },
-      });
+      // Insert the fog UNDER the basemap's first label (symbol) layer so city /
+      // place names stay readable ON TOP of the fog — otherwise fog-of-war hides
+      // every city label ("barely any cities labeled"). Falls back to on-top if
+      // the style has no symbol layer.
+      const firstLabelId = map.getStyle().layers?.find((l) => l.type === 'symbol')?.id;
+      map.addLayer(
+        {
+          id: 'fog-soft',
+          type: 'fill',
+          source: 'fog-soft',
+          layout: { visibility: 'none' },
+          paint: { 'fill-color': '#05070d', 'fill-opacity': 0.55 },
+        },
+        firstLabelId,
+      );
+      map.addLayer(
+        {
+          id: 'fog-crisp',
+          type: 'fill',
+          source: 'fog-crisp',
+          layout: { visibility: 'none' },
+          paint: { 'fill-color': '#05070d', 'fill-opacity': 0.3 },
+        },
+        firstLabelId,
+      );
 
       // Trail/route lines render UNDER the place markers; tap a line to open its
       // place card (rename / merge / reassign there).
@@ -563,9 +627,34 @@ export default function MapView() {
           'icon-ignore-placement': true,
         },
       });
+      // Repeat-visit badge: a small "×N" over any marker visited more than once
+      // (text, not an icon — keeps to Erica's no-icons rule). Drawn last so it
+      // sits above the cover photos.
+      map.addLayer({
+        id: 'place-visit-badge',
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['all', ['!', ['has', 'point_count']], ['>', ['get', 'visits'], 1]],
+        layout: {
+          'text-field': ['concat', '×', ['to-string', ['get', 'visits']]],
+          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-size': 11,
+          'text-offset': [1.1, -1.1],
+          'text-anchor': 'center',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#fff',
+          'text-halo-color': '#2563eb',
+          'text-halo-width': 2.5,
+        },
+      });
       map.on('styleimagemissing', (e) => {
         const iid = e.id;
-        if (!iid || !iid.startsWith('ph-') || map.hasImage(iid)) return;
+        const isPhoto = iid?.startsWith('ph-');
+        const isVideo = iid?.startsWith('vid-');
+        if (!iid || (!isPhoto && !isVideo) || map.hasImage(iid)) return;
         // Reserve the id with a transparent placeholder so it doesn't refire,
         // then fill in the real circular thumbnail once it decodes.
         map.addImage(
@@ -573,7 +662,8 @@ export default function MapView() {
           { width: 100, height: 100, data: new Uint8Array(100 * 100 * 4) },
           { pixelRatio: 2 },
         );
-        void circleIcon(iid.slice(3)).then((data) => {
+        const build = isVideo ? videoCircleIcon(iid.slice(4)) : circleIcon(iid.slice(3));
+        void build.then((data) => {
           if (data && map.hasImage(iid)) map.updateImage(iid, data);
         });
       });
@@ -689,13 +779,37 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Which leaf places belong to the current person view (attribution + cutoff).
+  // "Both" = only places with a post-2025-12-21 joint visit; a person = their solo
+  // + joint visits. Containers (trails/trips) roll up and aren't visit-filtered.
+  const [viewSet, setViewSet] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetchPlaceIdsForView(personFilter)
+      .then((s) => active && setViewSet(s))
+      .catch(() => active && setViewSet(null));
+    return () => {
+      active = false;
+    };
+  }, [personFilter, places.length]);
+
+  // Trailheads = leaf places that belong to a trail. They're landmarks Erica
+  // wants ALWAYS on the map (e.g. the Appalachian / Tuscarora / W&OD trailheads),
+  // so they're exempt from the person/cutoff view filter just like the trails.
+  const trailIds = new Set(places.filter((p) => p.is_trail).map((p) => p.id));
+  const trailMemberIds = new Set(
+    places.filter((p) => (p.part_of ?? []).some((pid) => trailIds.has(pid))).map((p) => p.id),
+  );
+
   // Filter the map: bucket-list places are hidden unless their toggle is on;
-  // visited places follow the selected activity tag and the person filter.
+  // visited places follow the selected activity tag and the person view.
   const visiblePlaces = places.filter((p) => {
     if (p.bucket) return false; // bucket-list places live on the bucket page, not the main map
     if (!p.saved) return false; // only saved places appear on the map
-    // "Just me / Just Josh" hides only places explicitly marked the OTHER person's.
-    if (personFilter && p.solo_profile && p.solo_profile !== personFilter) return false;
+    // Leaf places must be in the current person view (attribution + cutoff).
+    // Containers (trails/trips) AND trailheads are exempt so trails stay visible.
+    if (!p.holds_children && !trailMemberIds.has(p.id) && viewSet && !viewSet.has(p.id))
+      return false;
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 
@@ -994,28 +1108,23 @@ export default function MapView() {
     setDrawBusy(false);
   }
 
-  async function handleAddAt(lng: number, lat: number, presetName?: string) {
-    setAddMode(false);
-    setBanner('Adding that place…');
-    const geo = presetName ? null : await reverseGeocode(lng, lat);
-    try {
-      const created = await createPlace({
-        name: presetName ?? geo?.name ?? 'New place',
-        country: geo?.country ?? null,
-        admin1: geo?.admin1 ?? null,
-        lng,
-        lat,
-      });
-      setPlaces((prev) => [...prev, created]);
-      pendingRef.current.add(created.id); // remove on close if left empty
-      setBanner(null);
-      navigate(`/place/${created.id}`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Could not create place');
-    }
+  // Launched from a trail card's "Add a route": close the card, enter draw mode
+  // pre-named + targeted so the drawn route attaches to THIS trail on save.
+  function startDrawForTrail(trailId: string, name: string) {
+    drawTargetRef.current = trailId;
+    setDrawName(name);
+    navigate('/');
+    setDrawMode(true);
   }
 
-  // Close the card; if it was a placeholder pin left with no info, delete it.
+  // Map click / search → open an explicit DRAFT (nothing hits the DB until Save).
+  function handleAddAt(lng: number, lat: number, presetName?: string) {
+    setAddMode(false);
+    setBanner(null);
+    setDraft({ lat, lng, presetName });
+  }
+
+  // Close the card. (No throwaway cleanup — new places are explicit drafts now.)
   async function handleCloseCard(id: string | undefined) {
     navigate('/');
     if (!id || !pendingRef.current.has(id)) return;
@@ -1035,25 +1144,11 @@ export default function MapView() {
     setPlaces((prev) => prev.filter((x) => x.id !== id));
   }
 
-  // Search a location and drop a card there (auto-removes on close if left empty).
-  async function handleSearchPick(r: SearchResult) {
-    try {
-      const created = await createPlace({
-        name: r.name,
-        country: r.country,
-        admin1: r.admin1,
-        address: r.address,
-        lng: r.lng,
-        lat: r.lat,
-      });
-      setPlaces((prev) => [...prev, created]);
-      pendingRef.current.add(created.id);
-      setBanner(null);
-      mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: 12 });
-      navigate(`/place/${created.id}`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Could not add place');
-    }
+  // Search a location → open the new-place draft there (nothing saved until Save).
+  function handleSearchPick(r: SearchResult) {
+    mapRef.current?.flyTo({ center: [r.lng, r.lat], zoom: 12 });
+    setBanner(null);
+    setDraft({ lat: r.lat, lng: r.lng, presetName: r.name });
   }
 
   // Add photos: geotagged ones auto-place by GPS; photos WITHOUT a location get
@@ -1063,6 +1158,7 @@ export default function MapView() {
     let added = 0;
     let geoPlaceId: string | null = null; // place the (first) geotagged photo landed on
     const skips: Record<string, number> = {};
+    const perPlace = new Map<string, number>(); // place_id → photos added there
 
     // Read GPS for all files first, then upload the geotagged ones in parallel (4×).
     const withGps = await mapPool(
@@ -1075,46 +1171,51 @@ export default function MapView() {
     );
     const noLoc = withGps.filter((x) => x && !x.gps).map((x) => x!.f);
 
-    const results = await mapPool(
-      geo,
-      ({ f, gps }) => uploadPhoto(f, { lat: gps.lat, lng: gps.lng }),
-      4,
+    // Through the global upload queue: progress + pause/retry, survives navigation.
+    const results = await Promise.all(
+      geo.map(({ f, gps }) => enqueueUpload(f, { lat: gps.lat, lng: gps.lng })),
     );
     results.forEach((r) => {
       if (!r) skips.error = (skips.error ?? 0) + 1;
       else if (r.ok) {
         added++;
         if (!geoPlaceId && r.place_id) geoPlaceId = r.place_id;
+        if (r.place_id) perPlace.set(r.place_id, (perPlace.get(r.place_id) ?? 0) + 1);
       } else if (r.skipped) skips[r.skipped] = (skips[r.skipped] ?? 0) + 1;
     });
 
-    // Photos with no location → one new card at the map center to place manually.
-    let newPlaceId: string | null = null;
+    // Photos with no location → upload them WITHOUT coordinates or a place. They
+    // land unassigned in the Sorter inbox, to be placed by capture time — no more
+    // fabricating a location at the map center.
+    let inboxAdded = 0;
     if (noLoc.length > 0) {
-      const ctr = mapRef.current?.getCenter();
-      const lat = ctr?.lat ?? 39;
-      const lng = ctr?.lng ?? -77;
-      try {
-        const created = await createPlace({
-          name: 'New place',
-          country: null,
-          admin1: null,
-          lat,
-          lng,
-        });
-        newPlaceId = created.id;
-        for (const f of noLoc) {
-          await uploadPhoto(f, { placeId: created.id, lat, lng, override: true }).catch(
-            () => undefined,
-          );
-        }
-      } catch {
-        /* ignore */
-      }
+      const res = await Promise.all(noLoc.map((f) => enqueueUpload(f, { override: true })));
+      inboxAdded = res.filter((r) => r && r.ok).length;
     }
 
     if (added > 0) await triggerGeocode().catch(() => undefined);
     const rows = await fetchPlaces().catch(() => places);
+    // Prefill a freshly geo-placed photo's card from the photo's own coordinates
+    // right away (name/state/country), so the address is populated the moment the
+    // card opens — not only after the server geocode. Empty fields ONLY, so an
+    // existing named place the photo attached to is never overwritten.
+    if (geoPlaceId && geo[0]?.gps) {
+      const gp = rows.find((r) => r.id === geoPlaceId);
+      if (gp && (!gp.name || gp.name === 'New place' || !gp.admin1 || !gp.country)) {
+        const rev = await reverseGeocode(geo[0].gps.lng, geo[0].gps.lat).catch(() => null);
+        if (rev) {
+          const patch: { name?: string; admin1?: string | null; country?: string | null } = {};
+          if (!gp.name || gp.name === 'New place') patch.name = rev.name;
+          if (!gp.admin1) patch.admin1 = rev.admin1;
+          if (!gp.country) patch.country = rev.country;
+          const upd = await updatePlace(geoPlaceId, patch).catch(() => null);
+          if (upd) {
+            const i = rows.findIndex((r) => r.id === geoPlaceId);
+            if (i >= 0) rows[i] = upd;
+          }
+        }
+      }
+    }
     setPlaces(rows);
     await fetchPlaceCounts()
       .then((c) => {
@@ -1124,21 +1225,45 @@ export default function MapView() {
       .catch(() => undefined);
     setTrayNonce((n) => n + 1);
 
-    if (newPlaceId) {
-      setBanner('Set this place’s location using the address box on the card.');
-      navigate(`/place/${newPlaceId}`);
-    } else if (geoPlaceId) {
+    // A batch that touched several places → show a completion report (which places
+    // got photos + what was skipped) instead of jumping to just the first one.
+    if (perPlace.size > 1) {
+      const skipCount = Object.values(skips).reduce((a, b) => a + b, 0);
+      const report = {
+        added,
+        skipped: skipCount,
+        rows: [...perPlace.entries()]
+          .map(([pid, n]) => ({
+            id: pid,
+            name: rows.find((r) => r.id === pid)?.name ?? 'Place',
+            n,
+          }))
+          .sort((a, b) => b.n - a.n),
+      };
+      setUploadReport(report);
+      setBanner(null);
+      return;
+    }
+
+    if (geoPlaceId) {
       // Geotagged photo(s) auto-placed — open the card so the location/name/tags
       // can be adjusted just like any other place.
       setBanner(added > 1 ? `Added ${added} photos. Review the location and details here.` : null);
       navigate(`/place/${geoPlaceId}`);
+    } else if (inboxAdded > 0 && added === 0) {
+      // Only no-GPS photos → they're in the inbox to sort by date.
+      setBanner(
+        `${inboxAdded} photo${inboxAdded > 1 ? 's' : ''} had no location — added to your inbox. Sort them in Settings → Sort photos into places.`,
+      );
     } else if (added > 0) {
-      setBanner(`Added ${added} photo${added > 1 ? 's' : ''} to the map.`);
+      setBanner(
+        `Added ${added} photo${added > 1 ? 's' : ''} to the map${inboxAdded ? ` · ${inboxAdded} with no location went to your inbox` : ''}.`,
+      );
     } else {
       // Nothing added — say exactly why so it's never a silent failure.
       const labels: Record<string, string> = {
         duplicate: 'already on the map',
-        deleted: 'previously deleted (can’t be re-added)',
+        deleted: 'previously deleted (auto-import skips it; re-upload on purpose to add it back)',
         error: 'upload error',
         undecodable: 'couldn’t read the image',
       };
@@ -1161,25 +1286,11 @@ export default function MapView() {
       setSearching(false);
       return;
     }
-    try {
-      const created = await createPlace({
-        name: geo.name,
-        country: geo.country,
-        admin1: geo.admin1,
-        address: geo.address,
-        lng: geo.lng,
-        lat: geo.lat,
-      });
-      setPlaces((prev) => [...prev, created]);
-      pendingRef.current.add(created.id);
-      setAddress('');
-      setAddMode(false);
-      setBanner(null);
-      mapRef.current?.flyTo({ center: [geo.lng, geo.lat], zoom: 12 });
-      navigate(`/place/${created.id}`);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Could not create place');
-    }
+    setAddress('');
+    setAddMode(false);
+    setBanner(null);
+    mapRef.current?.flyTo({ center: [geo.lng, geo.lat], zoom: 12 });
+    setDraft({ lat: geo.lat, lng: geo.lng, presetName: geo.name });
     setSearching(false);
   }
 
@@ -1229,6 +1340,69 @@ export default function MapView() {
         </button>
       )}
 
+      {uploadReport && (
+        <div className="npd-overlay" role="dialog" onClick={() => setUploadReport(null)}>
+          <div className="npd-card" onClick={(e) => e.stopPropagation()}>
+            <div className="npd-head">
+              <b>
+                {uploadReport.added} photo{uploadReport.added === 1 ? '' : 's'} across{' '}
+                {uploadReport.rows.length} places
+              </b>
+              <button className="npd-x" onClick={() => setUploadReport(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            {uploadReport.skipped > 0 && (
+              <div className="label">
+                {uploadReport.skipped} skipped (duplicates / no location / errors)
+              </div>
+            )}
+            <div className="trash-list">
+              {uploadReport.rows.map((row) => (
+                <div key={row.id} className="trash-row">
+                  <div className="trash-main">
+                    <b>{row.name}</b>
+                    <span className="label">
+                      {row.n} photo{row.n === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUploadReport(null);
+                      navigate(`/place/${row.id}`);
+                    }}
+                  >
+                    Review
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="btn-row" style={{ marginTop: 8 }}>
+              <button onClick={() => setUploadReport(null)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {draft && (
+        <NewPlaceDraft
+          initialLat={draft.lat}
+          initialLng={draft.lng}
+          presetName={draft.presetName}
+          places={places}
+          people={people}
+          meId={profile?.id ?? null}
+          onSaved={(placeId) => {
+            setDraft(null);
+            void fetchPlaces()
+              .then(setPlaces)
+              .catch(() => undefined);
+            navigate(`/place/${placeId}`);
+          }}
+          onCancel={() => setDraft(null)}
+        />
+      )}
+
       <PersonFilter
         people={filterPeople}
         value={personFilter}
@@ -1237,6 +1411,20 @@ export default function MapView() {
       />
 
       <StatsBar places={places} onFilterCategory={setFilterCat} personFilter={personFilter} />
+
+      <FilterChips
+        filterCat={filterCat}
+        personFilter={personFilter}
+        people={filterPeople}
+        meId={profile?.id}
+        visibleCount={visiblePlaces.length}
+        onClearCat={() => setFilterCat(null)}
+        onClearPerson={() => setPersonFilter(null)}
+        onReset={() => {
+          setFilterCat(null);
+          setPersonFilter(null);
+        }}
+      />
 
       <div className="layers-control">
         {(['fog', 'heat', 'none'] as const).map((l) => (
@@ -1439,6 +1627,7 @@ export default function MapView() {
           onPlaceChanged={handlePlaceChanged}
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}
+          onAddRoute={startDrawForTrail}
         />
       )}
     </div>

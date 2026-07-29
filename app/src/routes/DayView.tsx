@@ -13,13 +13,21 @@ import {
   fetchPlaces,
   updateEntry,
 } from '../lib/data';
-import { fetchActivitiesForDay, reassignActivity, updateActivity } from '../lib/strava';
+import {
+  assignActivityToRace,
+  fetchActivitiesForDay,
+  fetchRaceNames,
+  reassignActivity,
+  updateActivity,
+} from '../lib/strava';
 import { categoryIcon, categoryLabel } from '../lib/categories';
 import type { Activity, Entry, NewEntry, Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import EntryEditor from '../components/EntryEditor';
 import EntryPhotos from '../components/EntryPhotos';
 import PhotoGallery from '../components/PhotoGallery';
+import WeatherThatDay from '../components/WeatherThatDay';
+import ElevationChart from '../components/ElevationChart';
 import StarRating from '../components/StarRating';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -64,6 +72,9 @@ export default function DayView() {
   const [editActId, setEditActId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState('Run');
+  const [racingId, setRacingId] = useState<string | null>(null);
+  const [raceName, setRaceName] = useState('');
+  const [raceNames, setRaceNames] = useState<string[]>([]);
 
   async function saveActivity(a: Activity) {
     await updateActivity(a.id, editName.trim() || a.name || a.type, editType);
@@ -80,10 +91,14 @@ export default function DayView() {
     void fetchPlace(id).then(setPlace);
     void fetchActivitiesForDay(id, date).then(setActs);
     void loadEntries();
-    if (canEdit)
+    if (canEdit) {
       void fetchPlaces()
         .then(setAllPlaces)
         .catch(() => undefined);
+      void fetchRaceNames()
+        .then(setRaceNames)
+        .catch(() => undefined);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, date]);
 
@@ -99,16 +114,31 @@ export default function DayView() {
   }
   async function moveToNew(a: Activity) {
     setMovingId(null);
+    // Name the new place from its LOCATION (reverse geocode), never the activity
+    // title. If the geocoder gives nothing, create a "New place" flagged for the
+    // nightly geocoder to name — same rule the ingest path (place_for_activity) uses.
     const geo = await reverseGeocode(a.lng, a.lat).catch(() => null);
     const created = await createPlace({
-      name: geo?.name ?? a.name ?? 'Moved activity',
+      name: geo?.name ?? 'New place',
       country: geo?.country ?? null,
       admin1: geo?.admin1 ?? null,
       lng: a.lng,
       lat: a.lat,
+      saved: true,
+      needs_geocode: !geo?.name,
     });
     await reassignActivity(a.id, created.id);
     navigate(`/place/${created.id}`);
+  }
+
+  // Mark a run as a race: move it under a race place (found/created by name), so
+  // opening that race shows every time it was run. Empty name → the activity's own.
+  async function markAsRace(a: Activity) {
+    const nm = raceName.trim() || a.name || 'Race';
+    setRacingId(null);
+    setRaceName('');
+    const raceId = await assignActivityToRace(a.id, nm);
+    navigate(`/place/${raceId}`);
   }
 
   // Create the map ONCE (don't recreate on data load, or the drawn route is lost).
@@ -210,6 +240,9 @@ export default function DayView() {
           <span>{place?.name ?? 'Place'}</span>
         </Link>
         <h2 style={{ margin: '4px 0' }}>{date ? dayLabel(date) : ''}</h2>
+        {place && date && (place.lat || place.lng) && (
+          <WeatherThatDay lat={place.lat} lng={place.lng} date={date} />
+        )}
 
         {/* Strava routes this day */}
         {acts.length > 0 && (
@@ -279,6 +312,7 @@ export default function DayView() {
                       View on Strava ↗
                     </a>
                   )}
+                  <ElevationChart profile={a.elevation_profile} gainM={a.elevation_gain} />
                   {canEdit && (
                     <div className="route-move">
                       {movingId === a.id ? (
@@ -289,23 +323,81 @@ export default function DayView() {
                               e.target.value && void moveToExisting(a, e.target.value)
                             }
                           >
-                            <option value="">Move to an existing place…</option>
-                            {allPlaces
+                            <option value="">Tie to a place, city, or trip…</option>
+                            {[...allPlaces]
                               .filter((p) => p.id !== id)
-                              .map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
+                              .sort((x, y) => x.name.localeCompare(y.name))
+                              .map((p) => {
+                                const tag = p.is_trail
+                                  ? ' (Trail)'
+                                  : p.category === 'trip'
+                                    ? ' (Trip)'
+                                    : p.category === 'city'
+                                      ? ' (City)'
+                                      : p.category === 'region'
+                                        ? ' (Region)'
+                                        : '';
+                                return (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                    {tag}
+                                  </option>
+                                );
+                              })}
                           </select>
                           <div className="move-picker-row">
-                            <button onClick={() => void moveToNew(a)}>＋ New place here</button>
+                            <button onClick={() => void moveToNew(a)}>Make it its own place</button>
                             <button onClick={() => setMovingId(null)}>Cancel</button>
                           </div>
                         </div>
                       ) : (
                         <button className="link-btn" onClick={() => setMovingId(a.id)}>
-                          Wrong place? Move ↗
+                          Move / make its own place ↗
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {canEdit && ['Run', 'Hike', 'Walk', 'Ride'].includes(a.type) && (
+                    <div className="route-move">
+                      {racingId === a.id ? (
+                        <div className="move-picker">
+                          <input
+                            list="race-names"
+                            placeholder="Race name (e.g. Turkey Trot 5K)"
+                            value={raceName}
+                            autoFocus
+                            onChange={(e) => setRaceName(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && void markAsRace(a)}
+                          />
+                          <datalist id="race-names">
+                            {raceNames.map((nm) => (
+                              <option key={nm} value={nm} />
+                            ))}
+                          </datalist>
+                          <div className="move-picker-row">
+                            <button onClick={() => void markAsRace(a)}>Save race</button>
+                            <button
+                              onClick={() => {
+                                setRacingId(null);
+                                setRaceName('');
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                            Reuse an existing race name to log another running of it.
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          className="link-btn"
+                          onClick={() => {
+                            setRacingId(a.id);
+                            setRaceName('');
+                          }}
+                        >
+                          This was a race ↗
                         </button>
                       )}
                     </div>

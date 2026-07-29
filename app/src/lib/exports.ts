@@ -33,8 +33,11 @@ function exportable(places: Place[]): Place[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function exportCsv(places: Place[]) {
-  const rows = exportable(places);
+// Pure builders (no DOM) — the actual serialization logic, exported so it can be
+// unit-tested without a browser. The export* wrappers just add the download.
+
+/** CSV of the exportable places, header row first. */
+export function placesToCsv(places: Place[]): string {
   const head = [
     'name',
     'latitude',
@@ -48,7 +51,7 @@ export function exportCsv(places: Place[]) {
     'last_visit',
   ];
   const lines = [head.join(',')];
-  for (const p of rows)
+  for (const p of exportable(places))
     lines.push(
       [
         p.name,
@@ -65,28 +68,28 @@ export function exportCsv(places: Place[]) {
         .map(csvCell)
         .join(','),
     );
-  download('adventureorno-places.csv', 'text/csv', lines.join('\n'));
+  return lines.join('\n');
 }
 
-export function exportGpx(places: Place[]) {
-  const rows = exportable(places);
-  const wpts = rows
+/** GPX 1.1 document with one <wpt> per exportable place. */
+export function placesToGpx(places: Place[]): string {
+  const wpts = exportable(places)
     .map(
       (p) =>
         `  <wpt lat="${p.lat}" lon="${p.lng}"><name>${xml(p.name)}</name>` +
         `<desc>${xml((p.categories ?? []).join(', '))}</desc></wpt>`,
     )
     .join('\n');
-  const doc =
+  return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<gpx version="1.1" creator="adventureorno.com" xmlns="http://www.topografix.com/GPX/1/1">\n` +
-    `${wpts}\n</gpx>\n`;
-  download('adventureorno-places.gpx', 'application/gpx+xml', doc);
+    `${wpts}\n</gpx>\n`
+  );
 }
 
-export function exportKml(places: Place[]) {
-  const rows = exportable(places);
-  const marks = rows
+/** KML document with one <Placemark> per exportable place. */
+export function placesToKml(places: Place[]): string {
+  const marks = exportable(places)
     .map(
       (p) =>
         `    <Placemark><name>${xml(p.name)}</name>` +
@@ -94,9 +97,21 @@ export function exportKml(places: Place[]) {
         `<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`,
     )
     .join('\n');
-  const doc =
+  return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n` +
-    `    <name>AdventureOrNo places</name>\n${marks}\n  </Document>\n</kml>\n`;
-  download('adventureorno-places.kml', 'application/vnd.google-earth.kml+xml', doc);
+    `    <name>AdventureOrNo places</name>\n${marks}\n  </Document>\n</kml>\n`
+  );
+}
+
+export function exportCsv(places: Place[]) {
+  download('adventureorno-places.csv', 'text/csv', placesToCsv(places));
+}
+
+export function exportGpx(places: Place[]) {
+  download('adventureorno-places.gpx', 'application/gpx+xml', placesToGpx(places));
+}
+
+export function exportKml(places: Place[]) {
+  download('adventureorno-places.kml', 'application/vnd.google-earth.kml+xml', placesToKml(places));
 }

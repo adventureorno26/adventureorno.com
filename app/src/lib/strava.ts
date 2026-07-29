@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
-  'id, strava_id, type, name, distance, elevation_gain, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
+  'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
 
 /** Set who an activity belongs to (null = both of us). Rebuilds the place's visits. */
 export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {
@@ -28,6 +28,55 @@ export async function fetchMileage(personId?: string | null): Promise<MileageRow
   });
   if (error) throw error;
   return (data ?? []) as MileageRow[];
+}
+
+export interface ActivityListRow {
+  id: string;
+  type: string;
+  name: string | null;
+  distance: number;
+  start_date: string | null;
+  place_id: string | null;
+  place_name: string | null;
+}
+
+/** Every activity of one type for a person (null = Both view), newest first —
+ *  for the "tap a run total → see the list of runs" drill-down. */
+export async function fetchActivitiesOfType(
+  type: string,
+  personId?: string | null,
+): Promise<ActivityListRow[]> {
+  let query = supabase
+    .from('activities')
+    .select('id, type, name, distance, start_date, place_id, places(name)')
+    .eq('type', type)
+    .order('start_date', { ascending: false, nullsFirst: false });
+  query = personId
+    ? query.or(`solo_profile.is.null,solo_profile.eq.${personId}`)
+    : query.is('solo_profile', null);
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []).map((a) => {
+    const row = a as unknown as {
+      id: string;
+      type: string;
+      name: string | null;
+      distance: number;
+      start_date: string | null;
+      place_id: string | null;
+      places: { name: string } | { name: string }[] | null;
+    };
+    const pl = Array.isArray(row.places) ? row.places[0] : row.places;
+    return {
+      id: row.id,
+      type: row.type,
+      name: row.name,
+      distance: row.distance,
+      start_date: row.start_date,
+      place_id: row.place_id,
+      place_name: pl?.name ?? null,
+    };
+  });
 }
 
 export interface PlaceCount {
@@ -75,6 +124,121 @@ export async function fetchActivityLines(personId?: string | null): Promise<Acti
 }
 
 /** Total meters by activity type across a set of places (trail + its trailheads). */
+export interface WanderStats {
+  places_count: number;
+  miles: number;
+  trips_count: number;
+}
+
+/** Headline stats from the visit-level model: places (each counts once), miles,
+ *  and trips (per occurrence). Pass a profile id for that person; omit for Both. */
+export async function fetchWanderStats(personId?: string | null): Promise<WanderStats> {
+  const { data, error } = await supabase.rpc('wander_stats', { p_profile: personId ?? null });
+  if (error) throw error;
+  const r = (data?.[0] ?? {}) as Partial<WanderStats>;
+  return {
+    places_count: Number(r.places_count ?? 0),
+    miles: Number(r.miles ?? 0),
+    trips_count: Number(r.trips_count ?? 0),
+  };
+}
+
+// A race is its own place (category='race'); each running is an activity under
+// it. "Count each race once, count every running." Buckets: 5K/10K/10 Mile/Half/
+// Full/Other. race_stats counts runnings; races_list is one row per named race.
+export interface RaceStat {
+  bucket: string;
+  n: number;
+  miles: number;
+  ord: number;
+}
+export interface RaceRow {
+  id: string;
+  name: string;
+  times: number;
+  miles: number;
+  bucket: string;
+}
+
+/** Move a run under a race place (found or created by name). Returns the race id. */
+export async function assignActivityToRace(
+  activityId: string,
+  raceName: string,
+  racePlaceId?: string | null,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('assign_activity_to_race', {
+    p_activity: activityId,
+    p_race_name: raceName,
+    p_race_place: racePlaceId ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Runnings per distance bucket for a person (null = Both). */
+export async function fetchRaceStats(personId?: string | null): Promise<RaceStat[]> {
+  const { data, error } = await supabase.rpc('race_stats', { p_profile: personId ?? null });
+  if (error) throw error;
+  return (data ?? []) as RaceStat[];
+}
+
+/** One row per named race: how many times run, miles, and distance bucket. */
+export async function fetchRacesList(personId?: string | null): Promise<RaceRow[]> {
+  const { data, error } = await supabase.rpc('races_list', { p_profile: personId ?? null });
+  if (error) throw error;
+  return (data ?? []) as RaceRow[];
+}
+
+export interface SearchActivity {
+  id: string;
+  name: string | null;
+  type: string;
+  place_id: string | null;
+  start_date: string | null;
+  place_name: string | null;
+}
+
+/** All activities (name + type + place) for the ⌘K search, so a run/hike is
+ *  findable by its name and jumps to its day. */
+export async function fetchSearchActivities(): Promise<SearchActivity[]> {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('id, name, type, place_id, start_date, places(name)')
+    .order('start_date', { ascending: false, nullsFirst: false });
+  if (error) return [];
+  return (data ?? []).map((a) => {
+    const row = a as unknown as {
+      id: string;
+      name: string | null;
+      type: string;
+      place_id: string | null;
+      start_date: string | null;
+      places: { name: string } | { name: string }[] | null;
+    };
+    const pl = Array.isArray(row.places) ? row.places[0] : row.places;
+    return {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      place_id: row.place_id,
+      start_date: row.start_date,
+      place_name: pl?.name ?? null,
+    };
+  });
+}
+
+/** All race names (regardless of who ran them) — for the "log another running"
+ *  datalist, so an existing race is one click to reuse. */
+export async function fetchRaceNames(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('places')
+    .select('name')
+    .eq('category', 'race')
+    .order('name');
+  if (error) return [];
+  return (data ?? []).map((r: { name: string }) => r.name);
+}
+
 export async function fetchMileageForPlaces(placeIds: string[]): Promise<Record<string, number>> {
   if (placeIds.length === 0) return {};
   const { data, error } = await supabase

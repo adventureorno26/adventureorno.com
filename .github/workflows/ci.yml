@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -24,6 +26,9 @@ jobs:
       - name: App — test
         working-directory: app
         run: npm run test
+      - name: App — production build
+        working-directory: app
+        run: npm run build
 
       - name: Worker — typecheck
         working-directory: workers/photo-gateway
@@ -31,9 +36,121 @@ jobs:
       - name: Worker — test
         working-directory: workers/photo-gateway
         run: npm run test
-
-      # Build-only check of the worker (no deploy). Skips gracefully if it needs
-      # secrets/account that CI doesn't have.
+      # Real build check of the worker (no deploy). A dry-run only bundles, so it
+      # must succeed — no more hiding failures behind `|| echo`.
       - name: Worker — wrangler dry-run
         working-directory: workers/photo-gateway
-        run: npx wrangler deploy --dry-run --outdir /tmp/wrangler-dry || echo "wrangler dry-run skipped (needs account/secrets)"
+        run: npx wrangler deploy --dry-run --outdir /tmp/wrangler-dry
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Dependency/security scan. Surfaces advisories; not a hard gate yet because
+      # transitive deps can carry unfixable highs — tighten to `--audit-level=high`
+      # blocking once the tree is clean.
+      - name: npm audit (report)
+        run: npm audit --audit-level=high || true
+
+  db-types-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Regenerate app/src/lib/database.types.ts from the live schema and fail if
+      # it differs from what's committed — i.e. a migration changed the schema but
+      # the checked-in types weren't refreshed (`npm run gen:types`). Only runs
+      # when the token secret is configured; otherwise it's a no-op so forks/PRs
+      # without the secret don't fail spuriously.
+      - name: Check DB types are in sync
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN not set — skipping DB types drift check."
+            exit 0
+          fi
+          npm run gen:types
+          if ! git diff --exit-code -- app/src/lib/database.types.ts; then
+            echo "::error::database.types.ts is stale. Run 'npm run gen:types' and commit the result."
+            exit 1
+          fi
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: App — build (preview target for e2e)
+        working-directory: app
+        run: npm run build
+      - name: Install Playwright browsers
+        working-directory: app
+        run: npx playwright install --with-deps chromium webkit
+      - name: Playwright e2e (public + authed-if-secrets)
+        working-directory: app
+        # The authed specs SKIP when TEST_BOT_* aren't set, so this passes on
+        # forks/PRs without secrets and runs the full suite when they're present.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          TEST_BOT_EMAIL: ${{ secrets.TEST_BOT_EMAIL }}
+          TEST_BOT_PASSWORD: ${{ secrets.TEST_BOT_PASSWORD }}
+        run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: app/playwright-report/
+          retention-days: 7
+
+  db-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # The migration chain does NOT fresh-apply the way the CLI does it (0001
+      # references public.profiles before it exists — see docs/decisions.md), so a
+      # normal `supabase start`, which auto-applies migrations, would fail. Instead we
+      # move the migrations aside so the CLI brings up a clean Postgres (+ auth / vault
+      # / roles via gotrue) with NOTHING applied, restore them, then let
+      # scripts/db-bootstrap.sh (invoked by db-test.sh) apply the real chain with
+      # check_function_bodies=off + the single tolerated 0044 error and
+      # production-faithful grants. db-test.sh then runs every supabase/tests/*.test.sql
+      # under ON_ERROR_STOP=1 — any FAIL assertion, broken grant, RLS leak, or
+      # migration error fails the job. No secrets (fully local + network-isolated).
+      - name: Start local Supabase (empty migrations; bootstrap applies the real chain)
+        run: |
+          mkdir -p /tmp/aon-mig-hold
+          mv supabase/migrations/*.sql /tmp/aon-mig-hold/
+          supabase start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          mv /tmp/aon-mig-hold/*.sql supabase/migrations/
+      - name: Run SQL tests (migrations + RLS/trigger/RPC assertions)
+        run: bash scripts/db-test.sh
+      - name: Stop local Supabase
+        if: ${{ !cancelled() }}
+        run: supabase stop --no-backup || true
+
+  # ---------------------------------------------------------------------------
+  # TODO (scaffolding — need infra/secrets before enabling as required checks):
+  #   * MUTATING acceptance flows (create place, log two visits, duplicate handling,
+  #     upload retry) — need a dedicated TEST TENANT so they don't write to the
+  #     household DB. Blocked on the commercial multi-tenant work (Space isolation).
+  #   * preview-deploy smoke test: curl the Pages preview URL for 200 + key routes.
+  #   * real-device iPhone/Android install-flow checks (acceptance #10) — manual.
+  # Make `build`/`e2e` required checks in branch protection so CI gates merges.

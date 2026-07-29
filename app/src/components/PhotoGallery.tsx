@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   deletePhoto,
+  restorePhoto,
   fetchPhotoObjectUrl,
   fetchPhotosForPlace,
   fetchPhotosForPlaceOnDay,
@@ -11,13 +12,16 @@ import {
   setPhotoDate,
   uploadPhoto,
 } from '../lib/photos';
+import { showSnack } from '../lib/snackbar';
 import { updatePlace } from '../lib/data';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
 import type { Photo, Place, Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
+import PhotoReactions from './PhotoReactions';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
+import PhotoMatchReview from './PhotoMatchReview';
 
 interface Props {
   place: Place;
@@ -29,7 +33,7 @@ interface Props {
 }
 
 const SKIP_LABELS: Record<string, string> = {
-  deleted: 'was deleted before and can’t be re-added',
+  deleted: 'was deleted before (skipped by auto-import; re-upload it on purpose to add it back)',
   duplicate: 'is already here',
   no_gps: 'has no GPS location',
   screenshot: 'looks like a screenshot',
@@ -78,16 +82,38 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }, [place.id, day]);
 
   const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
-  const canGoogle = profile?.role === 'owner' && googlePhotosEnabled();
+  // Google Photos import is a deliberate manual upload — editors (Josh) can use
+  // it too, from their own Google account. (The Erica-only rule is the automated
+  // nightly device ingest, not hand-picking photos in the app.)
+  const canGoogle = canUpload && googlePhotosEnabled();
   const canDelete = (p: Photo): boolean =>
     profile?.role === 'owner' || p.uploaded_by === profile?.id;
 
-  // Import straight from Google Photos → File[] → the normal upload path.
+  // Photos chosen for review before upload (place cards only — day view already
+  // pins the date, so it uploads straight through).
+  const [reviewFiles, setReviewFiles] = useState<File[] | null>(null);
+
+  // Picked from Files/Google → show the location+date match review, unless we're
+  // in day view (date fixed) or it's a single photo (nothing to sort).
+  function handlePicked(files: File[]) {
+    if (files.length === 0) return;
+    if (day || files.length === 1) {
+      void upload(files, true);
+    } else {
+      setReviewFiles(files);
+    }
+  }
+
+  // Import straight from Google Photos → File[] → the review/upload path.
   async function addFromGoogle() {
     try {
-      const files = await pickFromGooglePhotos((s) => setNote(s));
+      const files = await pickFromGooglePhotos((s) => setNote(s), {
+        returnTo: `/place/${place.id}`,
+        placeId: place.id,
+        label: place.name,
+      });
       setNote(null);
-      if (files.length) await upload(files, true);
+      if (files.length) handlePicked(files);
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Google Photos import failed.');
     }
@@ -189,11 +215,19 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }
 
   async function remove(p: Photo) {
-    if (!confirm('Delete this photo permanently? It can never be re-added.')) return;
     try {
       await deletePhoto(p.id);
       setPhotos((prev) => (prev ?? []).filter((x) => x.id !== p.id));
       setLightIdx(null);
+      showSnack({
+        message: 'Photo moved to trash',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void restorePhoto(p.id)
+            .then(() => load().then((rows) => setPhotos(rows)))
+            .catch(() => undefined);
+        },
+      });
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Delete failed');
     }
@@ -323,7 +357,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            void upload(Array.from(e.dataTransfer.files), true);
+            handlePicked(Array.from(e.dataTransfer.files));
           }}
           onClick={() => setPickMenu((v) => !v)}
           role="button"
@@ -337,7 +371,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
             multiple
             hidden
             onChange={(e) => {
-              void upload(Array.from(e.target.files ?? []), true);
+              handlePicked(Array.from(e.target.files ?? []));
               e.target.value = '';
             }}
           />
@@ -572,9 +606,28 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                 ⤓
               </button>
             </div>
+
+            <PhotoReactions
+              key={openPhoto.id}
+              photoId={openPhoto.id}
+              caption={openPhoto.caption}
+              canEdit={canUpload}
+            />
           </div>,
           document.body,
         )}
+
+      {reviewFiles && (
+        <PhotoMatchReview
+          place={place}
+          files={reviewFiles}
+          onConfirm={(selected) => {
+            setReviewFiles(null);
+            void upload(selected, true);
+          }}
+          onCancel={() => setReviewFiles(null)}
+        />
+      )}
     </div>
   );
 }

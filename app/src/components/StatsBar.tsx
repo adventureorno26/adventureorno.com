@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
-import { fetchMileage } from '../lib/strava';
+import {
+  fetchActivitiesOfType,
+  fetchMileage,
+  fetchRacesList,
+  fetchRaceStats,
+  fetchWanderStats,
+  type ActivityListRow,
+  type RaceRow,
+  type RaceStat,
+  type WanderStats,
+} from '../lib/strava';
 import { fetchAllEntries } from '../lib/data';
 
 interface Props {
@@ -64,11 +74,18 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       p.name.trim() !== '' && // skip unnamed drafts
       !(personFilter && p.solo_profile && p.solo_profile !== personFilter),
   );
-  // Main bar shows just Places + Miles. Cities/States moved to Settings.
-  const [detail, setDetail] = useState<null | 'places' | 'miles'>(null);
+  // Main bar shows Places + Miles + Races. Cities/States moved to Settings.
+  const [detail, setDetail] = useState<null | 'places' | 'miles' | 'races'>(null);
+  const [typeList, setTypeList] = useState<{ type: string; rows: ActivityListRow[] } | null>(null);
   const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
-  const toggle = (k: typeof detail) => setDetail((cur) => (cur === k ? null : k));
-  const closeDetail = () => setDetail(null);
+  const toggle = (k: typeof detail) => {
+    setTypeList(null);
+    setDetail((cur) => (cur === k ? null : k));
+  };
+  const closeDetail = () => {
+    setTypeList(null);
+    setDetail(null);
+  };
 
   // Trails + Spots + Places all count. Trails/places are already in `visited`;
   // spots (entries) add to the total AND the drill-down list. Visits are NOT
@@ -107,7 +124,43 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       .catch(() => setMileage([]));
   }, [places.length, personFilter]); // refresh on data change or person toggle
 
-  const totalMiles = mileage.reduce((sum, r) => sum + Number(r.miles), 0);
+  // Headline places + miles come from the visit-level model (wander_stats): each
+  // place counted once, miles/trips per person, one cutoff. The drill-down lists
+  // above stay as-is (they're the detail view). Falls back to the local tallies
+  // if the RPC hasn't answered yet.
+  const [wander, setWander] = useState<WanderStats | null>(null);
+  useEffect(() => {
+    fetchWanderStats(personFilter)
+      .then(setWander)
+      .catch(() => setWander(null));
+  }, [places.length, personFilter]);
+
+  // Races: each running counts (race_stats buckets); races_list is one row per
+  // named race, so tapping a race opens it to see every time it was run.
+  const [raceStats, setRaceStats] = useState<RaceStat[]>([]);
+  const [racesList, setRacesList] = useState<RaceRow[]>([]);
+  useEffect(() => {
+    fetchRaceStats(personFilter)
+      .then(setRaceStats)
+      .catch(() => setRaceStats([]));
+    fetchRacesList(personFilter)
+      .then(setRacesList)
+      .catch(() => setRacesList([]));
+  }, [places.length, personFilter]);
+  const raceCount = raceStats.reduce((s, r) => s + Number(r.n), 0);
+
+  // Tapping an activity-type row (e.g. "123 runs") drills into the actual list of
+  // those activities, newest first — each links to its day.
+  function openType(type: string) {
+    setTypeList({ type, rows: [] });
+    fetchActivitiesOfType(type, personFilter)
+      .then((rows) => setTypeList({ type, rows }))
+      .catch(() => setTypeList({ type, rows: [] }));
+  }
+  const closeType = () => setTypeList(null);
+
+  const placesHeadline = wander ? wander.places_count : placesTotal;
+  const totalMiles = wander ? wander.miles : mileage.reduce((sum, r) => sum + Number(r.miles), 0);
   const animated = useCountUp(totalMiles);
 
   return (
@@ -117,7 +170,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
           className={`stat ${detail === 'places' ? 'on' : ''}`}
           onClick={() => toggle('places')}
         >
-          <b>{placesTotal}</b> <span className="label">places</span>
+          <b>{placesHeadline}</b> <span className="label">places</span>
         </button>
         <button
           className={`stat ${detail === 'miles' ? 'on' : ''}`}
@@ -125,17 +178,61 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
         >
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
         </button>
+        {raceCount > 0 && (
+          <button
+            className={`stat ${detail === 'races' ? 'on' : ''}`}
+            onClick={() => toggle('races')}
+          >
+            <b>{raceCount}</b> <span className="label">{raceCount === 1 ? 'race' : 'races'}</span>
+          </button>
+        )}
       </div>
 
       {detail && (
         <div className="stat-detail">
           <div className="stat-detail-head">
-            <b>{detail === 'places' ? 'All places' : 'Activity totals — tap to show on map'}</b>
+            {typeList ? (
+              <button className="stat-back" onClick={closeType}>
+                ‹ {typeList.type}s ({typeList.rows.length})
+              </button>
+            ) : (
+              <b>
+                {detail === 'places'
+                  ? 'All places'
+                  : detail === 'races'
+                    ? 'Races — tap one to see every time you ran it'
+                    : 'Activity totals — tap a type to see the list'}
+              </b>
+            )}
             <button className="stat-detail-x" onClick={closeDetail}>
               ×
             </button>
           </div>
           <div className="stat-detail-list">
+            {detail === 'races' && (
+              <>
+                <div className="race-buckets">
+                  {raceStats.map((r) => (
+                    <span key={r.bucket} className="race-bucket">
+                      <b>{r.n}</b> {r.bucket}
+                      {r.n === 1 ? '' : 's'}
+                    </span>
+                  ))}
+                  <span className="race-bucket race-bucket-total">
+                    <b>{raceStats.reduce((s, r) => s + Number(r.miles), 0).toFixed(1)}</b> mi
+                  </span>
+                </div>
+                {racesList.map((r) => (
+                  <Link key={r.id} to={`/place/${r.id}`} onClick={closeDetail}>
+                    {r.name}
+                    <span className="label">
+                      {' '}
+                      · {r.times}× · {r.bucket}
+                    </span>
+                  </Link>
+                ))}
+              </>
+            )}
             {detail === 'places' &&
               combinedList.map((it) => (
                 <Link key={it.id} to={it.to} onClick={closeDetail}>
@@ -144,6 +241,51 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
                 </Link>
               ))}
             {detail === 'miles' &&
+              typeList &&
+              (typeList.rows.length === 0 ? (
+                <span className="label">Loading…</span>
+              ) : (
+                <>
+                  {STRAVA_CAT[typeList.type] && (
+                    <button
+                      className="mi-row mi-map-row"
+                      onClick={() => {
+                        onFilterCategory(STRAVA_CAT[typeList.type]);
+                        closeDetail();
+                      }}
+                    >
+                      <span className="mi-count">Show all on the map</span>
+                      <span className="stat-chev">›</span>
+                    </button>
+                  )}
+                  {typeList.rows.map((a) => (
+                    <Link
+                      key={a.id}
+                      to={
+                        a.place_id
+                          ? `/place/${a.place_id}${a.start_date ? `/day/${a.start_date.slice(0, 10)}` : ''}`
+                          : '#'
+                      }
+                      onClick={closeDetail}
+                    >
+                      {a.start_date
+                        ? new Date(a.start_date).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })
+                        : 'Undated'}
+                      <span className="label">
+                        {' '}
+                        · {(a.distance / 1609.344).toFixed(1)} mi
+                        {a.place_name ? ` · ${a.place_name}` : ''}
+                      </span>
+                    </Link>
+                  ))}
+                </>
+              ))}
+            {detail === 'miles' &&
+              !typeList &&
               (mileage.filter((r) => Number(r.miles) > 0).length === 0 ? (
                 <span className="label">No Strava activities yet</span>
               ) : (
@@ -151,10 +293,9 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
                   .filter((r) => Number(r.miles) > 0)
                   .sort((a, b) => Number(b.miles) - Number(a.miles))
                   .map((r) => {
-                    const cat = STRAVA_CAT[r.type];
                     const n = Number(r.activity_count);
-                    const row = (
-                      <>
+                    return (
+                      <button key={r.type} className="mi-row" onClick={() => openType(r.type)}>
                         <span className="mi-count">
                           {n} {activityNoun(r.type, n)}
                         </span>
@@ -162,24 +303,8 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
                           <b>{Number(r.miles).toFixed(1)}</b>
                           <span className="mi-unit">mi</span>
                         </span>
-                        {cat && <span className="stat-chev">›</span>}
-                      </>
-                    );
-                    return cat ? (
-                      <button
-                        key={r.type}
-                        className="mi-row"
-                        onClick={() => {
-                          onFilterCategory(cat);
-                          closeDetail();
-                        }}
-                      >
-                        {row}
+                        <span className="stat-chev">›</span>
                       </button>
-                    ) : (
-                      <span key={r.type} className="mi-row">
-                        {row}
-                      </span>
                     );
                   })
               ))}

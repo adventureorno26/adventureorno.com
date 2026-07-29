@@ -3,17 +3,34 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   addCategory,
+  fetchClimbingStats,
+  fetchGeoCoverage,
   fetchHomeZone,
+  fetchMapPeople,
+  fetchPeaksBagged,
+  fetchPlacePeople,
+  type MapPerson,
+  type Peak,
   fetchMapProjection,
   fetchPlaces,
   fetchSettingsStats,
+  fetchTrackingStatus,
   setMapProjection,
   triggerGeocode,
   updateHomeZone,
+  type GeoCoverage,
   type HomeZone,
   type MapProjection,
   type SettingsStats,
+  type TrackingStatus,
 } from '../lib/data';
+import {
+  setTrackingPref,
+  startTracking,
+  stopTracking,
+  trackingPref,
+  trackingSupported,
+} from '../lib/tracking';
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
@@ -46,7 +63,6 @@ const TAG_COLORS = [
  *  cards, the map legend, review-section headings). */
 function TagsCard() {
   const [label, setLabel] = useState('');
-  const [icon, setIcon] = useState('');
   const [color, setColor] = useState(TAG_COLORS[0]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -57,9 +73,9 @@ function TagsCard() {
     setBusy(true);
     setMsg(null);
     try {
-      await addCategory(label.trim(), icon.trim(), color);
+      // No icon — Erica's standing rule is no icons unless asked.
+      await addCategory(label.trim(), '', color);
       setLabel('');
-      setIcon('');
       setColor(TAG_COLORS[0]);
       setTick((t) => t + 1);
       setMsg('Added — it now shows everywhere tags appear.');
@@ -79,7 +95,6 @@ function TagsCard() {
       <div className="our-stats" key={tick} style={{ marginBottom: 10 }}>
         {CATEGORIES.map((c) => (
           <span key={c.slug} className="stat">
-            {c.icon ? `${c.icon} ` : ''}
             {c.label}
           </span>
         ))}
@@ -90,14 +105,6 @@ function TagsCard() {
           placeholder="New tag name (e.g. Spa)"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-        />
-        <input
-          style={{ width: 56, textAlign: 'center' }}
-          placeholder="🧖"
-          maxLength={2}
-          value={icon}
-          onChange={(e) => setIcon(e.target.value)}
-          title="Optional emoji"
         />
         <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           {TAG_COLORS.map((c) => (
@@ -353,13 +360,13 @@ function GeocodeCard() {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Our stats — same pill style as the map. National Parks lands with that feature. */
-function OurStatsCard() {
+function OurStatsCard({ personId }: { personId: string | null }) {
   const [s, setS] = useState<SettingsStats | null>(null);
   useEffect(() => {
-    fetchSettingsStats()
+    fetchSettingsStats(personId)
       .then(setS)
       .catch(() => setS(null));
-  }, []);
+  }, [personId]);
   if (!s) return null;
   const pills = [
     { label: 'Trails Taken', value: s.trails_taken },
@@ -370,7 +377,7 @@ function OurStatsCard() {
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>Our stats</summary>
+        <summary>Stats</summary>
         <div className="our-stats">
           {pills.map((p) => (
             <div key={p.label} className="stat">
@@ -385,19 +392,30 @@ function OurStatsCard() {
 
 /** Cities & States — the geography count that used to sit in the map stats bar.
  *  Each state/country is a dropdown listing the cities (places) within it. */
-function PlacesByStateCard() {
+function PlacesByStateCard({
+  personId,
+  placePeople,
+}: {
+  personId: string | null;
+  placePeople: Map<string, Set<string>>;
+}) {
   const [places, setPlaces] = useState<Place[] | null>(null);
+  const [cov, setCov] = useState<GeoCoverage | null>(null);
   useEffect(() => {
     fetchPlaces()
       .then(setPlaces)
       .catch(() => setPlaces([]));
-  }, []);
+    fetchGeoCoverage(personId)
+      .then(setCov)
+      .catch(() => setCov(null));
+  }, [personId]);
   if (!places) return null;
 
   // Top-level, saved, non-bucket places grouped by state (US) or country.
   const groups = new Map<string, { isState: boolean; cities: Place[] }>();
   for (const p of places) {
     if (p.bucket || !p.saved) continue;
+    if (personId && !(placePeople.get(p.id)?.has(personId) ?? false)) continue;
     const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
     const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
     if (!groups.has(key)) groups.set(key, { isState: Boolean(isUS), cities: [] });
@@ -407,17 +425,22 @@ function PlacesByStateCard() {
     if (a[1].isState !== b[1].isState) return a[1].isState ? -1 : 1;
     return a[0].localeCompare(b[0]);
   });
-  const stateCount = ordered.filter((g) => g[1].isState).length;
-  const countryCount = ordered.filter((g) => !g[1].isState).length;
+  // Accurate counts from the server (DC excluded from the 50, US/US-States
+  // spellings normalized); fall back to the client grouping until it loads.
+  const stateCount =
+    cov?.us_state_count ??
+    ordered.filter((g) => g[1].isState && g[0] !== 'District of Columbia').length;
+  const countryCount = cov?.country_count ?? ordered.filter((g) => !g[1].isState).length;
   const statePct = Math.round((stateCount / 50) * 100);
 
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>Cities &amp; states</summary>
+        <summary>Cities and states</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
-            <b>{stateCount}</b> <span className="label">of 50 states</span>
+            <b>{stateCount}</b>{' '}
+            <span className="label">of 50 states{cov?.has_dc ? ' + DC' : ''}</span>
           </div>
           <div className="stat">
             <b>{statePct}%</b> <span className="label">of the US</span>
@@ -452,7 +475,13 @@ function PlacesByStateCard() {
 
 /** National Parks visited — counts saved places whose name reads like a national
  *  park / monument / forest, with a dropdown of which ones. */
-function NationalParksCard() {
+function NationalParksCard({
+  personId,
+  placePeople,
+}: {
+  personId: string | null;
+  placePeople: Map<string, Set<string>>;
+}) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   useEffect(() => {
     fetchPlaces()
@@ -466,6 +495,7 @@ function NationalParksCard() {
       (p) =>
         p.saved &&
         !p.bucket &&
+        (!personId || (placePeople.get(p.id)?.has(personId) ?? false)) &&
         /national (park|monument|forest|seashore|recreation area|historic)/i.test(p.name),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -473,7 +503,7 @@ function NationalParksCard() {
   return (
     <div className="card">
       <details className="stats-dropdown">
-        <summary>National Parks &amp; public lands</summary>
+        <summary>National Parks</summary>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{parks.length}</b> <span className="label">visited</span>
@@ -493,6 +523,175 @@ function NationalParksCard() {
         )}
       </details>
     </div>
+  );
+}
+
+/** Location tracking — turn on in-app tracking + show each person's last ping. */
+function TrackingCard({ myId }: { myId: string }) {
+  const [on, setOn] = useState(trackingPref());
+  const [rows, setRows] = useState<TrackingStatus[] | null>(null);
+  useEffect(() => {
+    fetchTrackingStatus()
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, []);
+  function toggle() {
+    const next = !on;
+    setOn(next);
+    setTrackingPref(next);
+    if (next) startTracking(myId);
+    else stopTracking();
+  }
+  const rel = (iso: string | null): string => {
+    if (!iso) return 'never';
+    const ms = Date.now() - new Date(iso).getTime();
+    const d = Math.floor(ms / 86400000);
+    if (d > 0) return `${d}d ago`;
+    const h = Math.floor(ms / 3600000);
+    if (h > 0) return `${h}h ago`;
+    const m = Math.floor(ms / 60000);
+    return m > 0 ? `${m}m ago` : 'just now';
+  };
+  return (
+    <div className="card">
+      <b>Location tracking</b>
+      <p className="label" style={{ margin: '6px 0 10px' }}>
+        Records your location while the app is open — powers the map fog, heatmap, and matching
+        photos to places. Phones only track while the app is open (no background tracking on
+        iPhone).
+      </p>
+      {trackingSupported() ? (
+        <button className={on ? 'primary' : ''} onClick={toggle}>
+          {on ? 'Tracking on — tap to stop' : 'Turn on tracking'}
+        </button>
+      ) : (
+        <p className="label">This device can’t share its location.</p>
+      )}
+      {rows && (
+        <div className="our-stats" style={{ marginTop: 10 }}>
+          {rows
+            .filter((r) => r.display_name !== 'Test Bot')
+            .map((r) => (
+              <div key={r.profile_id} className="stat">
+                <b>{r.display_name ?? 'You'}</b>{' '}
+                <span className="label">last {rel(r.last_ping)}</span>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
+function PeaksCard({ personId }: { personId: string | null }) {
+  const [peaks, setPeaks] = useState<Peak[] | null>(null);
+  const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
+  useEffect(() => {
+    fetchPeaksBagged(personId)
+      .then(setPeaks)
+      .catch(() => setPeaks([]));
+    fetchClimbingStats(personId)
+      .then(setClimb)
+      .catch(() => setClimb(null));
+  }, [personId]);
+  if (!peaks) return null;
+  return (
+    <div className="card">
+      <details className="stats-dropdown">
+        <summary>Peaks &amp; climbing</summary>
+        <div className="our-stats" style={{ marginBottom: 10 }}>
+          <div className="stat">
+            <b>{peaks.length}</b> <span className="label">summits</span>
+          </div>
+          {climb && climb.total_ft > 0 && (
+            <>
+              <div className="stat">
+                <b>{climb.total_ft.toLocaleString()}</b> <span className="label">ft climbed</span>
+              </div>
+              <div className="stat">
+                <b>{climb.everests}</b> <span className="label">Everests</span>
+              </div>
+            </>
+          )}
+        </div>
+        {peaks.length === 0 ? (
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>No summits matched yet.</p>
+        ) : (
+          <div className="visit-list">
+            {peaks.map((p) =>
+              p.place_id ? (
+                <Link key={p.id} className="visit-row peak-row" to={`/place/${p.place_id}`}>
+                  <span className="visit-main">{p.name}</span>
+                  {p.ele_ft ? (
+                    <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
+                  ) : null}
+                </Link>
+              ) : (
+                <div key={p.id} className="visit-row peak-row">
+                  <span className="visit-main">{p.name}</span>
+                  {p.ele_ft ? (
+                    <span className="label"> · {p.ele_ft.toLocaleString()} ft</span>
+                  ) : null}
+                </div>
+              ),
+            )}
+          </div>
+        )}
+      </details>
+    </div>
+  );
+}
+
+/** The whole Stats section with one Me / Josh / Both toggle that drives every
+ *  pill (each card refetches/refilters for the selected person). */
+function StatsSection() {
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
+  const [person, setPerson] = useState<string | null>(null); // null = Both
+  useEffect(() => {
+    fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
+    fetchPlacePeople()
+      .then(setPlacePeople)
+      .catch(() => undefined);
+  }, []);
+  const real = people.filter((p) => p.display_name !== 'Test Bot');
+  return (
+    <>
+      <div className="stats-toggle">
+        <button
+          className={person === null ? 'on' : ''}
+          onClick={() => setPerson(null)}
+          type="button"
+        >
+          Both
+        </button>
+        {real.map((pp) => (
+          <button
+            key={pp.id}
+            className={person === pp.id ? 'on' : ''}
+            onClick={() => setPerson(pp.id)}
+            type="button"
+          >
+            {pp.display_name ?? 'Me'}
+          </button>
+        ))}
+      </div>
+      <div className="stats-row">
+        <OurStatsCard personId={person} />
+        <PlacesByStateCard personId={person} placePeople={placePeople} />
+        <NationalParksCard personId={person} placePeople={placePeople} />
+        <PeaksCard personId={person} />
+        <Link className="card stat-navcard" to="/trips">
+          Trips
+        </Link>
+        <Link className="card stat-navcard" to="/wrapped">
+          Years
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -579,25 +778,28 @@ function GarminImportCard() {
   async function onFiles(files: FileList) {
     setBusy(true);
     let added = 0;
-    let failed = 0;
+    const problems: string[] = [];
     for (const file of Array.from(files)) {
       try {
         const parsed = /\.fit$/i.test(file.name)
           ? await parseFitActivity(await file.arrayBuffer(), file.name)
           : parseActivityFile(await file.text(), file.name);
         if (!parsed) {
-          failed++;
+          problems.push(`${file.name}: no GPS track found`);
           continue;
         }
         await importFileActivity(parsed);
         added++;
-      } catch {
-        failed++;
+      } catch (e) {
+        // Surface the real reason instead of a silent "couldn't be read".
+        problems.push(`${file.name}: ${e instanceof Error ? e.message : 'upload failed'}`);
       }
-      setMsg(`Imported ${added}, failed ${failed}…`);
+      setMsg(`Imported ${added}${problems.length ? `, ${problems.length} failed` : ''}…`);
     }
     setMsg(
-      `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported${failed ? `, ${failed} couldn't be read` : ''}. Re-importing the same file is safe (duplicates are ignored).`,
+      `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported.` +
+        (problems.length ? ` Couldn't import: ${problems.join('; ')}` : '') +
+        ' Re-importing the same file is safe (duplicates are ignored).',
     );
     setBusy(false);
   }
@@ -608,8 +810,8 @@ function GarminImportCard() {
       <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
         Strava only lets one athlete connect, so bring your Garmin activities in as files instead.
         You can upload the <b>.FIT</b> files straight from your watch/Garmin Connect, or export an
-        activity as GPX/TCX (gear icon → <b>Export</b>). They're attributed to you, and importing the
-        same file twice is safe.
+        activity as GPX/TCX (gear icon → <b>Export</b>). They're attributed to you, and importing
+        the same file twice is safe.
       </div>
       <button className="primary" disabled={busy} onClick={() => fileRef.current?.click()}>
         {busy ? 'Importing…' : 'Choose GPX / TCX / FIT files'}
@@ -733,7 +935,7 @@ export default function Settings() {
   return (
     <div
       className="settings-page"
-      style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}
+      style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px 96px' }}
     >
       <Link className="back-bar" to="/">
         <span>Map</span>
@@ -746,25 +948,56 @@ export default function Settings() {
       <h2 style={{ marginTop: 28 }}>Account</h2>
       <button onClick={() => void signOut()}>Sign out</button>
 
-      <h2 style={{ marginTop: 28 }}>Our stats</h2>
-      <div className="stats-row">
-        <OurStatsCard />
-        <PlacesByStateCard />
-        <NationalParksCard />
-      </div>
+      <h2 style={{ marginTop: 28 }}>Stats</h2>
+      <StatsSection />
+
+      {(profile?.role === 'owner' || profile?.role === 'editor') && (
+        <>
+          <h2 style={{ marginTop: 28 }}>Manage data</h2>
+          <div className="card">
+            <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+              Tools for tidying everything up — edit every place in one table, sort photos, review
+              what needs attention, merge duplicates, and check the health of your data.
+            </p>
+            <div className="settings-tools">
+              <Link to="/places/edit">
+                <button className="primary">Edit all places</button>
+              </Link>
+              <Link to="/photos/sort">
+                <button>Sort photos into places</button>
+              </Link>
+              <Link to="/attention">
+                <button>Needs attention</button>
+              </Link>
+              <Link to="/albums">
+                <button>Smart albums</button>
+              </Link>
+              <Link to="/timeline">
+                <button>Timeline</button>
+              </Link>
+              <Link to="/duplicates">
+                <button>Duplicate places</button>
+              </Link>
+              <Link to="/health">
+                <button>Data health</button>
+              </Link>
+              <Link to="/trash">
+                <button>Trash</button>
+              </Link>
+            </div>
+          </div>
+        </>
+      )}
+
+      {profile && (
+        <>
+          <h2 style={{ marginTop: 28 }}>Location tracking</h2>
+          <TrackingCard myId={profile.id} />
+        </>
+      )}
 
       <h2 style={{ marginTop: 28 }}>Tags</h2>
       <TagsCard />
-
-      <h2 style={{ marginTop: 28 }}>Trips</h2>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Link to="/trips">
-          <button>All Our Trips</button>
-        </Link>
-        <Link to="/wrapped">
-          <button>Our Year in Travel</button>
-        </Link>
-      </div>
 
       <h2 style={{ marginTop: 28 }}>Export our data</h2>
       <ExportCard />

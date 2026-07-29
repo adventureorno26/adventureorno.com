@@ -82,6 +82,10 @@ async function readImageBytes(req: Request): Promise<{
   placeId: string | null;
   override: boolean;
   takenAt: string | null;
+  // SHA-256 of the ORIGINAL file, computed client-side before it resizes/re-encodes.
+  // Dedup + the deletion blocklist key off this so the same original is recognised
+  // regardless of which browser resized it. Null → hash the received bytes (old path).
+  origSha: string | null;
 }> {
   const ct = req.headers.get('Content-Type') ?? '';
   if (ct.includes('multipart/form-data')) {
@@ -103,6 +107,7 @@ async function readImageBytes(req: Request): Promise<{
       placeId: (form.get('place_id') as string | null) || null,
       override: form.get('override') === 'true',
       takenAt: (form.get('taken_at') as string | null) || null,
+      origSha: (form.get('orig_sha') as string | null) || null,
     };
   }
   // Raw body (the iOS Shortcut posts the JPEG as the request body).
@@ -122,6 +127,7 @@ async function readImageBytes(req: Request): Promise<{
     placeId: url.searchParams.get('place_id'),
     override: url.searchParams.get('override') === 'true',
     takenAt: url.searchParams.get('taken_at'),
+    origSha: url.searchParams.get('orig_sha'),
   };
 }
 
@@ -137,11 +143,18 @@ async function runPipeline(
   uploadedBy: string | null,
   allowOverride: boolean,
 ): Promise<IngestOutcome> {
-  const { bytes, thumbBytes, w: formW, h: formH, lat: formLat, lng: formLng, placeId, override, takenAt } =
+  const { bytes, thumbBytes, w: formW, h: formH, lat: formLat, lng: formLng, placeId, override, takenAt, origSha } =
     await readImageBytes(req);
   if (bytes.byteLength === 0) return { status: 400, body: { error: 'empty body' } };
+  // Upper bound so a malformed/hostile request can't force a huge decode/store.
+  // 64 MiB is far above any real photo (even a raw iPhone HEIC/large JPEG), so
+  // this never rejects a legitimate upload.
+  const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) return { status: 413, body: { error: 'file too large' } };
 
-  const sha = await sha256Hex(bytes);
+  // Prefer the client's hash of the ORIGINAL bytes (stable across browsers/resizes);
+  // fall back to hashing what we received.
+  const sha = (origSha && /^[0-9a-f]{64}$/i.test(origSha) ? origSha.toLowerCase() : null) ?? (await sha256Hex(bytes));
   const isDeleted = await hashIsDeleted(env, sha);
   const isDuplicate = isDeleted ? false : await findPhotoByHash(env, sha);
 
@@ -162,7 +175,9 @@ async function runPipeline(
   const skip = ingestDecision({
     isDeleted,
     isDuplicate,
-    gate: allowOverride ? (hasCoords ? null : 'no_gps') : screenshotGate(exif, hasCoords),
+    // Manual uploads are deliberate — no screenshot/make-model gate (and no-coords
+    // is allowed, landing the photo unassigned). The Shortcut path keeps the gate.
+    gate: allowOverride ? null : screenshotGate(exif, hasCoords),
     hasCoords,
     inZone,
     manual: allowOverride,
@@ -187,9 +202,10 @@ async function runPipeline(
     }
   }
 
-  // Auto-place the photo by its GPS when the caller didn't pick a place.
+  // Auto-place the photo by its GPS when the caller didn't pick a place. With no
+  // coordinates it stays unassigned (place_id null) → the Sorter inbox.
   let finalPlaceId = placeId;
-  if (!finalPlaceId) finalPlaceId = await assignPlace(env, lat!, lng!);
+  if (!finalPlaceId && hasCoords) finalPlaceId = await assignPlace(env, lat!, lng!);
 
   const uuid = crypto.randomUUID();
   const r2Key = `photos/${uuid}.jpg`;
@@ -203,8 +219,8 @@ async function runPipeline(
 
   const id = await insertPhoto(env, {
     place_id: finalPlaceId,
-    lat: lat!,
-    lng: lng!,
+    lat: lat ?? null,
+    lng: lng ?? null,
     // Day-view uploads pin the photo to a chosen date; otherwise use EXIF.
     taken_at: takenAt ?? exif.takenAt,
     r2_key: r2Key,
@@ -492,8 +508,12 @@ export default {
       if (path === '/health') return json({ ok: true }, 200, cors);
       return json({ error: 'not found' }, 404, cors);
     } catch (err) {
-      // Never leak coordinates/tokens in error text.
-      return json({ error: 'internal error', detail: String(err).slice(0, 200) }, 500, cors);
+      // Never leak internal error text to the client — it can carry SQL detail,
+      // tokens, or coordinates. Log the full error server-side (Worker logs) under
+      // a short ref and hand the client only that ref for support/debugging.
+      const ref = crypto.randomUUID().slice(0, 8);
+      console.error(`[${ref}]`, err);
+      return json({ error: 'internal error', ref }, 500, cors);
     }
   },
 };
