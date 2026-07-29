@@ -193,11 +193,11 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
   Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date' | 'address' | 'lat' | 'lng'>>;
 
-// A Trip is a named date range (planning + journal container). Places "belong" to
-// a trip when their first_visit falls in the range (computed, not stored). This is
-// the first-class Trip entity from ADR 0001 (Option A). `part_of`/container-Place
-// trips remain as a compatibility representation until the UI is migrated.
+// A Trip is a first-class planning + journal container (ADR 0001, Option A). It is
+// NOT a Place — it is a trip TO one or more Places, linked by explicit `trip_stops`
+// (a Trip only ever contains what you put on it; nothing auto-attaches by date).
 export type TripStatus = 'taken' | 'upcoming';
+export type TripStopStatus = 'planned' | 'completed' | 'skipped';
 
 export interface Trip {
   id: string;
@@ -205,11 +205,23 @@ export interface Trip {
   start_date: string | null; // date; null = an undated draft
   end_date: string | null; // date
   status: TripStatus;
+  source_place_id: string | null; // provenance of a migrated container-Place trip
   created_at: string;
 }
 
-// Aggregate stats for a trip (from the trip_stats RPC), over the places whose
-// first_visit falls within the trip's date range.
+// One Place on a Trip. `completed` carries the evidence visit; `planned` has none.
+export interface TripStop {
+  id: string;
+  trip_id: string;
+  place_id: string;
+  visit_id: string | null;
+  status: TripStopStatus;
+  sort_order: number;
+  note: string | null;
+}
+
+// Aggregate stats for a trip (from the trip_stats RPC), from its linked completed
+// stops only (never date-range inference).
 export interface TripStats {
   places: number;
   visits: number;

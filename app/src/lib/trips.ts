@@ -1,30 +1,46 @@
-// Trips: a named date range. Places "belong" to a trip when their first_visit
-// falls in the range (computed, not stored). Stats come from the trip_stats RPC.
+// Trips — canonical model (ADR 0001, Option A). A Trip is a first-class `trips` row;
+// its Places are EXPLICIT `trip_stops` (nothing attaches by date). A Trip is a trip
+// TO one or more Places. Reads are member-gated + draft-private on the server.
 
 import { supabase } from './supabase';
-import type { Place, Trip, TripStats, TripStatus } from './types';
-import { createPlace, updatePlace, addVisit } from './data';
+import type { Place, Trip, TripStats, TripStop, TripStopStatus, TripStatus } from './types';
+import { createPlace } from './data';
 import { forwardGeocode } from './maptiler';
 
-const TRIP_COLS = 'id, name, start_date, end_date, status, created_at';
+const TRIP_COLS = 'id, name, start_date, end_date, status, source_place_id, created_at';
+const STOP_COLS = 'id, trip_id, place_id, visit_id, status, sort_order, note';
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, cover_pos_y, address, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, saved, is_trail, part_of, suggested, category, holds_children, cover_pos_y, address, created_by, created_at';
 
+/** All trips, newest first. Grouped by month/year in the UI. */
 export async function fetchTrips(): Promise<Trip[]> {
   const { data, error } = await supabase
     .from('trips')
     .select(TRIP_COLS)
-    // Only trips from Dec 21, 2025 onward (undated drafts still show).
-    .or('start_date.gte.2025-12-21,start_date.is.null')
     .order('start_date', { ascending: false, nullsFirst: false });
   if (error) throw error;
   return (data ?? []) as Trip[];
 }
 
+/** Trips whose stops include this Place — powers "Trips to this place" on a place
+ *  card. A Place can appear on a trip via several stops; dedupe to one row per trip. */
+export async function fetchTripsForPlace(placeId: string): Promise<Trip[]> {
+  const { data, error } = await supabase
+    .from('trip_stops')
+    .select(`trips!inner(${TRIP_COLS})`)
+    .eq('place_id', placeId);
+  if (error) throw error;
+  const byId = new Map<string, Trip>();
+  for (const row of (data ?? []) as unknown as Array<{ trips: Trip }>) {
+    if (row.trips) byId.set(row.trips.id, row.trips);
+  }
+  return [...byId.values()].sort((a, b) => (b.start_date ?? '').localeCompare(a.start_date ?? ''));
+}
+
 export async function createTrip(
   name: string,
-  start: string,
-  end: string,
+  start: string | null,
+  end: string | null,
   status: TripStatus = 'taken',
 ): Promise<Trip> {
   const { data, error } = await supabase
@@ -48,7 +64,6 @@ export async function setTripStatus(id: string, status: TripStatus): Promise<Tri
   return data as Trip;
 }
 
-/** Rename a trip. */
 export async function renameTrip(id: string, name: string): Promise<Trip> {
   const { data, error } = await supabase
     .from('trips')
@@ -60,34 +75,7 @@ export async function renameTrip(id: string, name: string): Promise<Trip> {
   return data as Trip;
 }
 
-/** Merge several day-by-day trips into the first: it spans the full min→max date
- *  range; the others are deleted. Places attach by date, so nothing is lost. */
-export async function mergeTrips(ids: string[]): Promise<void> {
-  if (ids.length < 2) return;
-  const { data, error } = await supabase.from('trips').select(TRIP_COLS).in('id', ids);
-  if (error) throw error;
-  const rows = (data ?? []) as Trip[];
-  const starts = rows.map((t) => t.start_date).filter(Boolean) as string[];
-  const ends = rows.map((t) => t.end_date ?? t.start_date).filter(Boolean) as string[];
-  const minStart = starts.sort()[0];
-  const maxEnd = ends.sort()[ends.length - 1];
-  const keep = rows.reduce((a, b) => ((a.start_date ?? '') <= (b.start_date ?? '') ? a : b));
-  const { error: upErr } = await supabase
-    .from('trips')
-    .update({ start_date: minStart, end_date: maxEnd })
-    .eq('id', keep.id);
-  if (upErr) throw upErr;
-  const drop = ids.filter((id) => id !== keep.id);
-  const { error: delErr } = await supabase.from('trips').delete().in('id', drop);
-  if (delErr) throw delErr;
-}
-
-export async function deleteTrip(id: string): Promise<void> {
-  const { error } = await supabase.from('trips').delete().eq('id', id);
-  if (error) throw error;
-}
-
-/** Change a trip's date range — e.g. extend a one-day trip into several days. */
+/** Change a trip's date range. */
 export async function updateTripDates(id: string, start: string, end: string): Promise<Trip> {
   const { data, error } = await supabase
     .from('trips')
@@ -99,18 +87,78 @@ export async function updateTripDates(id: string, start: string, end: string): P
   return data as Trip;
 }
 
+export async function deleteTrip(id: string): Promise<void> {
+  const { error } = await supabase.from('trips').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Merge several trips into the earliest-starting one: move every stop onto it and
+ *  delete the rest. Explicit stops move with the trip, so nothing is lost. */
+export async function mergeTrips(ids: string[]): Promise<void> {
+  if (ids.length < 2) return;
+  const { data, error } = await supabase.from('trips').select(TRIP_COLS).in('id', ids);
+  if (error) throw error;
+  const rows = (data ?? []) as Trip[];
+  if (rows.length < 2) return;
+  const keep = rows.reduce((a, b) => ((a.start_date ?? '') <= (b.start_date ?? '') ? a : b));
+  const drop = ids.filter((id) => id !== keep.id);
+  const { error: mvErr } = await supabase
+    .from('trip_stops')
+    .update({ trip_id: keep.id })
+    .in('trip_id', drop);
+  if (mvErr) throw mvErr;
+  const { error: delErr } = await supabase.from('trips').delete().in('id', drop);
+  if (delErr) throw delErr;
+}
+
 export async function fetchTripStats(tripId: string): Promise<TripStats> {
   const { data, error } = await supabase.rpc('trip_stats', { p_trip: tripId });
   if (error) throw error;
-  return data as TripStats;
+  return data as unknown as TripStats;
 }
 
-/** Add a place to a trip by name: geocode it, drop a real map pin, and date it
- *  into the trip range (so it belongs to the trip and shows on the map). */
+/** The explicit stops on a trip, in order. */
+export async function fetchTripStops(tripId: string): Promise<TripStop[]> {
+  const { data, error } = await supabase
+    .from('trip_stops')
+    .select(STOP_COLS)
+    .eq('trip_id', tripId)
+    .order('sort_order');
+  if (error) throw error;
+  return (data ?? []) as TripStop[];
+}
+
+/** The trip's Places (draft-private, server-filtered via trip_place_ids). */
+export async function fetchTripPlaces(trip: Trip): Promise<Place[]> {
+  const { data: idRows, error: idErr } = await supabase.rpc('trip_place_ids', { p_trip: trip.id });
+  if (idErr) throw idErr;
+  const ids = (idRows ?? []) as unknown as string[];
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from('places').select(PLACE_COLS).in('id', ids);
+  if (error) throw error;
+  return (data ?? []) as unknown as Place[];
+}
+
+/** Add a Place to a trip as a planned stop (idempotent per trip+place). */
+export async function addStop(
+  tripId: string,
+  placeId: string,
+  status: TripStopStatus = 'planned',
+): Promise<void> {
+  const { error } = await supabase
+    .from('trip_stops')
+    .insert({ trip_id: tripId, place_id: placeId, status });
+  if (error && error.code !== '23505') throw error; // ignore duplicate planned stop
+}
+
+/** Remove a stop from a trip. */
+export async function removeStop(stopId: string): Promise<void> {
+  const { error } = await supabase.from('trip_stops').delete().eq('id', stopId);
+  if (error) throw error;
+}
+
+/** Add a place to a trip by name: geocode it, create the Place, add it as a stop. */
 export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> {
-  const start = trip.start_date;
-  const end = trip.end_date ?? trip.start_date;
-  if (!start || !end) throw new Error('This trip has no dates set.');
   const geo = await forwardGeocode(query.trim());
   if (!geo) throw new Error(`Couldn't find "${query}". Try a more specific name.`);
   const place = await createPlace({
@@ -122,21 +170,6 @@ export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> 
     lng: geo.lng,
     saved: true,
   });
-  // Date it into the trip so it belongs + shows a visit on its card.
-  await updatePlace(place.id, { first_visit: start, last_visit: end });
-  await addVisit(place.id, start, end).catch(() => undefined);
-  return { ...place, first_visit: start, last_visit: end };
-}
-
-/** Places auto-attached to a trip: first_visit within the trip's date range. */
-export async function fetchTripPlaces(trip: Trip): Promise<Place[]> {
-  if (!trip.start_date || !trip.end_date) return [];
-  const { data, error } = await supabase
-    .from('places')
-    .select(PLACE_COLS)
-    .gte('first_visit', trip.start_date)
-    .lte('first_visit', trip.end_date)
-    .order('first_visit');
-  if (error) throw error;
-  return (data ?? []) as Place[];
+  await addStop(trip.id, place.id, 'planned');
+  return place;
 }
