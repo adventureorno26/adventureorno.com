@@ -81,11 +81,22 @@ client writes them directly:
 4. Data cleanup (later): once the UI is canonical, retire `places.category='trip'`
    containers + `part_of` (ADR's `part_of` retirement).
 
-## Open decisions for Erica
-- **DECISION 1** (timeline scope, above).
-- **DECISION 2 — trip route.** New `/trip/:id` view, or keep trips rendering through
-  the Place card shell for now? (Recommend a dedicated `/trip/:id` — a trip isn't a
-  Place.)
-- **DECISION 3 — id-space migration.** Existing deep links `/place/:containerId` for
-  the 33 old trips: redirect to `/trip/:newId` (map via `source_place_id`), or leave
-  them? (Recommend a redirect shim.)
+## Decisions — RESOLVED by Erica (2026-07-29)
+- **D1 — timeline scope: TIGHTEN.** ✅ Done in `0103`: itinerary shows only explicit
+  `trip_stops` places.
+- **D2 — no dedicated trip page; reuse the place-card shell.** A trip is "TO a place."
+  - Trips list (`Trips.tsx`): render trips as separate entries **grouped by month + year**.
+  - Place card: add a **"Trips to [this place]"** section listing trips whose stops
+    include this place, by month/year.
+  - Opening a trip reuses the existing place-card shell (populated from `trips` +
+    `trip_stops` + `trip_timeline`), NOT a new `/trip/:id` design. (A `/trip/:id` route
+    may still exist for linking, but it renders through the same card shell.)
+- **D3 — trips are MANUAL only; nothing auto-promotes.** A trip exists only when Erica
+  creates it. The backfill already reflects this: 8 real trips migrated; 24 auto-
+  detected `suggested` drafts were QUARANTINED, never converted. A lone activity (e.g.
+  "Mammoth March") is never a trip. Auto-detection STAYS ON as suggestions only
+  (`detect-trips-nightly` keeps running) — but a suggestion is a dismissable draft that
+  NEVER becomes a real trip without Erica's action. **The cutover must render
+  `suggested` drafts as suggestions (a review/confirm queue), never as trips.**
+  (Supersedes the old id-space-redirect question — deep links can 1:1 map old container
+  ids via `source_place_id` when needed.)
