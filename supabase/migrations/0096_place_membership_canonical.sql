@@ -69,6 +69,14 @@ begin
   if NEW.child_id = NEW.parent_id then
     raise exception 'place_membership: a place cannot contain itself (%).', NEW.child_id;
   end if;
+  -- Enforce valid containers for NEW/updated edges: a parent must be a container
+  -- (holds_children). Existing rows are grandfathered (BEFORE trigger only sees
+  -- new/updated rows); the one legacy non-container parent stays quarantined.
+  if not exists (
+    select 1 from public.places p where p.id = NEW.parent_id and coalesce(p.holds_children, false)
+  ) then
+    raise exception 'place_membership: parent % is not a container (holds_children).', NEW.parent_id;
+  end if;
   -- Is NEW.child_id reachable upward from NEW.parent_id? If so, adding
   -- child←parent closes a cycle.
   if exists (
@@ -97,6 +105,11 @@ create table if not exists public.place_membership_exceptions (
   reason text not null,
   detected_at timestamptz not null default now()
 );
+-- RLS: a maintenance/review table — editors and owners only (not viewers).
+alter table public.place_membership_exceptions enable row level security;
+drop policy if exists place_membership_exceptions_select on public.place_membership_exceptions;
+create policy place_membership_exceptions_select on public.place_membership_exceptions
+  for select using (public.is_editor_or_owner());
 
 -- 5a) part_of pairs whose parent place no longer exists (dangling). These are NOT
 --     mirrored into place_membership (the sync trigger skips them); recorded so the
