@@ -19,10 +19,12 @@ the orphaned date-range scaffolding — so the UI and `trip_stats` agree.
   date-range `fetchTripPlaces` + `trip_stats`), `detectTrips`/`resolveSuggestedTrip`.
   Safe to supersede/delete.
 
-## Backend prerequisite — migration `0102` (frontend-enablement; NOT in PR #10)
+## Backend prerequisite — migration `0103` (frontend-enablement; NOT in PR #10) — ✅ DRAFTED + TESTED
 The canonical UI passes a `trips.id`, but `0081`'s itinerary keys on a container
-`places.id`. `0102` re-points it. Production `trip_notes` has **0 rows**, so the data
-migration is trivial.
+`places.id`. `0103` re-points it. Production `trip_notes` has **0 rows**, so the data
+migration is trivial. **DECISION 1 resolved: tightened** — `trip_timeline` now resolves
+members from explicit `trip_stops` only (member-gated + draft-private), matching
+`trip_place_ids`/`trip_stats`. Test: `supabase/tests/0103_trip_notes_timeline.test.sql`.
 1. `trip_notes.trip_id`: map any existing rows via `trips.source_place_id`
    (`update trip_notes tn set trip_id = t.id from trips t where t.source_place_id = tn.trip_id`),
    then drop the `→ places(id)` FK and re-add `→ trips(id) on delete cascade`.
@@ -73,7 +75,7 @@ client writes them directly:
 
 ## Sequencing
 1. Deploy `0096–0101` to prod (PR #10 runbook). → `gen:types` → commit types.
-2. Land + deploy `0102` (trip_notes/timeline re-point). → `gen:types` → commit types.
+2. Land + deploy `0103` (trip_notes/timeline re-point). → `gen:types` → commit types.
 3. Frontend edits above, verified on the disposable stack + a preview; keep the old
    container-Place trips readable during transition (they carry `source_place_id`).
 4. Data cleanup (later): once the UI is canonical, retire `places.category='trip'`
