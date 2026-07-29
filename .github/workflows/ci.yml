@@ -117,10 +117,37 @@ jobs:
           path: app/playwright-report/
           retention-days: 7
 
+  db-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # The migration chain does NOT fresh-apply the way the CLI does it (0001
+      # references public.profiles before it exists — see docs/decisions.md), so a
+      # normal `supabase start`, which auto-applies migrations, would fail. Instead we
+      # move the migrations aside so the CLI brings up a clean Postgres (+ auth / vault
+      # / roles via gotrue) with NOTHING applied, restore them, then let
+      # scripts/db-bootstrap.sh (invoked by db-test.sh) apply the real chain with
+      # check_function_bodies=off + the single tolerated 0044 error and
+      # production-faithful grants. db-test.sh then runs every supabase/tests/*.test.sql
+      # under ON_ERROR_STOP=1 — any FAIL assertion, broken grant, RLS leak, or
+      # migration error fails the job. No secrets (fully local + network-isolated).
+      - name: Start local Supabase (empty migrations; bootstrap applies the real chain)
+        run: |
+          mkdir -p /tmp/aon-mig-hold
+          mv supabase/migrations/*.sql /tmp/aon-mig-hold/
+          supabase start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          mv /tmp/aon-mig-hold/*.sql supabase/migrations/
+      - name: Run SQL tests (migrations + RLS/trigger/RPC assertions)
+        run: bash scripts/db-test.sh
+      - name: Stop local Supabase
+        if: ${{ !cancelled() }}
+        run: supabase stop --no-backup || true
+
   # ---------------------------------------------------------------------------
   # TODO (scaffolding — need infra/secrets before enabling as required checks):
-  #   * db-migrations + pgTAP: spin up `supabase start`, apply migrations, run
-  #     pgTAP tests for RLS / triggers / RPC authorization / attribution / matching.
   #   * MUTATING acceptance flows (create place, log two visits, duplicate handling,
   #     upload retry) — need a dedicated TEST TENANT so they don't write to the
   #     household DB. Blocked on the commercial multi-tenant work (Space isolation).
