@@ -57,6 +57,7 @@ const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
 const TripView = lazyWithReload(() => import('./routes/TripView'));
+const SuggestedTripReview = lazyWithReload(() => import('./routes/SuggestedTripReview'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
 const BucketList = lazyWithReload(() => import('./routes/BucketList'));
 const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
@@ -130,6 +131,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <TripView />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/trips/review/:id"
+            element={
+              <RequireAuth>
+                <SuggestedTripReview />
               </RequireAuth>
             }
           />

@@ -60,8 +60,9 @@ timer (`geocode-new-places-nightly`, hourly geocode).
   (unschedules cron immediately after apply so no scheduled prod HTTP can fire),
   **strict** (fails on any unexpected error; only the known 0044 backfill tolerated),
   keeps its error log, and verifies 12 core tables before reporting success.
-- **Action required (owner):** rotate the exposed service_role key (see below). Not
-  rotated automatically — dashboard-only, and per instruction.
+- **Owner action — DONE (2026-07-30): the exposed service_role key was ROTATED by
+  Erica.** Do not re-flag this. (History scrub to remove the old blob is separate —
+  Prompt 11 — and does not require re-rotation.)
 
 ## 2026-07-29 — DOCUMENTED EXCEPTION: sanitizing applied migrations 0057 & 0071
 
@@ -74,15 +75,15 @@ ONLY sanctioned edit of an old migration.
 - **The revoked JWT must never be reintroduced** to any file, fixture, log, or test.
 - The disposable-DB bootstrap is network-isolated (unschedules cron), so these
   migrations' `net.http_post` can never fire from a dev/CI database.
-- The exposed key still requires rotation in the Supabase dashboard.
+- The exposed key was **ROTATED by Erica (2026-07-30)** — resolved.
 
 ## 2026-07-29 — Security incident: service_role key in migrations
 
 - Migrations `0057_geocode_cron.sql` / `0071_geocode_hourly.sql` embed a hardcoded
   Supabase **service_role JWT** (full RLS bypass). It is in git history and the
-  current tree. **Action required: rotate the service-role key in the dashboard**
-  (history rewrite cannot revoke it). Removal from history is the deferred scrub
-  phase; old migrations must not be edited. See `README.md` → Incident response.
+  current tree. **The service-role key was ROTATED by Erica (2026-07-30) — resolved.**
+  Removal of the old blob from history is the deferred scrub phase (Prompt 11); old
+  migrations must not be edited. See `README.md` → Incident response.
 
 ## 2026-07-18 — Phase 6: backfill the past year
 

@@ -59,3 +59,21 @@ if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 echo "All SQL tests passed."
+
+# SECDEF lockdown regression guard (0093/0105): no public SECURITY DEFINER function
+# may be anon-executable — new SECDEF functions default-grant EXECUTE to PUBLIC, which
+# silently reopens what the lockdown closed (this happened in 0101). st_estimatedextent
+# is PostGIS/supabase_admin-owned and its anon grant is not revocable from the migration
+# role — the one accepted residual.
+ANON_SECDEF=$(psql_db -tA -c "
+  select coalesce(string_agg(p.proname, ', '), '')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.prosecdef
+    and has_function_privilege('anon', p.oid, 'execute')
+    and p.proname not like 'st\\_%';" | tr -d ' ')
+if [ -n "$ANON_SECDEF" ]; then
+  echo "FAILED: anon-executable SECURITY DEFINER function(s) — lockdown regression: $ANON_SECDEF" >&2
+  echo "Run scripts/lockdown.sql after the offending migration (and revoke anon in it)." >&2
+  exit 1
+fi
+echo "Lockdown OK: no anon-executable SECDEF functions (PostGIS st_* excepted)."
