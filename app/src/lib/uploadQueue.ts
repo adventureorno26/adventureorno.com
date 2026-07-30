@@ -4,14 +4,25 @@
 // cancelled from one widget. Each file moves through a small state machine:
 //   queued → uploading → done | skipped | failed (retryable) | canceled
 //
-// enqueueUpload() returns a promise that resolves when the file finishes, so
-// existing call sites can `await` it exactly like uploadPhoto() and still get a
-// completion report — the queue just schedules the work.
+// DURABLE: each queued file (its original bytes + options) is persisted to IndexedDB
+// (see uploadStore.ts), so pending + failed uploads survive a page reload or browser
+// restart and resume on next launch via resumeUploads(). Successful and cancelled
+// uploads are forgotten; failed ones are kept so a retry survives a reload. If
+// IndexedDB is unavailable (private mode / quota) the queue still runs in memory —
+// durability just degrades to best-effort.
 //
-// (Reload-persistence via IndexedDB is a follow-up; this covers navigation +
-// connection loss + background-while-open.)
+// enqueueUpload() returns a promise that resolves when the file finishes, so existing
+// call sites can `await` it exactly like uploadPhoto() and still get a completion
+// report — the queue just schedules the work.
 
 import { uploadPhoto, type UploadResult } from './photos';
+import {
+  clearPersistedUploads,
+  forgetUpload,
+  loadPendingUploads,
+  persistUpload,
+  type UploadOpts,
+} from './uploadStore';
 
 export type UploadState = 'queued' | 'uploading' | 'done' | 'skipped' | 'failed' | 'canceled';
 
@@ -26,8 +37,8 @@ export interface QItem {
 
 interface Internal extends QItem {
   file: File;
-  opts: Parameters<typeof uploadPhoto>[1];
-  resolve: (r: UploadResult) => void;
+  opts: UploadOpts;
+  resolve?: (r: UploadResult) => void; // absent for uploads resumed from storage
   canceled: boolean;
 }
 
@@ -62,13 +73,11 @@ export function subscribeQueue(f: (items: QItem[], paused: boolean) => void): ()
   return () => subs.delete(f);
 }
 
-export function enqueueUpload(
-  file: File,
-  opts: Parameters<typeof uploadPhoto>[1] = {},
-): Promise<UploadResult> {
+export function enqueueUpload(file: File, opts: UploadOpts = {}): Promise<UploadResult> {
   return new Promise<UploadResult>((resolve) => {
+    const id = uid();
     items.push({
-      id: uid(),
+      id,
       name: file.name,
       state: 'queued',
       attempts: 0,
@@ -77,9 +86,51 @@ export function enqueueUpload(
       resolve,
       canceled: false,
     });
+    // Persist the original bytes so this upload survives a reload (best-effort).
+    void persistUpload({
+      id,
+      name: file.name,
+      file,
+      opts,
+      attempts: 0,
+      createdAt: Date.now(),
+    }).then((ok) => {
+      if (!ok) console.warn('upload not saved for offline resume (storage unavailable/full)');
+    });
     emit();
     pump();
   });
+}
+
+/** Re-enqueue uploads left in durable storage by a previous session (call on launch).
+ *  Skips any already in the live queue. Resumed items have no awaiting caller. */
+export async function resumeUploads(): Promise<number> {
+  const pending = await loadPendingUploads();
+  let added = 0;
+  for (const p of pending) {
+    if (items.some((i) => i.id === p.id)) continue;
+    items.push({
+      id: p.id,
+      name: p.name,
+      state: 'queued',
+      attempts: p.attempts ?? 0,
+      file: p.file as File,
+      opts: p.opts,
+      canceled: false,
+    });
+    added++;
+  }
+  if (added) {
+    emit();
+    pump();
+  }
+  return added;
+}
+
+/** Drop every durable upload — call on sign-out so one account's bytes never resume
+ *  under another session. */
+export async function clearQueueStorage(): Promise<void> {
+  await clearPersistedUploads();
 }
 
 function pump() {
@@ -102,7 +153,8 @@ function pump() {
           next.state = 'skipped';
           next.error = r.skipped;
         }
-        next.resolve(r);
+        void forgetUpload(next.id); // finished: release the persisted bytes
+        next.resolve?.(r);
         emit();
         pump();
       },
@@ -116,7 +168,9 @@ function pump() {
         } else {
           next.state = next.canceled ? 'canceled' : 'failed';
           next.error = next.canceled ? undefined : e instanceof Error ? e.message : String(e);
-          next.resolve({ ok: false } as UploadResult);
+          // Cancelled → forget. Failed → KEEP in storage so a retry survives a reload.
+          if (next.canceled) void forgetUpload(next.id);
+          next.resolve?.({ ok: false } as UploadResult);
           emit();
           pump();
         }
@@ -149,13 +203,16 @@ export function cancelItem(id: string) {
   const i = items.find((x) => x.id === id);
   if (!i) return;
   i.canceled = true;
+  void forgetUpload(id); // cancellation is final — drop the persisted bytes
   if (i.state === 'queued') {
     i.state = 'canceled';
-    i.resolve({ ok: false } as UploadResult);
+    i.resolve?.({ ok: false } as UploadResult);
   }
   emit();
 }
 export function clearFinished() {
+  // Forget any failed items being cleared from view (their bytes are no longer needed).
+  for (const i of items) if (i.state === 'failed') void forgetUpload(i.id);
   items = items.filter((i) => i.state === 'queued' || i.state === 'uploading');
   emit();
 }

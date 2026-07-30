@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { loadCategories } from '../lib/data';
+import { clearQueueStorage, resumeUploads } from '../lib/uploadQueue';
 import type { Profile } from '../lib/types';
 
 interface AuthState {
@@ -56,6 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session) {
         await loadCategories().catch(() => undefined);
         if (active) setCatsV((v) => v + 1);
+        // Resume any uploads a previous session left in durable storage.
+        void resumeUploads().catch(() => undefined);
       }
       if (active) setLoading(false);
     });
@@ -72,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    // Drop persisted uploads so one account's bytes never resume under another login.
+    await clearQueueStorage().catch(() => undefined);
     await supabase.auth.signOut();
     setProfile(null);
   };
