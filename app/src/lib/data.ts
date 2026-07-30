@@ -680,6 +680,28 @@ export async function deleteVisit(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Recreate a deleted visit with its FULL original record — dates, note, attribution,
+ *  override flag, and multi-day/trip flag — as a manual visit (used by visit Undo, so
+ *  Undo restores everything, not just the date). */
+export async function restoreVisit(v: Visit): Promise<Visit> {
+  const { data, error } = await supabase
+    .from('visits')
+    .insert({
+      place_id: v.place_id,
+      start_date: v.start_date,
+      end_date: v.end_date,
+      note: v.note,
+      is_trip: v.is_trip,
+      solo_profile: v.solo_profile,
+      solo_override: v.solo_override,
+      manual: true,
+    })
+    .select(VISIT_COLS)
+    .single();
+  if (error) throw error;
+  return data as Visit;
+}
+
 /** Reassign a visit to a different place (e.g. move a generic city visit to a
  *  specific spot with its own address). */
 export async function moveVisit(id: string, newPlaceId: string): Promise<void> {

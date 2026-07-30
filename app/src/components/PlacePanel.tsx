@@ -7,6 +7,7 @@ import {
   createPlace,
   deletePlace,
   deleteVisit,
+  restoreVisit,
   fetchCityBoundary,
   fetchEntries,
   fetchMapPeople,
@@ -419,8 +420,9 @@ export default function PlacePanel({
     }
   }
   async function removeVisit(id: string) {
-    // Soft UX: remove immediately, offer Undo (recreates the visit with the same
-    // dates + attribution) — friendlier than a browser confirm, esp. on mobile.
+    // Soft UX: remove immediately, offer Undo that restores the FULL original visit
+    // (date, note, attribution, override, trip flag) — friendlier than a browser
+    // confirm, esp. on mobile.
     const v = (visits ?? []).find((x) => x.id === id);
     try {
       await deleteVisit(id);
@@ -431,8 +433,7 @@ export default function PlacePanel({
         onAction: async () => {
           if (!v) return;
           try {
-            const nv = await addVisit(place.id, v.start_date, v.end_date);
-            if (v.solo_profile) await setVisitSolo(nv.id, v.solo_profile).catch(() => undefined);
+            await restoreVisit(v);
             await reloadVisits();
           } catch {
             /* ignore */

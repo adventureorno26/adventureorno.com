@@ -154,6 +154,13 @@ export default function NewPlaceDraft({
             ),
           4,
         );
+      } else if (visitDate) {
+        // No photos but a date was set — still record the visit (per-visit attribution).
+        const v = await addVisit(created.id, visitDate, visitDate);
+        if (who !== 'both') {
+          const pid = who === 'mine' ? meId : joshId;
+          if (pid) await setVisitSolo(v.id, pid).catch(() => undefined);
+        }
       }
       if (who !== 'both') {
         const pid = who === 'mine' ? meId : joshId;
