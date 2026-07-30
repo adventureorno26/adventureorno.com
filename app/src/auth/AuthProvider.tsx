@@ -20,7 +20,16 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
  * RPC promotes the pending invite into a profile on first sight. Safe to call
  * repeatedly (idempotent server-side).
  */
-async function ensureProfile(): Promise<Profile | null> {
+async function ensureProfile(userId: string): Promise<Profile | null> {
+  // Fast path: an existing member already has a profile — read it and SKIP
+  // claim_invite (which 401s on every load when there is no pending invite to claim).
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+  if (existing) return existing as Profile;
+  // First login after accepting an invite: no profile row yet → promote the invite.
   const { data, error } = await supabase.rpc('claim_invite');
   if (error) {
     // No pending invite and no existing profile → unauthorized user. Surface
@@ -44,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active) setProfile(null);
         return;
       }
-      const p = await ensureProfile();
+      const p = await ensureProfile(s.user.id);
       if (active) setProfile(p);
     }
 
