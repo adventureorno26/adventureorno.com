@@ -124,7 +124,12 @@ export default function TripItinerary({ tripId, canEdit }: { tripId: string; can
 
       {canEdit && (
         <div className="itin-newday">
-          <input type="date" value={newDay} onChange={(e) => setNewDay(e.target.value)} />
+          <input
+            type="date"
+            aria-label="Note date"
+            value={newDay}
+            onChange={(e) => setNewDay(e.target.value)}
+          />
           <input
             value={addDay === '__new' ? noteText : ''}
             onFocus={() => setAddDay('__new')}
