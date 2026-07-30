@@ -1,15 +1,19 @@
+I n
+
 # Frontend Trip cutover plan (canonical model)
 
 **Status:** PROPOSED — for review before any UI edits. Depends on the `0096–0101`
 backend being deployed to production first (PR #10). Nothing here is built yet.
 
 ## Goal
+
 Move the visible app from the **container-Place trip model** (a "trip" = a Place with
 `category='trip'`, membership via `places.part_of`, itinerary keyed on the place id)
 to the **canonical model** (`trips` + `trip_stops` + `place_membership`), and retire
 the orphaned date-range scaffolding — so the UI and `trip_stats` agree.
 
 ## What the frontend does today (measured)
+
 - **Active model:** `MapView.addTagged('trip')` creates a Place tagged `trip`;
   `PlacePanel` shows members via `part_of` and the itinerary via `TripItinerary`
   keyed on `place.id`; `Trips.tsx`/`Wrapped.tsx` list Places where
@@ -20,11 +24,13 @@ the orphaned date-range scaffolding — so the UI and `trip_stats` agree.
   Safe to supersede/delete.
 
 ## Backend prerequisite — migration `0103` (frontend-enablement; NOT in PR #10) — ✅ DRAFTED + TESTED
+
 The canonical UI passes a `trips.id`, but `0081`'s itinerary keys on a container
 `places.id`. `0103` re-points it. Production `trip_notes` has **0 rows**, so the data
 migration is trivial. **DECISION 1 resolved: tightened** — `trip_timeline` now resolves
 members from explicit `trip_stops` only (member-gated + draft-private), matching
 `trip_place_ids`/`trip_stats`. Test: `supabase/tests/0103_trip_notes_timeline.test.sql`.
+
 1. `trip_notes.trip_id`: map any existing rows via `trips.source_place_id`
    (`update trip_notes tn set trip_id = t.id from trips t where t.source_place_id = tn.trip_id`),
    then drop the `→ places(id)` FK and re-add `→ trips(id) on delete cascade`.
@@ -40,8 +46,10 @@ only places with a `trip_stop`. That's tighter (drops incidental in-boundary act
 OK to tighten, or keep a boundary fallback? (Recommend: tighten — matches the model.)
 
 ## Write path (no new RPCs needed)
+
 `trips` and `trip_stops` both have editor/owner RLS for insert/update/delete, so the
 client writes them directly:
+
 - **Create a trip:** insert into `trips` (replaces `createPlace(categories:['trip'])`).
 - **Add a stop:** insert into `trip_stops` (planned) / link a `visit_id` (completed)
   (replaces `togglePartOf`/`addMembers` on `places.part_of`).
@@ -49,6 +57,7 @@ client writes them directly:
   in `0097`/`0099`). Stats: `trip_stats(trip_id)`.
 
 ## Frontend changes, file by file
+
 1. **`lib/trips.ts`** — rewrite as the single canonical trips module: `fetchTrips`
    (from `trips`), `createTrip`, `addStop`/`removeStop` (trip_stops), `fetchTripPlaces`
    (via `trip_place_ids`), `fetchTripStats`. Delete `fetchTripPlaces`'s date-range
@@ -74,6 +83,7 @@ client writes them directly:
    `detect-trips`.)
 
 ## Sequencing
+
 1. Deploy `0096–0101` to prod (PR #10 runbook). → `gen:types` → commit types.
 2. Land + deploy `0103` (trip_notes/timeline re-point). → `gen:types` → commit types.
 3. Frontend edits above, verified on the disposable stack + a preview; keep the old
@@ -82,6 +92,7 @@ client writes them directly:
    containers + `part_of` (ADR's `part_of` retirement).
 
 ## Decisions — RESOLVED by Erica (2026-07-29)
+
 - **D1 — timeline scope: TIGHTEN.** ✅ Done in `0103`: itinerary shows only explicit
   `trip_stops` places.
 - **D2 — no dedicated trip page; reuse the place-card shell.** A trip is "TO a place."
