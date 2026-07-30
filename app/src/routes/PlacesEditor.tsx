@@ -470,7 +470,11 @@ export default function PlacesEditor() {
                       ))}
                     </div>
                     {avail.length > 0 && (
-                      <select value="" onChange={(e) => addTag(p.id, e.target.value)}>
+                      <select
+                        aria-label="Add a tag"
+                        value=""
+                        onChange={(e) => addTag(p.id, e.target.value)}
+                      >
                         <option value="">+ tag</option>
                         {avail.map((c) => (
                           <option key={c.slug} value={c.slug}>
