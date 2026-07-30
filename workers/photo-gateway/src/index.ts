@@ -12,6 +12,7 @@ import {
   assignPlace,
   deletePhotoRow,
   deleteVideoRow,
+  fetchAllMediaKeys,
   findPhotoByHash,
   recomputePlace,
   getPhoto,
@@ -420,6 +421,36 @@ async function handleVideoDelete(
   return json({ ok: true }, 200, cors);
 }
 
+// R2↔DB reconciliation — DRY RUN. Lists every R2 object and diffs it against the DB's
+// referenced media keys: ORPHAN objects (in R2, no DB row → safe to purge) and MISSING
+// objects (DB row, no R2 object → broken media). Reports counts + samples only; deletes
+// nothing. Owner-only.
+async function handleReconcile(env: Env, cors: Record<string, string>): Promise<Response> {
+  const dbKeys = await fetchAllMediaKeys(env);
+  const r2keys = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const listed = await env.PHOTOS.list({ cursor, limit: 1000 });
+    for (const o of listed.objects) r2keys.add(o.key);
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+  const orphanR2 = [...r2keys].filter((k) => !dbKeys.has(k));
+  const missing = [...dbKeys].filter((k) => !r2keys.has(k));
+  return json(
+    {
+      dry_run: true,
+      r2_objects: r2keys.size,
+      db_referenced_keys: dbKeys.size,
+      orphan_r2_objects: orphanR2.length,
+      missing_objects: missing.length,
+      orphan_r2_sample: orphanR2.slice(0, 50),
+      missing_sample: missing.slice(0, 50),
+    },
+    200,
+    cors,
+  );
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = req.headers.get('Origin');
@@ -486,6 +517,13 @@ export default {
       const vdel = path.match(/^\/video-delete\/([0-9a-f-]{36})$/i);
       if (vdel && req.method === 'POST') {
         return handleVideoDelete(env, vdel[1], await session(), cors);
+      }
+
+      // --- R2↔DB reconciliation (DRY RUN, owner-only) -----------------------
+      if (path === '/reconcile' && req.method === 'GET') {
+        const caller = await session();
+        if (caller?.role !== 'owner') return json({ error: 'owner required' }, 403, cors);
+        return handleReconcile(env, cors);
       }
 
       if (path === '/health') return json({ ok: true }, 200, cors);
