@@ -317,19 +317,23 @@ export default function PhotoSorter() {
       results.forEach((r) => {
         if (r && r.ok) added++;
       });
-      // Set who was on THIS visit (the group's month at this place). Photos create
-      // per-date visits via a trigger; attribute the ones in this month.
+      // Attribute ONLY the visits this group's photos actually landed on — never
+      // other visits that merely share the same month at this place (which would
+      // overwrite a separate visit's attribution).
       const who = groupWho[g.id] ?? 'both';
       const profileId = who === 'both' ? null : who === 'mine' ? meId : joshId;
-      const targetYm = override ? override.slice(0, 7) : g.ym;
-      if (targetYm !== 'nodate') {
+      const days = new Set<string>(
+        g.items
+          .map((it) => (override ? override : (it.takenAt ?? '').slice(0, 10)))
+          .filter((d): d is string => !!d),
+      );
+      if (days.size) {
         try {
           const visits = await fetchVisits(g.placeId!);
-          await Promise.all(
-            visits
-              .filter((v) => v.start_date.slice(0, 7) === targetYm)
-              .map((v) => setVisitSolo(v.id, profileId ?? null)),
+          const touched = visits.filter((v) =>
+            [...days].some((d) => d >= v.start_date && d <= v.end_date),
           );
+          await Promise.all(touched.map((v) => setVisitSolo(v.id, profileId ?? null)));
         } catch {
           /* ignore */
         }
