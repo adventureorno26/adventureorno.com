@@ -142,6 +142,8 @@ jobs:
           mv /tmp/aon-mig-hold/*.sql supabase/migrations/
       - name: Run SQL tests (migrations + RLS/trigger/RPC assertions)
         run: bash scripts/db-test.sh
+      - name: Export/restore round-trip (byte-identity proof)
+        run: bash scripts/export-restore-roundtrip.sh
       - name: Stop local Supabase
         if: ${{ !cancelled() }}
         run: supabase stop --no-backup || true
