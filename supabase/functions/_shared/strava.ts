@@ -114,8 +114,10 @@ export interface StravaActivity {
   map?: { summary_polyline?: string | null };
 }
 
-/** Upsert one Strava activity and assign a place. Every activity with a start
- *  point is ingested regardless of location. Returns 'stored' | 'skipped'. */
+/** Upsert one Strava activity. Placed activities get a leaf place; coordinate-free
+ *  (indoor/GPS-less) activities are still ingested when they carry real movement —
+ *  they count toward mileage + the timeline but stay UNPLACED (place_id null) and OFF
+ *  the map (no summary_polyline). Returns 'stored' | 'skipped'. */
 export async function ingestActivity(
   admin: SupabaseClient,
   a: StravaActivity,
@@ -123,8 +125,11 @@ export async function ingestActivity(
 ): Promise<'stored' | 'skipped'> {
   const type = a.type ?? a.sport_type ?? 'Workout';
   const ll = a.start_latlng;
-  if (!ll || ll.length < 2) return 'skipped'; // no start point → can't place it
-  const [lat, lng] = ll;
+  const hasCoords = Array.isArray(ll) && ll.length >= 2;
+  // Drop only the truly empty ones: no coordinates AND no distance to count.
+  if (!hasCoords && (a.distance ?? 0) <= 0) return 'skipped';
+  const lat = hasCoords ? ll![0] : null;
+  const lng = hasCoords ? ll![1] : null;
 
   // If this activity already exists, sync only the Strava-owned fields (name,
   // type, distance…) and PRESERVE any manual place/trailhead assignment (e.g. a
@@ -156,15 +161,18 @@ export async function ingestActivity(
     const { error } = await admin.from('activities').update(stravaFields).eq('id', existing.id);
     if (error) throw new Error(`update activity failed: ${error.message}`);
   } else {
-    // An activity gets its OWN leaf place at its start point (reusing a leaf
-    // within 150 m). No 30 km nearest-pin snapping.
-    const { data: assigned } = await admin.rpc('place_for_activity', {
-      p_lat: lat,
-      p_lng: lng,
-      p_type: a.type ?? null,
-      p_name: a.name ?? null,
-    });
-    placeId = (assigned as string | null) ?? null;
+    // A placed activity gets its OWN leaf place at its start point (reusing a leaf
+    // within 150 m). No 30 km nearest-pin snapping. Coordinate-free activities stay
+    // unplaced (place_id null).
+    if (hasCoords) {
+      const { data: assigned } = await admin.rpc('place_for_activity', {
+        p_lat: lat,
+        p_lng: lng,
+        p_type: a.type ?? null,
+        p_name: a.name ?? null,
+      });
+      placeId = (assigned as string | null) ?? null;
+    }
     const { error } = await admin
       .from('activities')
       .insert({ strava_id: a.id, place_id: placeId, ...stravaFields });
