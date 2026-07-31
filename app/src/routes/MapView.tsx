@@ -85,11 +85,11 @@ const coverVideoByPlace = new Map<string, string>();
 // A place's marker image id: its cover photo (`ph-<id>`), a trailhead's photo,
 // else — if it has a video with a poster — that video's poster (`vid-<id>`),
 // else '' (a plain pin). Every marker still = a real photo/video frame.
-function coverIcon(p: Place, all: Place[]): string {
+function coverIcon(p: Place, childCoverByParent: Map<string, string>): string {
   if (p.cover_photo_id) return `ph-${p.cover_photo_id}`;
   if (p.is_trail) {
-    const th = all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id);
-    if (th?.cover_photo_id) return `ph-${th.cover_photo_id}`;
+    const cover = childCoverByParent.get(p.id);
+    if (cover) return `ph-${cover}`;
   }
   const vid = coverVideoByPlace.get(p.id);
   if (vid) return `vid-${vid}`;
@@ -97,10 +97,19 @@ function coverIcon(p: Place, all: Place[]): string {
 }
 
 function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  // Precompute parent-place → the first child's cover photo ONCE (O(n)); coverIcon
+  // used to linear-scan all places per trail marker, i.e. O(n²) every feature rebuild.
+  const childCoverByParent = new Map<string, string>();
+  for (const x of places) {
+    if (!x.cover_photo_id) continue;
+    for (const pid of x.part_of ?? []) {
+      if (!childCoverByParent.has(pid)) childCoverByParent.set(pid, x.cover_photo_id);
+    }
+  }
   return {
     type: 'FeatureCollection',
     features: places.map((p) => {
-      const icon = coverIcon(p, places);
+      const icon = coverIcon(p, childCoverByParent);
       const primary = primaryCategory(p);
       return {
         type: 'Feature',
