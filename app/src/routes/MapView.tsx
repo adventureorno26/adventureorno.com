@@ -307,6 +307,7 @@ export default function MapView() {
   const drawPtsRef = useRef<[number, number][]>([]);
   const drawLineRef = useRef<[number, number][]>([]);
   const drawEncodedRef = useRef<string | null>(null);
+  const drawSeqRef = useRef(0); // version async route-snapping so stale geometry can't win
   const drawTargetRef = useRef<string | null>(null); // attach the drawn route to this place
   const addDrawPointRef = useRef<(lng: number, lat: number) => void>(() => undefined);
   drawModeRef.current = drawMode;
@@ -986,19 +987,23 @@ export default function MapView() {
 
   // ---- Draw-a-trail mode -------------------------------------------------
   async function refreshDrawGeometry() {
+    const seq = ++drawSeqRef.current; // this call's version
     const map = mapRef.current;
-    const pts = drawPtsRef.current;
+    const pts = [...drawPtsRef.current]; // snapshot for THIS call
     let lineCoords: [number, number][] = pts;
     let dist = 0;
-    drawEncodedRef.current = null;
+    let encoded: string | null = null;
     if (pts.length >= 2) {
       const snapped = await snapWalkingRoute(pts);
+      // A newer tap kicked off another refresh while we awaited — discard this
+      // stale result so slower earlier geometry can't overwrite the latest.
+      if (seq !== drawSeqRef.current) return;
       if (snapped) {
         lineCoords = polyline
           .decode(snapped.polyline)
           .map(([la, ln]) => [ln, la] as [number, number]);
         dist = snapped.distance;
-        drawEncodedRef.current = snapped.polyline;
+        encoded = snapped.polyline;
       } else {
         for (let i = 1; i < pts.length; i++) {
           dist += haversineMeters(
@@ -1008,6 +1013,8 @@ export default function MapView() {
         }
       }
     }
+    // Only the latest call reaches here — commit its geometry.
+    drawEncodedRef.current = encoded;
     drawLineRef.current = lineCoords;
     setDrawDist(dist);
     const feats: GeoJSON.Feature[] = pts.map((p) => ({
