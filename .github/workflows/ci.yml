@@ -113,6 +113,23 @@ jobs:
             exit 1
           fi
 
+  edge-config-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Compare each deployed Edge Function's verify_jwt to the declaration in
+      # supabase/config.toml. Catches an accidental auth-behavior change or a
+      # redeploy that flips a public callback to JWT-required (or vice-versa).
+      # Secret-guarded so forks/PRs without the token are a no-op.
+      - name: Check Edge Function config is in sync
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/check-edge-config.mjs
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
