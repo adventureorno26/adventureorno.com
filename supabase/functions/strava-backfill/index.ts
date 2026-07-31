@@ -84,16 +84,37 @@ Deno.serve(async (req) => {
     let stored = 0;
     let skipped = 0;
     let hasMore = false;
+    // Athletes whose page could NOT be fetched this run — reported so the caller can
+    // retry the page rather than silently losing that athlete's activities.
+    const failed: number[] = [];
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
     for (const acct of accounts) {
-      const access = await getValidAccessTokenFor(admin, acct.athlete_id);
       const params = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
       if (body.after) params.set('after', String(body.after));
       if (body.before) params.set('before', String(body.before));
-      const res = await fetch(`https://www.strava.com/api/v3/athlete/activities?${params}`, {
-        headers: { Authorization: `Bearer ${access}` },
-      });
-      if (res.status === 429) return json({ error: 'rate_limited', retryAfter: 900 }, 429);
-      if (!res.ok) continue; // skip this athlete's page on error, keep the others
+
+      // Fetch the page with bounded backoff on transient (5xx / network) errors.
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const access = await getValidAccessTokenFor(admin, acct.athlete_id);
+          res = await fetch(`https://www.strava.com/api/v3/athlete/activities?${params}`, {
+            headers: { Authorization: `Bearer ${access}` },
+          });
+        } catch {
+          res = null; // network error → treat as transient
+        }
+        if (res && (res.ok || res.status === 429 || (res.status >= 400 && res.status < 500))) break;
+        if (attempt < 2) await sleep(400 * (attempt + 1)); // 400ms, 800ms
+      }
+
+      if (res && res.status === 429) return json({ error: 'rate_limited', retryAfter: 900 }, 429);
+      if (!res || !res.ok) {
+        // Do NOT silently skip — record the athlete so the caller retries this page.
+        failed.push(acct.athlete_id);
+        continue;
+      }
       const activities = (await res.json()) as StravaActivity[];
       processed += activities.length;
       if (activities.length === PER_PAGE) hasMore = true;
@@ -104,13 +125,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Once we've reached the end, link any outings both of you recorded so stats
-    // count them once.
-    if (!hasMore) {
+    // Once we've reached the end (and nothing failed), link any outings both of you
+    // recorded so stats count them once.
+    if (!hasMore && failed.length === 0) {
       await admin.rpc('dedupe_shared_outings').catch(() => undefined);
     }
 
-    return json({ processed, stored, skipped, page, hasMore });
+    // Report failed athletes so the caller can surface them and re-run — never a
+    // silent skip. hasMore stays data-driven so a persistently-broken athlete can't
+    // trap the pager in an infinite loop.
+    return json({ processed, stored, skipped, page, hasMore, failed });
   } catch (e) {
     return json({ error: String(e).slice(0, 200) }, 500);
   }

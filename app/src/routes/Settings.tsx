@@ -777,17 +777,24 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
     let page = 1;
     let stored = 0;
     let processed = 0;
+    let anyFailed = false;
     try {
       for (;;) {
         const r = await backfillPage(after, before, page);
         stored += r.stored;
         processed += r.processed;
+        if (r.failed && r.failed.length) anyFailed = true;
         setProgress(`Page ${page}: ${processed} activities scanned, ${stored} stored…`);
         if (!r.hasMore) break;
         page++;
         await sleep(1500); // gentle pacing under the 100/15min limit
       }
-      setProgress(`Done — ${stored} activities stored from the last ${days} days.`);
+      setProgress(
+        `Done — ${stored} activities stored from the last ${days} days.` +
+          (anyFailed
+            ? ' Some pages could not be fetched — run backfill again to fill the gaps.'
+            : ''),
+      );
     } catch (e) {
       setProgress(e instanceof Error ? e.message : 'Backfill failed');
     }

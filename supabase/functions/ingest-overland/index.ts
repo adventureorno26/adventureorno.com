@@ -48,11 +48,14 @@ Deno.serve(async (req) => {
   const tokenHash = await sha256Hex(token);
   const { data: tok } = await admin
     .from('ingest_tokens')
-    .select('id')
+    .select('id, profile_id')
     .eq('token_hash', tokenHash)
     .is('revoked_at', null)
     .maybeSingle();
   if (!tok) return json({ result: 'error', error: 'invalid token' }, 401);
+  // Attribution comes from the TOKEN, never the request body — a device can't forge
+  // whose pings these are.
+  const profileId = tok.profile_id as string | null;
   await admin
     .from('ingest_tokens')
     .update({ last_used_at: new Date().toISOString() })
@@ -82,6 +85,7 @@ Deno.serve(async (req) => {
     recorded_at: string;
     source: string;
     accuracy: number | null;
+    profile_id: string | null;
   }
   // Keep every point with usable accuracy, regardless of location.
   const keep = (_lat: number, _lng: number, acc: number | null): boolean =>
@@ -101,10 +105,16 @@ Deno.serve(async (req) => {
           recorded_at: payload.tst ? new Date(payload.tst * 1000).toISOString() : new Date().toISOString(),
           source: 'owntracks',
           accuracy: acc,
+          profile_id: profileId,
         });
       }
     }
-    if (rows.length > 0) await admin.from('location_pings').insert(rows);
+    if (rows.length > 0) {
+      const { error } = await admin.from('location_pings').insert(rows);
+      // Never ack a failed insert — OwnTracks would drop the message. Return a 500
+      // so the device retries instead of discarding the point.
+      if (error) return json({ result: 'error', error: error.message }, 500);
+    }
     return json([]); // OwnTracks expects a (possibly empty) array of messages back
   }
 
@@ -125,6 +135,7 @@ Deno.serve(async (req) => {
       recorded_at: f.properties?.timestamp ?? new Date().toISOString(),
       source: 'overland',
       accuracy: acc,
+      profile_id: profileId,
     });
   }
 

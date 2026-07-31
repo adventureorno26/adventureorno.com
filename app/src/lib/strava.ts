@@ -375,6 +375,8 @@ export interface BackfillPage {
   skipped: number;
   page: number;
   hasMore: boolean;
+  /** Athlete ids whose page couldn't be fetched this run (surfaced, never silent). */
+  failed?: number[];
 }
 
 /** Run one backfill page via the Edge Function. Caller loops + paces (rate limit). */
