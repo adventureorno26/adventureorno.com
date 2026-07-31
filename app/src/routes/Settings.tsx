@@ -270,9 +270,14 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 function OurStatsCard({ personId }: { personId: string | null }) {
   const [s, setS] = useState<SettingsStats | null>(null);
   useEffect(() => {
+    // Discard a stale response if the person toggle changed before it resolved.
+    let live = true;
     fetchSettingsStats(personId)
-      .then(setS)
-      .catch(() => setS(null));
+      .then((r) => live && setS(r))
+      .catch(() => live && setS(null));
+    return () => {
+      live = false;
+    };
   }, [personId]);
   if (!s) return null;
   const pills = [
@@ -309,12 +314,16 @@ function PlacesByStateCard({
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [cov, setCov] = useState<GeoCoverage | null>(null);
   useEffect(() => {
+    let live = true;
     fetchPlaces()
-      .then(setPlaces)
-      .catch(() => setPlaces([]));
+      .then((r) => live && setPlaces(r))
+      .catch(() => live && setPlaces([]));
     fetchGeoCoverage(personId)
-      .then(setCov)
-      .catch(() => setCov(null));
+      .then((r) => live && setCov(r))
+      .catch(() => live && setCov(null));
+    return () => {
+      live = false;
+    };
   }, [personId]);
   if (!places) return null;
 
@@ -495,12 +504,16 @@ function PeaksCard({ personId }: { personId: string | null }) {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
   const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
   useEffect(() => {
+    let live = true;
     fetchPeaksBagged(personId)
-      .then(setPeaks)
-      .catch(() => setPeaks([]));
+      .then((r) => live && setPeaks(r))
+      .catch(() => live && setPeaks([]));
     fetchClimbingStats(personId)
-      .then(setClimb)
-      .catch(() => setClimb(null));
+      .then((r) => live && setClimb(r))
+      .catch(() => live && setClimb(null));
+    return () => {
+      live = false;
+    };
   }, [personId]);
   if (!peaks) return null;
   return (
