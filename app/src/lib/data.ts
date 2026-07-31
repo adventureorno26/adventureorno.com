@@ -691,7 +691,8 @@ export async function restoreVisit(v: Visit): Promise<Visit> {
       start_date: v.start_date,
       end_date: v.end_date,
       note: v.note,
-      is_trip: v.is_trip,
+      // is_trip is a generated column (end_date > start_date) — never write it;
+      // restoring the dates reproduces it automatically.
       solo_profile: v.solo_profile,
       solo_override: v.solo_override,
       manual: true,
@@ -729,6 +730,115 @@ export async function updateEntry(id: string, patch: Partial<NewEntry>): Promise
 export async function deleteEntry(id: string): Promise<void> {
   const { error } = await supabase.from('entries').delete().eq('id', id);
   if (error) throw error;
+}
+
+// --- Unified experience creation (Prompt 2B) -------------------------------
+// One transactional + idempotent creation path shared by every "log an
+// experience" surface (AddWizard, NewPlaceDraft, MapView, PlacePanel/addSpot,
+// DayView, imports). The server RPC create_experience() writes the whole
+// place+visit+attribution+people graph atomically; passing a stable `key`
+// makes a retry after a partial failure return the same records instead of
+// duplicating them. Generate the key once per user save action and reuse it on
+// retry.
+
+/** A place to log against: an existing place by id, or a brand-new place. */
+export type ExperiencePlaceInput =
+  | { id: string }
+  | {
+      name: string;
+      lat: number;
+      lng: number;
+      country?: string | null;
+      admin1?: string | null;
+      city?: string | null;
+      address?: string | null;
+      categories?: string[];
+      saved?: boolean;
+    };
+
+/** The optional visit to attach. Omit `date` to only create/reuse the place. */
+export type ExperienceVisitInput = {
+  date?: string;
+  end_date?: string;
+  note?: string | null;
+  rating?: number | null;
+  /** 'me' | 'josh' | 'both' | a raw profile uuid. Omit to leave unset. */
+  who?: string;
+  person_ids?: string[];
+};
+
+export type ExperienceResult = {
+  place_id: string;
+  visit_id: string | null;
+  idempotent: boolean;
+};
+
+/** Mint an idempotency key for one save action (reuse the same value on retry). */
+export function newExperienceKey(): string {
+  return crypto.randomUUID();
+}
+
+export async function addExperience(
+  key: string,
+  place: ExperiencePlaceInput,
+  visit: ExperienceVisitInput = {},
+): Promise<ExperienceResult> {
+  const { data, error } = await supabase.rpc('create_experience', {
+    p_key: key,
+    p_place: place,
+    p_visit: visit,
+  });
+  if (error) throw error;
+  return data as ExperienceResult;
+}
+
+// --- Non-login people (children) — Prompt 2B -------------------------------
+export type Person = {
+  id: string;
+  display_name: string;
+  kind: string;
+  birthdate: string | null;
+};
+
+export async function fetchPeople(): Promise<Person[]> {
+  const { data, error } = await supabase
+    .from('people')
+    .select('id, display_name, kind, birthdate')
+    .is('deleted_at', null)
+    .order('display_name');
+  if (error) throw error;
+  return (data ?? []) as Person[];
+}
+
+export async function createPerson(display_name: string, kind = 'child'): Promise<Person> {
+  const { data, error } = await supabase
+    .from('people')
+    .insert({ display_name: display_name.trim(), kind })
+    .select('id, display_name, kind, birthdate')
+    .single();
+  if (error) throw error;
+  return data as Person;
+}
+
+/** Replace the set of non-login people attached to a visit. */
+export async function setVisitPeople(visitId: string, personIds: string[]): Promise<void> {
+  const del = await supabase.from('visit_people').delete().eq('visit_id', visitId);
+  if (del.error) throw del.error;
+  if (personIds.length) {
+    const { error } = await supabase
+      .from('visit_people')
+      .insert(personIds.map((person_id) => ({ visit_id: visitId, person_id })));
+    if (error) throw error;
+  }
+}
+
+export async function fetchVisitPeople(visitId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('visit_people')
+    .select('person_id')
+    .eq('visit_id', visitId);
+  if (error) throw error;
+  return (data ?? []).map((r) => (r as { person_id: string }).person_id);
 }
 
 // --- Phase 3: clustering-support operations --------------------------------

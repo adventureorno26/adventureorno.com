@@ -2347,6 +2347,27 @@ a {
 .aw-target {
   margin: 0 0 6px;
 }
+.aw-addkid {
+  display: flex;
+  gap: 8px;
+}
+.aw-addkid input {
+  flex: 1;
+}
+.aw-addkid-btn {
+  flex: 0 0 auto;
+  padding: 0 14px;
+  border-radius: var(--radius, 10px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.aw-addkid-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .aw-or {
   text-align: center;
   color: var(--muted);

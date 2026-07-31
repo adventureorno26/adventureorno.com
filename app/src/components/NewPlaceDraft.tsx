@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addVisit,
-  createPlace,
+  addExperience,
   fetchPoiDetails,
+  newExperienceKey,
   setPlaceSolo,
-  setVisitSolo,
+  updatePlace,
   type PoiDetails,
 } from '../lib/data';
 import type { MapPerson } from '../lib/data';
@@ -79,6 +79,17 @@ export default function NewPlaceDraft({
   const [busy, setBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const joshId = people.find((p) => p.id !== meId)?.id ?? null;
+  // Idempotency keys per save action (reused on retry, reset on success). One for
+  // the "create new place" action, one for "add to an existing (duplicate) place".
+  const keyNew = useRef<string | null>(null);
+  const keyExisting = useRef<string | null>(null);
+
+  // Map the tri-state Who selector to the create_experience `who` param.
+  function whoParam(): string | undefined {
+    if (who === 'mine') return meId ?? undefined;
+    if (who === 'josh') return joshId ?? undefined;
+    return undefined; // 'both' — leave attribution unset
+  }
 
   // Name/region from the coordinates, unless the caller preset a name.
   useEffect(() => {
@@ -132,41 +143,44 @@ export default function NewPlaceDraft({
     if (busy) return;
     setBusy('Saving…');
     try {
-      const created = await createPlace({
-        name: name.trim() || 'New place',
-        admin1,
-        country,
-        address,
-        lat,
-        lng,
-        categories: tags,
-        website,
-        saved: true,
-      });
+      if (!keyNew.current) keyNew.current = newExperienceKey();
+      // Place + (optional) manual visit + attribution created atomically. A manual
+      // visit is only logged when there are NO photos — with photos, the visit is
+      // derived from the photo dates (avoids double-counting).
+      const res = await addExperience(
+        keyNew.current,
+        {
+          name: name.trim() || 'New place',
+          admin1,
+          country,
+          address,
+          lat,
+          lng,
+          categories: tags,
+          saved: true,
+        },
+        visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
+      );
+      const placeId = res.place_id;
+
+      // Enrichments create_experience doesn't own.
+      if (website) await updatePlace(placeId, { website }).catch(() => undefined);
+      if (who !== 'both') {
+        const pid = who === 'mine' ? meId : joshId;
+        await setPlaceSolo(placeId, pid ?? null).catch(() => undefined);
+      }
+
       if (files.length) {
         setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
         await mapPool(
           files,
-          (f) =>
-            uploadPhoto(f, { placeId: created.id, lat, lng, takenAt, override: true }).catch(
-              () => null,
-            ),
+          (f) => uploadPhoto(f, { placeId, lat, lng, takenAt, override: true }).catch(() => null),
           4,
         );
-      } else if (visitDate) {
-        // No photos but a date was set — still record the visit (per-visit attribution).
-        const v = await addVisit(created.id, visitDate, visitDate);
-        if (who !== 'both') {
-          const pid = who === 'mine' ? meId : joshId;
-          if (pid) await setVisitSolo(v.id, pid).catch(() => undefined);
-        }
       }
-      if (who !== 'both') {
-        const pid = who === 'mine' ? meId : joshId;
-        await setPlaceSolo(created.id, pid ?? null).catch(() => undefined);
-      }
-      onSaved(created.id);
+      keyNew.current = null;
+      onSaved(placeId);
     } catch {
       setBusy(null);
     }
@@ -179,13 +193,14 @@ export default function NewPlaceDraft({
     if (busy) return;
     setBusy('Adding your visit…');
     try {
-      if (visitDate) {
-        const v = await addVisit(p.id, visitDate, visitDate);
-        if (who !== 'both') {
-          const pid = who === 'mine' ? meId : joshId;
-          if (pid) await setVisitSolo(v.id, pid).catch(() => undefined);
-        }
-      }
+      if (!keyExisting.current) keyExisting.current = newExperienceKey();
+      // Same atomic path against an existing place; manual visit only when there
+      // are no photos (photos derive their own visit).
+      await addExperience(
+        keyExisting.current,
+        { id: p.id },
+        visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
+      );
       if (files.length) {
         setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
@@ -202,6 +217,7 @@ export default function NewPlaceDraft({
           4,
         );
       }
+      keyExisting.current = null;
       onSaved(p.id);
     } catch {
       setBusy(null);
