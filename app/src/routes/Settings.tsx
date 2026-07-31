@@ -864,6 +864,16 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
 
 export default function Settings() {
   const { profile, signOut } = useAuth();
+  const [members, setMembers] = useState<MapPerson[]>([]);
+  useEffect(() => {
+    fetchMapPeople()
+      .then(setMembers)
+      .catch(() => undefined);
+  }, []);
+  const memberNames = members
+    .map((m) => m.display_name)
+    .filter(Boolean)
+    .join(' & ');
 
   return (
     <div
@@ -942,7 +952,7 @@ export default function Settings() {
         </>
       )}
 
-      <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
+      <h2 style={{ marginTop: 28 }}>{memberNames ? `Shared — ${memberNames}` : 'Shared'}</h2>
       <SharedHub />
 
       {profile && (
