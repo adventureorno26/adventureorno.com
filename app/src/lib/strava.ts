@@ -30,6 +30,14 @@ export async function fetchMileage(personId?: string | null): Promise<MileageRow
   return (data ?? []) as MileageRow[];
 }
 
+/** Total household miles for ONE year (de-duped shared outings). For Wrapped, so a
+ *  selected year shows that year's mileage rather than an all-time total. */
+export async function fetchYearMiles(year: number): Promise<number> {
+  const { data, error } = await supabase.rpc('wrapped_year_miles', { p_year: year });
+  if (error) return 0;
+  return Number(data ?? 0);
+}
+
 export interface ActivityListRow {
   id: string;
   type: string;

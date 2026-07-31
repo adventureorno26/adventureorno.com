@@ -3133,6 +3133,7 @@ export type Database = {
           wanters: string[]
         }[]
       }
+      wrapped_year_miles: { Args: { p_year: number }; Returns: number }
     }
     Enums: {
       [_ in never]: never
