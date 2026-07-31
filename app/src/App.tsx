@@ -2,13 +2,6 @@ import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
-// MapView is the landing view and owns the MapLibre map + all its markers. It is
-// imported EAGERLY on purpose: lazy-loading it split MapLibre's CSS/JS into a
-// chunk that loaded after our styles (maps collapsed to 0 height, markers/route
-// maps broke) and made the map appear only after a second chunk download (slow).
-// Eager keeps the map instant and correct; the login shell paying for MapLibre is
-// an acceptable trade for the map actually working.
-import MapView from './routes/MapView';
 import LocationTracker from './components/LocationTracker';
 import ErrorBoundary from './components/ErrorBoundary';
 import Snackbar from './components/Snackbar';
@@ -40,6 +33,11 @@ function lazyWithReload<T extends ComponentType<unknown>>(factory: () => Promise
 }
 
 // Secondary routes stay code-split (their JS loads only when visited).
+// MapView owns MapLibre (~the largest dependency). Lazy-loaded so the login shell
+// does NOT download the MapLibre JS chunk; only the small maplibre-gl.css stays eager
+// in main.tsx (it must load before index.css or the map collapses to 0 height). The
+// map's Suspense fallback covers the one-time chunk fetch on the authenticated landing.
+const MapView = lazyWithReload(() => import('./routes/MapView'));
 const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
 const DayView = lazyWithReload(() => import('./routes/DayView'));
 const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
