@@ -57,6 +57,20 @@ jobs:
       - name: npm audit (report)
         run: npm audit --audit-level=high || true
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Current-tree secret scan (NOT git history — the history scrub is a separate,
+      # owner-gated phase). Fails the build if any secret is committed to the working
+      # tree. Pinned gitleaks binary; --redact so a match never prints the secret.
+      - name: Gitleaks (current tree)
+        run: |
+          VER=8.18.4
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks detect --no-git --redact --exit-code 1 --verbose
+
   db-types-drift:
     runs-on: ubuntu-latest
     steps:

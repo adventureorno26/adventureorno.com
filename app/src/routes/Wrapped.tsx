@@ -59,15 +59,23 @@ export default function Wrapped() {
         if (!skip.has(c)) tagCounts.set(c, (tagCounts.get(c) ?? 0) + 1);
     const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
     const miles = mileage.reduce((s, r) => s + Number(r.miles), 0);
-    // Farthest place from home (Leesburg) — the biggest adventure.
-    const home = { lat: 39.1157, lng: -77.5636 };
+    // Biggest adventure = the place farthest from the year's centre of gravity.
+    // Derived from the data (no hardcoded home location).
+    const withCoords = inYear.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const center =
+      withCoords.length > 0
+        ? {
+            lat: withCoords.reduce((s, p) => s + p.lat, 0) / withCoords.length,
+            lng: withCoords.reduce((s, p) => s + p.lng, 0) / withCoords.length,
+          }
+        : { lat: 0, lng: 0 };
     let farthest: { name: string; mi: number } | null = null;
-    for (const p of inYear) {
-      const dLat = ((p.lat - home.lat) * Math.PI) / 180;
-      const dLng = ((p.lng - home.lng) * Math.PI) / 180;
+    for (const p of withCoords) {
+      const dLat = ((p.lat - center.lat) * Math.PI) / 180;
+      const dLng = ((p.lng - center.lng) * Math.PI) / 180;
       const a =
         Math.sin(dLat / 2) ** 2 +
-        Math.cos((home.lat * Math.PI) / 180) *
+        Math.cos((center.lat * Math.PI) / 180) *
           Math.cos((p.lat * Math.PI) / 180) *
           Math.sin(dLng / 2) ** 2;
       const mi = 3958.8 * 2 * Math.asin(Math.sqrt(a));

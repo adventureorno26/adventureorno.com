@@ -3,15 +3,12 @@ import { haversineMeters, metersToMiles } from './geo';
 
 describe('haversineMeters', () => {
   it('is ~0 for identical points', () => {
-    expect(
-      haversineMeters({ lng: -77.5636, lat: 39.1157 }, { lng: -77.5636, lat: 39.1157 }),
-    ).toBeCloseTo(0, 5);
+    expect(haversineMeters({ lng: 0, lat: 0 }, { lng: 0, lat: 0 })).toBeCloseTo(0, 5);
   });
 
-  it('matches a known distance (Leesburg → Washington DC ~ 55 km)', () => {
-    const leesburg = { lng: -77.5636, lat: 39.1157 };
-    const dc = { lng: -77.0369, lat: 38.9072 };
-    const d = haversineMeters(leesburg, dc);
+  it('matches a known distance (0.5° of latitude ≈ 55.6 km)', () => {
+    // Fictional points, no real locations: one degree of latitude ≈ 111.2 km.
+    const d = haversineMeters({ lng: 0, lat: 0 }, { lng: 0, lat: 0.5 });
     expect(d).toBeGreaterThan(48_000);
     expect(d).toBeLessThan(58_000);
   });
