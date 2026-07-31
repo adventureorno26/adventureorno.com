@@ -139,7 +139,7 @@ export default function Wrapped() {
         <div className="wrapped-card">
           <div className="wrapped-card-label">Biggest adventure</div>
           <div className="wrapped-card-value">{stats.farthest.name}</div>
-          <div className="wrapped-card-sub">{stats.farthest.mi.toFixed(0)} miles from home</div>
+          <div className="wrapped-card-sub">{stats.farthest.mi.toFixed(0)} miles out</div>
         </div>
       )}
 
