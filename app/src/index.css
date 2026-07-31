@@ -1356,7 +1356,9 @@ a {
 }
 .hero-close {
   position: absolute;
-  top: 10px;
+  /* Clear the notch / status bar when the sheet is pulled to the top, so the
+     close (back-to-map) control is never tucked under it on mobile. */
+  top: calc(10px + env(safe-area-inset-top));
   right: 12px;
   z-index: 2;
   width: 32px;
@@ -1450,7 +1452,8 @@ a {
   gap: 8px;
   min-height: 40px;
   padding: 8px 14px 8px 10px;
-  margin: 0 0 8px;
+  /* Push below the notch / status bar so the back button is always tappable. */
+  margin: env(safe-area-inset-top) 0 8px;
   border-radius: 999px;
   background: var(--panel-glass);
   backdrop-filter: blur(12px);
@@ -5365,6 +5368,24 @@ textarea {
   font-weight: 600;
   font-size: 12px;
   cursor: pointer;
+}
+/* Mobile: the bottom-center primary nav sits in the bottom band (~12–62px), so lift
+   the whole bottom-left map-control stack (person filter → search → add-trail → gear)
+   above it. Keeps the locked stack order + spacing; only raises the base so the nav
+   never covers the toggle/search pills. */
+@media (max-width: 640px) {
+  .person-filter {
+    bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+  .places-search-btn {
+    bottom: calc(102px + env(safe-area-inset-bottom));
+  }
+  .add-trail-btn {
+    bottom: calc(134px + env(safe-area-inset-bottom));
+  }
+  .stats-bar .actions {
+    bottom: calc(166px + env(safe-area-inset-bottom));
+  }
 }
 .search-palette-backdrop {
   position: fixed;
