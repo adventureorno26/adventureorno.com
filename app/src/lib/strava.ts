@@ -350,9 +350,13 @@ export async function fetchStravaAthletes(): Promise<StravaAthlete[]> {
   return (data ?? []) as StravaAthlete[];
 }
 
-/** Build the Strava authorize URL. Client ID is public; secret stays server-side.
- *  `state` carries the owner's user id so the callback can attribute the account. */
-export function stravaAuthorizeUrl(clientId: string, ownerId: string): string {
+/** Begin a Strava link: mint a random single-use state (bound to the signed-in
+ *  editing account, server-side) and build the authorize URL with it. The client
+ *  ID is public; the secret stays server-side. Using a minted state instead of the
+ *  raw user id prevents OAuth CSRF / account injection (see migration 0115). */
+export async function beginStravaLink(clientId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('strava_oauth_start');
+  if (error || !data) throw error ?? new Error('Could not start Strava link');
   const redirect = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/strava-auth`;
   const params = new URLSearchParams({
     client_id: clientId,
@@ -360,7 +364,7 @@ export function stravaAuthorizeUrl(clientId: string, ownerId: string): string {
     response_type: 'code',
     approval_prompt: 'auto',
     scope: 'read,activity:read_all',
-    state: ownerId,
+    state: data as string,
   });
   return `https://www.strava.com/oauth/authorize?${params}`;
 }

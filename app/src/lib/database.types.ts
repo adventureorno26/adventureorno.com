@@ -574,6 +574,41 @@ export type Database = {
           },
         ]
       }
+      oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          profile_id: string
+          provider: string
+          state: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          profile_id: string
+          provider?: string
+          state: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          profile_id?: string
+          provider?: string
+          state?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_states_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parks: {
         Row: {
           boundary: unknown
@@ -1994,6 +2029,10 @@ export type Database = {
       cluster_now: { Args: never; Returns: Json }
       cluster_unassigned: { Args: never; Returns: Json }
       confirm_suggested_trip: { Args: { p_place: string }; Returns: string }
+      consume_oauth_state: {
+        Args: { p_provider?: string; p_state: string }
+        Returns: string
+      }
       create_experience: {
         Args: { p_key: string; p_place: Json; p_visit?: Json }
         Returns: Json
@@ -3034,6 +3073,7 @@ export type Database = {
       }
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
+      strava_oauth_start: { Args: never; Returns: string }
       toggle_photo_reaction: {
         Args: { p_emoji: string; p_photo: string }
         Returns: undefined

@@ -31,7 +31,7 @@ import {
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
-import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
+import { backfillPage, beginStravaLink, isMyStravaConnected } from '../lib/strava';
 import { importFileActivity, parseActivityFile, parseFitActivity } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import SharedHub from '../components/SharedHub';
@@ -743,11 +743,25 @@ function GarminImportCard() {
   );
 }
 
-function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
+function StravaCard({ isOwner }: { isOwner: boolean }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
   const clientId = import.meta.env.VITE_STRAVA_CLIENT_ID;
+
+  async function connectStrava() {
+    if (!clientId) return;
+    setLinkErr(null);
+    setLinking(true);
+    try {
+      window.location.href = await beginStravaLink(clientId);
+    } catch {
+      setLinkErr('Could not start the Strava link. Please try again.');
+      setLinking(false);
+    }
+  }
 
   useEffect(() => {
     isMyStravaConnected().then(setConnected);
@@ -827,9 +841,14 @@ function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
             activities, turn on <b>Garmin Connect → Strava</b> in Garmin Connect — they'll flow in
             through Strava, no separate Garmin connection needed.
           </div>
-          <a href={stravaAuthorizeUrl(clientId, myId)}>
-            <button className="primary">Connect Strava</button>
-          </a>
+          <button className="primary" onClick={connectStrava} disabled={linking}>
+            {linking ? 'Starting…' : 'Connect Strava'}
+          </button>
+          {linkErr && (
+            <div style={{ color: 'var(--danger, #c00)', fontSize: 13, marginTop: 8 }}>
+              {linkErr}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -922,7 +941,7 @@ export default function Settings() {
       {profile && (
         <>
           <h2 style={{ marginTop: 28 }}>Strava &amp; Garmin</h2>
-          <StravaCard myId={profile.id} isOwner={profile.role === 'owner'} />
+          <StravaCard isOwner={profile.role === 'owner'} />
           <GarminImportCard />
         </>
       )}
