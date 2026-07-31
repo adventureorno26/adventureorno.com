@@ -183,6 +183,20 @@ export default function PlacesEditor() {
     if (hasJosh && !hasMe) return 'josh';
     return 'mine';
   }
+  // Union of everyone across a place's visits: a visit with a solo profile counts
+  // only that person; a null solo (no override) means "both".
+  function peopleUnion(visits: Visit[]): Set<string> {
+    const set = new Set<string>();
+    for (const vv of visits) {
+      if (vv.solo_profile) set.add(vv.solo_profile);
+      else {
+        if (meId) set.add(meId);
+        if (joshId) set.add(joshId);
+      }
+    }
+    return set;
+  }
+
   async function setWho(p: Place, key: Who) {
     const profileId = key === 'both' ? null : key === 'mine' ? meId : joshId;
     const v = selectedVisit(p);
@@ -190,30 +204,36 @@ export default function PlacesEditor() {
     try {
       if (v) {
         await setVisitSolo(v.id, profileId ?? null);
+        // Update the edited visit AND recompute the place's aggregate people as the
+        // UNION across ALL its visits — editing one visit must never replace people
+        // contributed by other visits.
+        const updated = (visitsByPlace.get(p.id) ?? []).map((x) =>
+          x.id === v.id ? { ...x, solo_profile: profileId ?? null, solo_override: true } : x,
+        );
         setVisitsByPlace((cur) => {
           const next = new Map(cur);
-          next.set(
-            p.id,
-            (next.get(p.id) ?? []).map((x) =>
-              x.id === v.id ? { ...x, solo_profile: profileId ?? null, solo_override: true } : x,
-            ),
-          );
+          next.set(p.id, updated);
+          return next;
+        });
+        setPlacePeople((cur) => {
+          const next = new Map(cur);
+          next.set(p.id, peopleUnion(updated));
           return next;
         });
       } else {
+        // Place-level attribution (no specific visit) sets the whole place.
         await setPlaceSolo(p.id, profileId ?? null);
+        setPlacePeople((cur) => {
+          const next = new Map(cur);
+          const set = new Set<string>();
+          if (key === 'both') {
+            if (meId) set.add(meId);
+            if (joshId) set.add(joshId);
+          } else if (profileId) set.add(profileId);
+          next.set(p.id, set);
+          return next;
+        });
       }
-      // Reflect in the people map so the top filter stays in sync.
-      setPlacePeople((cur) => {
-        const next = new Map(cur);
-        const set = new Set<string>();
-        if (key === 'both') {
-          if (meId) set.add(meId);
-          if (joshId) set.add(joshId);
-        } else if (profileId) set.add(profileId);
-        next.set(p.id, set);
-        return next;
-      });
       setRowStatus(p.id, 'saved');
       window.setTimeout(() => setRowStatus(p.id, undefined), 1400);
     } catch {
@@ -252,26 +272,71 @@ export default function PlacesEditor() {
   async function batchMove(placeId: string) {
     const ids = [...selPhotos];
     if (ids.length === 0) return;
-    await mapPool(ids, (id) => assignPhotoToPlace(id, placeId).catch(() => null), 4);
-    setPanelPhotos((cur) => (cur ? cur.filter((p) => !selPhotos.has(p.id)) : cur));
-    setSelPhotos(new Set());
-    showSnack({ message: `Moved ${ids.length} photo${ids.length === 1 ? '' : 's'}.` });
+    // Track each row's outcome; keep the failures SELECTED so they're retryable and
+    // report the exact count rather than claiming everything moved.
+    const results = await mapPool(
+      ids,
+      async (id) => {
+        try {
+          await assignPhotoToPlace(id, placeId);
+          return { id, ok: true };
+        } catch {
+          return { id, ok: false };
+        }
+      },
+      4,
+    );
+    const failed = new Set(results.filter((r) => !r!.ok).map((r) => r!.id));
+    const moved = ids.length - failed.size;
+    setPanelPhotos((cur) =>
+      cur ? cur.filter((p) => failed.has(p.id) || !selPhotos.has(p.id)) : cur,
+    );
+    setSelPhotos(failed);
+    showSnack({
+      message: failed.size
+        ? `Moved ${moved}; ${failed.size} failed — still selected, try again.`
+        : `Moved ${moved} photo${moved === 1 ? '' : 's'}.`,
+    });
   }
   async function batchDelete() {
     const ids = [...selPhotos];
     if (ids.length === 0) return;
-    await mapPool(ids, (id) => deletePhoto(id).catch(() => null), 4);
-    setPanelPhotos((cur) => (cur ? cur.filter((p) => !ids.includes(p.id)) : cur));
-    setSelPhotos(new Set());
-    showSnack({
-      message: `${ids.length} photo${ids.length === 1 ? '' : 's'} to trash`,
-      actionLabel: 'Undo',
-      onAction: () => {
-        void mapPool(ids, (id) => restorePhoto(id).catch(() => null), 4).then(
-          () => photoPanel && openPhotos(photoPanel),
-        );
+    const results = await mapPool(
+      ids,
+      async (id) => {
+        try {
+          await deletePhoto(id);
+          return { id, ok: true };
+        } catch {
+          return { id, ok: false };
+        }
       },
-    });
+      4,
+    );
+    const failed = new Set(results.filter((r) => !r!.ok).map((r) => r!.id));
+    const deleted = ids.filter((id) => !failed.has(id));
+    setPanelPhotos((cur) =>
+      cur ? cur.filter((p) => failed.has(p.id) || !ids.includes(p.id)) : cur,
+    );
+    setSelPhotos(failed); // keep failures selected for retry
+    if (deleted.length) {
+      // Undo restores ONLY the photos that were actually deleted.
+      showSnack({
+        message: failed.size
+          ? `${deleted.length} to trash; ${failed.size} failed (still selected).`
+          : `${deleted.length} photo${deleted.length === 1 ? '' : 's'} to trash`,
+        actionLabel: 'Undo',
+        onAction: () => {
+          void mapPool(deleted, (id) => restorePhoto(id).catch(() => null), 4).then(
+            () => photoPanel && openPhotos(photoPanel),
+          );
+        },
+      });
+    } else if (failed.size) {
+      showSnack({
+        message: `Couldn't delete ${failed.size} photo${failed.size === 1 ? '' : 's'} — still selected, try again.`,
+      });
+    }
   }
   async function removePhoto(id: string) {
     try {
