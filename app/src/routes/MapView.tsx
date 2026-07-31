@@ -1063,10 +1063,16 @@ export default function MapView() {
     });
   }
 
-  function nearestPlaceId(lng: number, lat: number, maxM: number): string | null {
+  function nearestPlaceId(
+    lng: number,
+    lat: number,
+    maxM: number,
+    eligible?: (p: Place) => boolean,
+  ): string | null {
     let best: string | null = null;
     let bestD = maxM;
     for (const p of placesRef.current) {
+      if (eligible && !eligible(p)) continue; // don't snap to an ineligible venue
       const d = haversineMeters({ lng, lat }, { lng: p.lng, lat: p.lat });
       if (d < bestD) {
         bestD = d;
@@ -1093,7 +1099,12 @@ export default function MapView() {
         polyline.encode(drawLineRef.current.map(([ln, la]) => [la, ln] as [number, number]));
       const [startLng, startLat] = pts[0];
       // If launched from a trail card, attach to that trail; else nearest place.
-      let placeId = drawTargetRef.current ?? nearestPlaceId(startLng, startLat, 2000);
+      // Only reuse a nearby TRAIL or container as the target — never snap a drawn
+      // trail onto an unrelated venue (a restaurant, winery, etc.). Otherwise create
+      // a fresh trail place below.
+      let placeId =
+        drawTargetRef.current ??
+        nearestPlaceId(startLng, startLat, 2000, (p) => !!p.is_trail || !!p.holds_children);
       if (!placeId) {
         const created = await createPlace({
           name: drawName.trim(),
