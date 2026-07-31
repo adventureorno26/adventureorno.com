@@ -90,7 +90,12 @@ export default function PeopleCard({ meId }: { meId: string }) {
           onChange={(e) => setEmail(e.target.value)}
           style={{ flex: 2 }}
         />
-        <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={{ flex: 1 }}>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as Role)}
+          aria-label="Invite role"
+          style={{ flex: 1 }}
+        >
           <option value="editor">Editor</option>
           <option value="viewer">Viewer</option>
         </select>

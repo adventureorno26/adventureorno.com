@@ -1607,7 +1607,11 @@ export default function MapView() {
               value={drawName}
               onChange={(e) => setDrawName(e.target.value)}
             />
-            <select value={drawType} onChange={(e) => setDrawType(e.target.value)}>
+            <select
+              value={drawType}
+              onChange={(e) => setDrawType(e.target.value)}
+              aria-label="Activity type"
+            >
               <option value="Hike">🥾 Hiking</option>
               <option value="Walk">🚶 Walking</option>
               <option value="Run">🏃 Running</option>

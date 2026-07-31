@@ -99,7 +99,12 @@ export default function PlacesList() {
           </label>
           <span style={{ color: 'var(--muted)', fontSize: 13 }}>{sel.size} selected</span>
           <div className="spacer" style={{ flex: 1 }} />
-          <select value={tag} onChange={(e) => setTag(e.target.value)} style={{ width: 'auto' }}>
+          <select
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            aria-label="Tag to apply to the selected places"
+            style={{ width: 'auto' }}
+          >
             {MANUAL_CATEGORIES.map((c) => (
               <option key={c.slug} value={c.slug}>
                 {c.icon} {c.label}

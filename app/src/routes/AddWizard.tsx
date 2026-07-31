@@ -333,6 +333,7 @@ export default function AddWizard() {
                 className="attribution-select"
                 value={who}
                 onChange={(e) => setWho(e.target.value)}
+                aria-label="Who was there"
               >
                 <option value="">Both of us</option>
                 {people.map((p) => (
