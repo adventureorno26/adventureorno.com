@@ -2209,6 +2209,36 @@ a {
 }
 
 /* Uniform grid of tool buttons inside the "Edit all places" card (no overflow). */
+/* Settings destination tabs (Prompt 7 rec 41). Sticky so they stay reachable while
+   scrolling a section. */
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 4px;
+  position: sticky;
+  top: 0;
+  background: var(--bg, #0f1115);
+  padding: 8px 0;
+  z-index: 3;
+}
+.settings-tabs button {
+  padding: 7px 14px;
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-tabs button.on {
+  color: var(--text);
+  border-color: var(--accent, #38bdf8);
+  background: color-mix(in srgb, var(--accent, #38bdf8) 16%, transparent);
+}
+
 .settings-tools {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));

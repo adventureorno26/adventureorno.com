@@ -875,6 +875,8 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+type SettingsTab = 'account' | 'connections' | 'privacy' | 'data' | 'advanced';
+
 export default function Settings() {
   const { profile, signOut } = useAuth();
   const [members, setMembers] = useState<MapPerson[]>([]);
@@ -887,6 +889,17 @@ export default function Settings() {
     .map((m) => m.display_name)
     .filter(Boolean)
     .join(' & ');
+
+  // Settings is divided into manageable destinations (Prompt 7, rec 41). Every card
+  // is retained — just grouped under a tab so the page isn't one endless scroll.
+  const [tab, setTab] = useState<SettingsTab>('account');
+  const TABS: { key: SettingsTab; label: string }[] = [
+    { key: 'account', label: 'Account' },
+    { key: 'connections', label: 'Connections' },
+    { key: 'privacy', label: 'Privacy' },
+    { key: 'data', label: 'Data' },
+    { key: 'advanced', label: 'Advanced' },
+  ];
 
   return (
     <div
@@ -901,88 +914,113 @@ export default function Settings() {
         Signed in as <b>{profile?.display_name ?? 'you'}</b> · role <b>{profile?.role}</b>
       </p>
 
-      <h2 style={{ marginTop: 28 }}>Account</h2>
-      <button onClick={() => void signOut()}>Sign out</button>
+      <nav className="settings-tabs" aria-label="Settings sections">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={tab === t.key ? 'on' : ''}
+            onClick={() => setTab(t.key)}
+            type="button"
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      <h2 style={{ marginTop: 28 }}>Stats</h2>
-      <StatsSection />
-
-      {(profile?.role === 'owner' || profile?.role === 'editor') && (
+      {tab === 'account' && (
         <>
-          <h2 style={{ marginTop: 28 }}>Manage data</h2>
-          <div className="card">
-            <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
-              Tools for tidying everything up — edit every place in one table, sort photos, review
-              what needs attention, merge duplicates, and check the health of your data.
-            </p>
-            <div className="settings-tools">
-              <Link to="/places/edit">
-                <button className="primary">Edit all places</button>
-              </Link>
-              <Link to="/photos/sort">
-                <button>Sort photos into places</button>
-              </Link>
-              <Link to="/attention">
-                <button>Needs attention</button>
-              </Link>
-              <Link to="/albums">
-                <button>Smart albums</button>
-              </Link>
-              <Link to="/timeline">
-                <button>Timeline</button>
-              </Link>
-              <Link to="/duplicates">
-                <button>Duplicate places</button>
-              </Link>
-              <Link to="/health">
-                <button>Data health</button>
-              </Link>
-              <Link to="/trash">
-                <button>Trash</button>
-              </Link>
-            </div>
-          </div>
+          <h2 style={{ marginTop: 20 }}>Account</h2>
+          <button onClick={() => void signOut()}>Sign out</button>
+
+          {profile?.role === 'owner' && (
+            <>
+              <h2 style={{ marginTop: 28 }}>Join requests</h2>
+              <JoinRequestsCard />
+
+              <h2 style={{ marginTop: 28 }}>People</h2>
+              <PeopleCard meId={profile.id} />
+            </>
+          )}
         </>
       )}
 
-      {profile && (
+      {tab === 'connections' && profile && (
         <>
-          <h2 style={{ marginTop: 28 }}>Location tracking</h2>
-          <TrackingCard myId={profile.id} />
-        </>
-      )}
-
-      <h2 style={{ marginTop: 28 }}>Tags</h2>
-      <TagsCard />
-
-      <h2 style={{ marginTop: 28 }}>Export our data</h2>
-      <ExportCard />
-
-      {profile?.role === 'owner' && (
-        <>
-          <h2 style={{ marginTop: 28 }}>Map</h2>
-          <ProjectionCard />
-        </>
-      )}
-
-      <h2 style={{ marginTop: 28 }}>{memberNames ? `Shared — ${memberNames}` : 'Shared'}</h2>
-      <SharedHub />
-
-      {profile && (
-        <>
-          <h2 style={{ marginTop: 28 }}>Strava &amp; Garmin</h2>
+          <h2 style={{ marginTop: 20 }}>Strava &amp; Garmin</h2>
           <StravaCard isOwner={profile.role === 'owner'} />
           <GarminImportCard />
         </>
       )}
 
-      {profile?.role === 'owner' && (
+      {tab === 'privacy' && (
         <>
-          <h2 style={{ marginTop: 28 }}>Join requests</h2>
-          <JoinRequestsCard />
+          <h2 style={{ marginTop: 20 }}>{memberNames ? `Shared — ${memberNames}` : 'Shared'}</h2>
+          <SharedHub />
 
-          <h2 style={{ marginTop: 28 }}>People</h2>
-          <PeopleCard meId={profile.id} />
+          {profile && (
+            <>
+              <h2 style={{ marginTop: 28 }}>Location tracking</h2>
+              <TrackingCard myId={profile.id} />
+            </>
+          )}
+        </>
+      )}
+
+      {tab === 'data' && (
+        <>
+          <h2 style={{ marginTop: 20 }}>Stats</h2>
+          <StatsSection />
+
+          {(profile?.role === 'owner' || profile?.role === 'editor') && (
+            <>
+              <h2 style={{ marginTop: 28 }}>Manage data</h2>
+              <div className="card">
+                <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+                  Tools for tidying everything up — edit every place in one table, sort photos,
+                  review what needs attention, merge duplicates, and check the health of your data.
+                </p>
+                <div className="settings-tools">
+                  <Link to="/places/edit">
+                    <button className="primary">Edit all places</button>
+                  </Link>
+                  <Link to="/photos/sort">
+                    <button>Sort photos into places</button>
+                  </Link>
+                  <Link to="/attention">
+                    <button>Needs attention</button>
+                  </Link>
+                  <Link to="/albums">
+                    <button>Smart albums</button>
+                  </Link>
+                  <Link to="/timeline">
+                    <button>Timeline</button>
+                  </Link>
+                  <Link to="/duplicates">
+                    <button>Duplicate places</button>
+                  </Link>
+                  <Link to="/health">
+                    <button>Data health</button>
+                  </Link>
+                  <Link to="/trash">
+                    <button>Trash</button>
+                  </Link>
+                </div>
+              </div>
+            </>
+          )}
+
+          <h2 style={{ marginTop: 28 }}>Tags</h2>
+          <TagsCard />
+
+          <h2 style={{ marginTop: 28 }}>Export our data</h2>
+          <ExportCard />
+        </>
+      )}
+
+      {tab === 'advanced' && profile?.role === 'owner' && (
+        <>
+          <h2 style={{ marginTop: 20 }}>Map</h2>
+          <ProjectionCard />
 
           <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
           <GeocodeCard />
