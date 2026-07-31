@@ -22,7 +22,14 @@ export async function fetchInvites(): Promise<Invite[]> {
   return (data ?? []) as Invite[];
 }
 
-export async function sendInvite(email: string, role: Role): Promise<void> {
+export interface InviteResult {
+  /** True when an email was sent; false when we returned a link to share instead. */
+  emailed: boolean;
+  /** A copy-and-share magic link, present only when emailed is false. */
+  actionLink?: string;
+}
+
+export async function sendInvite(email: string, role: Role): Promise<InviteResult> {
   const { data: sess } = await supabase.auth.getSession();
   const token = sess.session?.access_token;
   if (!token) throw new Error('Not signed in');
@@ -39,10 +46,15 @@ export async function sendInvite(email: string, role: Role): Promise<void> {
       redirectTo: `${window.location.origin}/login`,
     }),
   });
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    emailed?: boolean;
+    action_link?: string;
+  };
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Invite failed (${res.status})`);
   }
+  return { emailed: body.emailed !== false, actionLink: body.action_link };
 }
 
 /** Revoke a pending invite (delete the row). */

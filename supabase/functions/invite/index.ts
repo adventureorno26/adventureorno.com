@@ -91,13 +91,21 @@ Deno.serve(async (req) => {
   //    fresh magic link.
   const { error: linkErr } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
   if (linkErr) {
-    const { error: otpErr } = await admin.auth.admin.generateLink({
+    // Email delivery failed (e.g. no SMTP configured, or the auth user already
+    // exists from a prior invite). Generate an authorized magic link and RETURN it
+    // so the owner can share it manually — NEVER report success while dropping the
+    // only way in.
+    const { data: linkData, error: otpErr } = await admin.auth.admin.generateLink({
       type: 'magiclink',
       email,
       options: { redirectTo },
     });
-    if (otpErr) return json({ error: otpErr.message }, 500);
+    const actionLink = linkData?.properties?.action_link;
+    if (otpErr || !actionLink) {
+      return json({ error: otpErr?.message ?? 'could not create an invite link' }, 500);
+    }
+    return json({ ok: true, email, role, emailed: false, action_link: actionLink });
   }
 
-  return json({ ok: true, email, role });
+  return json({ ok: true, email, role, emailed: true });
 });
