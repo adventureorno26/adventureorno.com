@@ -39,6 +39,8 @@ const ISSUES: { key: string; label: string }[] = [
   { key: 'photos_orphaned', label: 'Photos pointing to a place that no longer exists' },
   { key: 'videos_no_poster', label: 'Videos with no thumbnail (need re-upload)' },
   { key: 'activities_no_place', label: 'Activities not attached to a place' },
+  { key: 'pings_unattributed', label: 'Location pings with no owner (older imports)' },
+  { key: 'strava_tokens_expired', label: 'Expired Strava tokens (a refresh may be failing)' },
 ];
 
 /** Data-health center — a whole-dataset snapshot + integrity checks + one-tap
