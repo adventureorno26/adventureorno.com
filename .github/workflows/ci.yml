@@ -41,6 +41,17 @@ jobs:
         run: npm run test
       - name: App — production build
         working-directory: app
+        # The compile-time VITE_* values must exist during THIS build (Vite inlines
+        # import.meta.env at build time), not only in the later e2e preview step —
+        # otherwise the CI bundle inlines `undefined` for the Supabase URL/key and is
+        # structurally invalid. Real client-safe values from secrets when present;
+        # harmless placeholders otherwise so forks without secrets still build.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_placeholder' }}
+          VITE_MAPTILER_KEY: ${{ secrets.VITE_MAPTILER_KEY || 'placeholder' }}
+          VITE_PHOTO_GATEWAY_URL: ${{ secrets.VITE_PHOTO_GATEWAY_URL || 'https://placeholder.workers.dev' }}
+          VITE_STRAVA_CLIENT_ID: ${{ secrets.VITE_STRAVA_CLIENT_ID || '0' }}
         run: npm run build
 
       - name: Worker — typecheck
