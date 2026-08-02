@@ -1356,7 +1356,9 @@ a {
 }
 .hero-close {
   position: absolute;
-  top: 10px;
+  /* Clear the notch / status bar when the sheet is pulled to the top, so the
+     close (back-to-map) control is never tucked under it on mobile. */
+  top: calc(10px + env(safe-area-inset-top));
   right: 12px;
   z-index: 2;
   width: 32px;
@@ -1450,7 +1452,8 @@ a {
   gap: 8px;
   min-height: 40px;
   padding: 8px 14px 8px 10px;
-  margin: 0 0 8px;
+  /* Push below the notch / status bar so the back button is always tappable. */
+  margin: env(safe-area-inset-top) 0 8px;
   border-radius: 999px;
   background: var(--panel-glass);
   backdrop-filter: blur(12px);
@@ -2206,6 +2209,36 @@ a {
 }
 
 /* Uniform grid of tool buttons inside the "Edit all places" card (no overflow). */
+/* Settings destination tabs (Prompt 7 rec 41). Sticky so they stay reachable while
+   scrolling a section. */
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 4px;
+  position: sticky;
+  top: 0;
+  background: var(--bg, #0f1115);
+  padding: 8px 0;
+  z-index: 3;
+}
+.settings-tabs button {
+  padding: 7px 14px;
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-tabs button.on {
+  color: var(--text);
+  border-color: var(--accent, #38bdf8);
+  background: color-mix(in srgb, var(--accent, #38bdf8) 16%, transparent);
+}
+
 .settings-tools {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -2343,6 +2376,27 @@ a {
 }
 .aw-target {
   margin: 0 0 6px;
+}
+.aw-addkid {
+  display: flex;
+  gap: 8px;
+}
+.aw-addkid input {
+  flex: 1;
+}
+.aw-addkid-btn {
+  flex: 0 0 auto;
+  padding: 0 14px;
+  border-radius: var(--radius, 10px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.aw-addkid-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .aw-or {
   text-align: center;
@@ -5365,6 +5419,24 @@ textarea {
   font-weight: 600;
   font-size: 12px;
   cursor: pointer;
+}
+/* Mobile: the bottom-center primary nav sits in the bottom band (~12–62px), so lift
+   the whole bottom-left map-control stack (person filter → search → add-trail → gear)
+   above it. Keeps the locked stack order + spacing; only raises the base so the nav
+   never covers the toggle/search pills. */
+@media (max-width: 640px) {
+  .person-filter {
+    bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+  .places-search-btn {
+    bottom: calc(102px + env(safe-area-inset-bottom));
+  }
+  .add-trail-btn {
+    bottom: calc(134px + env(safe-area-inset-bottom));
+  }
+  .stats-bar .actions {
+    bottom: calc(166px + env(safe-area-inset-bottom));
+  }
 }
 .search-palette-backdrop {
   position: fixed;

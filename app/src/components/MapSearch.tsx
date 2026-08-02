@@ -17,6 +17,7 @@ export default function MapSearch({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const timer = useRef<number>();
+  const seq = useRef(0); // request identity so a slow older query can't clobber newer results
 
   useEffect(() => {
     window.clearTimeout(timer.current);
@@ -25,7 +26,10 @@ export default function MapSearch({
       return;
     }
     timer.current = window.setTimeout(async () => {
-      setResults(await searchGeocode(q, getProximity?.()));
+      const mySeq = ++seq.current;
+      const r = await searchGeocode(q, getProximity?.());
+      if (mySeq !== seq.current) return; // a newer query started — discard stale results
+      setResults(r);
       setOpen(true);
     }, 280);
     return () => window.clearTimeout(timer.current);

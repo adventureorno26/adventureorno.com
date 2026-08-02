@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  addVisit,
-  createPlace,
+  addExperience,
+  createPerson,
   fetchMapPeople,
+  fetchPeople,
   fetchPlaces,
-  setMyRating,
-  setVisitSolo,
+  newExperienceKey,
   updatePlace,
+  type ExperiencePlaceInput,
   type MapPerson,
+  type Person,
 } from '../lib/data';
 import type { Place } from '../lib/types';
 import { mapPool, photosEnabled, uploadPhoto } from '../lib/photos';
@@ -70,6 +72,17 @@ export default function AddWizard() {
   const [multi, setMulti] = useState(false);
   const [endDate, setEndDate] = useState('');
   const [who, setWho] = useState(''); // '' = both; else a profile id
+  // Non-login people (children) present on this visit.
+  const [kids, setKids] = useState<Person[]>([]);
+  const [selKids, setSelKids] = useState<string[]>([]);
+  const [newKid, setNewKid] = useState('');
+  useEffect(() => {
+    fetchPeople()
+      .then(setKids)
+      .catch(() => undefined);
+  }, []);
+  // One idempotency key per save action; reused across retries, reset on success.
+  const keyRef = useRef<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [rating, setRating] = useState<number | null>(null);
   const [review, setReview] = useState('');
@@ -131,11 +144,16 @@ export default function AddWizard() {
     if (busy) return;
     setBusy('Saving…');
     try {
-      let placeId: string;
+      // The place graph (place + visit + attribution + rating + people) is written
+      // atomically by one idempotent service. Reuse the key across retries so a
+      // second attempt after a partial failure returns the same records.
+      if (!keyRef.current) keyRef.current = newExperienceKey();
+
+      let placeInput: ExperiencePlaceInput;
       let pLat: number;
       let pLng: number;
       if (mode === 'new') {
-        const created = await createPlace({
+        placeInput = {
           name: name.trim() || 'New place',
           admin1,
           country,
@@ -144,15 +162,38 @@ export default function AddWizard() {
           lng: lng!,
           categories: tags,
           saved: true,
-        });
-        placeId = created.id;
+        };
         pLat = lat!;
         pLng = lng!;
-        if (review.trim()) await updatePlace(placeId, { review: review.trim() });
       } else if (existing) {
-        placeId = existing.id;
+        placeInput = { id: existing.id };
         pLat = existing.lat;
         pLng = existing.lng;
+      } else {
+        setBusy(null);
+        return;
+      }
+
+      const end = visitDate && multi && endDate && endDate >= visitDate ? endDate : visitDate;
+      const res = await addExperience(
+        keyRef.current,
+        placeInput,
+        visitDate
+          ? {
+              date: visitDate,
+              end_date: end || undefined,
+              who: who || undefined,
+              rating: rating ?? undefined,
+              person_ids: selKids.length ? selKids : undefined,
+            }
+          : { rating: rating ?? undefined },
+      );
+      const placeId = res.place_id;
+
+      // Enrichments create_experience doesn't own (kept as compatibility writes):
+      if (mode === 'new') {
+        if (review.trim()) await updatePlace(placeId, { review: review.trim() });
+      } else if (existing) {
         // Merge tags additively; don't clobber an existing review.
         if (tags.length) {
           const merged = Array.from(new Set([...(existing.categories ?? []), ...tags]));
@@ -160,17 +201,8 @@ export default function AddWizard() {
         }
         if (review.trim() && !existing.review)
           await updatePlace(placeId, { review: review.trim() });
-      } else {
-        setBusy(null);
-        return;
       }
 
-      if (rating != null) await setMyRating(placeId, rating).catch(() => undefined);
-      if (visitDate) {
-        const end = multi && endDate && endDate >= visitDate ? endDate : visitDate;
-        const v = await addVisit(placeId, visitDate, end);
-        if (who) await setVisitSolo(v.id, who).catch(() => undefined);
-      }
       if (files.length) {
         setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
@@ -183,6 +215,7 @@ export default function AddWizard() {
           4,
         );
       }
+      keyRef.current = null; // saved — a later save is a new action
       showSnack({ message: 'Saved!' });
       navigate(`/place/${placeId}`);
     } catch (e) {
@@ -300,6 +333,7 @@ export default function AddWizard() {
                 className="attribution-select"
                 value={who}
                 onChange={(e) => setWho(e.target.value)}
+                aria-label="Who was there"
               >
                 <option value="">Both of us</option>
                 {people.map((p) => (
@@ -310,6 +344,51 @@ export default function AddWizard() {
               </select>
             </>
           )}
+
+          <label className="aw-label">Kids along (optional)</label>
+          <div className="pe-chips">
+            {kids.map((k) => (
+              <button
+                key={k.id}
+                type="button"
+                className={`pe-chip${selKids.includes(k.id) ? ' on' : ''}`}
+                onClick={() =>
+                  setSelKids((s) => (s.includes(k.id) ? s.filter((x) => x !== k.id) : [...s, k.id]))
+                }
+              >
+                {k.display_name}
+              </button>
+            ))}
+          </div>
+          <div className="aw-addkid">
+            <input
+              type="text"
+              value={newKid}
+              placeholder="Add a child…"
+              onChange={(e) => setNewKid(e.target.value)}
+            />
+            <button
+              type="button"
+              className="aw-addkid-btn"
+              disabled={!newKid.trim()}
+              onClick={async () => {
+                const name = newKid.trim();
+                if (!name) return;
+                try {
+                  const person = await createPerson(name);
+                  setKids((k) =>
+                    [...k, person].sort((a, b) => a.display_name.localeCompare(b.display_name)),
+                  );
+                  setSelKids((s) => [...s, person.id]);
+                  setNewKid('');
+                } catch {
+                  setNote('Could not add that person.');
+                }
+              }}
+            >
+              Add
+            </button>
+          </div>
         </div>
       )}
 

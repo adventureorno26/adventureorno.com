@@ -2,13 +2,6 @@ import { lazy, Suspense, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
-// MapView is the landing view and owns the MapLibre map + all its markers. It is
-// imported EAGERLY on purpose: lazy-loading it split MapLibre's CSS/JS into a
-// chunk that loaded after our styles (maps collapsed to 0 height, markers/route
-// maps broke) and made the map appear only after a second chunk download (slow).
-// Eager keeps the map instant and correct; the login shell paying for MapLibre is
-// an acceptable trade for the map actually working.
-import MapView from './routes/MapView';
 import LocationTracker from './components/LocationTracker';
 import ErrorBoundary from './components/ErrorBoundary';
 import Snackbar from './components/Snackbar';
@@ -40,6 +33,11 @@ function lazyWithReload<T extends ComponentType<unknown>>(factory: () => Promise
 }
 
 // Secondary routes stay code-split (their JS loads only when visited).
+// MapView owns MapLibre (~the largest dependency). Lazy-loaded so the login shell
+// does NOT download the MapLibre JS chunk; only the small maplibre-gl.css stays eager
+// in main.tsx (it must load before index.css or the map collapses to 0 height). The
+// map's Suspense fallback covers the one-time chunk fetch on the authenticated landing.
+const MapView = lazyWithReload(() => import('./routes/MapView'));
 const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
 const DayView = lazyWithReload(() => import('./routes/DayView'));
 const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
@@ -83,195 +81,199 @@ export default function App() {
     <ErrorBoundary>
       <Suspense fallback={<FullScreenMessage>Loading…</FullScreenMessage>}>
         <LocationTracker />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <MapView />
-              </RequireAuth>
-            }
-          />
-          {/* Place panel is rendered inside MapView; deep-link routes to the same view. */}
-          <Route
-            path="/place/:id"
-            element={
-              <RequireAuth>
-                <MapView />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/place/:id/routes"
-            element={
-              <RequireAuth>
-                <RoutesView />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/place/:id/day/:date"
-            element={
-              <RequireAuth>
-                <DayView />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/trips"
-            element={
-              <RequireAuth>
-                <Trips />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/trip/:id"
-            element={
-              <RequireAuth>
-                <TripView />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/trips/review/:id"
-            element={
-              <RequireAuth>
-                <SuggestedTripReview />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/wrapped"
-            element={
-              <RequireAuth>
-                <Wrapped />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/places"
-            element={
-              <RequireAuth>
-                <PlacesList />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/places/edit"
-            element={
-              <RequireAuth>
-                <PlacesEditor />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/photos/sort"
-            element={
-              <RequireAuth>
-                <PhotoSorter />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/bucket"
-            element={
-              <RequireAuth>
-                <BucketList />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/settings/import"
-            element={
-              <RequireAuth>
-                <ImportTimeline />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <RequireAuth>
-                <Settings />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/trash"
-            element={
-              <RequireAuth>
-                <Trash />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/attention"
-            element={
-              <RequireAuth>
-                <AttentionDashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/albums"
-            element={
-              <RequireAuth>
-                <SmartAlbums />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/timeline"
-            element={
-              <RequireAuth>
-                <Timeline />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/duplicates"
-            element={
-              <RequireAuth>
-                <Duplicates />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/place/:id/compare"
-            element={
-              <RequireAuth>
-                <Compare />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/health"
-            element={
-              <RequireAuth>
-                <DataHealth />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/add"
-            element={
-              <RequireAuth>
-                <AddWizard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/photos/import/complete"
-            element={
-              <RequireAuth>
-                <ImportComplete />
-              </RequireAuth>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        {/* Main landmark — display:contents adds the semantic landmark for screen
+            readers without introducing any box/layout change. */}
+        <main style={{ display: 'contents' }}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <RequireAuth>
+                  <MapView />
+                </RequireAuth>
+              }
+            />
+            {/* Place panel is rendered inside MapView; deep-link routes to the same view. */}
+            <Route
+              path="/place/:id"
+              element={
+                <RequireAuth>
+                  <MapView />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/place/:id/routes"
+              element={
+                <RequireAuth>
+                  <RoutesView />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/place/:id/day/:date"
+              element={
+                <RequireAuth>
+                  <DayView />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/trips"
+              element={
+                <RequireAuth>
+                  <Trips />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/trip/:id"
+              element={
+                <RequireAuth>
+                  <TripView />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/trips/review/:id"
+              element={
+                <RequireAuth>
+                  <SuggestedTripReview />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/wrapped"
+              element={
+                <RequireAuth>
+                  <Wrapped />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/places"
+              element={
+                <RequireAuth>
+                  <PlacesList />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/places/edit"
+              element={
+                <RequireAuth>
+                  <PlacesEditor />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/photos/sort"
+              element={
+                <RequireAuth>
+                  <PhotoSorter />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/bucket"
+              element={
+                <RequireAuth>
+                  <BucketList />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings/import"
+              element={
+                <RequireAuth>
+                  <ImportTimeline />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <RequireAuth>
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/trash"
+              element={
+                <RequireAuth>
+                  <Trash />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/attention"
+              element={
+                <RequireAuth>
+                  <AttentionDashboard />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/albums"
+              element={
+                <RequireAuth>
+                  <SmartAlbums />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/timeline"
+              element={
+                <RequireAuth>
+                  <Timeline />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/duplicates"
+              element={
+                <RequireAuth>
+                  <Duplicates />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/place/:id/compare"
+              element={
+                <RequireAuth>
+                  <Compare />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/health"
+              element={
+                <RequireAuth>
+                  <DataHealth />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/add"
+              element={
+                <RequireAuth>
+                  <AddWizard />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/photos/import/complete"
+              element={
+                <RequireAuth>
+                  <ImportComplete />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
         <PrimaryNav />
         <ImportResumeBanner />
         <Snackbar />

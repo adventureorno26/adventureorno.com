@@ -31,7 +31,7 @@ import {
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
-import { backfillPage, isMyStravaConnected, stravaAuthorizeUrl } from '../lib/strava';
+import { backfillPage, beginStravaLink, isMyStravaConnected } from '../lib/strava';
 import { importFileActivity, parseActivityFile, parseFitActivity } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import SharedHub from '../components/SharedHub';
@@ -270,9 +270,14 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 function OurStatsCard({ personId }: { personId: string | null }) {
   const [s, setS] = useState<SettingsStats | null>(null);
   useEffect(() => {
+    // Discard a stale response if the person toggle changed before it resolved.
+    let live = true;
     fetchSettingsStats(personId)
-      .then(setS)
-      .catch(() => setS(null));
+      .then((r) => live && setS(r))
+      .catch(() => live && setS(null));
+    return () => {
+      live = false;
+    };
   }, [personId]);
   if (!s) return null;
   const pills = [
@@ -309,12 +314,16 @@ function PlacesByStateCard({
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [cov, setCov] = useState<GeoCoverage | null>(null);
   useEffect(() => {
+    let live = true;
     fetchPlaces()
-      .then(setPlaces)
-      .catch(() => setPlaces([]));
+      .then((r) => live && setPlaces(r))
+      .catch(() => live && setPlaces([]));
     fetchGeoCoverage(personId)
-      .then(setCov)
-      .catch(() => setCov(null));
+      .then((r) => live && setCov(r))
+      .catch(() => live && setCov(null));
+    return () => {
+      live = false;
+    };
   }, [personId]);
   if (!places) return null;
 
@@ -495,12 +504,16 @@ function PeaksCard({ personId }: { personId: string | null }) {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
   const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
   useEffect(() => {
+    let live = true;
     fetchPeaksBagged(personId)
-      .then(setPeaks)
-      .catch(() => setPeaks([]));
+      .then((r) => live && setPeaks(r))
+      .catch(() => live && setPeaks([]));
     fetchClimbingStats(personId)
-      .then(setClimb)
-      .catch(() => setClimb(null));
+      .then((r) => live && setClimb(r))
+      .catch(() => live && setClimb(null));
+    return () => {
+      live = false;
+    };
   }, [personId]);
   if (!peaks) return null;
   return (
@@ -743,11 +756,25 @@ function GarminImportCard() {
   );
 }
 
-function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
+function StravaCard({ isOwner }: { isOwner: boolean }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
   const clientId = import.meta.env.VITE_STRAVA_CLIENT_ID;
+
+  async function connectStrava() {
+    if (!clientId) return;
+    setLinkErr(null);
+    setLinking(true);
+    try {
+      window.location.href = await beginStravaLink(clientId);
+    } catch {
+      setLinkErr('Could not start the Strava link. Please try again.');
+      setLinking(false);
+    }
+  }
 
   useEffect(() => {
     isMyStravaConnected().then(setConnected);
@@ -763,17 +790,24 @@ function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
     let page = 1;
     let stored = 0;
     let processed = 0;
+    let anyFailed = false;
     try {
       for (;;) {
         const r = await backfillPage(after, before, page);
         stored += r.stored;
         processed += r.processed;
+        if (r.failed && r.failed.length) anyFailed = true;
         setProgress(`Page ${page}: ${processed} activities scanned, ${stored} stored…`);
         if (!r.hasMore) break;
         page++;
         await sleep(1500); // gentle pacing under the 100/15min limit
       }
-      setProgress(`Done — ${stored} activities stored from the last ${days} days.`);
+      setProgress(
+        `Done — ${stored} activities stored from the last ${days} days.` +
+          (anyFailed
+            ? ' Some pages could not be fetched — run backfill again to fill the gaps.'
+            : ''),
+      );
     } catch (e) {
       setProgress(e instanceof Error ? e.message : 'Backfill failed');
     }
@@ -827,17 +861,45 @@ function StravaCard({ myId, isOwner }: { myId: string; isOwner: boolean }) {
             activities, turn on <b>Garmin Connect → Strava</b> in Garmin Connect — they'll flow in
             through Strava, no separate Garmin connection needed.
           </div>
-          <a href={stravaAuthorizeUrl(clientId, myId)}>
-            <button className="primary">Connect Strava</button>
-          </a>
+          <button className="primary" onClick={connectStrava} disabled={linking}>
+            {linking ? 'Starting…' : 'Connect Strava'}
+          </button>
+          {linkErr && (
+            <div style={{ color: 'var(--danger, #c00)', fontSize: 13, marginTop: 8 }}>
+              {linkErr}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
+type SettingsTab = 'account' | 'connections' | 'privacy' | 'data' | 'advanced';
+
 export default function Settings() {
   const { profile, signOut } = useAuth();
+  const [members, setMembers] = useState<MapPerson[]>([]);
+  useEffect(() => {
+    fetchMapPeople()
+      .then(setMembers)
+      .catch(() => undefined);
+  }, []);
+  const memberNames = members
+    .map((m) => m.display_name)
+    .filter(Boolean)
+    .join(' & ');
+
+  // Settings is divided into manageable destinations (Prompt 7, rec 41). Every card
+  // is retained — just grouped under a tab so the page isn't one endless scroll.
+  const [tab, setTab] = useState<SettingsTab>('account');
+  const TABS: { key: SettingsTab; label: string }[] = [
+    { key: 'account', label: 'Account' },
+    { key: 'connections', label: 'Connections' },
+    { key: 'privacy', label: 'Privacy' },
+    { key: 'data', label: 'Data' },
+    { key: 'advanced', label: 'Advanced' },
+  ];
 
   return (
     <div
@@ -852,88 +914,113 @@ export default function Settings() {
         Signed in as <b>{profile?.display_name ?? 'you'}</b> · role <b>{profile?.role}</b>
       </p>
 
-      <h2 style={{ marginTop: 28 }}>Account</h2>
-      <button onClick={() => void signOut()}>Sign out</button>
+      <nav className="settings-tabs" aria-label="Settings sections">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={tab === t.key ? 'on' : ''}
+            onClick={() => setTab(t.key)}
+            type="button"
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      <h2 style={{ marginTop: 28 }}>Stats</h2>
-      <StatsSection />
-
-      {(profile?.role === 'owner' || profile?.role === 'editor') && (
+      {tab === 'account' && (
         <>
-          <h2 style={{ marginTop: 28 }}>Manage data</h2>
-          <div className="card">
-            <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
-              Tools for tidying everything up — edit every place in one table, sort photos, review
-              what needs attention, merge duplicates, and check the health of your data.
-            </p>
-            <div className="settings-tools">
-              <Link to="/places/edit">
-                <button className="primary">Edit all places</button>
-              </Link>
-              <Link to="/photos/sort">
-                <button>Sort photos into places</button>
-              </Link>
-              <Link to="/attention">
-                <button>Needs attention</button>
-              </Link>
-              <Link to="/albums">
-                <button>Smart albums</button>
-              </Link>
-              <Link to="/timeline">
-                <button>Timeline</button>
-              </Link>
-              <Link to="/duplicates">
-                <button>Duplicate places</button>
-              </Link>
-              <Link to="/health">
-                <button>Data health</button>
-              </Link>
-              <Link to="/trash">
-                <button>Trash</button>
-              </Link>
-            </div>
-          </div>
+          <h2 style={{ marginTop: 20 }}>Account</h2>
+          <button onClick={() => void signOut()}>Sign out</button>
+
+          {profile?.role === 'owner' && (
+            <>
+              <h2 style={{ marginTop: 28 }}>Join requests</h2>
+              <JoinRequestsCard />
+
+              <h2 style={{ marginTop: 28 }}>People</h2>
+              <PeopleCard meId={profile.id} />
+            </>
+          )}
         </>
       )}
 
-      {profile && (
+      {tab === 'connections' && profile && (
         <>
-          <h2 style={{ marginTop: 28 }}>Location tracking</h2>
-          <TrackingCard myId={profile.id} />
-        </>
-      )}
-
-      <h2 style={{ marginTop: 28 }}>Tags</h2>
-      <TagsCard />
-
-      <h2 style={{ marginTop: 28 }}>Export our data</h2>
-      <ExportCard />
-
-      {profile?.role === 'owner' && (
-        <>
-          <h2 style={{ marginTop: 28 }}>Map</h2>
-          <ProjectionCard />
-        </>
-      )}
-
-      <h2 style={{ marginTop: 28 }}>Shared — Erica &amp; Josh</h2>
-      <SharedHub />
-
-      {profile && (
-        <>
-          <h2 style={{ marginTop: 28 }}>Strava &amp; Garmin</h2>
-          <StravaCard myId={profile.id} isOwner={profile.role === 'owner'} />
+          <h2 style={{ marginTop: 20 }}>Strava &amp; Garmin</h2>
+          <StravaCard isOwner={profile.role === 'owner'} />
           <GarminImportCard />
         </>
       )}
 
-      {profile?.role === 'owner' && (
+      {tab === 'privacy' && (
         <>
-          <h2 style={{ marginTop: 28 }}>Join requests</h2>
-          <JoinRequestsCard />
+          <h2 style={{ marginTop: 20 }}>{memberNames ? `Shared — ${memberNames}` : 'Shared'}</h2>
+          <SharedHub />
 
-          <h2 style={{ marginTop: 28 }}>People</h2>
-          <PeopleCard meId={profile.id} />
+          {profile && (
+            <>
+              <h2 style={{ marginTop: 28 }}>Location tracking</h2>
+              <TrackingCard myId={profile.id} />
+            </>
+          )}
+        </>
+      )}
+
+      {tab === 'data' && (
+        <>
+          <h2 style={{ marginTop: 20 }}>Stats</h2>
+          <StatsSection />
+
+          {(profile?.role === 'owner' || profile?.role === 'editor') && (
+            <>
+              <h2 style={{ marginTop: 28 }}>Manage data</h2>
+              <div className="card">
+                <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+                  Tools for tidying everything up — edit every place in one table, sort photos,
+                  review what needs attention, merge duplicates, and check the health of your data.
+                </p>
+                <div className="settings-tools">
+                  <Link to="/places/edit">
+                    <button className="primary">Edit all places</button>
+                  </Link>
+                  <Link to="/photos/sort">
+                    <button>Sort photos into places</button>
+                  </Link>
+                  <Link to="/attention">
+                    <button>Needs attention</button>
+                  </Link>
+                  <Link to="/albums">
+                    <button>Smart albums</button>
+                  </Link>
+                  <Link to="/timeline">
+                    <button>Timeline</button>
+                  </Link>
+                  <Link to="/duplicates">
+                    <button>Duplicate places</button>
+                  </Link>
+                  <Link to="/health">
+                    <button>Data health</button>
+                  </Link>
+                  <Link to="/trash">
+                    <button>Trash</button>
+                  </Link>
+                </div>
+              </div>
+            </>
+          )}
+
+          <h2 style={{ marginTop: 28 }}>Tags</h2>
+          <TagsCard />
+
+          <h2 style={{ marginTop: 28 }}>Export our data</h2>
+          <ExportCard />
+        </>
+      )}
+
+      {tab === 'advanced' && profile?.role === 'owner' && (
+        <>
+          <h2 style={{ marginTop: 20 }}>Map</h2>
+          <ProjectionCard />
 
           <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
           <GeocodeCard />

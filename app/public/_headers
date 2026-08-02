@@ -1,8 +1,27 @@
-# Hashed assets are immutable — cache them forever.
+# Cloudflare Pages headers for the custom domain (adventureorno.com).
+
+# Hashed assets are immutable — cache them forever. (This block is first/most
+# specific so assets keep the long cache; the security headers on /* still apply.)
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
 # Everything else (index.html, the SPA shell) must always revalidate so a new
 # deploy is picked up immediately and never serves a stale HTML → dead-CSS pair.
+#
+# SECURITY HEADERS (Prompt 3, rec 3/31/32). The CSP is now ENFORCING (it shipped
+# in Report-Only first and proved clean against the map / Supabase / auth / place
+# views). To roll back fast if a flow breaks, rename Content-Security-Policy back
+# to Content-Security-Policy-Report-Only and redeploy. The allowlist is derived
+# from the app's real runtime
+# origins: Supabase (REST + realtime wss), the photo-gateway Worker (photos/video),
+# MapTiler (tiles + geocoding), Open-Meteo (weather), Nominatim (POI lookup), and
+# the Google Photos picker. Strava is navigation-only (form-action), not fetched.
 /*
   Cache-Control: no-cache, must-revalidate
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://www.strava.com https://accounts.google.com; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.maptiler.com https://adventureorno-photo-gateway.adventureorno26.workers.dev https://*.supabase.co; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self' https://accounts.google.com https://photospicker.googleapis.com; connect-src 'self' https://cloudflareinsights.com https://aanfyhsjbtnqzphuoiem.supabase.co wss://aanfyhsjbtnqzphuoiem.supabase.co https://api.maptiler.com https://adventureorno-photo-gateway.adventureorno26.workers.dev https://api.open-meteo.com https://archive-api.open-meteo.com https://nominatim.openstreetmap.org https://photospicker.googleapis.com https://www.googleapis.com https://accounts.google.com

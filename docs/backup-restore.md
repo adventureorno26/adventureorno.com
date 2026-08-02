@@ -11,12 +11,14 @@ contains **no destinations, keys, or credentials**. You supply those at run time
 
 ## What gets backed up
 
-1. **Postgres** (Supabase project) — schema + all rows: `profiles`, `people`,
-   `places`, `visits`, `entries`, `trips`, `activities`, `location_pings`,
-   `photos`/`videos` **metadata**, `reactions`, `place_categories`, membership,
-   and the `settings` table. Use the versioned export from
-   [`../supabase/`](../supabase) tooling (see Prompt 5's export/restore format)
-   or `pg_dump` against a **read** connection.
+1. **Postgres** (Supabase project) — all canonical rows: `profiles`, `people`,
+   `places`, `visits`, `entries`, `trips`/`trip_stops`, `activities`,
+   `location_pings`, `photos`/`videos` **metadata**, reactions, `place_categories`,
+   membership, and `settings`. The concrete tool is **`scripts/export-data.sh
+   <dir>`** — a versioned, integrity-checked export (`manifest.json` with format +
+   schema version, per-table row counts + SHA-256; `data/<table>.copy`). It
+   **excludes** the credential tables (`ingest_tokens`, `strava_accounts`,
+   `google_tokens`) and never emits bytes or signed URLs. `pg_dump` is a fallback.
 2. **R2 media objects** — the actual photo/video bytes, plus a manifest that maps
    object keys → owning visit/place. The DB export stores only keys, never signed
    URLs or bytes.
@@ -93,9 +95,13 @@ pg_restore --no-owner --clean --if-exists -d "$TARGET_DATABASE_URL" "$VERIFY/db.
 rclone copy "$VERIFY/media/" "$LOCAL_R2:$LOCAL_BUCKET"
 ```
 
-A **synthetic round-trip test** (fictional data only) proving export→restore keeps
-IDs, relationships, attribution, dates, counts, and checksums lives with the
-export/restore code (Prompt 5). It must never use production data.
+The concrete restore is **`scripts/restore-data.sh <dir>`** — it verifies the
+manifest's schema version + every per-table SHA-256, then reloads under
+`session_replication_role = replica` (triggers/FKs off) into the **local disposable
+db only** (confirmation-gated; no path to production). A **synthetic round-trip
+test** — `scripts/export-restore-roundtrip.sh` — seeds fictional data, exports,
+restores, re-exports, and asserts the manifests are **byte-identical**. It runs in CI
+(the `db-tests` job) and never touches production data.
 
 ## Pruning (separate, confirmed)
 

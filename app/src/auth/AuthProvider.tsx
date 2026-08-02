@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { loadCategories } from '../lib/data';
+import { clearQueueStorage, resumeUploads } from '../lib/uploadQueue';
 import type { Profile } from '../lib/types';
 
 interface AuthState {
@@ -19,7 +20,16 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
  * RPC promotes the pending invite into a profile on first sight. Safe to call
  * repeatedly (idempotent server-side).
  */
-async function ensureProfile(): Promise<Profile | null> {
+async function ensureProfile(userId: string): Promise<Profile | null> {
+  // Fast path: an existing member already has a profile — read it and SKIP
+  // claim_invite (which 401s on every load when there is no pending invite to claim).
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+  if (existing) return existing as Profile;
+  // First login after accepting an invite: no profile row yet → promote the invite.
   const { data, error } = await supabase.rpc('claim_invite');
   if (error) {
     // No pending invite and no existing profile → unauthorized user. Surface
@@ -43,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (active) setProfile(null);
         return;
       }
-      const p = await ensureProfile();
+      const p = await ensureProfile(s.user.id);
       if (active) setProfile(p);
     }
 
@@ -56,6 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session) {
         await loadCategories().catch(() => undefined);
         if (active) setCatsV((v) => v + 1);
+        // Resume any uploads a previous session left in durable storage.
+        void resumeUploads().catch(() => undefined);
       }
       if (active) setLoading(false);
     });
@@ -72,6 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    // Drop persisted uploads so one account's bytes never resume under another login.
+    await clearQueueStorage().catch(() => undefined);
     await supabase.auth.signOut();
     setProfile(null);
   };

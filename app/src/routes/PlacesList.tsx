@@ -13,7 +13,8 @@ import type { Place } from '../lib/types';
 export default function PlacesList() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
-  const [places, setPlaces] = useState<Place[]>([]);
+  const [places, setPlaces] = useState<Place[] | null>(null); // null = loading
+  const [failed, setFailed] = useState(false);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [tag, setTag] = useState(MANUAL_CATEGORIES[0].slug);
@@ -21,22 +22,26 @@ export default function PlacesList() {
   const [msg, setMsg] = useState<string | null>(null);
 
   function load() {
+    setFailed(false);
     fetchPlaces()
       .then((rows) => setPlaces(rows.sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => setMsg('Could not load places'));
+      .catch(() => {
+        setPlaces([]);
+        setFailed(true);
+      });
   }
   useEffect(load, []);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     return s
-      ? places.filter(
+      ? (places ?? []).filter(
           (p) =>
             p.name.toLowerCase().includes(s) ||
             (p.admin1 ?? '').toLowerCase().includes(s) ||
             (p.country ?? '').toLowerCase().includes(s),
         )
-      : places;
+      : (places ?? []);
   }, [places, q]);
 
   function toggle(id: string) {
@@ -56,7 +61,7 @@ export default function PlacesList() {
     if (sel.size === 0) return;
     setBusy(true);
     setMsg(null);
-    const targets = places.filter((p) => sel.has(p.id));
+    const targets = (places ?? []).filter((p) => sel.has(p.id));
     await Promise.all(
       targets.map((p) => {
         const cur = p.categories ?? [];
@@ -86,7 +91,7 @@ export default function PlacesList() {
         style={{ margin: '8px 0 14px' }}
       />
 
-      {canEdit && (
+      {canEdit && filtered.length > 0 && (
         <div className="bulk-bar card">
           <label style={{ margin: 0 }}>
             <input
@@ -99,7 +104,12 @@ export default function PlacesList() {
           </label>
           <span style={{ color: 'var(--muted)', fontSize: 13 }}>{sel.size} selected</span>
           <div className="spacer" style={{ flex: 1 }} />
-          <select value={tag} onChange={(e) => setTag(e.target.value)} style={{ width: 'auto' }}>
+          <select
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            aria-label="Tag to apply to the selected places"
+            style={{ width: 'auto' }}
+          >
             {MANUAL_CATEGORIES.map((c) => (
               <option key={c.slug} value={c.slug}>
                 {c.icon} {c.label}
@@ -119,6 +129,37 @@ export default function PlacesList() {
         </div>
       )}
       {msg && <div className="banner">{msg}</div>}
+
+      {/* Loading / failure / empty / no-match states — never a stranded blank page. */}
+      {places === null ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 24 }}>Loading places…</p>
+      ) : failed ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 24 }}>
+          Couldn’t load places.{' '}
+          <button
+            onClick={load}
+            type="button"
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: 'var(--accent, #38bdf8)',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+            }}
+          >
+            Try again
+          </button>
+        </p>
+      ) : places.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 24 }}>
+          No places yet. Add one from the <Link to="/">map</Link>.
+        </p>
+      ) : filtered.length === 0 ? (
+        <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 24 }}>
+          No places match “{q.trim()}”.
+        </p>
+      ) : null}
 
       <div className="place-rows">
         {filtered.map((p) => (

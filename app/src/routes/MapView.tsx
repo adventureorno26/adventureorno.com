@@ -85,11 +85,11 @@ const coverVideoByPlace = new Map<string, string>();
 // A place's marker image id: its cover photo (`ph-<id>`), a trailhead's photo,
 // else — if it has a video with a poster — that video's poster (`vid-<id>`),
 // else '' (a plain pin). Every marker still = a real photo/video frame.
-function coverIcon(p: Place, all: Place[]): string {
+function coverIcon(p: Place, childCoverByParent: Map<string, string>): string {
   if (p.cover_photo_id) return `ph-${p.cover_photo_id}`;
   if (p.is_trail) {
-    const th = all.find((x) => (x.part_of ?? []).includes(p.id) && x.cover_photo_id);
-    if (th?.cover_photo_id) return `ph-${th.cover_photo_id}`;
+    const cover = childCoverByParent.get(p.id);
+    if (cover) return `ph-${cover}`;
   }
   const vid = coverVideoByPlace.get(p.id);
   if (vid) return `vid-${vid}`;
@@ -97,10 +97,19 @@ function coverIcon(p: Place, all: Place[]): string {
 }
 
 function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  // Precompute parent-place → the first child's cover photo ONCE (O(n)); coverIcon
+  // used to linear-scan all places per trail marker, i.e. O(n²) every feature rebuild.
+  const childCoverByParent = new Map<string, string>();
+  for (const x of places) {
+    if (!x.cover_photo_id) continue;
+    for (const pid of x.part_of ?? []) {
+      if (!childCoverByParent.has(pid)) childCoverByParent.set(pid, x.cover_photo_id);
+    }
+  }
   return {
     type: 'FeatureCollection',
     features: places.map((p) => {
-      const icon = coverIcon(p, places);
+      const icon = coverIcon(p, childCoverByParent);
       const primary = primaryCategory(p);
       return {
         type: 'Feature',
@@ -307,6 +316,7 @@ export default function MapView() {
   const drawPtsRef = useRef<[number, number][]>([]);
   const drawLineRef = useRef<[number, number][]>([]);
   const drawEncodedRef = useRef<string | null>(null);
+  const drawSeqRef = useRef(0); // version async route-snapping so stale geometry can't win
   const drawTargetRef = useRef<string | null>(null); // attach the drawn route to this place
   const addDrawPointRef = useRef<(lng: number, lat: number) => void>(() => undefined);
   drawModeRef.current = drawMode;
@@ -986,19 +996,23 @@ export default function MapView() {
 
   // ---- Draw-a-trail mode -------------------------------------------------
   async function refreshDrawGeometry() {
+    const seq = ++drawSeqRef.current; // this call's version
     const map = mapRef.current;
-    const pts = drawPtsRef.current;
+    const pts = [...drawPtsRef.current]; // snapshot for THIS call
     let lineCoords: [number, number][] = pts;
     let dist = 0;
-    drawEncodedRef.current = null;
+    let encoded: string | null = null;
     if (pts.length >= 2) {
       const snapped = await snapWalkingRoute(pts);
+      // A newer tap kicked off another refresh while we awaited — discard this
+      // stale result so slower earlier geometry can't overwrite the latest.
+      if (seq !== drawSeqRef.current) return;
       if (snapped) {
         lineCoords = polyline
           .decode(snapped.polyline)
           .map(([la, ln]) => [ln, la] as [number, number]);
         dist = snapped.distance;
-        drawEncodedRef.current = snapped.polyline;
+        encoded = snapped.polyline;
       } else {
         for (let i = 1; i < pts.length; i++) {
           dist += haversineMeters(
@@ -1008,6 +1022,8 @@ export default function MapView() {
         }
       }
     }
+    // Only the latest call reaches here — commit its geometry.
+    drawEncodedRef.current = encoded;
     drawLineRef.current = lineCoords;
     setDrawDist(dist);
     const feats: GeoJSON.Feature[] = pts.map((p) => ({
@@ -1056,10 +1072,16 @@ export default function MapView() {
     });
   }
 
-  function nearestPlaceId(lng: number, lat: number, maxM: number): string | null {
+  function nearestPlaceId(
+    lng: number,
+    lat: number,
+    maxM: number,
+    eligible?: (p: Place) => boolean,
+  ): string | null {
     let best: string | null = null;
     let bestD = maxM;
     for (const p of placesRef.current) {
+      if (eligible && !eligible(p)) continue; // don't snap to an ineligible venue
       const d = haversineMeters({ lng, lat }, { lng: p.lng, lat: p.lat });
       if (d < bestD) {
         bestD = d;
@@ -1086,7 +1108,12 @@ export default function MapView() {
         polyline.encode(drawLineRef.current.map(([ln, la]) => [la, ln] as [number, number]));
       const [startLng, startLat] = pts[0];
       // If launched from a trail card, attach to that trail; else nearest place.
-      let placeId = drawTargetRef.current ?? nearestPlaceId(startLng, startLat, 2000);
+      // Only reuse a nearby TRAIL or container as the target — never snap a drawn
+      // trail onto an unrelated venue (a restaurant, winery, etc.). Otherwise create
+      // a fresh trail place below.
+      let placeId =
+        drawTargetRef.current ??
+        nearestPlaceId(startLng, startLat, 2000, (p) => !!p.is_trail || !!p.holds_children);
       if (!placeId) {
         const created = await createPlace({
           name: drawName.trim(),
@@ -1589,7 +1616,11 @@ export default function MapView() {
               value={drawName}
               onChange={(e) => setDrawName(e.target.value)}
             />
-            <select value={drawType} onChange={(e) => setDrawType(e.target.value)}>
+            <select
+              value={drawType}
+              onChange={(e) => setDrawType(e.target.value)}
+              aria-label="Activity type"
+            >
               <option value="Hike">🥾 Hiking</option>
               <option value="Walk">🚶 Walking</option>
               <option value="Run">🏃 Running</option>

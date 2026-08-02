@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  addExperience,
   addVisit,
   clearCity,
   createEntry,
   createPlace,
   deletePlace,
   deleteVisit,
+  restoreVisit,
   fetchCityBoundary,
   fetchEntries,
   fetchMapPeople,
@@ -15,6 +17,7 @@ import {
   fetchPlaceVisitStats,
   fetchSpatialMembers,
   fetchVisits,
+  newExperienceKey,
   setCityBoundary,
   setMyRating,
   setVisitSolo,
@@ -161,6 +164,7 @@ export default function PlacePanel({
   const [vEnd, setVEnd] = useState('');
   const [vMulti, setVMulti] = useState(false);
   const [vWho, setVWho] = useState(''); // '' = both; else a profile id
+  const visitKeyRef = useRef<string | null>(null); // idempotency key per visit submit
   const [merging, setMerging] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
@@ -404,9 +408,15 @@ export default function PlacePanel({
     const end = vMulti && vEnd ? vEnd : vStart;
     if (!start) return;
     try {
-      const v = await addVisit(place.id, start, end < start ? start : end);
-      // Carry "who was there" onto the new visit (attribution is per-visit).
-      if (vWho) await setVisitSolo(v.id, vWho).catch(() => undefined);
+      // Atomic + idempotent: the visit and its attribution log together, and a
+      // double-submit/retry with the same key won't create a second visit.
+      if (!visitKeyRef.current) visitKeyRef.current = newExperienceKey();
+      await addExperience(
+        visitKeyRef.current,
+        { id: place.id },
+        { date: start, end_date: end < start ? start : end, who: vWho || undefined },
+      );
+      visitKeyRef.current = null;
       setAddingVisit(false);
       setVStart('');
       setVEnd('');
@@ -419,8 +429,9 @@ export default function PlacePanel({
     }
   }
   async function removeVisit(id: string) {
-    // Soft UX: remove immediately, offer Undo (recreates the visit with the same
-    // dates + attribution) — friendlier than a browser confirm, esp. on mobile.
+    // Soft UX: remove immediately, offer Undo that restores the FULL original visit
+    // (date, note, attribution, override, trip flag) — friendlier than a browser
+    // confirm, esp. on mobile.
     const v = (visits ?? []).find((x) => x.id === id);
     try {
       await deleteVisit(id);
@@ -431,8 +442,7 @@ export default function PlacePanel({
         onAction: async () => {
           if (!v) return;
           try {
-            const nv = await addVisit(place.id, v.start_date, v.end_date);
-            if (v.solo_profile) await setVisitSolo(nv.id, v.solo_profile).catch(() => undefined);
+            await restoreVisit(v);
             await reloadVisits();
           } catch {
             /* ignore */

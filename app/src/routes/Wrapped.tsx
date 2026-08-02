@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchPlaces } from '../lib/data';
-import { fetchMileage } from '../lib/strava';
+import { fetchMapPeople, fetchPlaces, type MapPerson } from '../lib/data';
+import { fetchYearMiles } from '../lib/strava';
 import { categoryLabel } from '../lib/categories';
-import type { MileageRow, Place } from '../lib/types';
+import type { Place } from '../lib/types';
 
 // "Our Year in Travel" — a shareable recap of the couple's adventures, filtered
 // to a year. Everything is computed from the data already in the app.
@@ -14,17 +14,41 @@ function yearOf(p: Place): number | null {
 
 export default function Wrapped() {
   const [places, setPlaces] = useState<Place[] | null>(null);
-  const [mileage, setMileage] = useState<MileageRow[]>([]);
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const [yearMiles, setYearMiles] = useState(0);
   const [year, setYear] = useState<number>(new Date().getFullYear());
 
   useEffect(() => {
     fetchPlaces()
       .then(setPlaces)
       .catch(() => setPlaces([]));
-    fetchMileage()
-      .then(setMileage)
-      .catch(() => setMileage([]));
+    fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
   }, []);
+
+  // Mileage is fetched PER YEAR so a selected year shows that year's total, not an
+  // all-time figure.
+  useEffect(() => {
+    let live = true;
+    fetchYearMiles(year)
+      .then((m) => live && setYearMiles(m))
+      .catch(() => live && setYearMiles(0));
+    return () => {
+      live = false;
+    };
+  }, [year]);
+
+  // Participants label, data-driven from the household's editing members (owner +
+  // editors), not a hardcoded "Erica & Josh".
+  const participants = useMemo(
+    () =>
+      people
+        .map((p) => p.display_name)
+        .filter(Boolean)
+        .join(' & '),
+    [people],
+  );
 
   const years = useMemo(() => {
     const set = new Set<number>();
@@ -58,23 +82,30 @@ export default function Wrapped() {
       for (const c of p.categories ?? [])
         if (!skip.has(c)) tagCounts.set(c, (tagCounts.get(c) ?? 0) + 1);
     const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const miles = mileage.reduce((s, r) => s + Number(r.miles), 0);
-    // Farthest place from home (Leesburg) — the biggest adventure.
-    const home = { lat: 39.1157, lng: -77.5636 };
+    // Biggest adventure = the place farthest from the year's centre of gravity.
+    // Derived from the data (no hardcoded home location).
+    const withCoords = inYear.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const center =
+      withCoords.length > 0
+        ? {
+            lat: withCoords.reduce((s, p) => s + p.lat, 0) / withCoords.length,
+            lng: withCoords.reduce((s, p) => s + p.lng, 0) / withCoords.length,
+          }
+        : { lat: 0, lng: 0 };
     let farthest: { name: string; mi: number } | null = null;
-    for (const p of inYear) {
-      const dLat = ((p.lat - home.lat) * Math.PI) / 180;
-      const dLng = ((p.lng - home.lng) * Math.PI) / 180;
+    for (const p of withCoords) {
+      const dLat = ((p.lat - center.lat) * Math.PI) / 180;
+      const dLng = ((p.lng - center.lng) * Math.PI) / 180;
       const a =
         Math.sin(dLat / 2) ** 2 +
-        Math.cos((home.lat * Math.PI) / 180) *
+        Math.cos((center.lat * Math.PI) / 180) *
           Math.cos((p.lat * Math.PI) / 180) *
           Math.sin(dLng / 2) ** 2;
       const mi = 3958.8 * 2 * Math.asin(Math.sqrt(a));
       if (!farthest || mi > farthest.mi) farthest = { name: p.name, mi };
     }
-    return { count: inYear.length, states, countries, trips, parks, topTags, miles, farthest };
-  }, [places, mileage, year]);
+    return { count: inYear.length, states, countries, trips, parks, topTags, farthest };
+  }, [places, year]);
 
   if (!places) return <div className="center-screen">Loading…</div>;
 
@@ -97,7 +128,7 @@ export default function Wrapped() {
           ))}
         </div>
         <h1>Our Year in Travel</h1>
-        <p className="wrapped-sub">{year} · Erica &amp; Josh</p>
+        <p className="wrapped-sub">{participants ? `${year} · ${participants}` : year}</p>
       </div>
 
       <div className="wrapped-grid">
@@ -118,7 +149,7 @@ export default function Wrapped() {
           <span>trips</span>
         </div>
         <div className="wrapped-stat">
-          <b>{stats.miles.toFixed(0)}</b>
+          <b>{yearMiles.toFixed(0)}</b>
           <span>miles moved</span>
         </div>
         <div className="wrapped-stat">
@@ -131,7 +162,7 @@ export default function Wrapped() {
         <div className="wrapped-card">
           <div className="wrapped-card-label">Biggest adventure</div>
           <div className="wrapped-card-value">{stats.farthest.name}</div>
-          <div className="wrapped-card-sub">{stats.farthest.mi.toFixed(0)} miles from home</div>
+          <div className="wrapped-card-sub">{stats.farthest.mi.toFixed(0)} miles out</div>
         </div>
       )}
 

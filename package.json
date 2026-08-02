@@ -14,7 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "typecheck:workers": "npm run typecheck --workspace @adventureorno/photo-gateway",
     "gen:types": "node scripts/gen-types.mjs",
-    "preview": "npm run preview --workspace app"
+    "preview": "npm run preview --workspace app",
+    "check:edge-config": "node scripts/check-edge-config.mjs"
   },
   "engines": {
     "node": ">=20"

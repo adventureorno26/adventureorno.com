@@ -68,6 +68,8 @@ Deno.serve(async (req) => {
       lng: p.lng,
       recorded_at: p.time ?? new Date().toISOString(),
       source: 'timeline',
+      // Attributed to the verified owner performing the import (not the payload).
+      profile_id: user.id,
     }));
 
   if (rows.length > 0) {

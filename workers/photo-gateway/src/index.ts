@@ -12,6 +12,7 @@ import {
   assignPlace,
   deletePhotoRow,
   deleteVideoRow,
+  fetchAllMediaKeys,
   findPhotoByHash,
   recomputePlace,
   getPhoto,
@@ -31,6 +32,7 @@ import { readExif, screenshotGate } from './exif';
 import { ingestDecision } from './decide';
 import { renderVariants } from './images';
 import { photoCacheKey, purgePhotoCache } from './cache';
+import { coordOk, looksLikeJpeg, sanitizeTakenAt } from './validate';
 
 function corsHeaders(env: Env, origin: string | null): Record<string, string> {
   const allowed = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
@@ -140,6 +142,19 @@ async function runPipeline(
   const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
   if (bytes.byteLength > MAX_UPLOAD_BYTES) return { status: 413, body: { error: 'file too large' } };
 
+  // Reject NaN / out-of-range client coordinates rather than storing junk. (EXIF
+  // coordinates are parsed numerically downstream and are trusted.)
+  if (!coordOk(formLat, -90, 90) || !coordOk(formLng, -180, 180)) {
+    return { status: 400, body: { error: 'invalid coordinates' } };
+  }
+  // The manual path stores the client-rendered bytes directly (no server decode),
+  // so verify they're actually JPEG — reject arbitrary bytes / PNG (rule #5). The
+  // Shortcut path decodes below, which rejects non-images on its own.
+  if (thumbBytes && (!looksLikeJpeg(bytes) || !looksLikeJpeg(thumbBytes))) {
+    return { status: 400, body: { error: 'unsupported image format' } };
+  }
+  const safeTakenAt = sanitizeTakenAt(takenAt);
+
   // Prefer the client's hash of the ORIGINAL bytes (stable across browsers/resizes);
   // fall back to hashing what we received.
   const sha = (origSha && /^[0-9a-f]{64}$/i.test(origSha) ? origSha.toLowerCase() : null) ?? (await sha256Hex(bytes));
@@ -205,7 +220,7 @@ async function runPipeline(
     lat: lat ?? null,
     lng: lng ?? null,
     // Day-view uploads pin the photo to a chosen date; otherwise use EXIF.
-    taken_at: takenAt ?? exif.takenAt,
+    taken_at: safeTakenAt ?? exif.takenAt,
     r2_key: r2Key,
     thumb_key: thumbKey,
     width: variants.web.width,
@@ -306,27 +321,42 @@ async function handleUploadVideo(
   const url = new URL(req.url);
   const qnum = (k: string): number | null => {
     const v = url.searchParams.get(k);
-    return v != null && v !== '' ? Number(v) : null;
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   };
+
+  // Validate BEFORE writing to R2, so a bad request never leaves an orphan object.
+  const lat = qnum('lat');
+  const lng = qnum('lng');
+  if (!coordOk(lat, -90, 90) || !coordOk(lng, -180, 180)) {
+    return json({ error: 'invalid coordinates' }, 400, cors);
+  }
+  // Size cap via Content-Length (the body streams straight to R2, so we can't
+  // measure it after the fact). 500 MiB is far above any phone clip.
+  const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
+  const clen = Number(req.headers.get('content-length') ?? '');
+  if (Number.isFinite(clen) && clen > MAX_VIDEO_BYTES) {
+    return json({ error: 'file too large' }, 413, cors);
+  }
   // The browser sets Content-Type from the File (video/mp4, video/quicktime, …).
   const ct = req.headers.get('Content-Type') || '';
   const contentType = ct.startsWith('video/') ? ct : 'video/mp4';
   const uuid = crypto.randomUUID();
   const r2Key = `videos/${uuid}`;
   await env.PHOTOS.put(r2Key, req.body, { httpMetadata: { contentType } });
-  const lat = qnum('lat');
-  const lng = qnum('lng');
   let placeId = url.searchParams.get('place_id') || null;
   if (!placeId && lat != null && lng != null) placeId = await assignPlace(env, lat, lng);
+  const dur = qnum('duration');
   const id = await insertVideo(env, {
     place_id: placeId,
     r2_key: r2Key,
     poster_key: null,
     content_type: contentType,
-    taken_at: url.searchParams.get('taken_at'),
+    taken_at: sanitizeTakenAt(url.searchParams.get('taken_at')),
     lat,
     lng,
-    duration_s: qnum('duration'),
+    duration_s: dur != null && dur >= 0 ? dur : null,
     uploaded_by: caller.userId,
     source: 'manual',
   });
@@ -420,6 +450,36 @@ async function handleVideoDelete(
   return json({ ok: true }, 200, cors);
 }
 
+// R2↔DB reconciliation — DRY RUN. Lists every R2 object and diffs it against the DB's
+// referenced media keys: ORPHAN objects (in R2, no DB row → safe to purge) and MISSING
+// objects (DB row, no R2 object → broken media). Reports counts + samples only; deletes
+// nothing. Owner-only.
+async function handleReconcile(env: Env, cors: Record<string, string>): Promise<Response> {
+  const dbKeys = await fetchAllMediaKeys(env);
+  const r2keys = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const listed = await env.PHOTOS.list({ cursor, limit: 1000 });
+    for (const o of listed.objects) r2keys.add(o.key);
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+  const orphanR2 = [...r2keys].filter((k) => !dbKeys.has(k));
+  const missing = [...dbKeys].filter((k) => !r2keys.has(k));
+  return json(
+    {
+      dry_run: true,
+      r2_objects: r2keys.size,
+      db_referenced_keys: dbKeys.size,
+      orphan_r2_objects: orphanR2.length,
+      missing_objects: missing.length,
+      orphan_r2_sample: orphanR2.slice(0, 50),
+      missing_sample: missing.slice(0, 50),
+    },
+    200,
+    cors,
+  );
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = req.headers.get('Origin');
@@ -486,6 +546,13 @@ export default {
       const vdel = path.match(/^\/video-delete\/([0-9a-f-]{36})$/i);
       if (vdel && req.method === 'POST') {
         return handleVideoDelete(env, vdel[1], await session(), cors);
+      }
+
+      // --- R2↔DB reconciliation (DRY RUN, owner-only) -----------------------
+      if (path === '/reconcile' && req.method === 'GET') {
+        const caller = await session();
+        if (caller?.role !== 'owner') return json({ error: 'owner required' }, 403, cors);
+        return handleReconcile(env, cors);
       }
 
       if (path === '/health') return json({ ok: true }, 200, cors);

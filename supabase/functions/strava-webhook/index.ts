@@ -60,6 +60,34 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   try {
     if (event.aspect_type === 'delete') {
+      // Deletion events are unauthenticated (no signature), so treat them as HINTS,
+      // not commands. Verify (1) the athlete is one we actually have linked, and
+      // (2) the activity is genuinely gone on Strava, before destroying local data.
+      const { data: acct } = await admin
+        .from('strava_accounts')
+        .select('athlete_id')
+        .eq('athlete_id', event.owner_id)
+        .maybeSingle();
+      if (!acct) return json({ ok: true, ignored: 'unknown athlete' });
+
+      // Confirm deletion: fetching the activity should 404. A 200 means the event is
+      // spurious/forged → do NOT delete. If we can't verify (token/network error),
+      // leave the row intact rather than destroy data on an unverifiable hint.
+      try {
+        const access = await getValidAccessTokenFor(admin, event.owner_id);
+        const check = await fetch(
+          `https://www.strava.com/api/v3/activities/${event.object_id}`,
+          { headers: { Authorization: `Bearer ${access}` } },
+        );
+        if (check.ok) return json({ ok: true, ignored: 'activity still exists on Strava' });
+        if (check.status !== 404) {
+          return json({ ok: true, ignored: `delete unverified (status ${check.status})` });
+        }
+      } catch (e) {
+        console.error('strava-webhook delete verify failed', String(e));
+        return json({ ok: true, ignored: 'delete unverified — left intact' });
+      }
+
       const { data: row } = await admin
         .from('activities')
         .select('place_id')

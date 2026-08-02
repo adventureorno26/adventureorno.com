@@ -8,6 +8,7 @@ export default function PeopleCard({ meId }: { meId: string }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('editor');
   const [msg, setMsg] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
@@ -23,10 +24,18 @@ export default function PeopleCard({ meId }: { meId: string }) {
   async function invite() {
     setBusy(true);
     setMsg(null);
+    setInviteLink(null);
+    const to = email.trim();
     try {
-      await sendInvite(email.trim().toLowerCase(), role);
+      const result = await sendInvite(to.toLowerCase(), role);
       setEmail('');
-      setMsg(`Invite sent to ${email.trim()}.`);
+      if (result.emailed) {
+        setMsg(`Invite sent to ${to}.`);
+      } else {
+        // Email couldn't be delivered — surface the link so it isn't lost.
+        setMsg(`Couldn't email ${to}. Copy this sign-in link and send it to them:`);
+        setInviteLink(result.actionLink ?? null);
+      }
       await refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Invite failed');
@@ -81,7 +90,12 @@ export default function PeopleCard({ meId }: { meId: string }) {
           onChange={(e) => setEmail(e.target.value)}
           style={{ flex: 2 }}
         />
-        <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={{ flex: 1 }}>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as Role)}
+          aria-label="Invite role"
+          style={{ flex: 1 }}
+        >
           <option value="editor">Editor</option>
           <option value="viewer">Viewer</option>
         </select>
@@ -101,6 +115,27 @@ export default function PeopleCard({ meId }: { meId: string }) {
       {msg && (
         <div className="banner" style={{ marginTop: 8 }}>
           {msg}
+        </div>
+      )}
+      {inviteLink && (
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            readOnly
+            value={inviteLink}
+            onFocus={(e) => e.currentTarget.select()}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(inviteLink).then(
+                () => setMsg('Link copied — send it to your invitee.'),
+                () => undefined,
+              );
+            }}
+          >
+            Copy
+          </button>
         </div>
       )}
     </div>

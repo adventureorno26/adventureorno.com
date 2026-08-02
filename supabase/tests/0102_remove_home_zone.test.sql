@@ -35,8 +35,8 @@ begin
   if pg_get_functiondef('public.assign_activity_place(float8,float8)'::regprocedure) ilike '%is_home%' then
     raise exception 'FAIL: assign_activity_place still references is_home';
   end if;
-  -- Placing an activity at the old home center yields a NORMAL place.
-  v_place := public.assign_activity_place(39.1157, -77.5636);
+  -- Placing an activity anywhere yields a NORMAL place (fictional coords).
+  v_place := public.assign_activity_place(12.5, 34.5);
   if v_place is null then raise exception 'FAIL: assign_activity_place returned null'; end if;
   if (select is_home from public.places where id = v_place) then
     raise exception 'FAIL: assign_activity_place created an is_home place';

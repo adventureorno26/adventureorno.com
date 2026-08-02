@@ -259,3 +259,35 @@ ONLY sanctioned edit of an old migration.
   name, visit dates, and placeholder photo/route chips.
 - **Cloudflare Pages SPA fallback** via `app/public/_redirects` (`/* /index.html
   200`) so deep links and hard reloads route correctly.
+
+## Prompt 2B — unified creation service + non-login people (2026-07-31)
+
+- **`create_experience(key, place, visit)` RPC (migration 0111)** is the ONE
+  transactional + idempotent creation path. A PL/pgSQL body is a single
+  transaction, so place+visit+attribution+rating+people commit together or not at
+  all — no half-built records. Idempotency is a client-supplied key recorded in
+  `experience_requests`; concurrent same-key calls are serialized with a per-key
+  `pg_advisory_xact_lock`, so a retry after a partial failure returns the SAME
+  ids instead of duplicating. Rating delegates to `set_my_rating` (per-user
+  `place_ratings` + owner mirror) rather than a blind `places.rating` write; a
+  new visit calls `promote_trip_stops_for_place` so a planned trip stop in-window
+  flips to completed. `is_trip` is a GENERATED column — never inserted (this also
+  fixed a latent runtime crash in `restoreVisit`/visit-Undo).
+- **Non-login people (migration 0110):** `people` + `visit_people` + `trip_people`.
+  Children/companions are records, not auth accounts (owner=Erica, editor=Josh,
+  viewers reaction-only). Member-read, editor/owner-write RLS; accessed directly
+  via PostgREST.
+- **Frontend:** `addExperience`/`newExperienceKey` + people helpers in `data.ts`.
+  AddWizard and NewPlaceDraft save through `addExperience` with one idempotency
+  key per action (reused on retry, reset on success); AddWizard gained a "Kids
+  along" picker. Place-level `setPlaceSolo`, `website`, `review`, and additive tag
+  merges remain compatibility enrichments the RPC doesn't own. PlacePanel's
+  "log a visit" (submitVisit) also goes through addExperience now.
+- **What deliberately does NOT use create_experience** (they aren't experience-
+  logging): MapView's empty-container quick-add (blank name, `saved:false` — the
+  RPC forbids blank names); MapView's trail fallback inside route-drawing
+  (activity placement); DayView `moveToNew` (creates a place to *reassign an
+  activity* to — the activity is the visit); PlacePanel `addSpot` (creates a
+  CHILD place with `part_of` hierarchy the RPC doesn't model). These keep their
+  specialized helpers by design. Bulk import remains the one genuine convergence
+  debt (kept on the older path for now).

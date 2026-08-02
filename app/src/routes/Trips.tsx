@@ -29,7 +29,9 @@ export default function Trips() {
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   const [trips, setTrips] = useState<Trip[] | null>(null);
   const [suggested, setSuggested] = useState<Place[]>([]);
+  const [showAllSuggested, setShowAllSuggested] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const SUGGESTED_CAP = 5;
 
   const load = useCallback(async () => {
     const [t, s] = await Promise.all([
@@ -77,9 +79,9 @@ export default function Trips() {
 
       {canEdit && suggested.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <h2 style={{ marginBottom: 8 }}>Suggested — review to confirm</h2>
+          <h2 style={{ marginBottom: 8 }}>Suggested — review to confirm ({suggested.length})</h2>
           <div className="trip-places">
-            {suggested.map((p) => (
+            {(showAllSuggested ? suggested : suggested.slice(0, SUGGESTED_CAP)).map((p) => (
               <div
                 key={p.id}
                 className="trip-place"
@@ -114,6 +116,11 @@ export default function Trips() {
               </div>
             ))}
           </div>
+          {suggested.length > SUGGESTED_CAP && (
+            <button onClick={() => setShowAllSuggested((v) => !v)} style={{ marginTop: 8 }}>
+              {showAllSuggested ? 'Show fewer' : `Show all ${suggested.length} suggestions`}
+            </button>
+          )}
         </div>
       )}
 

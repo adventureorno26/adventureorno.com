@@ -237,3 +237,31 @@ export async function deletePhotoRow(env: Env, photo: FullPhotoRow, byUser: stri
   });
   if (!res.ok) throw new Error(`delete photo row failed: ${res.status}`);
 }
+
+/** Every R2 object key the DB references (photo web + thumb, video + poster) across
+ *  ALL rows — the set of keys that SHOULD exist in R2. Used by the reconcile dry-run.*/
+export async function fetchAllMediaKeys(env: Env): Promise<Set<string>> {
+  const keys = new Set<string>();
+  const add = (k: string | null | undefined) => {
+    if (k) keys.add(k);
+  };
+  const pr = await fetch(`${env.SUPABASE_URL}/rest/v1/photos?select=r2_key,thumb_key`, {
+    headers: restHeaders(env),
+  });
+  if (pr.ok) {
+    for (const row of (await pr.json()) as Array<{ r2_key: string; thumb_key: string | null }>) {
+      add(row.r2_key);
+      add(row.thumb_key);
+    }
+  }
+  const vr = await fetch(`${env.SUPABASE_URL}/rest/v1/videos?select=r2_key,poster_key`, {
+    headers: restHeaders(env),
+  });
+  if (vr.ok) {
+    for (const row of (await vr.json()) as Array<{ r2_key: string; poster_key: string | null }>) {
+      add(row.r2_key);
+      add(row.poster_key);
+    }
+  }
+  return keys;
+}

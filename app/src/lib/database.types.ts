@@ -2,6 +2,7 @@
 // Regenerate with: npm run gen:types
 // Source of truth: the live Supabase schema (supabase/migrations).
 
+
 export type Json =
   | string
   | number
@@ -30,8 +31,8 @@ export type Database = {
           geom: unknown
           id: string
           is_race: boolean
-          lat: number
-          lng: number
+          lat: number | null
+          lng: number | null
           moving_time: number | null
           name: string | null
           owner_profile: string | null
@@ -57,8 +58,8 @@ export type Database = {
           geom?: unknown
           id?: string
           is_race?: boolean
-          lat: number
-          lng: number
+          lat?: number | null
+          lng?: number | null
           moving_time?: number | null
           name?: string | null
           owner_profile?: string | null
@@ -84,8 +85,8 @@ export type Database = {
           geom?: unknown
           id?: string
           is_race?: boolean
-          lat?: number
-          lng?: number
+          lat?: number | null
+          lng?: number | null
           moving_time?: number | null
           name?: string | null
           owner_profile?: string | null
@@ -321,6 +322,38 @@ export type Database = {
           },
         ]
       }
+      experience_requests: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          idempotency_key: string
+          place_id: string | null
+          visit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          idempotency_key: string
+          place_id?: string | null
+          visit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          idempotency_key?: string
+          place_id?: string | null
+          visit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "experience_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_tokens: {
         Row: {
           profile_id: string
@@ -541,6 +574,41 @@ export type Database = {
           },
         ]
       }
+      oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          profile_id: string
+          provider: string
+          state: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          profile_id: string
+          provider?: string
+          state: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          profile_id?: string
+          provider?: string
+          state?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_states_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parks: {
         Row: {
           boundary: unknown
@@ -648,6 +716,44 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      people: {
+        Row: {
+          birthdate: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          display_name: string
+          id: string
+          kind: string
+        }
+        Insert: {
+          birthdate?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          display_name: string
+          id?: string
+          kind?: string
+        }
+        Update: {
+          birthdate?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          display_name?: string
+          id?: string
+          kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "people_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       photo_reactions: {
         Row: {
@@ -1356,6 +1462,39 @@ export type Database = {
           },
         ]
       }
+      trip_people: {
+        Row: {
+          created_at: string
+          person_id: string
+          trip_id: string
+        }
+        Insert: {
+          created_at?: string
+          person_id: string
+          trip_id: string
+        }
+        Update: {
+          created_at?: string
+          person_id?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_people_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_people_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_stops: {
         Row: {
           created_at: string
@@ -1529,6 +1668,39 @@ export type Database = {
             columns: ["place_id"]
             isOneToOne: false
             referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_people: {
+        Row: {
+          created_at: string
+          person_id: string
+          visit_id: string
+        }
+        Insert: {
+          created_at?: string
+          person_id: string
+          visit_id: string
+        }
+        Update: {
+          created_at?: string
+          person_id?: string
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_people_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_people_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
             referencedColumns: ["id"]
           },
         ]
@@ -1822,6 +1994,7 @@ export type Database = {
         Args: { p_id: string; p_role: string }
         Returns: undefined
       }
+      assert_member: { Args: never; Returns: undefined }
       assign_activity_place: {
         Args: { p_lat: number; p_lng: number }
         Returns: string
@@ -1855,6 +2028,15 @@ export type Database = {
       }
       cluster_now: { Args: never; Returns: Json }
       cluster_unassigned: { Args: never; Returns: Json }
+      confirm_suggested_trip: { Args: { p_place: string }; Returns: string }
+      consume_oauth_state: {
+        Args: { p_provider?: string; p_state: string }
+        Returns: string
+      }
+      create_experience: {
+        Args: { p_key: string; p_place: Json; p_visit?: Json }
+        Returns: Json
+      }
       create_manual_activity: {
         Args: {
           p_date: string
@@ -2295,6 +2477,8 @@ export type Database = {
           winery: number
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_photo: { Args: { p_id: string }; Returns: undefined }
       soft_delete_place: { Args: { p_id: string }; Returns: undefined }
       spatial_members: { Args: { p_container: string }; Returns: string[] }
@@ -2889,6 +3073,7 @@ export type Database = {
       }
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
+      strava_oauth_start: { Args: never; Returns: string }
       toggle_photo_reaction: {
         Args: { p_emoji: string; p_photo: string }
         Returns: undefined
@@ -2948,6 +3133,7 @@ export type Database = {
           wanters: string[]
         }[]
       }
+      wrapped_year_miles: { Args: { p_year: number }; Returns: number }
     }
     Enums: {
       [_ in never]: never

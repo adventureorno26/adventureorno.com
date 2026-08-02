@@ -4,11 +4,41 @@ project_id = "aanfyhsjbtnqzphuoiem"
 [db]
 major_version = 15
 
+# Edge-function JWT behavior is declared here for EVERY function and checked
+# against the live deployment by scripts/check-edge-config.mjs (CI job
+# `edge-config-drift`), so an accidental verify_jwt change is caught. `true` =
+# the platform requires a valid Supabase JWT (app-invoked, per-user). `false` =
+# the endpoint is a public callback/webhook/device path that authenticates
+# itself in the function body (OAuth code, Strava signature, device token, or a
+# shared cron secret). Keep this list complete: an undeclared deployed function
+# fails the drift check.
+
+# --- App-invoked (require a user JWT) ---
 [functions.invite]
 verify_jwt = true
 
-# These functions perform their own request authentication because modern
-# Supabase sb_secret_ keys are valid only in the apikey header, not as JWTs.
+[functions.strava-backfill]
+verify_jwt = true
+
+[functions.import-timeline]
+verify_jwt = true
+
+[functions.ai-suggest]
+verify_jwt = true
+
+[functions.google-photos-token]
+verify_jwt = true
+
+# --- Public callbacks / webhooks / device + cron paths (self-authenticating) ---
+# These authenticate in the function body: OAuth code exchange, the Strava push
+# signature, the device ingest token, or a shared cron secret (modern Supabase
+# sb_secret_ keys are valid only in the apikey header, not as JWTs).
+[functions.strava-auth]
+verify_jwt = false
+
+[functions.strava-webhook]
+verify_jwt = false
+
 [functions.detect-trips]
 verify_jwt = false
 
@@ -16,7 +46,4 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.ingest-overland]
-verify_jwt = false
-
-[functions.strava-webhook]
 verify_jwt = false
