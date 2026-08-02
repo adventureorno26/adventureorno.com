@@ -16,7 +16,7 @@ export default function MapSearch({
   const [q, setQ] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
-  const timer = useRef<number>();
+  const timer = useRef<number | undefined>(undefined);
   const seq = useRef(0); // request identity so a slow older query can't clobber newer results
 
   useEffect(() => {
