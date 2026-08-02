@@ -7,10 +7,10 @@
 begin;
 
 insert into auth.users (id, email) values
-  ('cccccccc-0000-0000-0000-000000ca001','ca-owner@example.test') on conflict do nothing;
+  ('cccccccc-0000-0000-0000-0000000ca001','ca-owner@example.test') on conflict do nothing;
 insert into public.profiles (id, role, display_name) values
-  ('cccccccc-0000-0000-0000-000000ca001','owner','CA Owner');
-set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-000000ca001"}';
+  ('cccccccc-0000-0000-0000-0000000ca001','owner','CA Owner');
+set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-0000000ca001"}';
 
 -- 1) Atomicity under injected failure: a non-existent person_id makes the
 --    visit_people insert fail; the whole create_experience must roll back.

@@ -1,14 +1,17 @@
-# MANUAL-SETUP.md — steps only Erica can do
+# Manual provider and device operations
 
-Do items 1–4 before starting Phase 1. The rest are flagged inside the phase briefs.
+The project is already live. This file records owner-only provider/device
+operations; it is not an initial build checklist. Never paste real credential
+values into this file. Follow [`COMPLETION-PLAN.md`](COMPLETION-PLAN.md) for order.
 
 ## 1. Domain (5 min)
-Cloudflare dashboard → Domain Registration → Register Domains → buy **adventureorno.com**.
-Nothing else needed yet; Phase 1 attaches it to Pages.
+`adventureorno.com` is registered and attached to the live Pages project. Manage
+DNS/custom domains only through the verified account and use
+[`deploy-cloudflare.md`](deploy-cloudflare.md) for deployment controls.
 
 ## 2. Repo & Claude Code ↔ GitHub connection (10 min)
-Repo: **adventureorno26/adventureorno.com** (make it **private**: repo → Settings → General →
-Danger Zone → Change visibility, if it isn't already). Then wire up Claude Code:
+Repo: **adventureorno26/adventureorno.com** (private). To configure a new local
+operator workstation:
 - `git clone https://github.com/adventureorno26/adventureorno.com.git` and work from that root.
 - `gh auth login` → GitHub.com → HTTPS → "Login with a web browser" while signed into the
   **adventureorno26** account in that browser. Confirm with `gh auth status`. This is what lets
@@ -16,13 +19,10 @@ Danger Zone → Change visibility, if it isn't already). Then wire up Claude Cod
 - Optional but recommended: inside a Claude Code session run `/install-github-app` and install
   the Claude GitHub App on this repo — you can then tag `@claude` on issues/PR comments and it
   works asynchronously from GitHub.
-- Copy this package's CLAUDE.md to the repo root; MANUAL-SETUP.md + phases/ into /docs/.
 
 ## 3. Supabase — project already exists (5 min of settings)
-Project: `https://aanfyhsjbtnqzphuoiem.supabase.co` · publishable key
-`sb_publishable_3UufAcAfk9ftTwHuDNX-oQ_AnfbZ27D` (client-safe; goes in `.env.local` and
-Cloudflare Pages env vars as `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`).
-Still do these in the dashboard:
+Copy the project URL and current publishable key from the Supabase dashboard into
+`.env.local` and the corresponding Cloudflare `VITE_*` variables. Then audit:
 - Authentication → Sign In/Up: **disable "Allow new users to sign up"** (invite-only depends on
   this).
 - Project Settings → API keys: copy the **service_role/secret key** into `.env.local` ONLY when
@@ -30,13 +30,13 @@ Still do these in the dashboard:
 - Database: Phase 1's migrations will enable PostGIS; no manual action.
 
 ## 4. MapTiler — key exists, restrict it (3 min)
-Key `jCFByr4u55MrSeRYszGx` → `VITE_MAPTILER_KEY`. In cloud.maptiler.com → API keys → this key →
+Copy the current key into `VITE_MAPTILER_KEY`. In cloud.maptiler.com → API keys → this key →
 **Allowed HTTP origins**: add `adventureorno.com`, `www.adventureorno.com`, `localhost:5173`.
 Unrestricted keys can be scraped from your bundle and drain the free tier.
 
 ## 5. Cloudflare R2 (Phase 2)
-Dashboard → R2 → Create bucket `adventureorno-photos` (no public access). Create an R2 API token
-scoped to that bucket for the Worker.
+The private `adventureorno-photos` bucket is live. Confirm it remains non-public;
+use only a short-lived/scoped API token when maintenance requires one.
 
 ## 6. Strava API app (Phase 4, 10 min)
 strava.com/settings/api → Create app. Category: Data Importer. Website: https://adventureorno.com.
@@ -80,8 +80,8 @@ appear on the map within ~a minute; `/settings → Strava → Backfill` pulls hi
     rides in the query string.)
   - Significant-location or continuous mode, **batch 50**, trip mode off.
   - Tap **Send Now** once — you should see a green success and a `{"result":"ok"}`.
-  Home-zone points and anything with accuracy > 200 m are dropped server-side, so
-  a full day of tracking around home stores nothing until you leave the zone.
+  There is no home-exclusion zone. Location ingestion follows the current accuracy
+  and authorization rules, including at-home observations.
 
 ## 8. Partner's iPhone (Phase 5, 5 min)
 Nothing to install for ingestion (by design — his photos are manual-only). He just accepts his

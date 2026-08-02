@@ -1,8 +1,9 @@
 # Production deploy runbook — migrations 0096–0101 (canonical Trip model)
 
-**Status:** NOT yet deployed. This is the ADR 0001 "Trip Option A" backend, verified
-only on the disposable local stack. Run these steps in order; step 3 MUST happen
-before the push or `0100` aborts by design.
+> **Historical execution record — do not run.** Migrations 0096–0101 and the
+> canonical Trip backend are already live. This file preserves the original
+> deployment reasoning only; current work and verification are in
+> [`COMPLETION-PLAN.md`](COMPLETION-PLAN.md). Never replay applied migrations.
 
 **Who does what:** Erica executes the production + secret steps below (they require
 the real edge-secret value and dashboard access, which Claude must not handle).

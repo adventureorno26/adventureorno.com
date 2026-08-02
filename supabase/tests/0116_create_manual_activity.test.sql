@@ -5,15 +5,15 @@
 begin;
 
 insert into auth.users (id, email) values
-  ('cccccccc-0000-0000-0000-0000000ma001','ma-owner@example.test'),
-  ('cccccccc-0000-0000-0000-0000000ma002','ma-viewer@example.test') on conflict do nothing;
+  ('cccccccc-0000-0000-0000-0000000a1001','ma-owner@example.test'),
+  ('cccccccc-0000-0000-0000-0000000a1002','ma-viewer@example.test') on conflict do nothing;
 insert into public.profiles (id, role, display_name) values
-  ('cccccccc-0000-0000-0000-0000000ma001','owner','MA Owner'),
-  ('cccccccc-0000-0000-0000-0000000ma002','viewer','MA Viewer');
+  ('cccccccc-0000-0000-0000-0000000a1001','owner','MA Owner'),
+  ('cccccccc-0000-0000-0000-0000000a1002','viewer','MA Viewer');
 
 -- Viewer denied.
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-0000000ma002"}';
+set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-0000000a1002"}';
 do $$
 begin
   begin
@@ -27,7 +27,7 @@ reset role;
 
 -- Owner: bad coordinates rejected; a valid call succeeds with geom auto-computed.
 set local role authenticated;
-set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-0000000ma001"}';
+set local request.jwt.claims = '{"sub":"cccccccc-0000-0000-0000-0000000a1001"}';
 do $$
 declare v_id uuid;
 begin

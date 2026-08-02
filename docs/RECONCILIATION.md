@@ -1,44 +1,47 @@
-# Branch & dependency-PR reconciliation (analysis only — no actions taken)
+# Branch, deployment, and dependency reconciliation
 
-Snapshot at HEAD `90937ce` on branch `phase-7-globe-fog`
-(tracks `origin/phase-7-globe-fog`, in sync 0/0). **Nothing below was merged,
-rebased, closed, deleted, or pushed.** This is a recommendation for a human.
+Status verified 2026-08-02. This document is descriptive; it does not authorize
+merges, deployments, branch deletion, or history rewriting.
 
-## Branch state
+## Current source of truth
 
-- **Active branch:** `phase-7-globe-fog` — carries essentially all recent work
-  (the UX overhaul, migrations 0092–0095, Playwright, Worker hardening) and is
-  what has been deployed to Cloudflare Pages via Direct Upload.
-- **`main`** is **not** an ancestor of `phase-7-globe-fog`: the two have
-  **diverged**. `main`'s tip (`57e8421` "Stats bar: restore States/Countries
-  counts") is not contained in the active branch, and the active branch has a
-  large body of commits not in `main`.
-- Older `phase-1-skeleton … phase-6-backfill` branches are historical
-  checkpoints; per the phase-doc deprecation they can be archived/deleted later,
-  but only after confirming `main` (or the active branch) contains their work.
-  (Exact ahead/behind counts weren't computed — `git rev-list` is very slow on
-  this OneDrive-backed working tree; use a local non-synced clone to measure.)
+- Remote `main` is the production source branch at `7e9c6d0`.
+- Cloudflare Pages project `adventureorno-com` deployed that commit to production.
+- The former `phase-7-globe-fog` work was merged into `main`; the old divergence
+  described by earlier versions of this document no longer exists.
+- The repository is private.
 
-**Recommended (do not execute here):** open a PR from `phase-7-globe-fog` → `main`,
-review, and reconcile so `main` becomes the single source of truth again. Resolve
-`main`'s divergent commit (`57e8421`) during that review — confirm whether the
-stats-bar fix it contains is already reproduced on the active branch before
-discarding either side. Once `main` is current, retire the stale phase branches.
+Production being current does **not** mean it is verified: CI for `7e9c6d0` is
+red. Cloudflare deployed the commit independently of the application test result.
+Stabilizing and gating that path is completion-plan Phase 1.
 
-## Open Dependabot PRs (all based on `main`)
+## Dependency branches
 
-| PR | Group | Scope | Recommendation |
-|----|-------|-------|----------------|
-| **#7** | github_actions | 2 action bumps | Superseded by the CI-hardening work (pinned action SHAs). **Do not merge as-is** — re-create with SHA-pinned, verified actions (see Prompt 8 / rec 52–62). |
-| **#8** | photo-gateway (Worker) | 5 updates | Stage as a Worker upgrade with a **regenerated lockfile** and Worker/Miniflare checks before merge. |
-| **#9** | app | **13** frontend updates in one PR | **Do not merge as-is.** Split into separate migrations — React, Router, Vite, testing, ESLint/Prettier, MapLibre — running the full check matrix after each family (Prompt 8 / rec 55). |
+- Router 7 was merged in PR #19. The first post-merge Playwright run failed its
+  catch-all-route assertion because the preview was built without required Vite
+  placeholders and could not boot correctly. With valid fictional placeholders,
+  `/no-such-page` reaches the `/login` gate on all four Playwright projects. No
+  Router 7 regression remains in that focused check.
+- `deps/react-19` / PR #18 is open, conflicts with current `main`, and has failing
+  checks. Rebase only after Phase 1 is green, then run the full matrix.
+- `deps/worker-upgrade` / PR #17 is open, conflicts with current `main`, and has
+  failing checks. Rebase and verify separately from frontend upgrades.
+- The earlier grouped Dependabot PRs were closed/superseded; do not recreate a
+  multi-package mega-upgrade.
 
-None of these should be merged, closed, or rebased until (a) `main` is reconciled
-with the active branch, and (b) the staged-upgrade plan above is followed. Because
-they target `main`, they will likely need rebasing after the branch reconciliation.
+## Historical branches
 
-## Why this matters for the other prompts
+Phase 1–6, Trip deployment, and canonical-backend branches are checkpoints. Do
+not delete them until the history-scrub decision is resolved and a verified
+encrypted backup exists. Afterward, archive/delete them only through an explicit
+housekeeping task.
 
-- CI hardening (Prompt 3/8) pins action SHAs → makes PR #7 obsolete.
-- Generated-types + build fixes (Prompt 5/8) must pass before the PR #9 mega-bump
-  is split and landed, or type drift will hide real breakage.
+## Next action
+
+Follow [`COMPLETION-PLAN.md`](COMPLETION-PLAN.md), beginning with Phase 1. Do not
+start React 19, the Worker upgrade, optional AI, or history rewriting while the
+production commit's CI remains red.
+
+The current uncommitted Phase 1 workspace includes CI/bootstrap corrections and a
+forward migration numbered `0120`; none of it is live until it is reviewed,
+committed, pushed, checked, and deliberately promoted.

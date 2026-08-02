@@ -179,7 +179,21 @@ Places mapped into `trips`. All reversible.
 *(or "…with Trip Option B" to keep trips as container-Places).* Implementation is
 Prompt 2B and must not start before this phrase.
 
-## Implementation status (2026-07-29) — Option A approved, NOT complete
+## Implementation status (updated 2026-08-02) — Option A live, cutover incomplete
+
+Option A was approved and the canonical backend is now live in production.
+Migrations `0096`–`0119` are applied; first-class Trips, Visit-linked stops,
+non-login people, and transactional/idempotent `create_experience` exist. The
+Trip list/view/review UI and the primary AddWizard/NewPlaceDraft paths consume
+the newer model.
+
+The ADR is not fully retired because several compatibility write paths still call
+`createPlace`/`addVisit` directly (including Bucket, DayView, MapView, PhotoSorter,
+Trip helpers, and `PlacePanel.addSpot`). Entry links and the complete media/import
+cutover also remain. The authoritative remaining-work list is
+[`../COMPLETION-PLAN.md`](../COMPLETION-PLAN.md).
+
+### Historical July 29 assessment
 
 Migrations `0096`–`0099` + commits `a472179`, `a25bd87`, `edce236` are **unpublished
 DRAFT** work, verified only on a disposable local stack, **not applied to production
