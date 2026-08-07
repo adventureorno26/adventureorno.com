@@ -412,6 +412,11 @@ distinguishable from a known one. Summary:
   retained, and RLS-on/deny-all on both. Safe: the browser never queries either table and every
   reader is a service-role Edge Function (`strava-auth`, `strava-webhook`, `_shared/strava`,
   `google-photos-token` — all verified to use `adminClient()`/the secret key).
+  **Applied to production 2026-08-07 and verified**: client grantees on both tables went from
+  `anon,authenticated` to none; `service_role` kept all 7 privileges on each; an authenticated
+  caller now gets an explicit `403` on both (previously a silent empty result via RLS); `places`,
+  `activities` and `data_health` still return 200 for that same user, and `strava_accounts` still
+  returns Erica's row to service_role, so Strava remains connected.
 - **Performance findings accepted at current volume** (183 places, 568 visits, 159 photos, 444
   activities, ~17k pings) with no reported slowness. `multiple_permissive_policies` (102) is inherent
   to the owner/editor/viewer model; collapsing them trades auditability for microseconds. Measure
