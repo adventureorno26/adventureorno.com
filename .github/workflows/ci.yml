@@ -389,9 +389,14 @@ jobs:
             --branch "$branch" \
             --commit-hash "$HEAD_SHA" \
             --commit-dirty=false | tee deploy.log
-          url="$(grep -oE 'https://[a-z0-9-]+\.adventureorno\.pages\.dev' deploy.log | tail -1)"
+          # Wrangler prints TWO urls: the immutable per-deployment url ("Take a peek
+          # over at https://<hash>...") and the branch ALIAS ("Deployment alias URL"),
+          # which repoints asynchronously and can still serve the PREVIOUS deployment
+          # for a while. Smoking the alias produced a false SHA-mismatch failure, so
+          # take the per-deployment url — it addresses exactly this build.
+          url="$(sed -n 's/.*Take a peek over at \(https:\/\/[a-z0-9-]*\.adventureorno\.pages\.dev\).*/\1/p' deploy.log | tail -1)"
           if [ -z "$url" ]; then
-            echo "::error::Could not determine the preview URL from the wrangler output."
+            echo "::error::Could not determine the preview deployment URL from the wrangler output."
             exit 1
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
