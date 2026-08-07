@@ -15,7 +15,22 @@ import { authedTest as test, expect } from './fixtures';
 // element on the route, whatever is on top at its centre must be the element itself
 // (or its own descendant) — never the nav.
 
-const ROUTES = ['/', '/places', '/timeline', '/settings'];
+// A live audit of production found the same defect on four MORE routes than the
+// original place card: /health's GPX/KML/CSV export buttons were untappable on a
+// phone, and /trips, /bucket and /timeline each had their last entry covered.
+// All of them repeated the same inline page-wrapper style with zero bottom
+// padding; they now share `.page`, which carries `--pnav-clearance`.
+const ROUTES = [
+  '/',
+  '/places',
+  '/timeline',
+  '/settings',
+  '/health',
+  '/trips',
+  '/bucket',
+  '/trash',
+  '/albums',
+];
 
 // Phone viewports are where the nav overlaps; desktop puts it out of the way.
 const PHONE = { width: 390, height: 844 };
@@ -117,11 +132,13 @@ test.describe('bottom nav must not obstruct interactive elements', () => {
         return Math.floor(parseFloat(getComputedStyle(el).paddingBottom) || 0);
       }, selector);
 
-    const rows = await measure('.place-rows');
-    expect(rows, '.place-rows not rendered').not.toBeNull();
+    // `.page` is the shared shell for every centred scrolling route; it carries
+    // --pnav-clearance so whatever ends the page stays reachable.
+    const shell = await measure('.page');
+    expect(shell, '.page shell not rendered').not.toBeNull();
     expect(
-      rows!,
-      `.place-rows reserves ${rows}px but the nav occupies ${navFootprint}px — its last row would be untappable`,
+      shell!,
+      `.page reserves ${shell}px but the nav occupies ${navFootprint}px — whatever ends the page would be untappable`,
     ).toBeGreaterThanOrEqual(navFootprint);
 
     // Now open a place card and assert the same for the sheet.

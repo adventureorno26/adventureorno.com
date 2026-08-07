@@ -1642,12 +1642,24 @@ a {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
+/* ---------- Shared page shell ---------- */
+/* Every centred scrolling page (Places, Timeline, Trips, Bucket, Data health,
+   Trash, Duplicates, Smart albums, Compare, Places editor, Trip view, Suggested
+   trip review). These all repeated the same inline
+   `{ maxWidth: N, margin: '20px auto', padding: '0 16px' }` — and every one of
+   them reserved ZERO bottom space, so the floating nav sat on top of whatever
+   ended the page. On /health that made the GPX/KML/CSV export buttons
+   untappable on a phone; on /trips and /bucket it covered the last entry.
+   maxWidth stays inline because it varies per page. */
+.page {
+  margin: 20px auto;
+  padding: 0 16px var(--pnav-clearance);
+}
+
 .place-rows {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Last row is a link and this list ends the page — clear the floating nav. */
-  padding-bottom: var(--pnav-clearance);
 }
 .place-row {
   display: flex;

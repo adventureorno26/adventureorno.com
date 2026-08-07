@@ -105,7 +105,7 @@ export default function TripView() {
 
   if (notFound) {
     return (
-      <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+      <div className="page" style={{ maxWidth: 640 }}>
         <Link className="back-bar" to="/trips">
           <span>Trips</span>
         </Link>
@@ -115,14 +115,14 @@ export default function TripView() {
   }
   if (!trip) {
     return (
-      <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+      <div className="page" style={{ maxWidth: 640 }}>
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 640 }}>
       <Link className="back-bar" to="/trips">
         <span>Trips</span>
       </Link>

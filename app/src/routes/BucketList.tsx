@@ -115,7 +115,7 @@ export default function BucketList() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 640 }}>
       <Link className="back-bar" to="/">
         <span>Map</span>
       </Link>

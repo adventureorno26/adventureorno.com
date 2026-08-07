@@ -60,7 +60,7 @@ export default function DataHealth() {
   const issues = h ? ISSUES.filter((i) => (h[i.key] ?? 0) > 0) : [];
 
   return (
-    <div style={{ maxWidth: 720, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 720 }}>
       <Link className="back-bar" to="/settings">
         <span>Settings</span>
       </Link>

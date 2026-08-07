@@ -78,7 +78,7 @@ export default function PlacesList() {
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 760 }}>
       <Link className="back-bar" to="/">
         <span>Map</span>
       </Link>
