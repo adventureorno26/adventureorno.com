@@ -217,7 +217,11 @@ jobs:
           cache: npm
       - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
         with:
-          version: latest
+          # Pinned, not `latest`. 2.112.0 regressed: it rejects the Management API's
+          # `inserted_at` (`+00:00`) against a validator that demands a `Z` suffix,
+          # breaking `supabase link` with LegacyLinkApiKeysNetworkError. `latest`
+          # also makes CI non-reproducible. Bump deliberately.
+          version: 2.98.0
       - run: npm ci
       - name: Start disposable local Supabase
         run: |
@@ -278,7 +282,11 @@ jobs:
           persist-credentials: false
       - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
         with:
-          version: latest
+          # Pinned, not `latest`. 2.112.0 regressed: it rejects the Management API's
+          # `inserted_at` (`+00:00`) against a validator that demands a `Z` suffix,
+          # breaking `supabase link` with LegacyLinkApiKeysNetworkError. `latest`
+          # also makes CI non-reproducible. Bump deliberately.
+          version: 2.98.0
       # The migration chain does NOT fresh-apply the way the CLI does it (0001
       # references public.profiles before it exists — see docs/decisions.md), so a
       # normal `supabase start`, which auto-applies migrations, would fail. Instead we

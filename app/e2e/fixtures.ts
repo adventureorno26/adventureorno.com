@@ -1,12 +1,20 @@
 import { test as base, expect } from '@playwright/test';
 
-// Auth for e2e without magic links: a password grant for a dedicated TEST BOT
-// account, injected into localStorage before the app boots so the Supabase
-// client picks it up. Requires these env vars (CI secrets / local shell):
-//   VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, TEST_BOT_EMAIL, TEST_BOT_PASSWORD
-// Local development may omit them and run only the public suite. CI sets
-// REQUIRE_AUTH_E2E=true, which turns a missing fixture into a hard failure so a
-// green canonical run can never hide skipped authenticated coverage.
+// Auth for e2e without magic links: a password grant, injected into localStorage
+// before the app boots so the Supabase client picks it up.
+//
+// TWO fixture families:
+//
+//  * `authedTest` — a single TEST BOT account, used for NON-DESTRUCTIVE checks that
+//    may run against a shared/hosted database. Needs TEST_BOT_EMAIL/PASSWORD.
+//
+//  * `roleTest` — deterministic fictional OWNER / EDITOR / VIEWER identities seeded
+//    by `scripts/seed-e2e-users.mjs`. These back the MUTATING acceptance flows, so
+//    they are hard-gated to a LOCAL Supabase host: pointing them at a hosted project
+//    would write into real household data. See `mutating.spec.ts`.
+//
+// CI sets REQUIRE_AUTH_E2E=true, which turns a missing fixture into a hard failure
+// so a green canonical run can never hide skipped authenticated coverage.
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -22,13 +30,40 @@ if (requireAuth && !hasAuthEnv) {
   );
 }
 
-async function getSession(): Promise<unknown> {
+export type Role = 'owner' | 'editor' | 'viewer';
+
+const ROLE_CREDS: Record<Role, { email: string; password: string }> = {
+  owner: {
+    email: process.env.TEST_OWNER_EMAIL || 'owner.e2e@example.invalid',
+    password: process.env.TEST_OWNER_PASSWORD || 'Local-E2E-owner-2026!',
+  },
+  editor: {
+    email: process.env.TEST_EDITOR_EMAIL || 'editor.e2e@example.invalid',
+    password: process.env.TEST_EDITOR_PASSWORD || 'Local-E2E-editor-2026!',
+  },
+  viewer: {
+    email: process.env.TEST_VIEWER_EMAIL || 'viewer.e2e@example.invalid',
+    password: process.env.TEST_VIEWER_PASSWORD || 'Local-E2E-viewer-2026!',
+  },
+};
+
+/** True only when VITE_SUPABASE_URL points at a local disposable stack. */
+export function isLocalSupabase(): boolean {
+  if (!SUPABASE_URL) return false;
+  try {
+    return ['127.0.0.1', 'localhost', '::1'].includes(new URL(SUPABASE_URL).hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function signIn(email: string, password: string): Promise<unknown> {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: KEY!, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) throw new Error(`Test-bot sign-in failed (${res.status})`);
+  if (!res.ok) throw new Error(`Sign-in failed for ${email} (${res.status})`);
   return res.json();
 }
 
@@ -36,7 +71,26 @@ function projectRef(url: string): string {
   return new URL(url).hostname.split('.')[0];
 }
 
-// A page that is already signed in as the test bot.
+function storageKeyFor(url: string): string {
+  // The local stack's URL has no project ref in the hostname; supabase-js derives
+  // the key from the ref segment, which is `127` for 127.0.0.1. Match whatever the
+  // client will actually look up rather than hard-coding the hosted ref.
+  return `sb-${projectRef(url)}-auth-token`;
+}
+
+async function injectSession(
+  context: { addInitScript: (fn: unknown, arg: unknown) => Promise<void> },
+  session: unknown,
+): Promise<void> {
+  await context.addInitScript(
+    ([k, v]: [string, string]) => {
+      window.localStorage.setItem(k, v);
+    },
+    [storageKeyFor(SUPABASE_URL!), JSON.stringify(session)],
+  );
+}
+
+// A page already signed in as the shared test bot (non-destructive use only).
 export const authedTest = base.extend({
   page: async ({ page, context }, use) => {
     if (!hasAuthEnv) {
@@ -44,17 +98,56 @@ export const authedTest = base.extend({
       await use(page);
       return;
     }
-    const session = await getSession();
-    const storageKey = `sb-${projectRef(SUPABASE_URL!)}-auth-token`;
-    await context.addInitScript(
-      ([k, v]) => {
-        window.localStorage.setItem(k as string, v as string);
-      },
-      [storageKey, JSON.stringify(session)],
-    );
+    await injectSession(context, await signIn(EMAIL!, PASSWORD!));
     await use(page);
   },
 });
+
+/**
+ * A page signed in as a specific seeded role. MUTATING — refuses to run against a
+ * non-local Supabase host so these can never write to household data.
+ */
+export const roleTest = base.extend<{ signInAs: (role: Role) => Promise<void> }>({
+  signInAs: async ({ context }, use) => {
+    await use(async (role: Role) => {
+      if (!SUPABASE_URL || !KEY) {
+        throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required.');
+      }
+      if (!isLocalSupabase()) {
+        throw new Error(
+          `Refusing to run mutating e2e against a non-local Supabase host: ${SUPABASE_URL}. ` +
+            'Start the disposable stack (supabase start + scripts/db-bootstrap.sh + npm run seed:e2e).',
+        );
+      }
+      const { email, password } = ROLE_CREDS[role];
+      await injectSession(context, await signIn(email, password));
+    });
+  },
+});
+
+/** Supabase REST base + anon key, for direct API authorization assertions. */
+export function supabaseEnv(): { url: string; key: string } {
+  if (!SUPABASE_URL || !KEY) {
+    throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are required.');
+  }
+  return { url: SUPABASE_URL, key: KEY };
+}
+
+/**
+ * Access token for a seeded role. Local-only, same guard as `roleTest` — these
+ * tokens are used to attempt writes, so they must never point at a hosted project.
+ */
+export async function getRoleToken(role: Role): Promise<string> {
+  if (!isLocalSupabase()) {
+    throw new Error(
+      `Refusing to mint a mutating role token against a non-local Supabase host: ${SUPABASE_URL}.`,
+    );
+  }
+  const { email, password } = ROLE_CREDS[role];
+  const session = (await signIn(email, password)) as { access_token?: string };
+  if (!session.access_token) throw new Error(`No access_token returned for ${role}.`);
+  return session.access_token;
+}
 
 export const test = base;
 export { expect };

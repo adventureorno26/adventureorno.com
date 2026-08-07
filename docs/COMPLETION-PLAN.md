@@ -42,8 +42,16 @@ unchanged.
 1. Re-run the complete local validation matrix from a clean install after the remaining changes.
    Current evidence includes 60/60 Playwright, byte-identical export/restore, Worker dry-run, the
    production audit policy, Zizmor, 37/37 app unit tests, and 20/20 Worker tests.
-2. Add the required mutating owner/editor/viewer acceptance flows. Current authenticated coverage is
-   non-destructive only; do not describe Phase 1 as accepted until these run on disposable data.
+2. DONE 2026-08-07 — mutating owner/editor/viewer acceptance now exists (`app/e2e/mutating.spec.ts`),
+   hard-gated to a local disposable stack: `getRoleToken` throws on any non-local host, so it can
+   never write to household data. Covers create via `create_experience`, idempotent retry (same key →
+   same graph, exactly one row), a second visit as a distinct visit, editor create, viewer forbidden
+   from the RPC / direct INSERT / UPDATE / DELETE, viewer read + viewer-owned rating, owner
+   soft-delete with Undo restoring visits too, anonymous write rejection, and sign-out isolation.
+   Authorization is asserted at the API boundary, not by clicking: a UI that merely hides a button
+   would pass a click test while the endpoint stayed open.
+   Full suite: **132/132 across desktop Chrome, desktop WebKit, iPhone and Android, zero skips**
+   (was 60 with 20 authenticated skips).
 3. Convert OSV and Semgrep from report-only commands to hard gates, or record narrow finding-level
    exceptions with owner and expiry. They still contain `|| true` and therefore are not release
    quality even though `release-gate` depends on their job conclusions.
@@ -105,8 +113,24 @@ unchanged.
   the `! Access-Control-Allow-Origin` removal form, which does **not** work on Pages — the platform
   wildcard is applied after `_headers`. Replaced with an explicit
   `Access-Control-Allow-Origin: https://adventureorno.com`; live response verified.
-- Authenticated production routes and role enforcement are **not confirmed live** because no
-  authorized production test account was used. Still open.
+- Authenticated production IS now confirmed live (2026-08-07, via the dedicated `testbot` editor
+  account — never Erica's, since a password change drops all her refresh tokens). Verified against
+  `https://adventureorno.com`: RLS-scoped reads on places/photos/visits/activities/trips/profiles/
+  entries all 200; `data_health`, `place_ids_for_view` and `race_stats` all 200; the authenticated
+  map renders with clusters, stats bar and attribution toggle; a leaf place card opens
+  (`.map-root.card-open`) with weather, categories and visit rows; photos load through the
+  photo-gateway signed-URL path; **zero console errors** on both desktop and iPhone viewports.
+  Owner-vs-viewer enforcement is covered by the mutating suite on disposable data (blocker 2), not
+  by mutating production.
+- FOUND AND FIXED while verifying the above — a real defect that every green build had missed:
+  on iPhone the place card's primary action, **"Log a visit", was 91% covered by the floating bottom
+  nav**, and `elementFromPoint` at the button's centre returned the Add tab — so tapping the primary
+  action navigated to `/add`. `.panel` reserved 40px while the nav occupies 62px. The same shortfall
+  hit `.place-rows`, `.places-editor`, `.photo-sorter` and the sticky `.ps-footer`. Replaced the
+  scattered magic numbers with one `--pnav-clearance` token and added `app/e2e/nav-obstruction.spec.ts`.
+  The regression guard asserts the *invariant* (reserved padding ≥ nav footprint) rather than
+  hit-testing alone, because hit-testing passes on a sparse disposable dataset — verified by
+  negative control: the guard fails on the old 40px value and passes on the fix.
 - ~~The exact production deployment SHA is not confirmed.~~ RESOLVED 2026-08-07.
   GitHub CLI auth is healthy (account `adventureorno26`, active). The audit's real finding was that
   **production was stale**: the live deployment was commit `7100d98a` from 2026-08-01, while
