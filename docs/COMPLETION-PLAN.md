@@ -336,6 +336,37 @@ from `.github/workflows/ci.yml`.
 - Offline drafts and uploads recover after browser restart without claiming unsupported iOS
   background execution.
 
+## Live audit — 2026-08-07
+
+`scripts/audit-live.mjs` drives the deployed authenticated app across 11 routes x 3 viewports
+(iPhone, Android, desktop) as the test-bot editor and reports what a green build cannot see. It is
+read-only and safe against production. Re-run it after any UI change.
+
+**Baseline is healthy:** zero console errors, zero failed requests, zero blank pages, zero
+horizontal overflow, zero broken images across all 33 route/viewport combinations.
+
+**Fixed from the first run:** the floating-nav clearance defect on `/health` (GPX/KML/CSV export
+buttons untappable on a phone — the data recovery path), `/trips`, `/bucket`, `/timeline` and the
+place card. Obscured controls went 33 → 20.
+
+**Open, deliberately left for Erica's decision** (each is a design call, not a defect an agent
+should make unilaterally):
+
+1. Map attribution (`© MapTiler`, `© OpenStreetMap contributors`) sits under the floating nav on
+   phone widths. Attribution visibility is a licensing requirement for both providers, so this one
+   is worth a decision. Fixing it means moving map chrome, which is a locked layout.
+2. The `Fog` / `Heat` / `None` control is overlapped by the On-This-Day card on phones, and on
+   desktop the On-This-Day card itself sits under the nav.
+3. `/places/edit` renders a 1200px-wide bulk table on a 390px phone, so chips, rating and date
+   controls scroll out of view. Reasonable for a desktop-first power tool; confirm that is intended.
+4. 78 "tiny target" reports — 12 are map attribution links, the rest are text links inside larger
+   rows. Genuine touch-target work belongs to Phase 4 below and is a visual-design change.
+
+**Process note:** the audit was briefly run ~15s after a deploy and reported 10 console errors from
+stale chunk hashes (404 → SPA fallback returns HTML → module MIME error). All chunks returned 200
+minutes later and a re-run was clean. This is the exact failure mode behind the "batch changes,
+deploy once, then hard-refresh" rule — wait for edge propagation before verifying.
+
 ## Phase 4 — Authenticated frontend completion, accessibility, and performance
 
 - Complete a route/state matrix for loading, populated, empty, no-match, partial success, failure,
