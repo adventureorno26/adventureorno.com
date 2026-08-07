@@ -18,6 +18,7 @@ import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { haversineMeters } from '../lib/geo';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import { showSnack } from '../lib/snackbar';
+import { saveOutcomeMessage } from '../lib/saveOutcome';
 import { useAuth } from '../auth/AuthProvider';
 import MapSearch from '../components/MapSearch';
 import StarRating from '../components/StarRating';
@@ -162,6 +163,9 @@ export default function AddWizard() {
           lng: lng!,
           categories: tags,
           saved: true,
+          // Part of the SAME atomic write since migration 0122 — previously a
+          // follow-up updatePlace that could fail after the place already existed.
+          review: review.trim() || null,
         };
         pLat = lat!;
         pLng = lng!;
@@ -190,10 +194,9 @@ export default function AddWizard() {
       );
       const placeId = res.place_id;
 
-      // Enrichments create_experience doesn't own (kept as compatibility writes):
-      if (mode === 'new') {
-        if (review.trim()) await updatePlace(placeId, { review: review.trim() });
-      } else if (existing) {
+      // Enrichments create_experience doesn't own for an EXISTING place (the new-place
+      // review now rides along in the atomic write above).
+      if (mode === 'existing' && existing) {
         // Merge tags additively; don't clobber an existing review.
         if (tags.length) {
           const merged = Array.from(new Set([...(existing.categories ?? []), ...tags]));
@@ -203,20 +206,31 @@ export default function AddWizard() {
           await updatePlace(placeId, { review: review.trim() });
       }
 
+      // Media is deliberately NOT part of the atomic core: a photo that fails to
+      // upload must not roll back a correctly-saved visit. But a failure must be
+      // REPORTED, not swallowed — this previously mapped every failed upload to
+      // `null` and then said "Saved!" unconditionally, so a save in which every
+      // photo failed looked identical to a fully successful one.
+      let uploaded = 0;
+      let failed = 0;
       if (files.length) {
         setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
-        await mapPool(
+        const results = await mapPool(
           files,
           (f) =>
-            uploadPhoto(f, { placeId, lat: pLat, lng: pLng, takenAt, override: true }).catch(
-              () => null,
+            uploadPhoto(f, { placeId, lat: pLat, lng: pLng, takenAt, override: true }).then(
+              () => true,
+              () => false,
             ),
           4,
         );
+        uploaded = results.filter(Boolean).length;
+        failed = results.length - uploaded;
       }
-      keyRef.current = null; // saved — a later save is a new action
-      showSnack({ message: 'Saved!' });
+
+      keyRef.current = null; // the core saved — a later save is a new action
+      showSnack({ message: saveOutcomeMessage({ uploaded, failed }) });
       navigate(`/place/${placeId}`);
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Could not save.');

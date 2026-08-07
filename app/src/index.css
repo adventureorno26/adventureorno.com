@@ -16,6 +16,14 @@
   --danger: #f87171;
   --radius: 14px;
   --shadow: 0 10px 40px rgba(2, 8, 23, 0.55);
+  /* Vertical space the floating bottom nav occupies, measured from the bottom of
+     the viewport: its 12px offset + 50px pill height + 16px breathing room, on
+     top of the device safe area. Any full-height scroll view whose last element
+     is interactive MUST reserve this much, or the nav sits on top of it and
+     steals the tap. Regression: on iPhone the place card's "Log a visit" button
+     reserved only 40px, so it was 91% covered and `elementFromPoint` at its
+     centre returned the Add tab — tapping the primary action navigated to /add. */
+  --pnav-clearance: calc(env(safe-area-inset-bottom, 0px) + 78px);
   --grad: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
   font-family:
     system-ui,
@@ -1114,7 +1122,7 @@ a {
 @media (max-width: 640px) {
   .panel,
   .routes-panel {
-    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    padding-bottom: var(--pnav-clearance);
   }
 }
 
@@ -1634,6 +1642,20 @@ a {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
+/* ---------- Shared page shell ---------- */
+/* Every centred scrolling page (Places, Timeline, Trips, Bucket, Data health,
+   Trash, Duplicates, Smart albums, Compare, Places editor, Trip view, Suggested
+   trip review). These all repeated the same inline
+   `{ maxWidth: N, margin: '20px auto', padding: '0 16px' }` — and every one of
+   them reserved ZERO bottom space, so the floating nav sat on top of whatever
+   ended the page. On /health that made the GPX/KML/CSV export buttons
+   untappable on a phone; on /trips and /bucket it covered the last entry.
+   maxWidth stays inline because it varies per page. */
+.page {
+  margin: 20px auto;
+  padding: 0 16px var(--pnav-clearance);
+}
+
 .place-rows {
   display: flex;
   flex-direction: column;
@@ -1680,7 +1702,7 @@ a {
 .places-editor {
   max-width: 1200px;
   margin: 20px auto;
-  padding: 0 16px calc(60px + env(safe-area-inset-bottom));
+  padding: 0 16px var(--pnav-clearance);
 }
 .pe-controls {
   display: flex;
@@ -1932,7 +1954,7 @@ a {
 .photo-sorter {
   max-width: 760px;
   margin: 20px auto;
-  padding: 0 16px calc(60px + env(safe-area-inset-bottom));
+  padding: 0 16px var(--pnav-clearance);
 }
 .ps-summary {
   color: var(--muted);
@@ -2016,7 +2038,9 @@ a {
 .ps-footer {
   position: sticky;
   bottom: 0;
-  padding: 12px 0 calc(8px + env(safe-area-inset-bottom));
+  /* Sticky at the viewport bottom, so it lands directly under the floating nav
+     unless it clears it too (see --pnav-clearance). */
+  padding: 12px 0 var(--pnav-clearance);
   background: linear-gradient(0deg, var(--bg) 60%, transparent);
 }
 .ps-inbox {

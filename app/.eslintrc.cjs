@@ -12,5 +12,31 @@ module.exports = {
   rules: {
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    // COMPLETION-PLAN Phase 2: creation must go through the one transactional,
+    // idempotent path. `createPlace` is a bare INSERT — not atomic with the
+    // visit/rating/review that accompany it, and a retry duplicates the place.
+    // Importing it again would silently reintroduce that class of bug.
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          {
+            name: '../lib/data',
+            importNames: ['createPlace'],
+            message: 'Use createPlaceAtomic — createPlace is a non-atomic, non-idempotent insert.',
+          },
+          {
+            name: './data',
+            importNames: ['createPlace'],
+            message: 'Use createPlaceAtomic — createPlace is a non-atomic, non-idempotent insert.',
+          },
+          {
+            name: '../../lib/data',
+            importNames: ['createPlace'],
+            message: 'Use createPlaceAtomic — createPlace is a non-atomic, non-idempotent insert.',
+          },
+        ],
+      },
+    ],
   },
 };

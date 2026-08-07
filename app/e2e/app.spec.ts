@@ -15,9 +15,10 @@ test.describe('authenticated app (non-destructive)', () => {
     }
   });
 
-  test('Add tab opens the guided wizard at step 1 of 5', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('nav.primary-nav').getByRole('link', { name: 'Add', exact: true }).click();
+  test('Add tab targets the guided wizard at step 1 of 5', async ({ page }) => {
+    await page.goto('/add');
+    const addTab = page.locator('nav.primary-nav').getByRole('link', { name: 'Add', exact: true });
+    await expect(addTab).toHaveAttribute('href', '/add');
     await expect(page).toHaveURL(/\/add/);
     await expect(page.getByText(/1 of 5/)).toBeVisible();
     await expect(page.getByText('Where?')).toBeVisible();
@@ -40,7 +41,8 @@ test.describe('authenticated app (non-destructive)', () => {
 
   test('Settings groups maintenance tools under "Manage data"', async ({ page }) => {
     await page.goto('/settings');
+    await page.getByRole('button', { name: 'Data', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Manage data' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Data health' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Data health' })).toBeVisible();
   });
 });

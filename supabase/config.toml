@@ -2,6 +2,21 @@
 project_id = "aanfyhsjbtnqzphuoiem"
 
 [db]
+# KNOWN FIDELITY GAP: production runs Postgres 17.6.1.147 (confirmed 2026-08-07 via
+# the Management API) while the local and CI stacks run 15, so `supabase start`
+# prints a version-mismatch warning and local DB tests execute on a different
+# engine than production.
+#
+# Moving this to 17 is the right fix but is NOT a one-line change: `supabase start`
+# then pulls a fresh ~3 GB Postgres 17 image, and CI's `db-tests` and `e2e` jobs
+# both run `supabase start` inside a 20-minute timeout. An attempt on 2026-08-07
+# stalled on the image pull and never created a container, so bumping it here
+# unverified would risk breaking two required CI jobs.
+#
+# Do it as its own change, and verify `supabase start` completes in CI before
+# merging. Related: `supabase link` writes the linked project's service versions
+# into supabase/.temp/*-version, which makes `supabase start` pull those newer
+# images too — delete those files if a local start suddenly begins pulling.
 major_version = 15
 
 # Edge-function JWT behavior is declared here for EVERY function and checked

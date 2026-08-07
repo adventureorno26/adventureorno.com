@@ -18,6 +18,17 @@
 # the Google Photos picker. Strava is navigation-only (form-action), not fetched.
 /*
   Cache-Control: no-cache, must-revalidate
+  # Reconcile wildcard HTML CORS (Phase 1, rec 32). Cloudflare Pages injects
+  # `access-control-allow-origin: *` on HTML and static assets by default. This is a
+  # same-origin SPA that never needs a cross-origin read of its HTML or hashed
+  # assets, so strip the wildcard rather than advertise open CORS on authenticated-
+  # app HTML.
+  # VERIFIED 2026-08-07: the `! Access-Control-Allow-Origin` removal form does NOT
+  # work here — Pages applies its platform wildcard after `_headers`, so the live
+  # response still carried `access-control-allow-origin: *`. Setting an explicit
+  # value overrides it instead. Same-origin is correct: nothing cross-origin ever
+  # reads this app's HTML or hashed assets.
+  Access-Control-Allow-Origin: https://adventureorno.com
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

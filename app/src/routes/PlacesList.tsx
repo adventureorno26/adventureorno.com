@@ -78,7 +78,7 @@ export default function PlacesList() {
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 760 }}>
       <Link className="back-bar" to="/">
         <span>Map</span>
       </Link>
@@ -173,7 +173,12 @@ export default function PlacesList() {
               />
             )}
             <Link to={`/place/${p.id}`} className="place-row-main">
-              <span className="place-row-name">{p.name}</span>
+              {/* An unnamed draft (the map's "drop a pin, name it on the card"
+                  flow) rendered as an empty span, so the row had no label and no
+                  tappable text — invisible and unopenable, which is exactly the
+                  state Data Health's "Unnamed places" signal wants you to fix.
+                  Label it like the rest of the app does instead of hiding it. */}
+              <span className="place-row-name">{p.name || 'Unnamed place'}</span>
               <span className="place-row-sub">
                 {[p.admin1, p.country].filter(Boolean).join(', ')}
                 {p.rating ? ` · ${'★'.repeat(p.rating)}` : ''}

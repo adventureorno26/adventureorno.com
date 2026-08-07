@@ -4,7 +4,7 @@
 
 import { supabase } from './supabase';
 import type { Place, Trip, TripStats, TripStop, TripStopStatus, TripStatus } from './types';
-import { createPlace } from './data';
+import { createPlaceAtomic } from './data';
 import { forwardGeocode } from './maptiler';
 
 const TRIP_COLS = 'id, name, start_date, end_date, status, source_place_id, created_at';
@@ -223,7 +223,7 @@ export async function removeStop(stopId: string): Promise<void> {
 export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> {
   const geo = await forwardGeocode(query.trim());
   if (!geo) throw new Error(`Couldn't find "${query}". Try a more specific name.`);
-  const place = await createPlace({
+  const place = await createPlaceAtomic({
     name: geo.name,
     country: geo.country,
     admin1: geo.admin1,

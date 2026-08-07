@@ -1,0 +1,20 @@
+{
+  "$comment": "Semgrep findings and scan-coverage gaps accepted with an owner and an expiry. Enforced by scripts/check-semgrep.mjs, which FAILS on any finding or newly-unparseable file without an unexpired entry.",
+  "findings": [
+    {
+      "rule": "unsafe-formatstring",
+      "file": "workers/photo-gateway/src/index.ts",
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "reason": "False positive. The rule flags a non-literal in a console format position: `console.error(`[${ref}]`, err)`. `ref` is `crypto.randomUUID().slice(0, 8)` — locally generated hex, never attacker-influenced and never derived from request data, so no format specifier can be injected. The line exists specifically to satisfy the privacy rule: the full error is logged server-side under an opaque ref while the client receives only `{error, ref}`, so SQL detail, tokens and coordinates never reach the response. Rewriting it to appease the rule would make the logging worse."
+    }
+  ],
+  "parserLimitations": [
+    {
+      "file": "app/src/routes/MapView.tsx",
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "reason": "Semgrep's TSX parser reports PartialParsing around line 1615, the JSX attribute `placeholder=\"Trail name (e.g. W&OD — Leesburg segment)\"`. The construct is valid TSX that tsc and Vite both accept; the bare `&` and em dash trip Semgrep's own grammar. The user-facing copy is deliberate (the W&OD trail), so it is not being changed to satisfy a scanner. Consequence: part of MapView.tsx is not covered by Semgrep — tsc, eslint and the Playwright suite still cover it. Revisit when Semgrep's TSX grammar updates."
+    }
+  ]
+}

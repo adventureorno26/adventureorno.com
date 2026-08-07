@@ -93,7 +93,7 @@ export default function SuggestedTripReview() {
 
   if (notFound) {
     return (
-      <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+      <div className="page" style={{ maxWidth: 640 }}>
         <Link className="back-bar" to="/trips">
           <span>Trips</span>
         </Link>
@@ -103,14 +103,14 @@ export default function SuggestedTripReview() {
   }
   if (!draft) {
     return (
-      <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+      <div className="page" style={{ maxWidth: 640 }}>
         <p style={{ color: 'var(--muted)' }}>Loading…</p>
       </div>
     );
   }
   if (!canEdit) {
     return (
-      <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+      <div className="page" style={{ maxWidth: 640 }}>
         <Link className="back-bar" to="/trips">
           <span>Trips</span>
         </Link>
@@ -120,7 +120,7 @@ export default function SuggestedTripReview() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 640 }}>
       <Link className="back-bar" to="/trips">
         <span>Trips</span>
       </Link>

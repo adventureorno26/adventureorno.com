@@ -29,7 +29,7 @@ export default function Compare() {
     });
 
   return (
-    <div style={{ maxWidth: 900, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 900 }}>
       <Link className="back-bar" to={id ? `/place/${id}` : '/'}>
         <span>Back</span>
       </Link>

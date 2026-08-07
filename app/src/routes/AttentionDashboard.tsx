@@ -76,7 +76,7 @@ export default function AttentionDashboard() {
   const allClear = a && rows.length === 0;
 
   return (
-    <div style={{ maxWidth: 720, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 720 }}>
       <Link className="back-bar" to="/settings">
         <span>Settings</span>
       </Link>

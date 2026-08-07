@@ -61,10 +61,14 @@ select vault.create_secret('<NEW_EDGE_SECRET_VALUE>', 'aon_edge_secret_key');
 so the cron apikey (from Vault) matches. The old inline JWT from the sanitized
 `0057`/`0071` must stay revoked and never be reintroduced.
 
-**5. Push the migrations.**
-```
-supabase db push               # applies 0096 → 0101 in order
-```
+**5. Apply the migrations — DIRECT SQL only (never `supabase db push`).** As step 2
+explains, this project's `supabase_migrations.schema_migrations` tracking table is
+empty, so `supabase db push` / `supabase migration up` would try to replay the whole
+chain from `0001` against the already-populated production schema and fail. Apply
+`0096` → `0101` **in numeric order, one file at a time**, via the dashboard SQL editor
+(or `psql` with the prod connection string), watching each for the "already exists"
+partial-no-op case described in step 2. Do not use any Supabase migration-tracking
+command until the history table has been properly reconciled.
 
 **6. Verify production.**
 ```
@@ -90,10 +94,10 @@ retiring the orphaned `lib/trips.ts` date-range path).
 ## If something fails
 
 - `0100` aborts "Vault secret … not provisioned" → step 3 wasn't done; provision it,
-  re-run `supabase db push`.
-- Any migration errors mid-push → `supabase db push` stops at the failed migration;
-  the earlier ones are applied. Fix or roll back that migration using its in-file
-  `ROLLBACK:` header, then decide whether to continue or revert the set.
+  then re-apply `0100` directly.
+- Any migration errors mid-apply → stop at the failed file; the earlier files are
+  already applied. Fix or roll back that migration using its in-file `ROLLBACK:`
+  header, then decide whether to continue or revert the set.
 - To fully back out: apply each file's `ROLLBACK:` block in reverse order
   (`0101`→`0096`). No rows are deleted by the forward migrations except the
   migrated-trip rows they created (safe to remove on rollback).

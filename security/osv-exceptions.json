@@ -1,0 +1,302 @@
+{
+  "$comment": "OSV-Scanner findings accepted with an owner and an expiry. Enforced by scripts/check-osv.mjs, which FAILS on any finding without an unexpired entry. Production-reachable findings must use scope:production and name the packages.",
+  "exceptions": [
+    {
+      "id": "GHSA-2mjp-6q6p-2qxm",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "Undici has an HTTP Request/Response Smuggling issue",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-35p6-xmwp-9g52",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to HTTP response queue poisoning via keep-alive socket reuse",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-4992-7rv2-5pvq",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "Undici has CRLF Injection in undici via `upgrade` option",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-4cwx-7wf7-3272",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-4w7w-66w2-5vf9",
+      "scope": "development",
+      "packages": [
+        "vite"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-58qx-3vcg-4xpx",
+      "scope": "development",
+      "packages": [
+        "ws"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "ws: Uninitialized memory disclosure",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-5p4m-2wfm-xmqj",
+      "scope": "development",
+      "packages": [
+        "js-yaml"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) \u2014 CVE-2026-59870 fix not backported",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-5xrq-8626-4rwp",
+      "scope": "development",
+      "packages": [
+        "vitest"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "When Vitest UI server is listening, arbitrary file can be read and executed",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-67mh-4wv8-2f99",
+      "scope": "development",
+      "packages": [
+        "esbuild"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "esbuild enables any website to send any requests to the development server and read the response",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-8xcm-r25x-g524",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to downstream response desynchronization via retry interceptor",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-96hv-2xvq-fx4p",
+      "scope": "development",
+      "packages": [
+        "ws"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-f88m-g3jw-g9cj",
+      "scope": "development",
+      "packages": [
+        "sharp"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-fx2h-pf6j-xcff",
+      "scope": "development",
+      "packages": [
+        "vite"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "vite: `server.fs.deny` bypass on Windows alternate paths",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-fxqj-rqcc-2cmp",
+      "scope": "development",
+      "packages": [
+        "postcss"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q \u2014 attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-g8m3-5g58-fq7m",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to Set-Cookie SameSite attribute downgrade via permissive substring matching",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-g9mf-h72j-4rw9",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-jr45-8vmc-qm54",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-m8rv-5g2x-5cg5",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to CRLF Injection via blob-like body 'type' property",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-mh99-v99m-4gvg",
+      "scope": "development",
+      "packages": [
+        "brace-expansion"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-p88m-4jfj-68fv",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to HTTP header injection via Set-Cookie percent-decoding",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-qwww-vcr4-c8h2",
+      "scope": "production",
+      "packages": [
+        "react-router"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-09-30",
+      "summary": "React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response",
+      "reason": "The advisory affects React Router RSC/server-action mode. AdventureOrNo is a Vite BrowserRouter SPA with no RSC, SSR, actions, or server-action endpoint, so the vulnerable code path does not exist here. Pinned to 7.18.2 while an upstream non-RSC-breaking fix is monitored. Mirrors security/audit-exceptions.json advisory 1124282."
+    },
+    {
+      "id": "GHSA-rgw5-rvv9-x895",
+      "scope": "development",
+      "packages": [
+        "brace-expansion"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-v3r7-h72x-cjcm",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-v6wh-96g9-6wx3",
+      "scope": "development",
+      "packages": [
+        "vite"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-v9p9-hfj2-hcw8",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "Undici has Unhandled Exception in WebSocket Client Due to Invalid server_max_window_bits Validation",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-vrm6-8vpv-qv8q",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "Undici has Unbounded Memory Consumption in WebSocket permessage-deflate Decompression",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    },
+    {
+      "id": "GHSA-vxpw-j846-p89q",
+      "scope": "development",
+      "packages": [
+        "undici"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "undici WebSocket client vulnerable to denial of service via fragment count bypass",
+      "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
+    }
+  ]
+}

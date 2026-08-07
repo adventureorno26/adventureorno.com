@@ -29,6 +29,7 @@ coverage/
 app/playwright-report/
 app/test-results/
 app/.playwright/
+app/public/version.json
 
 # Google Timeline Takeout dumps / partial downloads (never commit — huge)
 app/TimlineTakeout/

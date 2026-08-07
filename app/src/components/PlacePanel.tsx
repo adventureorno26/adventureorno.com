@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   addExperience,
-  addVisit,
   clearCity,
   createEntry,
-  createPlace,
+  createPlaceAtomic,
   deletePlace,
   deleteVisit,
   restoreVisit,
@@ -232,25 +231,29 @@ export default function PlacePanel({
     if (draft.kind === 'note') {
       await createEntry({ ...draft, place_id: place.id });
     } else {
-      const spot = await createPlace({
-        name: draft.title,
-        country: place.country,
-        admin1: place.admin1,
-        lat: draft.lat ?? place.lat,
-        lng: draft.lng ?? place.lng,
-        address: draft.address ?? null,
-        city: parseCity(draft.address ?? null, place.admin1),
-        categories: [draft.kind],
-        saved: true,
-        part_of: [place.id], // grouped under this place
-      });
-      if (draft.rating != null || draft.body) {
-        await updatePlace(spot.id, {
-          rating: draft.rating ?? null,
+      // ONE atomic write (migration 0122). This used to be three separate
+      // requests — createPlace, then updatePlace for rating/review, then
+      // addVisit — so a failure after the first left a half-built spot with no
+      // review and no visit, and a retry created a second place.
+      const spot = await createPlaceAtomic(
+        {
+          name: draft.title,
+          country: place.country,
+          admin1: place.admin1,
+          lat: draft.lat ?? place.lat,
+          lng: draft.lng ?? place.lng,
+          address: draft.address ?? null,
+          city: parseCity(draft.address ?? null, place.admin1),
+          categories: [draft.kind],
+          saved: true,
+          part_of: [place.id], // grouped under this place
           review: draft.body ?? null,
-        });
-      }
-      if (draft.date) await addVisit(spot.id, draft.date, draft.date);
+        },
+        {
+          date: draft.date || undefined,
+          rating: draft.rating ?? null,
+        },
+      );
       onPlaceChanged(spot); // add the new place to the map
     }
     setAddingSpot(false);
@@ -444,8 +447,14 @@ export default function PlacePanel({
           try {
             await restoreVisit(v);
             await reloadVisits();
-          } catch {
-            /* ignore */
+          } catch (e) {
+            // Undo is the safety net for a destructive action. Swallowing this
+            // left the visit deleted while the user believed it was restored.
+            setError(
+              e instanceof Error
+                ? `Could not undo: ${e.message}`
+                : 'Could not undo — the visit is still removed. Log it again from this place.',
+            );
           }
         },
       });

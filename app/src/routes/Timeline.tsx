@@ -38,7 +38,7 @@ export default function Timeline() {
     new Date(m + '-01T00:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   return (
-    <div style={{ maxWidth: 720, margin: '20px auto', padding: '0 16px' }}>
+    <div className="page" style={{ maxWidth: 720 }}>
       <Link className="back-bar" to="/settings">
         <span>Settings</span>
       </Link>
