@@ -2,7 +2,6 @@
 // Regenerate with: npm run gen:types
 // Source of truth: the live Supabase schema (supabase/migrations).
 
-
 export type Json =
   | string
   | number
