@@ -6,8 +6,8 @@
 // supabase/config.toml ([functions.<name>] verify_jwt). Fails if any deployed
 // function's verify_jwt differs, or if a deployed function isn't declared. This
 // catches an accidental auth-behavior change (or a redeploy that silently flips a
-// public callback to JWT-required, or vice-versa). Without the token it's a no-op
-// so forks/PRs without the secret don't fail.
+// public callback to JWT-required, or vice-versa). Set REQUIRE_SUPABASE_ACCESS_TOKEN
+// in canonical CI so a missing secret fails instead of producing a false green.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -15,6 +15,10 @@ import { dirname, join } from 'node:path';
 const PROJECT_REF = 'aanfyhsjbtnqzphuoiem';
 const token = process.env.SUPABASE_ACCESS_TOKEN;
 if (!token) {
+  if (process.env.REQUIRE_SUPABASE_ACCESS_TOKEN === 'true') {
+    console.error('SUPABASE_ACCESS_TOKEN is required for this canonical drift check.');
+    process.exit(1);
+  }
   console.log('SUPABASE_ACCESS_TOKEN not set — skipping edge-config drift check.');
   process.exit(0);
 }

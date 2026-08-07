@@ -1,0 +1,11 @@
+{
+  "exceptions": [
+    {
+      "advisory": 1124282,
+      "packages": ["react-router", "react-router-dom"],
+      "owner": "repository owner",
+      "expires": "2026-09-30",
+      "reason": "The advisory affects React Router RSC/server-action mode. AdventureOrNo is a Vite BrowserRouter SPA and has no RSC, SSR, actions, or server-action endpoint. React Router is pinned to 7.18.2 while an upstream non-RSC-breaking fix is monitored."
+    }
+  ]
+}

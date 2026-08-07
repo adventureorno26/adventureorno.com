@@ -31,21 +31,21 @@ begin;
 -- ---------------------------------------------------------------------------
 do $$
 declare
-  targets text[][] := array[
-    array['entries','entries_select'],
-    array['join_requests','jr_insert_own'],
-    array['join_requests','jr_select_visible'],
-    array['join_requests','jr_update_own'],
-    array['location_pings','pings_insert_own'],
-    array['photo_reactions','photo_reactions_select'],
-    array['photo_reactions','photo_reactions_write'],
-    array['photos','photos_delete'],
-    array['photos','photos_select'],
-    array['place_ratings','place_ratings_select'],
-    array['place_ratings','place_ratings_write'],
-    array['place_wishes','place_wishes_write'],
-    array['places','places_select'],
-    array['videos','videos_select']
+  targets text[] := array[
+    'entries.entries_select',
+    'join_requests.jr_insert_own',
+    'join_requests.jr_select_visible',
+    'join_requests.jr_update_own',
+    'location_pings.pings_insert_own',
+    'photo_reactions.photo_reactions_select',
+    'photo_reactions.photo_reactions_write',
+    'photos.photos_delete',
+    'photos.photos_select',
+    'place_ratings.place_ratings_select',
+    'place_ratings.place_ratings_write',
+    'place_wishes.place_wishes_write',
+    'places.places_select',
+    'videos.videos_select'
   ];
   n_present int;
   n_wrapped int;
@@ -74,7 +74,7 @@ begin
   select count(*) into n_present
   from pg_policies
   where schemaname = 'public'
-    and array[tablename, policyname] = any (targets);
+    and (tablename || '.' || policyname) = any (targets);
   if n_present <> 14 then
     raise exception '0121 preflight: expected 14 target policies, found % — unexpected schema state.', n_present;
   end if;
@@ -83,7 +83,7 @@ begin
   select count(*) into n_wrapped
   from pg_policies
   where schemaname = 'public'
-    and array[tablename, policyname] = any (targets)
+    and (tablename || '.' || policyname) = any (targets)
     and (coalesce(qual,'') || ' ' || coalesce(with_check,'')) ~* '\(\s*select\s+auth\.uid\(\)';
   if n_wrapped > 0 then
     raise exception '0121 preflight: % target policies already use (select auth.uid()) — 0121 may already be applied.', n_wrapped;
