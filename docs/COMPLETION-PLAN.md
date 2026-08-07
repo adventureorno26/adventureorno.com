@@ -389,8 +389,40 @@ deploy once, then hard-refresh" rule — wait for edge propagation before verify
 
 ## Phase 5 — Production security, configuration, and recovery operations
 
-- Resolve or document Supabase advisor findings, intended authenticated SECURITY DEFINER RPCs,
-  mutable search paths, PostGIS-owned warnings, leaked-password protection, and service-role rotation.
+### Advisor findings — triaged 2026-08-07, see `security/advisor-baseline.md`
+
+All 83 security and 141 performance findings are classified there so a NEW finding is
+distinguishable from a known one. Summary:
+
+- **Nothing ERROR-level is actionable.** The single ERROR (`rls_disabled_in_public` on
+  `spatial_ref_sys`) and the three `anon_security_definer_function_executable` warnings
+  (`st_estimatedextent` overloads) are all owned by `supabase_admin` and belong to the `postgis`
+  extension — verified via `pg_class.relowner`/`pg_proc.proowner` + `pg_depend`. Migration 0093's
+  lockdown tried to revoke them and Postgres reported "no privileges could be revoked"; we are not
+  the owner. This is exactly why `db-test.sh`'s lockdown check excepts `st_*`, and its
+  "0 anon-executable SECDEF functions" result is accurate for first-party code.
+- **The 72 `authenticated_security_definer_function_executable` warnings are intended** — the
+  application RPCs, granted to `authenticated` only, never `anon`/`PUBLIC`, asserted every run.
+- **One REAL gap found and fixed (migration 0123).** `google_tokens` and `strava_accounts` had RLS
+  enabled with zero policies but still carried table-level GRANTs to `anon` and `authenticated`
+  (`anon=arwdDxtm`). Inert while RLS denies by default, but live the moment anyone adds a permissive
+  policy or disables RLS — and those tables hold the Google and Strava `refresh_token`/`access_token`
+  values. `oauth_states` had been locked down in 0120; these two were missed. Revoked, with
+  `supabase/tests/0123_lock_oauth_token_tables.test.sql` asserting no client grants, service_role
+  retained, and RLS-on/deny-all on both. Safe: the browser never queries either table and every
+  reader is a service-role Edge Function (`strava-auth`, `strava-webhook`, `_shared/strava`,
+  `google-photos-token` — all verified to use `adminClient()`/the secret key).
+- **Performance findings accepted at current volume** (183 places, 568 visits, 159 photos, 444
+  activities, ~17k pings) with no reported slowness. `multiple_permissive_policies` (102) is inherent
+  to the owner/editor/viewer model; collapsing them trades auditability for microseconds. Measure
+  before touching.
+- **OPEN, needs Erica:** `auth_leaked_password_protection` is a hosted Auth dashboard setting, not a
+  migration, and hosted changes need her authority. Low impact (sign-in is Google/magic-link; the
+  only password account is the test bot) but free hardening.
+
+### Remaining
+
+- Resolve service-role rotation and mutable search paths.
 - Synchronize `.env.example`, CI, Pages, Worker bindings, Edge Function secrets, and runbooks; the
   example currently omits part of the code-used variable inventory.
 - Restore only approved cron/geocode schedules and rerun only the approved Strava backfill.
