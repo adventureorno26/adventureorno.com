@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { setPlaceSolo, updatePlace } from '../lib/data';
+import { showSnack } from '../lib/snackbar';
 import type { MapPerson } from '../lib/data';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import MapSearch from './MapSearch';
@@ -38,8 +39,13 @@ export default function PlaceQuickEdit({
     try {
       const upd = await updatePlace(place.id, p);
       onUpdated(upd);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      // A silently-dropped edit looks exactly like a successful one: the spinner
+      // clears and nothing changes. Say so instead.
+      showSnack({
+        message:
+          e instanceof Error ? `Could not save: ${e.message}` : 'Could not save that change.',
+      });
     }
     setBusy(null);
   }
@@ -54,8 +60,11 @@ export default function PlaceQuickEdit({
     try {
       await setPlaceSolo(place.id, profileId ?? null);
       onUpdated({ ...place, solo_profile: profileId ?? null });
-    } catch {
-      /* ignore */
+    } catch (e) {
+      showSnack({
+        message:
+          e instanceof Error ? `Could not change who: ${e.message}` : 'Could not change who went.',
+      });
     }
     setBusy(null);
   }

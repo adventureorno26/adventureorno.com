@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
 import { createPlaceAtomic } from '../lib/data';
+import { showSnack } from '../lib/snackbar';
 import type { Place } from '../lib/types';
 
 /** Map on the bucket page: pan/zoom your want-to-go pins, tap one to open its
@@ -90,8 +91,14 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
             saved: true,
           });
           onAdded(); // refresh the bucket map/list; stay on this page (no jump to main map)
-        } catch {
-          /* ignore */
+          showSnack({ message: `Added ${name} to your bucket list.` });
+        } catch (e) {
+          // Tapping a label and getting NOTHING back is indistinguishable from a
+          // mis-tap, so a failed add used to look like "the map ignored me".
+          showSnack({
+            message:
+              e instanceof Error ? `Could not add ${name}: ${e.message}` : `Could not add ${name}.`,
+          });
         }
       });
     });

@@ -271,10 +271,37 @@ from `.github/workflows/ci.yml`.
 
 ## Phase 2 — Finish atomic canonical creation and truthful success behavior
 
-- Route every applicable place, visit, entry, activity, child-place, import, and trip creation path
-  through one transactional, idempotent service based on `create_experience`.
-- Extend the contract for review, tags, website, attribution, people, Trip/Visit/Activity/Entry links,
-  `entry_links`, geographic containment, and planned-stop completion.
+### Status 2026-08-07 — place creation is DONE and live
+
+- All nine remaining direct-insert call sites now use the canonical path. Migration `0122` extended
+  `create_experience`'s place contract with `is_trail`, `bucket`, `needs_geocode`, `website`, `auto`,
+  `part_of[]`, `review`, and an explicit `allow_unnamed` opt-in for the map's placeholder draft
+  (the blank-name guard stays ON for every other caller). The same INSERT keeps the existing
+  triggers firing, so behaviour is preserved while the write becomes atomic and idempotent.
+- Client: `createPlaceAtomic()` replaces `createPlace` in BucketMap, BucketList, PhotoSorter (x2),
+  DayView, MapView (x2), `trips.addPlaceToTrip`, and `PlacePanel.addSpot`. **addSpot collapsed from
+  three writes to one** — it previously did createPlace, then updatePlace for rating/review, then
+  addVisit, so a mid-sequence failure left a spot with no review and no visit, and a retry created a
+  second place. `createPlace` is deprecated with zero callers and an eslint `no-restricted-imports`
+  rule prevents its return (verified: reintroducing the import fails lint).
+- Applied to production 2026-08-07 and verified end to end against live: a child spot created through
+  the new contract landed its place, review, `part_of`, visit and `place_membership` row in ONE
+  write. Test rows were removed immediately; counts returned exactly to baseline (183 places /
+  568 visits / 159 photos, 0 experience_requests). Rollback artifact for the previous function
+  definition is in `supabase/snapshots/2026-08-07-create_experience-pre-0122.sql`.
+- Two real defects surfaced while doing this: PhotoSorter's GPS-derived place never set
+  `needs_geocode`, so a place named "New place" was invisible to the nightly geocoder and stayed
+  unnamed forever; and an unnamed draft rendered as a completely EMPTY row in `/places` — no label,
+  no tappable text — which is exactly the state Data Health's "Unnamed places" signal exists to
+  surface. Both fixed.
+
+### Remaining
+
+- Extend the contract for the rest: tags, Trip/Visit/Activity/Entry links, `entry_links`.
+  (review, website, attribution, people, geographic containment via `part_of`, and planned-stop
+  completion are already covered.)
+- Route the remaining non-place creation paths (entries, activities, trip stops, imports) through
+  the same service.
 - Remove direct compatibility inserts only after parity tests prove equivalent behavior.
 - Preserve one operation key across retry and cover partial failure, two visits, non-login people,
   import attribution, merge, delete, and full Undo.

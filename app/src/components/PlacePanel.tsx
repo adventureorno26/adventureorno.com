@@ -447,8 +447,14 @@ export default function PlacePanel({
           try {
             await restoreVisit(v);
             await reloadVisits();
-          } catch {
-            /* ignore */
+          } catch (e) {
+            // Undo is the safety net for a destructive action. Swallowing this
+            // left the visit deleted while the user believed it was restored.
+            setError(
+              e instanceof Error
+                ? `Could not undo: ${e.message}`
+                : 'Could not undo — the visit is still removed. Log it again from this place.',
+            );
           }
         },
       });
