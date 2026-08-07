@@ -12,7 +12,7 @@ import {
 } from '../lib/maptiler';
 import { createTrip } from '../lib/trips';
 import {
-  createPlace,
+  createPlaceAtomic,
   updatePlace,
   deletePlace,
   fetchFog,
@@ -285,8 +285,12 @@ export default function MapView() {
     }
     const c = mapRef.current?.getCenter();
     try {
-      const p = await createPlace({
+      const p = await createPlaceAtomic({
         name: '',
+        // This draft is deliberately unnamed — the user names it on the card that
+        // opens next. The server guard against blank names stays on for every
+        // other caller (migration 0122).
+        allow_unnamed: true,
         country: null,
         admin1: null,
         lat: c?.lat ?? 39.5,
@@ -1115,7 +1119,7 @@ export default function MapView() {
         drawTargetRef.current ??
         nearestPlaceId(startLng, startLat, 2000, (p) => !!p.is_trail || !!p.holds_children);
       if (!placeId) {
-        const created = await createPlace({
+        const created = await createPlaceAtomic({
           name: drawName.trim(),
           country: null,
           admin1: null,

@@ -54,6 +54,17 @@ export async function fetchPlace(id: string): Promise<Place | null> {
   return (data as Place) ?? null;
 }
 
+/**
+ * @deprecated Use {@link createPlaceAtomic}. This direct insert is neither
+ * transactional with the visit/rating/review that usually accompany it, nor
+ * idempotent, so a retry after a dropped connection creates a duplicate place.
+ *
+ * COMPLETION-PLAN Phase 2 moved every application call site onto
+ * `createPlaceAtomic` (migration 0122 extended the RPC's place contract to cover
+ * is_trail, bucket, needs_geocode, website, auto, part_of, review, and the
+ * explicit unnamed-draft opt-in). This is retained only as a compatibility export
+ * and has no callers; a lint rule keeps it that way.
+ */
 export async function createPlace(p: NewPlace): Promise<Place> {
   const { data, error } = await supabase.from('places').insert(p).select(PLACE_COLS).single();
   if (error) throw error;
@@ -754,6 +765,22 @@ export type ExperiencePlaceInput =
       address?: string | null;
       categories?: string[];
       saved?: boolean;
+      // Extended contract (migration 0122) so every creation surface can use this
+      // one atomic + idempotent path instead of a direct insert.
+      is_trail?: boolean;
+      bucket?: boolean;
+      needs_geocode?: boolean;
+      website?: string | null;
+      review?: string | null;
+      auto?: boolean;
+      /** Parent place ids. The DB trigger materialises place_membership rows. */
+      part_of?: string[];
+      /**
+       * Opt in to creating a place with an empty name — only the map's "drop a
+       * placeholder and name it on the card" draft flow. The server keeps the
+       * "a new place requires a name" guard on for everyone else.
+       */
+      allow_unnamed?: boolean;
     };
 
 /** The optional visit to attach. Omit `date` to only create/reuse the place. */
@@ -790,6 +817,32 @@ export async function addExperience(
   });
   if (error) throw error;
   return data as ExperienceResult;
+}
+
+/**
+ * Atomic + idempotent replacement for `createPlace`, returning the full Place the
+ * way the old direct-insert path did so call sites can render immediately.
+ *
+ * Prefer this over `createPlace` everywhere (COMPLETION-PLAN Phase 2). The direct
+ * insert is neither transactional with its visit nor idempotent, so a retry after
+ * a dropped connection silently created a duplicate place.
+ *
+ * Pass `key` explicitly when the caller can retry the same user action, so the
+ * retry returns the original record instead of creating a second one.
+ */
+export async function createPlaceAtomic(
+  place: Exclude<ExperiencePlaceInput, { id: string }>,
+  visit: ExperienceVisitInput = {},
+  key: string = newExperienceKey(),
+): Promise<Place> {
+  const { place_id } = await addExperience(key, place, visit);
+  const created = await fetchPlace(place_id);
+  if (!created) {
+    // The RPC committed but the row is not readable back — surface it rather than
+    // returning a hollow object the UI would render as an empty card.
+    throw new Error('The place was created but could not be read back.');
+  }
+  return created;
 }
 
 // --- Non-login people (children) — Prompt 2B -------------------------------

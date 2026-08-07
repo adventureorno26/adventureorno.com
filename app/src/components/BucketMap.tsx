@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
 import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
-import { createPlace } from '../lib/data';
+import { createPlaceAtomic } from '../lib/data';
 import type { Place } from '../lib/types';
 
 /** Map on the bucket page: pan/zoom your want-to-go pins, tap one to open its
@@ -80,7 +80,7 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
         const { lng, lat } = e.lngLat;
         try {
           const geo = await reverseGeocode(lng, lat).catch(() => null);
-          await createPlace({
+          await createPlaceAtomic({
             name,
             country: geo?.country ?? null,
             admin1: geo?.admin1 ?? null,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
-  createPlace,
+  createPlaceAtomic,
   fetchMapPeople,
   fetchPlaces,
   fetchVisits,
@@ -234,7 +234,7 @@ export default function PhotoSorter() {
   async function createFromSearch(groupId: string, r: SearchResult) {
     setNote('Creating that place…');
     try {
-      const created = await createPlace({
+      const created = await createPlaceAtomic({
         name: r.name,
         country: r.country,
         admin1: r.admin1,
@@ -260,13 +260,14 @@ export default function PhotoSorter() {
     setNote('Naming the new place from its location…');
     const rev = await reverseGeocode(withGps.lng, withGps.lat).catch(() => null);
     try {
-      const created = await createPlace({
+      const created = await createPlaceAtomic({
         name: rev?.name ?? 'New place',
         country: rev?.country ?? null,
         admin1: rev?.admin1 ?? null,
         lat: withGps.lat,
         lng: withGps.lng,
         saved: true,
+        needs_geocode: !rev?.name,
       });
       setPlaces((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
       reassign(groupId, created.id, created.name);

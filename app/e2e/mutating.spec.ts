@@ -257,6 +257,84 @@ test.describe('mutating acceptance — owner/editor/viewer', () => {
     expect((await visits.json()).length).toBe(2);
   });
 
+  // Phase 2: every creation surface now goes through create_experience. This is
+  // the exact shape PlacePanel.addSpot sends — previously THREE separate writes
+  // (createPlace, then updatePlace for rating/review, then addVisit), so a failure
+  // after the first left a half-built spot and a retry created a second place.
+  test('a child spot is created atomically with its parent link, review, rating and visit', async ({
+    request,
+  }, testInfo) => {
+    const c = await ctx('owner');
+    const parentName = `E2E Spot Parent ${testInfo.project.name} ${RUN_ID}`;
+    const parent = await rpc(request, c, 'create_experience', {
+      p_key: key('spot-parent', testInfo.project.name),
+      p_place: { name: parentName, lat: 47.6, lng: -122.3, categories: ['city'] },
+      p_visit: {},
+    });
+    expect(parent.status(), await parent.text()).toBe(200);
+    const parentId = (await parent.json()).place_id;
+
+    const childName = `E2E Child Spot ${testInfo.project.name} ${RUN_ID}`;
+    const child = await rpc(request, c, 'create_experience', {
+      p_key: key('spot-child', testInfo.project.name),
+      p_place: {
+        name: childName,
+        lat: 47.61,
+        lng: -122.31,
+        categories: ['restaurant'],
+        saved: true,
+        part_of: [parentId],
+        review: 'Excellent halibut.',
+      },
+      p_visit: { date: '2026-07-04', rating: 5 },
+    });
+    expect(child.status(), await child.text()).toBe(200);
+    const childBody = await child.json();
+    expect(childBody.place_id).toBeTruthy();
+    expect(childBody.visit_id, 'the visit must be part of the same atomic write').toBeTruthy();
+
+    const row = await request.get(
+      `${c.url}/rest/v1/places?select=id,name,review,part_of&id=eq.${childBody.place_id}`,
+      { headers: headers(c) },
+    );
+    const [place] = await row.json();
+    expect(place.review, 'review must land in the same write, not a follow-up PATCH').toBe(
+      'Excellent halibut.',
+    );
+    expect(place.part_of).toContain(parentId);
+
+    // The membership trigger must have materialised the parent/child edge.
+    const membership = await request.get(
+      `${c.url}/rest/v1/place_membership?select=parent_id&child_id=eq.${childBody.place_id}`,
+      { headers: headers(c) },
+    );
+    expect((await membership.json()).map((m: { parent_id: string }) => m.parent_id)).toContain(
+      parentId,
+    );
+  });
+
+  test('the unnamed-draft opt-in is required (map placeholder flow)', async ({
+    request,
+  }, testInfo) => {
+    const c = await ctx('owner');
+    const blocked = await rpc(request, c, 'create_experience', {
+      p_key: key('unnamed-blocked', testInfo.project.name),
+      p_place: { name: '', lat: 30.1, lng: -90.1 },
+      p_visit: {},
+    });
+    expect(blocked.status(), 'a blank name must be rejected without the opt-in').toBeGreaterThanOrEqual(
+      400,
+    );
+
+    const allowed = await rpc(request, c, 'create_experience', {
+      p_key: key('unnamed-allowed', testInfo.project.name),
+      p_place: { name: '', lat: 30.1, lng: -90.1, saved: false, allow_unnamed: true },
+      p_visit: {},
+    });
+    expect(allowed.status(), await allowed.text()).toBe(200);
+    expect((await allowed.json()).place_id).toBeTruthy();
+  });
+
   test('an unauthenticated caller can write nothing', async ({ request }) => {
     const { url, key } = supabaseEnv();
     const res = await request.post(`${url}/rest/v1/places`, {

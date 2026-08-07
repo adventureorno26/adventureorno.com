@@ -6,7 +6,7 @@ import polyline from '@mapbox/polyline';
 import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
 import {
   createEntry,
-  createPlace,
+  createPlaceAtomic,
   deleteEntry,
   fetchEntriesForDay,
   fetchPlace,
@@ -118,7 +118,7 @@ export default function DayView() {
     // title. If the geocoder gives nothing, create a "New place" flagged for the
     // nightly geocoder to name — same rule the ingest path (place_for_activity) uses.
     const geo = await reverseGeocode(a.lng, a.lat).catch(() => null);
-    const created = await createPlace({
+    const created = await createPlaceAtomic({
       name: geo?.name ?? 'New place',
       country: geo?.country ?? null,
       admin1: geo?.admin1 ?? null,

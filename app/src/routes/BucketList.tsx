@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
-  createPlace,
+  createPlaceAtomic,
   dateNightPick,
   fetchBucketPlaces,
   fetchWishes,
@@ -96,7 +96,7 @@ export default function BucketList() {
         setMsg("Couldn't resolve that place — try another.");
         return;
       }
-      await createPlace({
+      await createPlaceAtomic({
         name: full.name,
         country: full.country,
         admin1: full.admin1,
