@@ -8,6 +8,57 @@ prompts and recommendation traceability. This file controls current status, phas
 acceptance. The Claude Code instructions control execution detail only. If the files diverge, update
 both in the same documentation change; until then, this completion plan governs status and order.
 
+## Phase 1 continuation status — 2026-08-07 (newest status)
+
+This section supersedes older Phase 1 status statements below; the later phases and their order are
+unchanged.
+
+### Completed in the current workspace; not merged or deployed
+
+- Corrected unreleased migration 0121's invalid `name[] = text` preflight comparison. A clean
+  disposable rebuild now applies all 121 migrations. Eighteen SQL regression files pass, including
+  a new 0121 test for all 14 policies, five function search paths, and the retained primary key.
+- Seeded deterministic fictional local owner/editor/viewer users behind a strict localhost guard.
+  Canonical E2E now sets `REQUIRE_AUTH_E2E=true`; missing auth configuration fails instead of
+  silently skipping. The four-project authenticated fixture works against disposable Supabase.
+- Corrected the Settings browser assertion to select the Data section and assert the actual button
+  semantics. The prior run produced 56 passes and four identical assertion failures; the corrected
+  assertion then passed 4/4 projects. A final uninterrupted 60-test run remains required.
+- Canonical DB-types and Edge-config jobs now fail when `SUPABASE_ACCESS_TOKEN` is absent. Only an
+  untrusted fork may explicitly skip.
+- Added a hard production-dependency audit policy. The only temporary exception is React Router's
+  RSC/server-action advisory, which is not exposed by this Vite BrowserRouter SPA; it has an owner,
+  rationale, and 2026-09-30 expiry. React Router is pinned to 7.18.2.
+- Added a single release gate and an opt-in Cloudflare Pages production job. It builds the exact
+  gated SHA, writes build provenance, uploads with that SHA, then checks `/login`, SPA fallback,
+  an asset, no wildcard HTML CORS, and the exact live SHA. It is disabled unless the repository
+  variable `PRODUCTION_DEPLOY_ENABLED` is exactly `true`.
+
+### Remaining Phase 1 blockers, in priority order
+
+1. Run the complete local validation matrix from a clean install, including one uninterrupted
+   60/60 Playwright run, export/restore, Worker dry-run, the audit policy, and workflow lint.
+2. Add the required mutating owner/editor/viewer acceptance flows. Current authenticated coverage is
+   non-destructive only; do not describe Phase 1 as accepted until these run on disposable data.
+3. Convert OSV and Semgrep from report-only commands to hard gates, or record narrow finding-level
+   exceptions with owner and expiry. They still contain `|| true` and therefore are not release
+   quality even though `release-gate` depends on their job conclusions.
+4. Add a real Cloudflare preview deployment smoke job. The new smoke script currently protects the
+   post-production deploy only; it does not yet prove a merge candidate's preview URL.
+5. Review and merge the current branch. Production database state includes the intended 0121
+   changes from direct SQL, while Git `main` does not yet contain the corrected migration or its
+   regression test. Preserve that state distinction in the deployment record.
+6. Restore/configure hosted access: add `SUPABASE_ACCESS_TOKEN` for canonical drift jobs and fix the
+   Cloudflare account/API-token mismatch. In Cloudflare, first disable automatic production-branch
+   deployments; then configure the protected `production` environment and required client-safe
+   build values. Do not enable `PRODUCTION_DEPLOY_ENABLED` until all earlier blockers are green.
+7. Because required branch checks are unavailable for this private repository on its current GitHub
+   plan, treat the in-workflow `release-gate` as the production safety boundary. Do not claim that it
+   prevents a human from merging red code; it prevents that code from using this deploy job.
+8. With separate production authority, deploy one fully green SHA and verify the new smoke job,
+   exact `/version.json` SHA, removal of live wildcard HTML CORS, and authenticated production flows.
+   No hosted or production mutation is authorized by this document.
+
 ## Working rules
 
 1. Start from current remote `main`; record HEAD, branch, ahead/behind, and `git status`.
