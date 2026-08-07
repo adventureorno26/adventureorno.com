@@ -102,9 +102,10 @@ jobs:
 
   # --- Additional zero-cost security scanners (Prompt 8, recs 52–62) -----------
   # Each installs a PINNED tool and runs it, so a missing tool can't produce a false
-  # green. Report-mode (|| true) for the ones that can surface unfixable transitive
-  # findings — matches the existing `npm audit (report)` convention; tighten to a hard
-  # gate once the tree is clean. Zizmor gates hard because we own every workflow.
+  # green. ALL THREE ARE NOW HARD GATES (Phase 1, blocker 3) — the previous `|| true`
+  # report-mode could not fail and therefore produced a false green. Findings that
+  # cannot be fixed today are recorded in security/*-exceptions.json with an owner,
+  # a reason and an expiry, and the gate fails when one expires.
   osv-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -112,12 +113,20 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: OSV-Scanner (dependency vulnerabilities, report)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: OSV-Scanner (dependency vulnerabilities — HARD GATE)
         run: |
           VER=2.4.0
           curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${VER}/osv-scanner_linux_amd64" -o osv-scanner
           chmod +x osv-scanner
-          ./osv-scanner scan source --recursive . || true
+          # No `|| true`. check-osv.mjs fails on any finding without an unexpired,
+          # owned exception in security/osv-exceptions.json, and fails harder when a
+          # finding is reachable from the PRODUCTION dependency tree.
+          node scripts/check-osv.mjs ./osv-scanner
 
   semgrep:
     runs-on: ubuntu-latest
@@ -129,10 +138,18 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Semgrep (SAST over first-party source, report)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Semgrep (SAST over first-party source — HARD GATE)
         run: |
           pip install semgrep==1.172.0
-          semgrep scan --config=auto --error --quiet app/src workers/photo-gateway src || true
+          # No `|| true`, and no phantom `src` path — that directory does not exist
+          # at the repo root, so the old invocation scanned less than it claimed
+          # while `|| true` hid the error. check-semgrep.mjs fails on a missing scan
+          # path, on any finding without an unexpired owned exception, and on any
+          # newly-unparseable file (a silent coverage hole).
+          node scripts/check-semgrep.mjs semgrep app/src workers/photo-gateway
 
   zizmor:
     runs-on: ubuntu-latest
@@ -311,6 +328,86 @@ jobs:
         if: ${{ !cancelled() }}
         run: supabase stop --no-backup || true
 
+  # Real preview deployment for a merge candidate (Phase 1, blocker 4). Deploys the
+  # PR build to a Cloudflare Pages PREVIEW (any branch that is not the production
+  # branch `main`), then runs the same smoke script used after production. This is
+  # what proves a merge candidate's actual served output rather than only its build
+  # artifact. Skipped for fork PRs, which cannot access secrets.
+  deploy-preview:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_MAPTILER_KEY: ${{ secrets.VITE_MAPTILER_KEY }}
+      VITE_PHOTO_GATEWAY_URL: ${{ secrets.VITE_PHOTO_GATEWAY_URL }}
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+      VITE_STRAVA_CLIENT_ID: ${{ secrets.VITE_STRAVA_CLIENT_ID }}
+      VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Require preview deployment configuration
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_MAPTILER_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required for the preview deployment smoke test."
+              exit 1
+            fi
+          done
+      - name: Build the merge candidate with provenance
+        env:
+          BUILD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node scripts/write-build-version.mjs
+          npm run build --workspace app
+      - name: Deploy to a Pages PREVIEW (never the production branch)
+        id: preview
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # `adventureorno` is the project serving adventureorno.com; a branch other
+          # than the production branch `main` yields a preview deployment, so this
+          # can never overwrite the live site.
+          branch="ci-preview-$(printf '%s' "$HEAD_REF" | tr -c 'a-zA-Z0-9-' '-' | cut -c1-24)"
+          if [ "$branch" = "ci-preview-main" ]; then
+            echo "::error::Refusing to deploy a preview from a branch that resolves to the production branch."
+            exit 1
+          fi
+          npx wrangler pages deploy app/dist \
+            --project-name adventureorno \
+            --branch "$branch" \
+            --commit-hash "$HEAD_SHA" \
+            --commit-dirty=false | tee deploy.log
+          url="$(grep -oE 'https://[a-z0-9-]+\.adventureorno\.pages\.dev' deploy.log | tail -1)"
+          if [ -z "$url" ]; then
+            echo "::error::Could not determine the preview URL from the wrangler output."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Preview: $url"
+      - name: Smoke the preview (routes, fallback, assets, headers, exact SHA)
+        env:
+          SMOKE_BASE_URL: ${{ steps.preview.outputs.url }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/smoke-pages.mjs
+      - name: Record the preview URL in the job summary
+        if: ${{ always() }}
+        env:
+          URL: ${{ steps.preview.outputs.url }}
+        run: |
+          echo "Preview deployment: $URL" >> "$GITHUB_STEP_SUMMARY"
+
   # One machine-readable release gate. GitHub branch protection is unavailable on
   # the repository's current private/free plan, so the deployment itself must
   # depend on every required result and reject cancellations/skips/failures.
@@ -328,12 +425,15 @@ jobs:
       - edge-config-drift
       - e2e
       - db-tests
+      - deploy-preview
     steps:
       - name: Require every Phase 1 CI job to succeed
         env:
           RESULTS: ${{ toJson(needs) }}
         run: |
-          failures="$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<< "$RESULTS")"
+          # `deploy-preview` only runs on same-repo pull requests; treat its skip as
+          # acceptable, but never treat a failure or cancellation as acceptable.
+          failures="$(jq -r 'to_entries[] | select(.value.result != "success") | select(.key != "deploy-preview" or .value.result != "skipped") | "\(.key)=\(.value.result)"' <<< "$RESULTS")"
           if [ -n "$failures" ]; then
             echo "::error::Release gate rejected one or more jobs:"
             echo "$failures"

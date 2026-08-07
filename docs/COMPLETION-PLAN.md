@@ -52,11 +52,30 @@ unchanged.
    would pass a click test while the endpoint stayed open.
    Full suite: **132/132 across desktop Chrome, desktop WebKit, iPhone and Android, zero skips**
    (was 60 with 20 authenticated skips).
-3. Convert OSV and Semgrep from report-only commands to hard gates, or record narrow finding-level
-   exceptions with owner and expiry. They still contain `|| true` and therefore are not release
-   quality even though `release-gate` depends on their job conclusions.
-4. Add a real Cloudflare preview deployment smoke job. The new smoke script currently protects the
-   post-production deploy only; it does not yet prove a merge candidate's preview URL.
+3. DONE 2026-08-07 — OSV and Semgrep are hard gates; no `|| true` remains in any scanner job.
+   - `scripts/check-osv.mjs` fails on any advisory without an unexpired, owned exception in
+     `security/osv-exceptions.json`, and distinguishes **production-reachable** findings (resolved
+     from `npm ls --omit=dev`) from dev/build-only ones. Current state: 27 advisories, of which
+     exactly **1 is production-reachable** (the already-accepted React Router RSC advisory); the
+     other 26 are dev/build tooling (undici, vite, esbuild, vitest, sharp, ws, postcss, js-yaml,
+     brace-expansion) and expire 2026-11-06.
+   - `scripts/check-semgrep.mjs` fails on any finding without an exception, on any scan path that
+     does not exist, and on any newly-unparseable file. Two real defects surfaced: the old job
+     scanned a phantom `src` directory that does not exist at the repo root, and `MapView.tsx`
+     only PARTIALLY parses (Semgrep's TSX grammar trips on `W&OD` in a JSX attribute), so part of
+     the largest route file was never actually scanned while the job reported green. Both are now
+     recorded rather than hidden. Current state: 0 error / 0 warning / 1 info.
+   - Both gates were validated by negative control — each fails when its exception is removed,
+     expired, or mis-scoped, and passes when restored.
+4. DONE 2026-08-07 — `deploy-preview` deploys the merge candidate to a real Cloudflare Pages
+   PREVIEW (any branch other than the production branch `main`, so it can never touch the live
+   site) and runs `scripts/smoke-pages.mjs` against the returned URL. `release-gate` now depends on
+   it; a skip is accepted only for `deploy-preview` itself (fork PRs and pushes), while a failure or
+   cancellation still rejects, and a skip of any other job still rejects. Verified against five
+   simulated gate outcomes. The smoke script was also strengthened — it previously checked only the
+   CORS wildcard, so a dropped CSP or HSTS would have passed; it now asserts CSP, HSTS, frame
+   options, nosniff, referrer policy, permissions policy, COOP, immutable asset caching and
+   no-cache HTML, and it passes against live production at `7a3d98eb`.
 5. Review and merge the current branch.
    CORRECTED 2026-08-07: the remote ledger *does* record both migrations —
    `supabase_migrations.schema_migrations` contains `20260807153357 / 0120` and
