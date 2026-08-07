@@ -22,10 +22,13 @@
   # `access-control-allow-origin: *` on HTML and static assets by default. This is a
   # same-origin SPA that never needs a cross-origin read of its HTML or hashed
   # assets, so strip the wildcard rather than advertise open CORS on authenticated-
-  # app HTML. VERIFY on the preview after the next gated deploy: if Pages still
-  # emits the wildcard (platform header applied after _headers), replace the line
-  # below with an explicit same-origin `Access-Control-Allow-Origin: https://adventureorno.com`.
-  ! Access-Control-Allow-Origin
+  # app HTML.
+  # VERIFIED 2026-08-07: the `! Access-Control-Allow-Origin` removal form does NOT
+  # work here — Pages applies its platform wildcard after `_headers`, so the live
+  # response still carried `access-control-allow-origin: *`. Setting an explicit
+  # value overrides it instead. Same-origin is correct: nothing cross-origin ever
+  # reads this app's HTML or hashed assets.
+  Access-Control-Allow-Origin: https://adventureorno.com
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

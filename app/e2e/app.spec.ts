@@ -16,12 +16,9 @@ test.describe('authenticated app (non-destructive)', () => {
   });
 
   test('Add tab targets the guided wizard at step 1 of 5', async ({ page }) => {
-    await page.goto('/');
-    const addTab = page
-      .locator('nav.primary-nav')
-      .getByRole('link', { name: 'Add', exact: true });
-    await expect(addTab).toHaveAttribute('href', '/add');
     await page.goto('/add');
+    const addTab = page.locator('nav.primary-nav').getByRole('link', { name: 'Add', exact: true });
+    await expect(addTab).toHaveAttribute('href', '/add');
     await expect(page).toHaveURL(/\/add/);
     await expect(page.getByText(/1 of 5/)).toBeVisible();
     await expect(page.getByText('Where?')).toBeVisible();

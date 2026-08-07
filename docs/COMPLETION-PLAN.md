@@ -18,12 +18,15 @@ unchanged.
 - Corrected unreleased migration 0121's invalid `name[] = text` preflight comparison. A clean
   disposable rebuild now applies all 121 migrations. Eighteen SQL regression files pass, including
   a new 0121 test for all 14 policies, five function search paths, and the retained primary key.
+  Production received equivalent direct SQL earlier, but this migration file was never merged or
+  recorded remotely; the correction repairs its failing preflight without changing live behavior.
 - Seeded deterministic fictional local owner/editor/viewer users behind a strict localhost guard.
   Canonical E2E now sets `REQUIRE_AUTH_E2E=true`; missing auth configuration fails instead of
   silently skipping. The four-project authenticated fixture works against disposable Supabase.
 - Corrected the Settings browser assertion to select the Data section and assert the actual button
-  semantics. The prior run produced 56 passes and four identical assertion failures; the corrected
-  assertion then passed 4/4 projects. A final uninterrupted 60-test run remains required.
+  semantics, and removed a double-navigation race from the Add route assertion. A final
+  uninterrupted run passed 60/60 across desktop Chrome, desktop WebKit, iPhone, and Android with
+  zero authenticated skips. These are still non-destructive flows.
 - Canonical DB-types and Edge-config jobs now fail when `SUPABASE_ACCESS_TOKEN` is absent. Only an
   untrusted fork may explicitly skip.
 - Added a hard production-dependency audit policy. The only temporary exception is React Router's
@@ -36,8 +39,9 @@ unchanged.
 
 ### Remaining Phase 1 blockers, in priority order
 
-1. Run the complete local validation matrix from a clean install, including one uninterrupted
-   60/60 Playwright run, export/restore, Worker dry-run, the audit policy, and workflow lint.
+1. Re-run the complete local validation matrix from a clean install after the remaining changes.
+   Current evidence includes 60/60 Playwright, byte-identical export/restore, Worker dry-run, the
+   production audit policy, Zizmor, 37/37 app unit tests, and 20/20 Worker tests.
 2. Add the required mutating owner/editor/viewer acceptance flows. Current authenticated coverage is
    non-destructive only; do not describe Phase 1 as accepted until these run on disposable data.
 3. Convert OSV and Semgrep from report-only commands to hard gates, or record narrow finding-level
@@ -45,13 +49,28 @@ unchanged.
    quality even though `release-gate` depends on their job conclusions.
 4. Add a real Cloudflare preview deployment smoke job. The new smoke script currently protects the
    post-production deploy only; it does not yet prove a merge candidate's preview URL.
-5. Review and merge the current branch. Production database state includes the intended 0121
-   changes from direct SQL, while Git `main` does not yet contain the corrected migration or its
-   regression test. Preserve that state distinction in the deployment record.
-6. Restore/configure hosted access: add `SUPABASE_ACCESS_TOKEN` for canonical drift jobs and fix the
-   Cloudflare account/API-token mismatch. In Cloudflare, first disable automatic production-branch
-   deployments; then configure the protected `production` environment and required client-safe
-   build values. Do not enable `PRODUCTION_DEPLOY_ENABLED` until all earlier blockers are green.
+5. Review and merge the current branch.
+   CORRECTED 2026-08-07: the remote ledger *does* record both migrations —
+   `supabase_migrations.schema_migrations` contains `20260807153357 / 0120` and
+   `20260807153627 / 0121`. The earlier "never recorded remotely" claim was wrong. Note the
+   ledger holds only 28 of the 121 migration files (recording began 2026-07-29), which is why
+   `supabase db push` must never be used here: it would replay 0001–0093 against live household
+   data. Direct SQL only, per `docs/deploy-0096-0101-trips.md`.
+6. RESOLVED 2026-08-07 — hosted access restored:
+   - All ten CI secrets are now set on the repository (`SUPABASE_ACCESS_TOKEN`,
+     `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the seven client-safe `VITE_*`
+     values). Before this the repo had exactly one secret — a disabled legacy
+     `SUPABASE_SERVICE_ROLE_KEY` that no workflow referenced; it was deleted.
+   - The "Cloudflare account/API-token mismatch" was actually a **project-name** mismatch, and it
+     was more dangerous than described. Two Pages projects exist on the account: `adventureorno`
+     (serves adventureorno.com / www / adventureorno.pages.dev) and `adventureorno-com` (an orphan
+     with no custom domain). `deploy-production` targeted `adventureorno-com`, so enabling
+     `PRODUCTION_DEPLOY_ENABLED` would have deployed to the orphan, passed its own smoke check
+     against the *old* live site, and reported success while production never changed. The job now
+     targets `adventureorno`. The dead `VITE_FOURSQUARE_KEY` reference was removed.
+   - Automatic production-branch deployment was never on: the Pages project has `source: null`
+     (Direct Upload only), so nothing to disable.
+   - `PRODUCTION_DEPLOY_ENABLED` remains unset, per the rule that earlier blockers go green first.
 7. Because required branch checks are unavailable for this private repository on its current GitHub
    plan, treat the in-workflow `release-gate` as the production safety boundary. Do not claim that it
    prevents a human from merging red code; it prevents that code from using this deploy job.
@@ -82,13 +101,18 @@ unchanged.
   errors, page errors, failed requests, blank page, or framework overlay.
 - Production serves enforcing CSP, HSTS, frame protection, nosniff, referrer policy,
   Permissions-Policy, and COOP headers.
-- HTML also emits `Access-Control-Allow-Origin: *`; this conflicts with the intended no-wildcard-
-  HTML-CORS policy and remains a Phase 1 review/fix.
+- ~~HTML also emits `Access-Control-Allow-Origin: *`~~ FIXED 2026-08-07. The `_headers` file used
+  the `! Access-Control-Allow-Origin` removal form, which does **not** work on Pages — the platform
+  wildcard is applied after `_headers`. Replaced with an explicit
+  `Access-Control-Allow-Origin: https://adventureorno.com`; live response verified.
 - Authenticated production routes and role enforcement are **not confirmed live** because no
-  authorized production test account was used.
-- The exact production deployment SHA is **not confirmed**. Local GitHub CLI credentials were
-  invalid during the audit, preventing inspection of hosted Actions, PR, branch-rule, and deployment
-  state.
+  authorized production test account was used. Still open.
+- ~~The exact production deployment SHA is not confirmed.~~ RESOLVED 2026-08-07.
+  GitHub CLI auth is healthy (account `adventureorno26`, active). The audit's real finding was that
+  **production was stale**: the live deployment was commit `7100d98a` from 2026-08-01, while
+  `origin/main` had advanced to `81c6326`. Because the Pages project is Direct-Upload only, nothing
+  had promoted the newer commits. Production now serves `1d2815f3`, confirmed via
+  `/version.json`, with `/`, `/login`, `/places`, SPA fallback, and hashed assets all 200.
 
 ### Implemented on `origin/main`, not fully proven live end to end
 

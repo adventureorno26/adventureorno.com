@@ -2,7 +2,8 @@
 project_id = "aanfyhsjbtnqzphuoiem"
 
 [db]
-major_version = 15
+# Must match the linked project's engine (verified 2026-08-07: Postgres 17.6.1.147).
+major_version = 17
 
 # Edge-function JWT behavior is declared here for EVERY function and checked
 # against the live deployment by scripts/check-edge-config.mjs (CI job

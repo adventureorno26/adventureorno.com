@@ -354,7 +354,6 @@ jobs:
       VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
       VITE_STRAVA_CLIENT_ID: ${{ secrets.VITE_STRAVA_CLIENT_ID }}
       VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
-      VITE_FOURSQUARE_KEY: ${{ secrets.VITE_FOURSQUARE_KEY }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -380,7 +379,10 @@ jobs:
           npm run build --workspace app
       - name: Deploy gated build to Cloudflare Pages
         working-directory: app
-        run: npx wrangler pages deploy dist --project-name adventureorno-com --branch main --commit-hash "${{ github.sha }}" --commit-dirty=false
+        # `adventureorno` is the project that serves adventureorno.com. The
+        # similarly named `adventureorno-com` project is an unused orphan with no
+        # custom domain — deploying there succeeds but never updates the live site.
+        run: npx wrangler pages deploy dist --project-name adventureorno --branch main --commit-hash "${{ github.sha }}" --commit-dirty=false
       - name: Smoke production routes, headers, assets, and exact SHA
         env:
           SMOKE_BASE_URL: https://adventureorno.com
