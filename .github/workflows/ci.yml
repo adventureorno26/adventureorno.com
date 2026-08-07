@@ -16,6 +16,17 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Client-safe fictional placeholders are needed anywhere Vite modules may be
+# imported (typecheck, Vitest, and the Playwright preview build), not only during
+# the production-build step. Real hosted values are never required for these
+# non-authenticated checks.
+env:
+  VITE_SUPABASE_URL: https://placeholder.supabase.co
+  VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
+  VITE_MAPTILER_KEY: placeholder
+  VITE_PHOTO_GATEWAY_URL: https://placeholder.workers.dev
+  VITE_STRAVA_CLIENT_ID: '0'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,7 +37,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
 
@@ -41,17 +52,6 @@ jobs:
         run: npm run test
       - name: App — production build
         working-directory: app
-        # The compile-time VITE_* values must exist during THIS build (Vite inlines
-        # import.meta.env at build time), not only in the later e2e preview step —
-        # otherwise the CI bundle inlines `undefined` for the Supabase URL/key and is
-        # structurally invalid. Real client-safe values from secrets when present;
-        # harmless placeholders otherwise so forks without secrets still build.
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_placeholder' }}
-          VITE_MAPTILER_KEY: ${{ secrets.VITE_MAPTILER_KEY || 'placeholder' }}
-          VITE_PHOTO_GATEWAY_URL: ${{ secrets.VITE_PHOTO_GATEWAY_URL || 'https://placeholder.workers.dev' }}
-          VITE_STRAVA_CLIENT_ID: ${{ secrets.VITE_STRAVA_CLIENT_ID || '0' }}
         run: npm run build
 
       - name: Worker — typecheck
@@ -75,7 +75,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       # Dependency/security scan. Surfaces advisories; not a hard gate yet because
@@ -159,7 +159,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       # Regenerate app/src/lib/database.types.ts from the live schema and fail if
@@ -190,7 +190,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
       # Compare each deployed Edge Function's verify_jwt to the declaration in
       # supabase/config.toml. Catches an accidental auth-behavior change or a
       # redeploy that flips a public callback to JWT-required (or vice-versa).
@@ -209,7 +209,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: App — build (preview target for e2e)
@@ -220,11 +220,14 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Playwright e2e (public + authed-if-secrets)
         working-directory: app
-        # The authed specs SKIP when TEST_BOT_* aren't set, so this passes on
-        # forks/PRs without secrets and runs the full suite when they're present.
+        # GitHub resolves an unset secret to an empty string, which would override
+        # the safe workflow placeholder and prevent even /login from booting. Keep
+        # public checks deterministic while Phase 1 builds the disposable auth
+        # fixture. Authenticated specs still skip explicitly unless all bot values
+        # are present.
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_placeholder' }}
           TEST_BOT_EMAIL: ${{ secrets.TEST_BOT_EMAIL }}
           TEST_BOT_PASSWORD: ${{ secrets.TEST_BOT_PASSWORD }}
         run: npm run e2e
@@ -270,10 +273,12 @@ jobs:
         run: supabase stop --no-backup || true
 
   # ---------------------------------------------------------------------------
-  # TODO (scaffolding — need infra/secrets before enabling as required checks):
+  # TODO (Phase 1; see docs/COMPLETION-PLAN.md):
   #   * MUTATING acceptance flows (create place, log two visits, duplicate handling,
-  #     upload retry) — need a dedicated TEST TENANT so they don't write to the
-  #     household DB. Blocked on the commercial multi-tenant work (Space isolation).
+  #     upload retry) — seed fictional profiles in this job's disposable local
+  #     Supabase stack. This private app does not need or permit multi-tenancy.
+  #   * Canonical main must fail clearly if authenticated prerequisites are absent;
+  #     forks may run public-only with an explicit skip summary.
   #   * preview-deploy smoke test: curl the Pages preview URL for 200 + key routes.
   #   * real-device iPhone/Android install-flow checks (acceptance #10) — manual.
   # Make `build`/`e2e` required checks in branch protection so CI gates merges.

@@ -43,7 +43,7 @@ and no commercial/multi-tenant functionality.
 - There is no location-based ingest filter: outings everywhere (including at home)
   are stored and counted. (The former home-exclusion zone was removed in `0102`.)
 
-## Domain concepts (canonical model — ADR pending)
+## Domain concepts (canonical model — approved and live)
 
 - **Place** — a durable real-world destination or legitimate geographic container.
 - **Visit** — the canonical dated occurrence of one or more people at a Place.
@@ -53,9 +53,11 @@ and no commercial/multi-tenant functionality.
   routes, notes).
 - **Activity/route** — movement evidence linked to a Visit or Trip.
 
-The precise contract (and the retirement of the legacy `part_of` arrays in favour
-of one canonical hierarchy relation) is defined in an ADR under
-[`docs/adr/`](docs/adr) — **implement only after that ADR is approved.**
+The approved contract is defined in
+[`docs/adr/0001-place-visit-entry-trip-model.md`](docs/adr/0001-place-visit-entry-trip-model.md).
+Its canonical Trip, Visit, people, and `place_membership` schema is live. Some
+legacy frontend creation callers still bypass `create_experience`; that remaining
+compatibility work is tracked in [`docs/COMPLETION-PLAN.md`](docs/COMPLETION-PLAN.md).
 
 ## Repository layout
 
@@ -71,7 +73,7 @@ docs/                    This documentation set
 
 ## Setup
 
-1. Node ≥ 20, npm. `npm ci` at the repo root (npm workspaces).
+1. Node 22 LTS or newer, npm. `npm ci` at the repo root (npm workspaces).
 2. Create **`.env.local`** (gitignored — never commit). Use your own values;
    the placeholders below are the full inventory:
 
@@ -106,7 +108,7 @@ docs/                    This documentation set
 | Lint + format check | `npm run lint` | `app/` (eslint + prettier --check) |
 | Auto-format | `npm run format` | `app/` |
 | Unit tests | `npm run test` | `app/` (vitest, scoped to `src/**/*.test.ts`) |
-| E2E + a11y | `npm run e2e` | `app/` (Playwright; authed specs skip without `TEST_BOT_*`) |
+| E2E + a11y | `npm run e2e` | `app/` (Playwright; public specs run without secrets, authenticated specs require a disposable test account) |
 | Worker typecheck | `npm run typecheck` | `workers/photo-gateway/` |
 | Worker tests | `npm run test` | `workers/photo-gateway/` |
 | Production build | `npm run build` | `app/` (`tsc -b && vite build`) |
@@ -118,16 +120,21 @@ Worker dry-run, `db-types-drift`, dependency audit, and the Playwright suite.
 
 ## Local acceptance environment
 
-Mutating/authenticated tests run against a **disposable local Supabase stack**
-seeded with **fictional** editor + viewer accounts — **never production data or
-credentials.** External providers are mocked deterministically. The authenticated
-Playwright specs skip cleanly when `TEST_BOT_*`/`VITE_SUPABASE_*` aren't set.
+Mutating/authenticated tests must run against a **disposable local Supabase stack**
+seeded with **fictional** owner/editor/viewer accounts — **never production data or
+credentials.** External providers are mocked deterministically. A fork may run the
+public suite without credentials, but the canonical `main` CI run must fail clearly
+if its disposable authenticated environment is unavailable; it must not silently
+skip the acceptance suite.
 
-## Deployment (mechanism — run by a human)
+## Deployment
 
-- **Frontend:** Cloudflare Pages Direct Upload of `app/dist`
-  (`wrangler pages deploy app/dist --project-name adventureorno`). Vite bakes
-  `VITE_*` at build time, so **build before deploy**.
+- **Frontend project:** Cloudflare Pages `adventureorno-com`. Vite bakes `VITE_*`
+  at build time, so build and verify before promotion. Until a green-CI deployment
+  workflow is in place, production promotion is manual:
+  `wrangler pages deploy app/dist --project-name adventureorno-com --branch main`.
+- Do not treat Cloudflare's successful build check as application verification;
+  production must not be promoted while the repository CI workflow is red.
 - **Worker:** `wrangler deploy` in `workers/photo-gateway/`.
 - **Migrations:** applied to Supabase via the CLI/management API against the
   production project — additively, never editing an applied migration.
@@ -153,7 +160,8 @@ disposable local stack; production restore is manual with an explicit override.
   key), then follow the history-scrub runbook. A known instance: a `service_role`
   JWT is embedded in migrations `0057`/`0071` — **rotate the Supabase service-role
   key** and treat those migrations in the scrub plan. See
-  [`docs/decisions.md`](docs/decisions.md) and the scrub plan (Prompt 11).
+  [`docs/decisions.md`](docs/decisions.md) and the owner-gated history-scrub phase
+  in [`docs/COMPLETION-PLAN.md`](docs/COMPLETION-PLAN.md).
 - **Suspected data exposure:** revoke sessions, rotate affected keys, take a fresh
   encrypted backup, and reconcile via Data Health.
 
@@ -169,4 +177,6 @@ faked in CI.
 
 The `docs/phases/` briefs and `docs/UNFUCK-PLAN.md` describe the original
 build-out and are **archived/deprecated** — see [`docs/archive/`](docs/archive).
-This README + `CLAUDE.md` + the ADRs are the current source of truth.
+This README, `CLAUDE.md`, the ADRs, and
+[`docs/COMPLETION-PLAN.md`](docs/COMPLETION-PLAN.md) are the current source of
+truth. The completion plan is authoritative for unfinished work and ordering.

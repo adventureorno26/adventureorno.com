@@ -11,7 +11,7 @@ adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventur
 - Backend: Supabase — Postgres 15 with PostGIS, Auth, Edge Functions (Deno), pg_cron.
 - Photo storage: Cloudflare R2, accessed only through the `photo-gateway` Worker (upload + signed reads).
 - Workers: Wrangler-managed, in `/workers`. Edge Functions in `/supabase/functions`.
-- Package manager: npm. Lint: eslint + prettier defaults. Tests: vitest for pure logic (EXIF parsing, clustering helpers, geo/mileage math); no e2e framework.
+- Package manager: npm. Lint: eslint + prettier. Tests: Vitest, SQL regression tests on a disposable Supabase stack, Worker tests, and Playwright across desktop Chrome/WebKit plus iPhone/Android projects.
 
 ## Repository layout
 ```
@@ -64,15 +64,19 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
   committed, printed, or logged** — Supabase/Wrangler secrets and `.env.local` only.
 - `VITE_MAPTILER_KEY` is client-safe; the key is domain-restricted to adventureorno.com +
   localhost in the MapTiler dashboard.
-- Actual key values: see `.env.local` (gitignored) — MANUAL-SETUP.md records where each came from.
+- Actual key values: see `.env.local` (gitignored) — MANUAL-SETUP.md records the
+  provider/dashboard source, never the value.
 
 ## Git & GitHub workflow
 - Remote: `adventureorno26/adventureorno.com`, authenticated via the local `gh` CLI session
   (account adventureorno26). Verify with `gh auth status` at session start; if unauthenticated,
   stop and ask Erica to run `gh auth login`.
-- Work on a branch per phase (`phase-1-skeleton`, …); open a PR with `gh pr create` including a
-  summary + acceptance-criteria checklist; Erica reviews and merges. Never push directly to
-  main after Phase 1's initial scaffold commit. Never force-push.
+- Work on a focused branch; open a PR with a summary and exact verification counts.
+  Never merge or promote a production deployment while required CI is red. This
+  private repository cannot use GitHub's paid branch protection on the current
+  plan, so enforce the gate through the deployment workflow and human review.
+- Never force-push. The only exception is the separately approved history-scrub
+  procedure, which must stop for Erica's exact approval before any rewrite.
 
 ## Conventions
 - Every phase ends with: migrations applied, `npm run lint && npm run test` clean, deployed
@@ -83,7 +87,13 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
 - When a task requires a human step (dashboard clicks, App Store installs, OAuth approval), stop
   and print the exact steps rather than faking it — MANUAL-SETUP.md tracks these.
 
-## Backlog / TODO (proposed roadmap — not yet built)
+## Historical backlog ledger (not authoritative)
+
+The checklist below is the July 25 architecture-review ledger. It is retained as
+historical evidence and contains a mixture of shipped, partial, superseded, and
+optional ideas. **Do not use it to choose the next task or infer completion.** Use
+[`docs/COMPLETION-PLAN.md`](docs/COMPLETION-PLAN.md) for the current ordered work,
+acceptance criteria, and commands.
 
 Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check items off
 (or delete) as they ship. Tier 0 is correctness/security and should come first.
