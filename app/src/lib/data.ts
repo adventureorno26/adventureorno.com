@@ -741,6 +741,39 @@ export async function setVisitDates(id: string, start: string, end: string): Pro
   return data as unknown as Visit;
 }
 
+/**
+ * Name a place, and own that name.
+ *
+ * There is no automatic naming any more (migration 0130 unscheduled the geocoder and
+ * the dupe-merger). A name is always chosen by a person, and belongs to them:
+ *   scope = your profile id -> named in YOUR space; only you can change it
+ *   scope = null            -> named in the shared Both space; either of you can
+ * Always go through this rather than PATCHing `name`, so the ownership is recorded.
+ */
+export async function setPlaceName(
+  placeId: string,
+  name: string,
+  scope: string | null = null,
+): Promise<Place> {
+  const { data, error } = await supabase.rpc('set_place_name', {
+    p_place: placeId,
+    p_name: name,
+    p_scope: scope,
+  });
+  if (error) throw error;
+  return data as unknown as Place;
+}
+
+/**
+ * Whether `me` may rename this place — the same rule the DB enforces, evaluated
+ * locally so the UI can disable the control instead of failing on save.
+ */
+export function canRenamePlace(place: Place, me: string | null | undefined): boolean {
+  if (!place.name_locked) return true; // nobody has claimed it yet
+  if (place.name_scope === null) return true; // shared space: either of us
+  return !!me && place.name_scope === me; // someone's own space: only them
+}
+
 export async function deleteVisit(id: string): Promise<void> {
   const { error } = await supabase.from('visits').delete().eq('id', id);
   if (error) throw error;

@@ -19,6 +19,8 @@ import {
   newExperienceKey,
   setCityBoundary,
   setMyRating,
+  setPlaceName,
+  canRenamePlace,
   setVisitDates,
   setVisitSolo,
   updatePlace,
@@ -28,7 +30,7 @@ import type { Activity, Entry, NewEntry, Place, Trip, Visit } from '../lib/types
 import { fetchTripBySourcePlace, fetchTripsForPlace } from '../lib/trips';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchActivitiesForPlace, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
+import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
@@ -133,6 +135,12 @@ export default function PlacePanel({
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
+  // Only the person who named a place in their own space can rename it; a name given
+  // in the shared Both space belongs to either of us.
+  const canRename = canEdit && canRenamePlace(place, profile?.id);
+  // Keep a place in the space it was already named in; a brand-new name goes to the
+  // shared space, which is where the two of you curate together.
+  const nameScope = place.name_locked ? place.name_scope : null;
   const navigate = useNavigate();
 
   // A confirmed container-Place trip now lives as a canonical Trip — send old
@@ -207,7 +215,7 @@ export default function PlacePanel({
   }
 
   async function reloadActs() {
-    setTrailActs(await fetchActivitiesForPlace(place.id).catch(() => []));
+    setTrailActs(await fetchActivitiesForPlaceTree(place.id).catch(() => []));
   }
 
   // Set who was on a visit row. Activity rows update the activity (visits then
@@ -336,8 +344,10 @@ export default function PlacePanel({
   useEffect(() => {
     let active = true;
     setTrailActs(null);
-    // Every place now lists its own activities as visit rows (not just trails).
-    fetchActivitiesForPlace(place.id)
+    // Every place lists its own activities as visit rows (not just trails) — and a
+    // container also lists its segments', so the W&OD shows all 55 runs rather than
+    // the 6 that happen to sit on the trail row itself.
+    fetchActivitiesForPlaceTree(place.id)
       .then((rows) => active && setTrailActs(rows))
       .catch(() => active && setTrailActs([]));
     if (place.is_trail) {
@@ -502,10 +512,23 @@ export default function PlacePanel({
     await reloadVisits(); // a new photo/activity day may have added a visit
   }
 
+  // A name is chosen by a person and belongs to them. Go through set_place_name so
+  // the owner and the space are recorded — a plain PATCH would set the text without
+  // claiming it, and nothing would stop it drifting later.
   async function saveName() {
     setEditingName(false);
-    if (name.trim() && name.trim() !== place.name) await patch({ name: name.trim(), auto: false });
-    else setName(place.name);
+    const next = name.trim();
+    if (!next || next === place.name) {
+      setName(place.name);
+      return;
+    }
+    try {
+      const updated = await setPlaceName(place.id, next, nameScope);
+      onPlaceChanged(updated);
+    } catch (e) {
+      setName(place.name);
+      setError(e instanceof Error ? e.message : 'Could not rename this place.');
+    }
   }
 
   // "Edit address" search: sets the full address + pin + state/country (for the
@@ -677,7 +700,7 @@ export default function PlacePanel({
   // The place name, shown as the title on the photo. Click to edit it by hand;
   // the search below also fills it in.
   const titleEl =
-    editingName && canEdit ? (
+    editingName && canRename ? (
       <input
         className="title-input"
         value={name}
@@ -695,9 +718,15 @@ export default function PlacePanel({
       />
     ) : (
       <span
-        className={canEdit ? 'title-editable' : undefined}
-        onClick={() => canEdit && setEditingName(true)}
-        title={canEdit ? 'Tap to rename' : undefined}
+        className={canRename ? 'title-editable' : undefined}
+        onClick={() => canRename && setEditingName(true)}
+        title={
+          canRename
+            ? 'Tap to rename'
+            : canEdit
+              ? 'Named in the other person\u2019s space \u2014 only they can rename it'
+              : undefined
+        }
       >
         {place.name || <span className="title-empty">{titlePlaceholder}</span>}
         {place.auto && !place.is_home && <span className="auto-badge">auto</span>}

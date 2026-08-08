@@ -430,6 +430,13 @@ jobs:
   release-gate:
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    # deploy-production gated on `vars.PRODUCTION_DEPLOY_ENABLED` in its own job-level
+    # `if:` and skipped every time, even though a diagnostic step here printed
+    # event_name='push', ref='refs/heads/main', flag='true' on the very same run. The
+    # flag is resolved HERE, where it demonstrably reads correctly, and published as a
+    # job output; the deploy job then gates on that output instead of re-reading vars.
+    outputs:
+      deploy_enabled: ${{ steps.gateflag.outputs.enabled }}
     needs:
       - build
       - security
@@ -443,6 +450,20 @@ jobs:
       - db-tests
       - deploy-preview
     steps:
+      - name: Resolve whether production deploys are enabled
+        id: gateflag
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          FLAG: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+        run: |
+          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ] && [ "$FLAG" = true ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "event=$EVENT ref=$REF flag=$FLAG"
+
       - name: Require every Phase 1 CI job to succeed
         env:
           RESULTS: ${{ toJson(needs) }}
@@ -478,7 +499,7 @@ jobs:
   # Disabled by default. Enable only after Cloudflare automatic production-branch
   # deployments are off and the production environment secrets are configured.
   deploy-production:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
+    if: ${{ needs.release-gate.result == 'success' && needs.release-gate.outputs.deploy_enabled == 'true' }}
     needs: release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 20

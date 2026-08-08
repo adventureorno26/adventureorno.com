@@ -272,6 +272,37 @@ export async function fetchActivitiesForPlace(placeId: string): Promise<Activity
   return (data ?? []) as Activity[];
 }
 
+/**
+ * Activities for a place INCLUDING everything on its segments.
+ *
+ * A trail is a rollup: the W&OD is one place holding "Washington & Old Dominion
+ * Trail", "W&OD Bridle Trail" and "Purcellville Trailhead - W&OD" as segments, and
+ * the 55 runs are spread across all four rows. `fetchActivitiesForPlace` only ever
+ * matched `place_id = the trail itself`, so the trail card showed 6 of them and
+ * looked empty. The Appalachian Trail was worse: 11 of 37.
+ *
+ * Segment membership is the explicit `place_membership` link (trails and trips join
+ * by link, cities by boundary), so one extra query resolves the children.
+ */
+export async function fetchActivitiesForPlaceTree(placeId: string): Promise<Activity[]> {
+  const { data: kids, error: kidsErr } = await supabase
+    .from('place_membership')
+    .select('child_id')
+    .eq('parent_id', placeId);
+  if (kidsErr) throw kidsErr;
+
+  const ids = [placeId, ...(kids ?? []).map((k) => (k as { child_id: string }).child_id)];
+  if (ids.length === 1) return fetchActivitiesForPlace(placeId);
+
+  const { data, error } = await supabase
+    .from('activities')
+    .select(ACTIVITY_COLS)
+    .in('place_id', ids)
+    .order('start_date', { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as Activity[];
+}
+
 /** Activities for a place on a specific day (start_date within [day, day+1)). */
 export async function fetchActivitiesForDay(placeId: string, day: string): Promise<Activity[]> {
   const next = new Date(day + 'T00:00:00Z');

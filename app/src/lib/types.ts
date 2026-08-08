@@ -29,6 +29,12 @@ export interface Place {
   city: string | null; // city / locality (for trip grouping)
   auto: boolean; // created by the clustering job; badge until first edited
   needs_geocode: boolean;
+  // A person named this place, so no automation may ever rewrite it (0129/0130).
+  name_locked: boolean;
+  named_by: string | null; // profile that chose the name
+  // The space the name was given in: a profile id = that person's own space (only
+  // they may rename); null = the shared Both space (either member may rename).
+  name_scope: string | null;
   visit_count: number;
   rating: number | null; // 1..5 overall place rating
   review: string | null; // overall place review

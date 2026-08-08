@@ -1137,6 +1137,9 @@ export type Database = {
           lat: number
           lng: number
           name: string
+          name_locked: boolean
+          name_scope: string | null
+          named_by: string | null
           needs_geocode: boolean
           park: string | null
           part_of: string[]
@@ -1178,6 +1181,9 @@ export type Database = {
           lat: number
           lng: number
           name: string
+          name_locked?: boolean
+          name_scope?: string | null
+          named_by?: string | null
           needs_geocode?: boolean
           park?: string | null
           part_of?: string[]
@@ -1219,6 +1225,9 @@ export type Database = {
           lat?: number
           lng?: number
           name?: string
+          name_locked?: boolean
+          name_scope?: string | null
+          named_by?: string | null
           needs_geocode?: boolean
           park?: string | null
           part_of?: string[]
@@ -1241,6 +1250,20 @@ export type Database = {
           {
             foreignKeyName: "places_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "places_name_scope_fkey"
+            columns: ["name_scope"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "places_named_by_fkey"
+            columns: ["named_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2002,6 +2025,10 @@ export type Database = {
         Args: { p_activity: string; p_race_name: string; p_race_place?: string }
         Returns: string
       }
+      can_rename_place: {
+        Args: { p_caller: string; p_place: string }
+        Returns: boolean
+      }
       claim_invite: {
         Args: never
         Returns: {
@@ -2466,6 +2493,59 @@ export type Database = {
       set_photo_caption: {
         Args: { p_caption: string; p_photo: string }
         Returns: undefined
+      }
+      set_place_name: {
+        Args: { p_name: string; p_place: string; p_scope?: string }
+        Returns: {
+          activity_categories: string[]
+          address: string | null
+          admin1: string | null
+          auto: boolean
+          boundary: unknown
+          bucket: boolean
+          categories: string[]
+          category: string | null
+          city: string | null
+          country: string | null
+          counts_as_place: boolean | null
+          cover_photo_id: string | null
+          cover_pos_y: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          favorite: string | null
+          first_visit: string | null
+          geocoded_at: string | null
+          geom: unknown
+          holds_children: boolean
+          id: string
+          is_home: boolean
+          is_trail: boolean
+          kind: string
+          last_visit: string | null
+          lat: number
+          lng: number
+          name: string
+          name_locked: boolean
+          name_scope: string | null
+          named_by: string | null
+          needs_geocode: boolean
+          park: string | null
+          part_of: string[]
+          rating: number | null
+          review: string | null
+          saved: boolean
+          solo_profile: string | null
+          suggested: boolean
+          visit_count: number
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "places"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_place_solo: {
         Args: { p_place: string; p_profile: string }

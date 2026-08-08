@@ -1274,11 +1274,16 @@ export default function MapView() {
     // existing named place the photo attached to is never overwritten.
     if (geoPlaceId && geo[0]?.gps) {
       const gp = rows.find((r) => r.id === geoPlaceId);
-      if (gp && (!gp.name || gp.name === 'New place' || !gp.admin1 || !gp.country)) {
+      // Never re-derive a name a person has claimed (migrations 0129-0131) — the
+      // address fields are still fine to fill, they are not the name.
+      if (
+        gp &&
+        ((!gp.name_locked && (!gp.name || gp.name === 'New place')) || !gp.admin1 || !gp.country)
+      ) {
         const rev = await reverseGeocode(geo[0].gps.lng, geo[0].gps.lat).catch(() => null);
         if (rev) {
           const patch: { name?: string; admin1?: string | null; country?: string | null } = {};
-          if (!gp.name || gp.name === 'New place') patch.name = rev.name;
+          if (!gp.name_locked && (!gp.name || gp.name === 'New place')) patch.name = rev.name;
           if (!gp.admin1) patch.admin1 = rev.admin1;
           if (!gp.country) patch.country = rev.country;
           const upd = await updatePlace(geoPlaceId, patch).catch(() => null);
