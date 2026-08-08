@@ -823,6 +823,29 @@ export async function setVisitIsTrip(visitId: string, isTrip: boolean): Promise<
   return data as unknown as Visit;
 }
 
+export interface ActivityReaction {
+  emoji: string;
+  n: number;
+  who: string[];
+  mine: boolean;
+}
+
+/** Grouped reactions on an activity (migration 0135) — mirrors photo reactions. */
+export async function fetchActivityReactions(activityId: string): Promise<ActivityReaction[]> {
+  const { data, error } = await supabase.rpc('activity_reactions_for', { p_activity: activityId });
+  if (error) return [];
+  return (data ?? []) as ActivityReaction[];
+}
+
+/** Toggle the current user's reaction on an activity. */
+export async function toggleActivityReaction(activityId: string, emoji: string): Promise<void> {
+  const { error } = await supabase.rpc('toggle_activity_reaction', {
+    p_activity: activityId,
+    p_emoji: emoji,
+  });
+  if (error) throw error;
+}
+
 export async function deleteVisit(id: string): Promise<void> {
   const { error } = await supabase.from('visits').delete().eq('id', id);
   if (error) throw error;

@@ -1463,7 +1463,7 @@ export default function PlacePanel({
       {/* SPOTS AND REVIEWS — heading like Photos and Videos, with a blue add link.
           Each logged category is a dropdown that opens to its spots. */}
       <div className="visits-head">
-        <h3 style={{ marginTop: 22 }}>SPOTS AND REVIEWS</h3>
+        <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
         {canEdit && !addingSpot && (
           <span style={{ display: 'flex', gap: 12 }}>
             <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
@@ -1616,7 +1616,9 @@ export default function PlacePanel({
           ))}
         </div>
       ) : (
-        !addingSpot && <p style={{ color: 'var(--muted)', fontSize: 13 }}>No spots yet.</p>
+        !addingSpot && (
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>Nothing written here yet.</p>
+        )
       )}
 
       <RouteMiniMap place={place} />

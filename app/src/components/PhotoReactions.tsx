@@ -5,10 +5,8 @@ import {
   togglePhotoReaction,
   type PhotoReaction,
 } from '../lib/photos';
-
-// The emoji palette for reacting. These ARE the feature (Erica asked for emoji
-// reactions), so they're the intended exception to the no-icons rule.
-const PALETTE = ['❤️', '😍', '😂', '🔥', '👏', '🥹', '😮', '🙌'];
+import ReactionMark from './ReactionMarks';
+import { MARKS, labelFor } from '../lib/reactions';
 
 /** Caption + emoji reactions for one photo, shown under it in the lightbox. */
 export default function PhotoReactions({
@@ -23,13 +21,11 @@ export default function PhotoReactions({
   const [reactions, setReactions] = useState<PhotoReaction[]>([]);
   const [cap, setCap] = useState(caption ?? '');
   const [editingCap, setEditingCap] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
     setCap(caption ?? '');
     setEditingCap(false);
-    setPickerOpen(false);
     fetchPhotoReactions(photoId)
       .then((r) => active && setReactions(r))
       .catch(() => active && setReactions([]));
@@ -42,7 +38,6 @@ export default function PhotoReactions({
     setReactions(await fetchPhotoReactions(photoId).catch(() => []));
   }
   async function toggle(emoji: string) {
-    setPickerOpen(false);
     await togglePhotoReaction(photoId, emoji).catch(() => undefined);
     await reload();
   }
@@ -84,34 +79,42 @@ export default function PhotoReactions({
         </button>
       ) : null}
 
+      {/* Two reactions, always visible — no "+" picker to open first. The eight-emoji
+          palette hid everything behind a plus sign; two marks you can hit directly is
+          the whole interaction. */}
       <div className="photo-reactions">
-        {reactions.map((r) => (
-          <button
-            key={r.emoji}
-            className={`reaction-chip ${r.mine ? 'mine' : ''}`}
-            title={r.who.join(', ')}
-            onClick={() => void toggle(r.emoji)}
-          >
-            <span className="reaction-emoji">{r.emoji}</span>
-            {r.n > 1 && <span className="reaction-n">{r.n}</span>}
-          </button>
-        ))}
-        <button
-          className="reaction-add"
-          onClick={() => setPickerOpen((v) => !v)}
-          aria-label="Add a reaction"
-        >
-          ＋
-        </button>
-        {pickerOpen && (
-          <div className="reaction-picker">
-            {PALETTE.map((e) => (
-              <button key={e} onClick={() => void toggle(e)}>
-                {e}
-              </button>
-            ))}
-          </div>
-        )}
+        {MARKS.map((m) => {
+          const r = reactions.find((x) => x.emoji === m.emoji);
+          const n = r?.n ?? 0;
+          return (
+            <button
+              key={m.emoji}
+              className={`reaction-chip ${r?.mine ? 'mine' : ''} ${n ? 'has' : ''}`}
+              title={n ? r!.who.join(', ') : m.label}
+              aria-label={m.label}
+              aria-pressed={!!r?.mine}
+              onClick={() => void toggle(m.emoji)}
+            >
+              <ReactionMark emoji={m.emoji} on={n > 0} />
+              {n > 0 && <span className="reaction-n">{n}</span>}
+            </button>
+          );
+        })}
+        {/* Anything reacted with before the marks existed still shows. */}
+        {reactions
+          .filter((r) => !MARKS.some((m) => m.emoji === r.emoji))
+          .map((r) => (
+            <button
+              key={r.emoji}
+              className={`reaction-chip ${r.mine ? 'mine' : ''} has`}
+              title={r.who.join(', ')}
+              aria-label={labelFor(r.emoji) ?? r.emoji}
+              onClick={() => void toggle(r.emoji)}
+            >
+              <ReactionMark emoji={r.emoji} on />
+              {r.n > 1 && <span className="reaction-n">{r.n}</span>}
+            </button>
+          ))}
       </div>
     </div>
   );

@@ -6224,3 +6224,64 @@ button.mi-row:hover {
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* Reaction marks — the "sticker" direction Erica picked (2026-08-08): an outline
+   until someone reacts, then a solid fill with a keyline the colour of the surface
+   and a soft coloured shadow. Two marks only, always visible; the old eight-emoji
+   palette behind a "+" is gone. */
+.rmark {
+  display: block;
+  overflow: visible;
+  flex: none;
+}
+.rmark .rmark-fill {
+  fill: var(--hue);
+  stroke: var(--panel, #101a24);
+  stroke-width: 2.2;
+  paint-order: stroke;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  transform: scale(0.6);
+  transition:
+    opacity 160ms ease,
+    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.rmark .rmark-line {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 140ms ease;
+}
+.rmark.on .rmark-fill {
+  opacity: 1;
+  transform: scale(1);
+}
+.rmark.on .rmark-line {
+  opacity: 0;
+}
+.rmark.on {
+  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--hue) 50%, transparent));
+}
+@media (prefers-reduced-motion: reduce) {
+  .rmark .rmark-fill {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* The chip around a mark. `has` = somebody reacted; `mine` = I did. */
+.reaction-chip.has {
+  border-color: color-mix(in srgb, var(--hue) 45%, transparent);
+}
+.reaction-chip.mine {
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+  border-color: var(--hue);
+}
+.reaction-chip .reaction-n {
+  font-variant-numeric: tabular-nums;
+}
+.act-reactions {
+  margin-top: 6px;
+}

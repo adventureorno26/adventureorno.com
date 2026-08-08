@@ -6,6 +6,7 @@ import polyline from '@mapbox/polyline';
 import { MAPTILER_STYLE_URL, MAPTILER_TERRAIN_URL } from '../lib/maptiler';
 import { fetchPlace } from '../lib/data';
 import { fetchActivitiesForPlace } from '../lib/strava';
+import ActivityReactions from '../components/ActivityReactions';
 import { fetchPlacePings, walkSegments } from '../lib/walks';
 import type { Activity, Place } from '../lib/types';
 
@@ -235,6 +236,7 @@ export default function RoutesView() {
                     View on Strava ↗
                   </a>
                 )}
+                <ActivityReactions activityId={a.id} />
               </div>
             </div>
           ))
