@@ -53,6 +53,17 @@ jobs:
       - name: App — production build
         working-directory: app
         run: npm run build
+      # Regression guard for the LOGIN shell (Phase 4). MapLibre (~1.0 MB) and
+      # heic2any (~1.3 MB) must stay behind authenticated routes, and the shell
+      # must not creep. Verified by negative control: a simulated MapLibre leak,
+      # an oversized chunk, and a missing asset each fail this step.
+      - name: App — login bundle budget
+        run: npm run check:bundle
+      # An undocumented VITE_* is baked in as `undefined` at build time and its
+      # feature silently disappears — it never fails loudly. This keeps
+      # .env.example an accurate inventory of what the app actually reads.
+      - name: Env example covers every client variable
+        run: npm run check:env
 
       - name: Worker — typecheck
         working-directory: workers/photo-gateway

@@ -55,10 +55,16 @@ unchanged.
 3. DONE 2026-08-07 — OSV and Semgrep are hard gates; no `|| true` remains in any scanner job.
    - `scripts/check-osv.mjs` fails on any advisory without an unexpired, owned exception in
      `security/osv-exceptions.json`, and distinguishes **production-reachable** findings (resolved
-     from `npm ls --omit=dev`) from dev/build-only ones. Current state: 27 advisories, of which
-     exactly **1 is production-reachable** (the already-accepted React Router RSC advisory); the
-     other 26 are dev/build tooling (undici, vite, esbuild, vitest, sharp, ws, postcss, js-yaml,
-     brace-expansion) and expire 2026-11-06.
+     from `npm ls --omit=dev`) from dev/build-only ones. State as of 2026-08-07: 27 advisories,
+     **zero production-reachable** — all 27 are dev/build tooling (undici, vite, esbuild, vitest,
+     sharp, ws, postcss, js-yaml, brace-expansion, nanoid), expiring 2026-11-06. The React Router
+     RSC advisory that was the single production-reachable finding no longer matches, and
+     `npm audit --omit=dev` likewise now reports 0 affected packages; its exception in
+     `security/audit-exceptions.json` and `security/osv-exceptions.json` is retained but inert,
+     and both gates report unused exceptions as a note rather than a failure.
+     The gate has already earned its keep: it caught a NEW HIGH advisory on the very first PR
+     after it went live (GHSA-2v37-7h3g-55p8, nanoid, reached via vite -> postcss), which was
+     verified dev-only and accepted with an expiry rather than silently absorbed.
    - `scripts/check-semgrep.mjs` fails on any finding without an exception, on any scan path that
      does not exist, and on any newly-unparseable file. Two real defects surfaced: the old job
      scanned a phantom `src` directory that does not exist at the repo root, and `MapView.tsx`
@@ -76,7 +82,9 @@ unchanged.
    CORS wildcard, so a dropped CSP or HSTS would have passed; it now asserts CSP, HSTS, frame
    options, nosniff, referrer policy, permissions policy, COOP, immutable asset caching and
    no-cache HTML, and it passes against live production at `7a3d98eb`.
-5. Review and merge the current branch.
+5. DONE 2026-08-07 — reviewed and merged as PR #21 (merge commit `135c7bc`), with CI fully green
+   on the branch AND on `main` afterwards: build, security, secret-scan, osv-scan, semgrep, zizmor,
+   db-types-drift, edge-config-drift, e2e, db-tests, deploy-preview, release-gate.
    CORRECTED 2026-08-07: the remote ledger *does* record both migrations —
    `supabase_migrations.schema_migrations` contains `20260807153357 / 0120` and
    `20260807153627 / 0121`. The earlier "never recorded remotely" claim was wrong. Note the
@@ -98,12 +106,28 @@ unchanged.
    - Automatic production-branch deployment was never on: the Pages project has `source: null`
      (Direct Upload only), so nothing to disable.
    - `PRODUCTION_DEPLOY_ENABLED` remains unset, per the rule that earlier blockers go green first.
-7. Because required branch checks are unavailable for this private repository on its current GitHub
-   plan, treat the in-workflow `release-gate` as the production safety boundary. Do not claim that it
-   prevents a human from merging red code; it prevents that code from using this deploy job.
-8. With separate production authority, deploy one fully green SHA and verify the new smoke job,
-   exact `/version.json` SHA, removal of live wildcard HTML CORS, and authenticated production flows.
-   No hosted or production mutation is authorized by this document.
+7. UNCHANGED, and still true: required branch checks are unavailable on this repository's GitHub
+   plan, so the in-workflow `release-gate` is the production safety boundary. It does not prevent a
+   human from merging red code; it prevents that code from using the deploy job.
+8. DONE 2026-08-07, with Erica's explicit authority — one fully green SHA (`135c7bc`) is deployed
+   and verified live:
+   - `/version.json` reports exactly `135c7bcea5f5e1e7d023cc44e45547fa727a097d`, matching `main`.
+   - The strengthened smoke passes: routing, SPA fallback, immutable asset caching, no-cache HTML,
+     CSP, HSTS, frame options, nosniff, referrer policy, permissions policy, COOP, and exact SHA.
+   - Wildcard HTML CORS is gone; the response carries
+     `Access-Control-Allow-Origin: https://adventureorno.com`.
+   - Authenticated production flows confirmed with the dedicated test bot: RLS-scoped reads on
+     places/visits/photos/activities/trips/entries and the `data_health`, `place_ids_for_view` and
+     `race_stats` RPCs all 200; the full 11-route x 3-viewport audit reports zero console errors,
+     failed requests, blank pages, overflow or broken images; and the two headline fixes are live —
+     "Log a visit" is hit-testable on iPhone and `/health`'s GPX/KML/CSV exports are tappable.
+   - Independent confirmation the app is working for its actual user: Erica manually uploaded nine
+     photos at 19:19 UTC on the deployed build (`source=manual`, her own profile), taking the photo
+     count 159 -> 168.
+
+**Phase 1 is complete.** Every blocker above is closed. `PRODUCTION_DEPLOY_ENABLED` remains unset by
+choice: promotion is still a deliberate manual step, and the now-corrected `deploy-production` job is
+ready whenever Erica wants merges to promote automatically.
 
 ## Working rules
 
@@ -374,9 +398,49 @@ deploy once, then hard-refresh" rule — wait for edge propagation before verify
 - Replace swallowed important errors and false-success feedback with privacy-safe actionable states.
 - Finish mobile Place-sheet, bottom-nav/safe-area/keyboard, map-control, dialog, touch-target,
   reduced-motion, serious Axe, and physical iPhone/Android work.
-- Run Axe and overlap/layout tests across authenticated routes and all seven target viewports.
-- Add bundle budgets; lazy-load HEIC/video and other optional heavy processors. Confirm login fetches
-  neither MapLibre nor HEIC.
+- PARTLY DONE 2026-08-07 — Axe now runs across the AUTHENTICATED routes.
+  `app/e2e/a11y.spec.ts` scans `/`, `/places`, `/timeline`, `/add`, `/settings`, `/health`,
+  `/trips` and `/bucket` at phone and desktop, fails on any CRITICAL violation, and fails on any
+  SERIOUS violation whose rule is not explicitly accepted with a reason. It also asserts it did not
+  land on `/login`, so a redirect cannot produce a false pass by scanning the login shell.
+  Prior coverage was only `/login` and `/add`, which is why the app's single largest accessibility
+  defect went unseen: **every row checkbox on `/places` was unlabelled** — 183 rows, 366 nodes
+  across viewports, each announced as a bare "checkbox". They drive a BULK tag/untag, so selecting
+  the wrong one is destructive. Fixed with `aria-label="Select <place name>"` (no visual change),
+  plus a direct assertion so it cannot return even if the axe rule set shifts.
+  Overlap/layout across all seven viewports is covered separately by `layout.spec.ts` and
+  `nav-obstruction.spec.ts`.
+  **OPEN — needs Erica's decision:** one SERIOUS rule is accepted for now. `.pnav-add` renders white
+  on the brand accent `#3b82f6` at 12px, giving **3.67:1** where small text needs 4.5:1. It appears
+  on every route, so it is 16 of the 16 remaining serious nodes. The fix is a one-line change —
+  darkening that pill's background to roughly `#1d4ed8` clears 4.5:1 while staying in the same blue
+  family — but it alters the accent on the deliberately locked primary navigation, so it is a design
+  call rather than an agent's. Nothing else critical or serious remains.
+- DONE 2026-08-07 — bundle budgets exist and the login waterfall is confirmed clean.
+  A real browser waterfall against production shows `/login` fetching exactly four assets — the app
+  entry, React, supabase-js and the stylesheet, 178 KB gzipped — and **neither MapLibre (~1.0 MB)
+  nor heic2any (~1.3 MB)**. `scripts/check-bundle-budget.mjs` now enforces that in CI on every
+  build: it fails if either heavy chunk enters the login entry graph, if any chunk exceeds its
+  per-file gzip budget, if the shell exceeds 200 KB gzipped, or if a referenced asset is missing
+  from `dist`. Validated by negative control — a simulated MapLibre leak, an artificially oversized
+  chunk, and a deleted asset each exit non-zero.
+  CORRECTION: an earlier draft of this entry claimed MapView is eager. It is NOT — `App.tsx` uses
+  `lazyWithReload(() => import('./routes/MapView'))`, which is precisely why MapLibre stays out of
+  the login shell. The historical zero-height bug came from lazy-loading moving maplibre-gl's CSS
+  after `index.css`; the fix was to keep **only the small `maplibre-gl.css` eager in `main.tsx`,
+  imported BEFORE `./index.css`**, while the JS stays lazy. That CSS ordering — not eager JS — is
+  the safeguard, and it must not be reordered.
+- ALSO ALREADY DONE — heic2any is genuinely deferred, not merely code-split. `app/src/lib/photos.ts`
+  reaches it through `await import('heic2any')` inside the HEIC branch only, so it downloads when a
+  HEIC file is actually chosen and never before. Confirmed on production with an authenticated
+  waterfall: `/add` and `/photos/sort` load 7 JS chunks each and **zero** heavy chunks, while `/`
+  loads 15 including MapLibre with a live `.maplibregl-canvas` — MapLibre on the map route is
+  correct and deliberate (see the eager-MapView note above).
+  Method note: an earlier version of this measurement was WRONG. The session token had expired, so
+  every route silently redirected to `/login` and reported "no heavy chunks" — which looked like a
+  pass but was really the login shell four times over. The check now asserts it did not land on
+  `/login` and that the map canvas exists, so a redirect can no longer masquerade as a clean
+  waterfall.
 - Split oversized CSS, MapView, PlacePanel, Settings, and data modules only behind behavior-preserving
   tests.
 
@@ -428,8 +492,18 @@ distinguishable from a known one. Summary:
 ### Remaining
 
 - Resolve service-role rotation and mutable search paths.
-- Synchronize `.env.example`, CI, Pages, Worker bindings, Edge Function secrets, and runbooks; the
-  example currently omits part of the code-used variable inventory.
+- DONE 2026-08-07 for the client inventory — `.env.example` was missing two variables the app
+  actually reads: `VITE_GOOGLE_CLIENT_ID` (Google Photos picker) and `VITE_MAPBOX_TOKEN`
+  (business/POI search). That matters more than it looks: `VITE_*` values are baked in at BUILD
+  time, so an undocumented one ships as `undefined` and the feature it gates silently disappears
+  rather than failing loudly. The file now documents all 7 client variables plus the server-only
+  secrets and the local test identities, each with what it enables and what happens when blank.
+  `scripts/check-env-example.mjs` runs in CI and fails if any `import.meta.env.VITE_*` read by
+  `app/src` is undocumented; a documented-but-unused variable is reported as a note, not a failure.
+  Validated by negative control. Server secrets are deliberately not exact-matched — they vary per
+  environment and arrive via Supabase/Wrangler secrets.
+- Still to do: reconcile Pages env vars, Worker bindings and Edge Function secrets against this
+  inventory, and refresh the runbooks.
 - Restore only approved cron/geocode schedules and rerun only the approved Strava backfill.
 - Perform an encrypted database-plus-R2 backup and disposable restore drill with object-byte checksum
   proof.
