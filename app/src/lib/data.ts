@@ -151,6 +151,39 @@ export interface SettingsStats {
 /** Headline counts for the Settings page (same pill style as the map). */
 /** Counts of spots (entries) and visits — folded into the "Places" total so it
  *  reflects every spot, visit, and place we've logged. */
+export interface TripContent {
+  place_id: string;
+  place_name: string;
+  visit_id: string;
+  start_date: string;
+  end_date: string;
+}
+
+/**
+ * The places you went to during a trip.
+ *
+ * Cape Cod is a place AND the trip you took there; Linnell Landing is a place you
+ * visited during it. The contents are derived from the trip's DATES — nothing is
+ * stored, so marking or unmarking a trip changes them immediately and nothing can
+ * drift. Every stored version of this (trip_stops, part_of, suggested trips) did.
+ */
+export async function fetchTripContents(visitId: string): Promise<TripContent[]> {
+  const { data, error } = await supabase.rpc('trip_contents', { p_visit: visitId });
+  if (error) return [];
+  return (data ?? []) as TripContent[];
+}
+
+/**
+ * Occasions for the current view: a trip week is ONE, however much you did inside
+ * it. The places you visited during it still count as places, just not as extra
+ * visits.
+ */
+export async function fetchOccasionCount(profileId?: string | null): Promise<number> {
+  const { data, error } = await supabase.rpc('occasion_count', { p_profile: profileId ?? null });
+  if (error) return 0;
+  return (data as number) ?? 0;
+}
+
 export async function fetchItemCounts(): Promise<{ entries: number; visits: number }> {
   const [e, v] = await Promise.all([
     supabase.from('entries').select('*', { count: 'exact', head: true }),

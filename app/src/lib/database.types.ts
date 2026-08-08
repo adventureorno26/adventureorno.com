@@ -2305,6 +2305,7 @@ export type Database = {
           type: string
         }[]
       }
+      occasion_count: { Args: { p_profile?: string }; Returns: number }
       on_this_day: {
         Args: never
         Returns: {
@@ -3224,6 +3225,16 @@ export type Database = {
           profile_id: string
         }[]
       }
+      trip_contents: {
+        Args: { p_visit: string }
+        Returns: {
+          end_date: string
+          place_id: string
+          place_name: string
+          start_date: string
+          visit_id: string
+        }[]
+      }
       trip_place_ids: { Args: { p_trip: string }; Returns: string[] }
       trip_stats: { Args: { p_trip: string }; Returns: Json }
       trip_timeline: {
@@ -3251,6 +3262,7 @@ export type Database = {
         }
         Returns: string
       }
+      visit_is_inside_trip: { Args: { p_visit: string }; Returns: boolean }
       wander_stats: {
         Args: { p_profile?: string }
         Returns: {

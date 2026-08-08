@@ -6132,3 +6132,27 @@ button.mi-row:hover {
 .title-edit:hover {
   opacity: 1;
 }
+
+/* A trip's contents — the places visited inside its dates (migration 0134).
+   Indented under the trip's own visit row, because they belong to that occasion
+   rather than standing beside it. */
+.trip-contents {
+  list-style: none;
+  margin: 2px 0 6px 0;
+  padding: 0 0 0 18px;
+  border-left: 2px solid var(--border-soft);
+}
+.trip-contents li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.trip-contents a {
+  color: var(--text);
+  text-decoration: none;
+}
+.trip-contents a:hover {
+  text-decoration: underline;
+}

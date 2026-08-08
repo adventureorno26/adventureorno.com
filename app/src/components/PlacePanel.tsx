@@ -21,6 +21,9 @@ import {
   setMyRating,
   setPlaceName,
   canRenamePlace,
+  setVisitIsTrip,
+  fetchTripContents,
+  type TripContent,
   setVisitDates,
   setVisitSolo,
   updatePlace,
@@ -182,6 +185,9 @@ export default function PlacePanel({
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [editingName, setEditingName] = useState(false);
+  // A trip's contents — the places visited inside its dates. Derived server-side
+  // from the dates, so it follows marking/unmarking with nothing stored.
+  const [tripContents, setTripContents] = useState<Record<string, TripContent[]>>({});
   const [name, setName] = useState(place.name);
   const [error, setError] = useState<string | null>(null);
 
@@ -210,8 +216,28 @@ export default function PlacePanel({
   }, [place]);
 
   async function reloadVisits() {
-    setVisits(await fetchVisits(place.id).catch(() => []));
+    const rows = await fetchVisits(place.id).catch(() => []);
+    setVisits(rows);
     setVisitStats(await fetchPlaceVisitStats(place.id).catch(() => ({})));
+    const trips = rows.filter((v) => v.is_trip);
+    const pairs = await Promise.all(
+      trips.map(async (v) => [v.id, await fetchTripContents(v.id).catch(() => [])] as const),
+    );
+    setTripContents(Object.fromEntries(pairs));
+  }
+
+  // Mark a visit as a trip, or unmark it. The ONLY way is_trip is ever set — it is
+  // never derived (it used to be `end_date > start_date`, which silently made every
+  // multi-day stay a trip).
+  async function toggleVisitIsTrip(visitId: string, next: boolean) {
+    try {
+      await setVisitIsTrip(visitId, next);
+      await reloadVisits();
+      const updated = await fetchPlace(place.id).catch(() => null);
+      if (updated) onPlaceChanged(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update this visit.');
+    }
   }
 
   async function reloadActs() {
@@ -1109,6 +1135,7 @@ export default function PlacePanel({
               end: '' as string,
               sort: (a.start_date ?? '').slice(0, 10),
               solo: a.solo_profile as string | null,
+              trip: false,
               target: { type: 'activity' as const, id: a.id },
             }));
         const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
@@ -1122,6 +1149,7 @@ export default function PlacePanel({
               .filter((v) => isRollup || v.is_trip || !actDays.has(v.start_date))
               .map((v) => ({
                 key: v.id,
+                trip: v.is_trip,
                 date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
                 sub:
                   [
@@ -1193,6 +1221,20 @@ export default function PlacePanel({
                         )}
                         {canEdit && r.del && (
                           <button
+                            className="visit-edit"
+                            title={
+                              r.trip
+                                ? 'This visit is a trip — the places you went to during it are listed below'
+                                : 'Mark this visit as a trip'
+                            }
+                            aria-pressed={r.trip}
+                            onClick={() => void toggleVisitIsTrip(r.del!, !r.trip)}
+                          >
+                            {r.trip ? 'Not a trip' : 'Trip'}
+                          </button>
+                        )}
+                        {canEdit && r.del && (
+                          <button
                             className="visit-del"
                             title="Delete visit"
                             onClick={() => void removeVisit(r.del!)}
@@ -1201,6 +1243,23 @@ export default function PlacePanel({
                           </button>
                         )}
                       </div>
+                      {/* A trip contains the places you went to inside its dates.
+                          Each one is a place in its own right and counts once; the
+                          week itself is a single occasion. */}
+                      {r.trip && (tripContents[r.key] ?? []).length > 0 && (
+                        <ul className="trip-contents">
+                          {(tripContents[r.key] ?? []).map((c) => (
+                            <li key={c.visit_id}>
+                              <Link to={`/place/${c.place_id}`}>{c.place_name}</Link>
+                              <span className="muted">
+                                {c.start_date === c.end_date
+                                  ? fmtRunDate(c.start_date)
+                                  : `${fmtRunDate(c.start_date)} – ${fmtRunDate(c.end_date)}`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {canEdit && editingVisit && editingVisit === r.del && (
                         <div className="visit-dates-edit">
                           <label>
