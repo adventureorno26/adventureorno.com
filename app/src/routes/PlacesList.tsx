@@ -169,6 +169,13 @@ export default function PlacesList() {
                 type="checkbox"
                 checked={sel.has(p.id)}
                 onChange={() => toggle(p.id)}
+                // Without this every row's checkbox is just "checkbox" to a screen
+                // reader — 183 identical, unselectable-by-name controls, and the
+                // single largest accessibility defect in the app (axe: critical,
+                // 366 nodes). The row's name is the only thing that distinguishes
+                // them, and it drives a BULK tag/untag, so picking the wrong one
+                // is destructive.
+                aria-label={`Select ${p.name || 'unnamed place'}`}
                 style={{ width: 'auto' }}
               />
             )}

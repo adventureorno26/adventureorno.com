@@ -392,7 +392,24 @@ deploy once, then hard-refresh" rule — wait for edge propagation before verify
 - Replace swallowed important errors and false-success feedback with privacy-safe actionable states.
 - Finish mobile Place-sheet, bottom-nav/safe-area/keyboard, map-control, dialog, touch-target,
   reduced-motion, serious Axe, and physical iPhone/Android work.
-- Run Axe and overlap/layout tests across authenticated routes and all seven target viewports.
+- PARTLY DONE 2026-08-07 — Axe now runs across the AUTHENTICATED routes.
+  `app/e2e/a11y.spec.ts` scans `/`, `/places`, `/timeline`, `/add`, `/settings`, `/health`,
+  `/trips` and `/bucket` at phone and desktop, fails on any CRITICAL violation, and fails on any
+  SERIOUS violation whose rule is not explicitly accepted with a reason. It also asserts it did not
+  land on `/login`, so a redirect cannot produce a false pass by scanning the login shell.
+  Prior coverage was only `/login` and `/add`, which is why the app's single largest accessibility
+  defect went unseen: **every row checkbox on `/places` was unlabelled** — 183 rows, 366 nodes
+  across viewports, each announced as a bare "checkbox". They drive a BULK tag/untag, so selecting
+  the wrong one is destructive. Fixed with `aria-label="Select <place name>"` (no visual change),
+  plus a direct assertion so it cannot return even if the axe rule set shifts.
+  Overlap/layout across all seven viewports is covered separately by `layout.spec.ts` and
+  `nav-obstruction.spec.ts`.
+  **OPEN — needs Erica's decision:** one SERIOUS rule is accepted for now. `.pnav-add` renders white
+  on the brand accent `#3b82f6` at 12px, giving **3.67:1** where small text needs 4.5:1. It appears
+  on every route, so it is 16 of the 16 remaining serious nodes. The fix is a one-line change —
+  darkening that pill's background to roughly `#1d4ed8` clears 4.5:1 while staying in the same blue
+  family — but it alters the accent on the deliberately locked primary navigation, so it is a design
+  call rather than an agent's. Nothing else critical or serious remains.
 - DONE 2026-08-07 — bundle budgets exist and the login waterfall is confirmed clean.
   A real browser waterfall against production shows `/login` fetching exactly four assets — the app
   entry, React, supabase-js and the stylesheet, 178 KB gzipped — and **neither MapLibre (~1.0 MB)
