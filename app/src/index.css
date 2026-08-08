@@ -2701,10 +2701,16 @@ a {
 }
 
 /* "Log a visit" — the primary Place-card action. */
+/* "Log a visit" is a normal action, not a full-width banner. It was 100% wide and
+   700 weight, which made it the loudest thing on the card. */
 .log-visit-btn {
-  width: 100%;
+  width: auto;
+  align-self: flex-start;
   margin-top: 10px;
-  font-weight: 700;
+  padding: 0 14px;
+  min-height: 34px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* Accessibility utilities. */
