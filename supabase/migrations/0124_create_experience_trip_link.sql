@@ -1,0 +1,228 @@
+-- 0124 — Let create_experience() attach the place to a Trip as a stop, in the same
+-- transaction (COMPLETION-PLAN Phase 2: "extend the contract for Trip/Visit links").
+--
+-- Why: `addPlaceToTrip` is the last multi-write creation path that is not atomic.
+-- It does `createPlaceAtomic(...)` then `addStop(trip, place)` as two separate
+-- requests. If the second fails, the trip silently gains nothing while a stray
+-- place is left behind, and the retry mints a NEW idempotency key, so it creates a
+-- SECOND place rather than completing the first attempt. One key, one transaction
+-- fixes both.
+--
+-- Contract: p_place gains an optional `trip` object.
+--   {"id": <trip uuid>, "status": "planned"|"completed"|"skipped",
+--    "sort_order": <int>, "note": <text>}
+-- `status` defaults to 'planned'.
+--
+-- Ordering matters and is deliberate:
+--   1. resolve/create the place
+--   2. create the visit (if a date was given)
+--   3. insert the trip stop
+--   4. THEN call promote_trip_stops_for_place
+-- The existing code called promote inside step 2. Moving it after step 3 is what
+-- lets a stop created in this very call be promoted by the visit created in the
+-- same call — previously impossible, since the stop did not exist yet. For every
+-- caller that passes no `trip`, behaviour is byte-for-byte identical: promote still
+-- runs exactly once, only when a visit was created.
+--
+-- Constraint respected: `trip_stops_completed_needs_visit` requires
+-- (status='completed') = (visit_id is not null). So 'completed' is only accepted
+-- when this call also creates a visit; 'planned'/'skipped' always store visit_id
+-- null. A duplicate planned stop is ignored, matching addStop()'s existing
+-- swallow-23505 behaviour.
+
+create or replace function public.create_experience(
+  p_key text,
+  p_place jsonb,
+  p_visit jsonb default '{}'::jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_uid      uuid := auth.uid();
+  v_place    uuid;
+  v_visit    uuid;
+  v_prior    record;
+  v_name     text;
+  v_lat      float8;
+  v_lng      float8;
+  v_start    date;
+  v_end      date;
+  v_who      text;
+  v_solo     uuid;
+  v_override boolean := false;
+  v_josh     uuid;
+  v_partof   uuid[];
+  v_trip     uuid;
+  v_tstatus  text;
+  v_stop     uuid;
+begin
+  if not public.is_editor_or_owner() then
+    raise exception 'not authorized' using errcode = '42501';
+  end if;
+  if p_key is null or length(btrim(p_key)) = 0 then
+    raise exception 'idempotency key required';
+  end if;
+
+  -- Serialize concurrent calls that share a key so the retry observes the winner.
+  perform pg_advisory_xact_lock(hashtext('create_experience:' || p_key));
+
+  -- Idempotent short-circuit: this key already produced a graph — return it as-is.
+  select place_id, visit_id into v_prior
+    from public.experience_requests where idempotency_key = p_key;
+  if found then
+    return jsonb_build_object(
+      'place_id', v_prior.place_id, 'visit_id', v_prior.visit_id, 'idempotent', true);
+  end if;
+
+  -- 1) Resolve the place. An explicit id reuses an existing place (validated);
+  --    otherwise create a new one (coordinates are always required by the schema).
+  v_place := nullif(p_place->>'id', '')::uuid;
+  if v_place is not null then
+    if not exists (select 1 from public.places where id = v_place) then
+      raise exception 'place % not found', v_place;
+    end if;
+  else
+    v_name := btrim(coalesce(p_place->>'name', ''));
+    v_lat  := nullif(p_place->>'lat', '')::float8;
+    v_lng  := nullif(p_place->>'lng', '')::float8;
+    -- Unnamed places stay an explicit opt-in, not an accident.
+    if v_name = '' and not coalesce((p_place->>'allow_unnamed')::boolean, false) then
+      raise exception 'a new place requires a name';
+    end if;
+    if v_lat is null or v_lng is null then
+      raise exception 'a new place requires coordinates';
+    end if;
+
+    v_partof := coalesce(
+      (select array_agg(value::uuid) from jsonb_array_elements_text(p_place->'part_of')),
+      '{}'::uuid[]);
+    -- A parent must exist; otherwise membership sync would silently drop it.
+    if array_length(v_partof, 1) is not null then
+      if exists (
+        select 1 from unnest(v_partof) pid
+         where not exists (select 1 from public.places where id = pid))
+      then
+        raise exception 'part_of references a place that does not exist';
+      end if;
+    end if;
+
+    insert into public.places (
+      name, lat, lng, country, admin1, city, address, categories, saved, created_by,
+      is_trail, bucket, needs_geocode, website, auto, part_of, review)
+    values (
+      v_name, v_lat, v_lng,
+      nullif(p_place->>'country', ''),
+      nullif(p_place->>'admin1', ''),
+      nullif(p_place->>'city', ''),
+      nullif(p_place->>'address', ''),
+      coalesce(
+        (select array_agg(value) from jsonb_array_elements_text(p_place->'categories')),
+        '{}'::text[]),
+      coalesce((p_place->>'saved')::boolean, true),
+      v_uid,
+      coalesce((p_place->>'is_trail')::boolean, false),
+      coalesce((p_place->>'bucket')::boolean, false),
+      coalesce((p_place->>'needs_geocode')::boolean, false),
+      nullif(p_place->>'website', ''),
+      coalesce((p_place->>'auto')::boolean, false),
+      v_partof,
+      nullif(p_place->>'review', ''))
+    returning id into v_place;
+  end if;
+
+  -- 2) Optional visit — created only when a date is supplied (some callers just
+  --    create/rename a place). A single-day visit collapses start = end.
+  v_start := nullif(p_visit->>'date', '')::date;
+  v_end   := coalesce(nullif(p_visit->>'end_date', '')::date, v_start);
+  if v_start is not null then
+    -- Attribution: who = 'me' | 'josh' | 'both' | <profile-uuid>. Empty = leave unset.
+    v_who  := lower(coalesce(p_visit->>'who', ''));
+    v_josh := (select id from public.profiles where display_name = 'Josh' limit 1);
+    if v_who = 'both' then
+      v_solo := null; v_override := true;
+    elsif v_who = 'josh' then
+      v_solo := v_josh; v_override := true;
+    elsif v_who = 'me' then
+      v_solo := v_uid; v_override := true;
+    elsif v_who <> '' then
+      v_solo := nullif(p_visit->>'who', '')::uuid; v_override := v_solo is not null;
+    end if;
+
+    -- is_trip is a GENERATED column (multi-day span) — never inserted explicitly.
+    insert into public.visits (
+      place_id, start_date, end_date, note,
+      solo_profile, solo_override, manual, created_by)
+    values (
+      v_place, v_start, v_end,
+      nullif(p_visit->>'note', ''),
+      v_solo, v_override, true, v_uid)
+    returning id into v_visit;
+
+    -- Non-login people (children) present on this visit.
+    if p_visit ? 'person_ids' then
+      insert into public.visit_people (visit_id, person_id)
+      select v_visit, value::uuid
+        from jsonb_array_elements_text(p_visit->'person_ids')
+      on conflict do nothing;
+    end if;
+  end if;
+
+  -- 3) Optional Trip link — the place becomes a stop on that trip, atomically.
+  if p_place ? 'trip' then
+    v_trip := nullif(p_place->'trip'->>'id', '')::uuid;
+    if v_trip is null then
+      raise exception 'trip link requires an id';
+    end if;
+    if not exists (select 1 from public.trips where id = v_trip) then
+      raise exception 'trip % not found', v_trip;
+    end if;
+
+    v_tstatus := lower(coalesce(nullif(p_place->'trip'->>'status', ''), 'planned'));
+    if v_tstatus not in ('planned', 'completed', 'skipped') then
+      raise exception 'trip stop status must be planned, completed or skipped';
+    end if;
+    -- trip_stops_completed_needs_visit: completed <-> visit_id is not null.
+    if v_tstatus = 'completed' and v_visit is null then
+      raise exception
+        'a completed trip stop needs a visit — supply p_visit.date in the same call';
+    end if;
+
+    insert into public.trip_stops (trip_id, place_id, visit_id, status, sort_order, note)
+    values (
+      v_trip, v_place,
+      case when v_tstatus = 'completed' then v_visit else null end,
+      v_tstatus,
+      coalesce((p_place->'trip'->>'sort_order')::int, 0),
+      nullif(p_place->'trip'->>'note', ''))
+    on conflict do nothing          -- duplicate planned stop: same as addStop()
+    returning id into v_stop;
+  end if;
+
+  -- 4) Planned -> completed. Runs AFTER the stop insert so a stop created in this
+  --    same call can be promoted by the visit created in this same call. Only when
+  --    a visit exists, exactly as before.
+  if v_visit is not null then
+    perform public.promote_trip_stops_for_place(v_place);
+  end if;
+
+  -- Rating (per-user place_ratings, mirrored to places.rating for the owner) —
+  -- delegated to the canonical RPC so the rating model stays single-sourced.
+  if nullif(p_visit->>'rating', '') is not null then
+    perform public.set_my_rating(v_place, (p_visit->>'rating')::smallint);
+  end if;
+
+  -- 5) Record the request so a retry is idempotent.
+  insert into public.experience_requests (idempotency_key, created_by, place_id, visit_id)
+  values (p_key, v_uid, v_place, v_visit);
+
+  return jsonb_build_object('place_id', v_place, 'visit_id', v_visit, 'idempotent', false);
+end
+$function$;
+
+-- Preserve the existing grant surface exactly (0093 lockdown: never anon/PUBLIC).
+revoke all on function public.create_experience(text, jsonb, jsonb) from public;
+revoke all on function public.create_experience(text, jsonb, jsonb) from anon;
+grant execute on function public.create_experience(text, jsonb, jsonb) to authenticated;
+grant execute on function public.create_experience(text, jsonb, jsonb) to service_role;
