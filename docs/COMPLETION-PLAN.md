@@ -405,8 +405,17 @@ deploy once, then hard-refresh" rule — wait for edge propagation before verify
   making it `lazy()` once moved maplibre-gl's CSS after index.css and collapsed every map on the
   site to zero height. The budget ensures staying eager cannot quietly start dragging MapLibre into
   the login shell.
-- Still to do: lazy-load HEIC/video and other optional heavy processors behind the authenticated
-  routes that use them.
+- ALSO ALREADY DONE — heic2any is genuinely deferred, not merely code-split. `app/src/lib/photos.ts`
+  reaches it through `await import('heic2any')` inside the HEIC branch only, so it downloads when a
+  HEIC file is actually chosen and never before. Confirmed on production with an authenticated
+  waterfall: `/add` and `/photos/sort` load 7 JS chunks each and **zero** heavy chunks, while `/`
+  loads 15 including MapLibre with a live `.maplibregl-canvas` — MapLibre on the map route is
+  correct and deliberate (see the eager-MapView note above).
+  Method note: an earlier version of this measurement was WRONG. The session token had expired, so
+  every route silently redirected to `/login` and reported "no heavy chunks" — which looked like a
+  pass but was really the login shell four times over. The check now asserts it did not land on
+  `/login` and that the map canvas exists, so a redirect can no longer masquerade as a clean
+  waterfall.
 - Split oversized CSS, MapView, PlacePanel, Settings, and data modules only behind behavior-preserving
   tests.
 
