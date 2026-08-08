@@ -131,6 +131,45 @@ export type Database = {
           },
         ]
       }
+      activity_reactions: {
+        Row: {
+          activity_id: string
+          created_at: string
+          emoji: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          emoji: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          emoji?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_reactions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_reactions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       board_items: {
         Row: {
           board: string
@@ -1146,7 +1185,6 @@ export type Database = {
           rating: number | null
           review: string | null
           saved: boolean
-          solo_profile: string | null
           suggested: boolean
           visit_count: number
           website: string | null
@@ -1190,7 +1228,6 @@ export type Database = {
           rating?: number | null
           review?: string | null
           saved?: boolean
-          solo_profile?: string | null
           suggested?: boolean
           visit_count?: number
           website?: string | null
@@ -1234,7 +1271,6 @@ export type Database = {
           rating?: number | null
           review?: string | null
           saved?: boolean
-          solo_profile?: string | null
           suggested?: boolean
           visit_count?: number
           website?: string | null
@@ -1264,13 +1300,6 @@ export type Database = {
           {
             foreignKeyName: "places_named_by_fkey"
             columns: ["named_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "places_solo_profile_fkey"
-            columns: ["solo_profile"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1960,6 +1989,15 @@ export type Database = {
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
       activity_category: { Args: { p_type: string }; Returns: string }
+      activity_reactions_for: {
+        Args: { p_activity: string }
+        Returns: {
+          emoji: string
+          mine: boolean
+          n: number
+          who: string[]
+        }[]
+      }
       add_place_category: {
         Args: {
           p_color?: string
@@ -2341,6 +2379,13 @@ export type Database = {
           weight: number
         }[]
       }
+      place_attribution: {
+        Args: never
+        Returns: {
+          place_id: string
+          solo_profile: string
+        }[]
+      }
       place_days: {
         Args: { p_place: string }
         Returns: {
@@ -2539,7 +2584,6 @@ export type Database = {
           rating: number | null
           review: string | null
           saved: boolean
-          solo_profile: string | null
           suggested: boolean
           visit_count: number
           website: string | null
@@ -3211,6 +3255,10 @@ export type Database = {
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
       strava_oauth_start: { Args: never; Returns: string }
+      toggle_activity_reaction: {
+        Args: { p_activity: string; p_emoji: string }
+        Returns: undefined
+      }
       toggle_photo_reaction: {
         Args: { p_emoji: string; p_photo: string }
         Returns: undefined

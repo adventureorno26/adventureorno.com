@@ -51,7 +51,6 @@ const Timeline = lazyWithReload(() => import('./routes/Timeline'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
-const AddWizard = lazyWithReload(() => import('./routes/AddWizard'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Trips = lazyWithReload(() => import('./routes/Trips'));
@@ -265,14 +264,11 @@ export default function App() {
                 </RequireAuth>
               }
             />
-            <Route
-              path="/add"
-              element={
-                <RequireAuth>
-                  <AddWizard />
-                </RequireAuth>
-              }
-            />
+            {/* /add was a five-step wizard that could add neither photos nor a
+                Google Photos import. It is one sheet over the map now; the old
+                path still works so bookmarks and the import-return flow don't
+                dead-end. */}
+            <Route path="/add" element={<Navigate to="/?add=1" replace />} />
             <Route
               path="/photos/import/complete"
               element={

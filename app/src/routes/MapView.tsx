@@ -10,7 +10,6 @@ import {
   snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
-import { createTrip } from '../lib/trips';
 import {
   createPlaceAtomic,
   updatePlace,
@@ -30,7 +29,7 @@ import { fetchPhotoObjectUrl, mapPool, readGps } from '../lib/photos';
 import { fetchVideoCovers, fetchVideoPosterUrl } from '../lib/videos';
 import { enqueueUpload } from '../lib/uploadQueue';
 import NewPlaceDraft from '../components/NewPlaceDraft';
-import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
+import AddSheet from '../components/AddSheet';
 import {
   createManualActivity,
   fetchActivityLines,
@@ -38,13 +37,7 @@ import {
   type PlaceCount,
 } from '../lib/strava';
 import { haversineMeters } from '../lib/geo';
-import {
-  CATEGORIES,
-  categoryColor,
-  effectiveCategories,
-  isContainerSlug,
-  primaryCategory,
-} from '../lib/categories';
+import { categoryColor, effectiveCategories, primaryCategory } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { useAuth } from '../auth/AuthProvider';
 import StatsBar from '../components/StatsBar';
@@ -241,7 +234,8 @@ export default function MapView() {
   const [people, setPeople] = useState<MapPerson[]>([]);
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  // The one add sheet (map "+ Add" and the bottom Add tab both open it).
+  const [addSheet, setAddSheet] = useState(false);
   // Explicit new-place draft (map click / search) — nothing saved until Save.
   const [draft, setDraft] = useState<{ lat: number; lng: number; presetName?: string } | null>(
     null,
@@ -252,66 +246,12 @@ export default function MapView() {
     skipped: number;
     rows: { id: string; name: string; n: number }[];
   } | null>(null);
-  const [activitySub, setActivitySub] = useState(false);
-  const [activityFilter, setActivityFilter] = useState('');
-  const [photoSub, setPhotoSub] = useState(false);
   const addFileRef = useRef<HTMLInputElement | null>(null);
-  // Google Photos import is a manual upload — Erica AND Josh (editor) can use it,
-  // each from their own Google account. Only the automated device ingest is Erica-only.
-  const canGooglePhotos = canEdit && googlePhotosEnabled();
 
-  async function importGooglePhotos() {
-    setPhotoSub(false);
-    setAddMenuOpen(false);
-    try {
-      const files = await pickFromGooglePhotos((s) => setBanner(s));
-      if (files.length) await handleAddPhotos(files);
-    } catch (e) {
-      setBanner(e instanceof Error ? e.message : 'Google Photos import failed');
-    }
-  }
-
-  // +Add → a category/activity: create an empty place pre-tagged, open its card.
-  // The card's title-search fills name + location (placeholder shows an example).
-  async function addTagged(tag: string) {
-    setAddMenuOpen(false);
-    setActivitySub(false);
-    // A Trip is a first-class entity now (not a Place). Create it and open its view;
-    // dates + places are added there.
-    if (tag === 'trip') {
-      try {
-        const t = await createTrip('', null, null);
-        navigate(`/trip/${t.id}`);
-      } catch {
-        setBanner('Could not add — try again.');
-      }
-      return;
-    }
-    const c = mapRef.current?.getCenter();
-    try {
-      const p = await createPlaceAtomic({
-        name: '',
-        // This draft is deliberately unnamed — the user names it on the card that
-        // opens next. The server guard against blank names stays on for every
-        // other caller (migration 0122).
-        allow_unnamed: true,
-        country: null,
-        admin1: null,
-        lat: c?.lat ?? 39.5,
-        lng: c?.lng ?? -98.5,
-        categories: [tag],
-        // A trail container groups hikes/runs by mileage — flag it so its card
-        // uses the trail layout.
-        is_trail: tag === 'trail',
-        saved: false,
-      });
-      // Add to state so the card renders immediately (no waiting / map click).
-      setPlaces((prev) => [...prev, p]);
-      navigate(`/place/${p.id}`);
-    } catch {
-      setBanner('Could not add — try again.');
-    }
-  }
+  // "+ Add → Activity/Trip/Trail" used to create an EMPTY place row pre-tagged and
+  // open its card, so an abandoned add left a nameless place behind — and the Trip
+  // entry made a place out of something the model says is a visit. AddSheet asks
+  // first and writes once, through the same atomic draft the map click uses.
 
   // Draw-a-trail mode: tap the map to add waypoints; segments snap to walking paths.
   const [drawMode, setDrawMode] = useState(false);
@@ -940,6 +880,15 @@ export default function MapView() {
     for (const [id, prop] of props) if (map.getLayer(id)) map.setPaintProperty(id, prop, dim);
   }, [mapLayer, ready]);
 
+  // The bottom Add tab is a link to /?add=1 rather than a page, so tapping it
+  // again from anywhere re-opens the same sheet.
+  useEffect(() => {
+    if (searchParams.get('add') === '1') {
+      setAddSheet(true);
+      navigate('/', { replace: true });
+    }
+  }, [searchParams, navigate]);
+
   // Deep link: /?cat=dining (tapping a category on a card) → filter the map to
   // that category and zoom to fit those photo-pins.
   useEffect(() => {
@@ -1490,6 +1439,27 @@ export default function MapView() {
         />
       )}
 
+      {addSheet && (
+        <AddSheet
+          at={(() => {
+            const c = mapRef.current?.getCenter();
+            return { lat: c?.lat ?? 39.5, lng: c?.lng ?? -98.5 };
+          })()}
+          places={places}
+          people={people}
+          meId={profile?.id ?? null}
+          onSaved={(placeId) => {
+            setAddSheet(false);
+            void fetchPlaces()
+              .then(setPlaces)
+              .catch(() => undefined);
+            navigate(`/place/${placeId}`);
+          }}
+          onPhotos={(files) => void handleAddPhotos(files)}
+          onClose={() => setAddSheet(false)}
+        />
+      )}
+
       <PersonFilter
         people={filterPeople}
         value={personFilter}
@@ -1540,82 +1510,14 @@ export default function MapView() {
       <div className="map-top-row">
         {canEdit && (
           <div className="add-wrap">
-            <button className="add-btn" onClick={() => setAddMenuOpen((v) => !v)}>
+            {/* ONE opener. This used to be a menu of Activity (every tag) / Trip /
+                Trail / Bucket List / Photo → Files|Google — five surfaces asking
+                one question, plus a "Trip" entry that created the retired
+                trip-category place. AddSheet asks the three questions that matter
+                and carries the photo + Google Photos import that only lived here. */}
+            <button className="add-btn" onClick={() => setAddSheet(true)}>
               + Add
             </button>
-            {addMenuOpen && (
-              <div className="add-menu">
-                {/* Activity → every tag (with its icon). Pick one → a card opens
-                    already tagged with it. */}
-                <button onClick={() => setActivitySub((v) => !v)}>Activity</button>
-                {activitySub && (
-                  <div className="add-submenu">
-                    <input
-                      className="activity-filter"
-                      placeholder="Search…"
-                      autoFocus
-                      value={activityFilter}
-                      onChange={(e) => setActivityFilter(e.target.value)}
-                    />
-                    {[...CATEGORIES]
-                      .sort((a, b) => {
-                        const q = activityFilter.trim().toLowerCase();
-                        if (!q) return 0;
-                        const am = a.label.toLowerCase().startsWith(q) ? 0 : 1;
-                        const bm = b.label.toLowerCase().startsWith(q) ? 0 : 1;
-                        return am - bm;
-                      })
-                      .filter(
-                        (c) =>
-                          !isContainerSlug(c.slug) &&
-                          (!activityFilter.trim() ||
-                            c.label.toLowerCase().includes(activityFilter.trim().toLowerCase())),
-                      )
-                      .map((c) => (
-                        <button key={c.slug} onClick={() => void addTagged(c.slug)}>
-                          {c.label}
-                        </button>
-                      ))}
-                  </div>
-                )}
-                <button onClick={() => void addTagged('trip')}>Trip</button>
-                <button onClick={() => void addTagged('trail')}>Trail</button>
-                <button
-                  onClick={() => {
-                    setAddMenuOpen(false);
-                    navigate('/bucket');
-                  }}
-                >
-                  Bucket List
-                </button>
-                <button
-                  onClick={() => {
-                    if (canGooglePhotos) {
-                      setPhotoSub((v) => !v);
-                    } else {
-                      setAddMenuOpen(false);
-                      addFileRef.current?.click();
-                    }
-                  }}
-                >
-                  Photo
-                </button>
-                {canGooglePhotos && photoSub && (
-                  <div className="add-submenu">
-                    <button
-                      onClick={() => {
-                        setPhotoSub(false);
-                        setAddMenuOpen(false);
-                        addFileRef.current?.click();
-                      }}
-                    >
-                      Files
-                    </button>
-                    <button onClick={() => void importGooglePhotos()}>Google Photos</button>
-                  </div>
-                )}
-              </div>
-            )}
             <input
               ref={addFileRef}
               type="file"
@@ -1724,6 +1626,7 @@ export default function MapView() {
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}
           onAddRoute={startDrawForTrail}
+          visitCounts={visitCounts}
         />
       )}
     </div>

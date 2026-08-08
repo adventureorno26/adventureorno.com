@@ -222,6 +222,33 @@ export async function fetchPhotosForPlace(placeId: string): Promise<Photo[]> {
   return (data ?? []) as Photo[];
 }
 
+/**
+ * A container's photos INCLUDING its members'.
+ *
+ * fetchActivitiesForPlaceTree already did this for activities, so the Appalachian
+ * Trail listed all its hikes — but its gallery ran on the trail row alone and the
+ * trail owns 0 photos while its seven sections hold 27 between them. A trail is a
+ * rollup of its segments; so is its gallery.
+ */
+export async function fetchPhotosForPlaceTree(placeId: string): Promise<Photo[]> {
+  const { data: kids, error: kidsErr } = await supabase
+    .from('place_membership')
+    .select('child_id')
+    .eq('parent_id', placeId);
+  if (kidsErr) throw kidsErr;
+
+  const ids = [placeId, ...(kids ?? []).map((k) => (k as { child_id: string }).child_id)];
+  if (ids.length === 1) return fetchPhotosForPlace(placeId);
+
+  const { data, error } = await supabase
+    .from('photos')
+    .select(PHOTO_COLS)
+    .in('place_id', ids)
+    .order('taken_at', { ascending: false, nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as Photo[];
+}
+
 /** Photos taken at a place on a specific day (day view). */
 export async function fetchPhotosForPlaceOnDay(placeId: string, day: string): Promise<Photo[]> {
   const next = new Date(day + 'T00:00:00Z');

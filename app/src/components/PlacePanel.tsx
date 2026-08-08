@@ -54,6 +54,11 @@ interface Props {
   onPlaceDeleted: (id: string) => void;
   onMerged: (loserId: string, winner: Place) => void;
   onAddRoute?: (trailId: string, name: string) => void;
+  // Per-view visit counts (place_visit_counts for the map's Just me / Just Josh /
+  // Both view), already loaded by the map and passed down rather than re-fetched.
+  // A trail's Sections count what YOU did, so "6 of 7 done" means something
+  // different in each view.
+  visitCounts?: Map<string, number>;
 }
 
 /** Prepend https:// when the user typed a bare domain, so the link works. */
@@ -135,6 +140,7 @@ export default function PlacePanel({
   onPlaceChanged,
   onPlaceDeleted,
   onAddRoute,
+  visitCounts,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -396,13 +402,21 @@ export default function PlacePanel({
   // Trail card: its member places ARE its sections. Split into done (visited) and
   // not-yet so a long trail's progress lives in one place. Done first, most-recent
   // first; not-yet alphabetical.
+  //
+  // "Done" means done IN THE CURRENT VIEW. places.visit_count is global, so a
+  // section only Josh has walked read as done in Erica's "Just me" — the same
+  // mistake the map badge made before it moved to place_visit_counts. When the
+  // per-view counts haven't loaded (or a card is opened outside the map) it falls
+  // back to the global count rather than showing an empty trail.
+  const sectionDone = (p: Place): boolean =>
+    visitCounts ? (visitCounts.get(p.id) ?? 0) > 0 : p.visit_count > 0 || Boolean(p.first_visit);
   const trailSections = place.is_trail
     ? {
         done: memberPlaces
-          .filter((p) => p.visit_count > 0 || p.first_visit)
+          .filter(sectionDone)
           .sort((a, b) => (b.last_visit ?? '').localeCompare(a.last_visit ?? '')),
         todo: memberPlaces
-          .filter((p) => !(p.visit_count > 0 || p.first_visit))
+          .filter((p) => !sectionDone(p))
           .sort((a, b) => a.name.localeCompare(b.name)),
       }
     : null;
@@ -413,10 +427,16 @@ export default function PlacePanel({
   // whether it's a linked place or an inline spot. In CATEGORIES order. This is
   // the Appalachian-Trail grouping, now used for EVERY card (trips included) so a
   // hotel reads as "Hotel Reviews", not under the trip's city name.
+  //
+  // A TRAIL is the exception: its member places are its SECTIONS and are listed
+  // once, in the Sections list below. They used to appear there AND here, split
+  // across "Hiking", "Trail" and "Places" by whatever tag happened to be first —
+  // so one Appalachian Trail segment showed up twice under two different headings.
   const reviewGroups: { key: string; label: string; places: Place[]; entries: Entry[] }[] = [];
   {
+    const groupedMembers = place.is_trail ? [] : memberPlaces;
     const placeByKind = new Map<string, Place[]>();
-    for (const m of memberPlaces) {
+    for (const m of groupedMembers) {
       const k = (m.categories && m.categories[0]) || 'place';
       if (!placeByKind.has(k)) placeByKind.set(k, []);
       placeByKind.get(k)!.push(m);
@@ -583,8 +603,20 @@ export default function PlacePanel({
 
   async function toggleCat(slug: string) {
     const cur = place.categories ?? [];
-    const next = cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug];
-    await patch({ categories: next });
+    const on = cur.includes(slug);
+    const next = on ? cur.filter((s) => s !== slug) : [...cur, slug];
+
+    // There is no separate "make this a city / region / trail" control any more.
+    // The TAG is the answer to "what is it?", and it does the work:
+    //   City / Region — fetch the real OSM boundary so places inside roll up
+    //                   spatially (that boundary IS what makes it a container).
+    //   Trail         — set is_trail, which switches the card to the trail layout.
+    if (slug === 'city' || slug === 'region') {
+      if (on) await removeCityRegion();
+      else await makeCityRegion(slug);
+      return;
+    }
+    await patch({ categories: next, ...(slug === 'trail' ? { is_trail: !on } : {}) });
   }
 
   // City/region: pull the real OSM boundary for this place, mark it a container,
@@ -883,18 +915,26 @@ export default function PlacePanel({
 
       {!place.is_home && <WeatherLine lat={place.lat} lng={place.lng} />}
 
-      {/* Tags — always visible. Tap a pill to toggle it; selected pills stay
-          highlighted (no separate chip list). A card is marked a TRAIL here; a
-          TRIP is not a tag — it is a visit you marked, in the Visits list. */}
+      {/* WHAT IS IT? — the only place a place's type is set. Tap a pill to toggle
+          it. City and Region fetch the OSM boundary as you tap them, and Trail
+          switches the card to the trail layout, so there is no second "make this
+          a city / region / trail" row. TRIP is not offered at all: a trip is a
+          visit you marked, in the Visits list (docs/SCHEMA.md). */}
       {canEdit && (
         <div className="cat-edit">
           <div className="cat-picker">
-            {CATEGORIES.map((c) => {
-              const on = (place.categories ?? []).includes(c.slug);
+            {CATEGORIES.filter((c) => c.slug !== 'trip').map((c) => {
+              const on =
+                c.slug === 'trail'
+                  ? place.is_trail
+                  : c.slug === 'city' || c.slug === 'region'
+                    ? place.category === c.slug
+                    : (place.categories ?? []).includes(c.slug);
               return (
                 <button
                   key={c.slug}
                   className={`cat-toggle ${on ? 'on' : ''}`}
+                  disabled={cityBusy && (c.slug === 'city' || c.slug === 'region')}
                   onClick={() => void toggleCat(c.slug)}
                 >
                   {c.label}
@@ -902,51 +942,18 @@ export default function PlacePanel({
               );
             })}
           </div>
+          {cityBusy && <div className="label">Fetching the boundary…</div>}
+          {cityMsg && <div className="city-region-msg">{cityMsg}</div>}
+          {spatialCount != null && (place.category === 'city' || place.category === 'region') && (
+            <div className="label">
+              {spatialCount} place{spatialCount === 1 ? '' : 's'} inside
+            </div>
+          )}
         </div>
       )}
 
-      {/* City / region: pull the real OSM boundary so leaves inside roll up. Not
-          offered on trails or trips (those group by explicit membership). */}
-      {canEdit && !place.is_trail && place.category !== 'trip' && (
-        <div className="city-region">
-          {place.category === 'city' || place.category === 'region' ? (
-            <div className="city-region-row">
-              <span>
-                {place.category === 'region' ? 'Region' : 'City'}
-                {spatialCount != null &&
-                  ` · ${spatialCount} place${spatialCount === 1 ? '' : 's'} inside`}
-              </span>
-              <button
-                className="link-btn"
-                disabled={cityBusy}
-                onClick={() => void removeCityRegion()}
-              >
-                {cityBusy ? '…' : 'remove'}
-              </button>
-            </div>
-          ) : (
-            <div className="city-region-row">
-              <span className="city-region-label">Make this a</span>
-              <button
-                className="link-btn"
-                disabled={cityBusy}
-                onClick={() => void makeCityRegion('city')}
-              >
-                City
-              </button>
-              <button
-                className="link-btn"
-                disabled={cityBusy}
-                onClick={() => void makeCityRegion('region')}
-              >
-                Region
-              </button>
-              {cityBusy && <span className="muted"> fetching boundary…</span>}
-            </div>
-          )}
-          {cityMsg && <div className="city-region-msg">{cityMsg}</div>}
-        </div>
-      )}
+      {/* The separate "Make this a City / Region" row is gone — the City and
+          Region tags above do it. One question, one control. */}
 
       {(place.website || (canEdit && place.bucket)) && (
         <div className="card-actions">
@@ -1122,30 +1129,58 @@ export default function PlacePanel({
         // Garmin activity gets its own row (date · name · type · miles); photo/
         // entry-only days and multi-day trips show as dated visit rows.
         const acts = trailActs ?? [];
+
+        // A visit is the occasion; the ride and the run are what we DID during it,
+        // so they hang off it (docs/SCHEMA.md) rather than sitting beside it.
+        // Brewster is one fused 2-day stay containing a ride and a run — it read as
+        // three visits because all three were siblings. Only stays that span more
+        // than a day, or that were marked as a trip, adopt their activities; a
+        // single-day run is already one flat row and gains nothing from nesting.
+        const nestedActs = new Map<string, Activity[]>();
+        const nestedIds = new Set<string>();
+        if (!isTrail && !isRollup) {
+          for (const v of visits ?? []) {
+            const end = v.end_date || v.start_date;
+            if (!v.is_trip && end <= v.start_date) continue;
+            const mine = acts.filter((a) => {
+              const d = (a.start_date ?? '').slice(0, 10);
+              return d !== '' && d >= v.start_date && d <= end;
+            });
+            if (mine.length === 0) continue;
+            nestedActs.set(v.id, mine);
+            for (const a of mine) nestedIds.add(a.id);
+          }
+        }
+
         const actRows = isRollup
           ? []
-          : acts.map((a) => ({
-              key: a.id,
-              date: fmtRunDate(a.start_date),
-              sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-              to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
-              del: null as string | null,
-              start: '' as string,
-              end: '' as string,
-              sort: (a.start_date ?? '').slice(0, 10),
-              solo: a.solo_profile as string | null,
-              trip: false,
-              target: { type: 'activity' as const, id: a.id },
-            }));
+          : acts
+              .filter((a) => !nestedIds.has(a.id))
+              .map((a) => ({
+                key: a.id,
+                date: fmtRunDate(a.start_date),
+                sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+                to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
+                del: null as string | null,
+                start: '' as string,
+                end: '' as string,
+                sort: (a.start_date ?? '').slice(0, 10),
+                solo: a.solo_profile as string | null,
+                trip: false,
+                target: { type: 'activity' as const, id: a.id },
+              }));
         const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
         // Non-trail places also surface visit rows an activity doesn't already
         // cover: multi-day trips, and single days with photos/entries but no run.
         const visitRows = isTrail
           ? []
           : (visits ?? [])
-              // Rollups show all their (fused) visits; leaves show trips + any
-              // photo/entry day an activity row doesn't already cover.
-              .filter((v) => isRollup || v.is_trip || !actDays.has(v.start_date))
+              // Rollups show all their (fused) visits; leaves show trips, any stay
+              // that adopted activities, and any photo/entry day an activity row
+              // doesn't already cover.
+              .filter(
+                (v) => isRollup || v.is_trip || nestedActs.has(v.id) || !actDays.has(v.start_date),
+              )
               .map((v) => ({
                 key: v.id,
                 trip: v.is_trip,
@@ -1190,6 +1225,7 @@ export default function PlacePanel({
                     const open = editingVisit === r.key;
                     const contents = r.trip ? (tripContents[r.key] ?? []) : [];
                     const isVisit = !!r.del;
+                    const inside = nestedActs.get(r.key) ?? [];
                     return (
                       <div key={r.key} className={open ? 'visit-item open' : 'visit-item'}>
                         <div className="visit-row">
@@ -1254,6 +1290,28 @@ export default function PlacePanel({
                                   {c.start_date === c.end_date
                                     ? fmtRunDate(c.start_date)
                                     : `${fmtRunDate(c.start_date)} – ${fmtRunDate(c.end_date)}`}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {/* What we did during this stay. These are evidence, not
+                            separate visits — the ride and the run at Brewster
+                            happened on ONE 2-day visit. */}
+                        {inside.length > 0 && (
+                          <ul className="trip-contents visit-evidence">
+                            {inside.map((a) => (
+                              <li key={a.id}>
+                                <Link
+                                  to={`/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`}
+                                >
+                                  {a.name || a.type}
+                                </Link>
+                                <span className="muted">
+                                  {[a.type, miStr(a.distance), fmtRunDate(a.start_date)]
+                                    .filter(Boolean)
+                                    .join(' · ')}
                                 </span>
                               </li>
                             ))}

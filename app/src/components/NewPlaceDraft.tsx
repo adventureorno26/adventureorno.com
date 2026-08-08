@@ -53,6 +53,7 @@ export default function NewPlaceDraft({
   meId,
   onSaved,
   onCancel,
+  mode = 'visited',
 }: {
   initialLat: number;
   initialLng: number;
@@ -62,8 +63,16 @@ export default function NewPlaceDraft({
   meId: string | null;
   onSaved: (placeId: string) => void;
   onCancel: () => void;
+  // 'visited' = a place I've been (asks when + who). 'bucket' = somewhere to go
+  // later, which has no visit and therefore nobody to attribute it to.
+  mode?: 'visited' | 'bucket';
 }) {
+  const wanted = mode === 'bucket';
   const [name, setName] = useState(presetName ?? '');
+  // Where does it belong? A TRAIL is the only container ever chosen by hand —
+  // cities and regions attach spatially by boundary, so they are never a question.
+  const [partOf, setPartOf] = useState('');
+  const trails = places.filter((p) => p.is_trail).sort((a, b) => a.name.localeCompare(b.name));
   const [lat, setLat] = useState(initialLat);
   const [lng, setLng] = useState(initialLng);
   const [admin1, setAdmin1] = useState<string | null>(null);
@@ -158,14 +167,20 @@ export default function NewPlaceDraft({
           lng,
           categories: tags,
           saved: true,
+          bucket: wanted,
+          // Tagging it Trail IS what makes it a trail — there is no separate
+          // "make this a trail" control any more.
+          is_trail: tags.includes('trail'),
+          part_of: partOf ? [partOf] : undefined,
         },
-        visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
+        !wanted && visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
       );
       const placeId = res.place_id;
 
       // Enrichments create_experience doesn't own.
       if (website) await updatePlace(placeId, { website }).catch(() => undefined);
-      if (who !== 'both') {
+      // Somewhere-to-go-later has no visit, so there is nothing to attribute.
+      if (!wanted && who !== 'both') {
         const pid = who === 'mine' ? meId : joshId;
         await setPlaceSolo(placeId, pid ?? null).catch(() => undefined);
       }
@@ -224,7 +239,12 @@ export default function NewPlaceDraft({
     }
   }
 
-  const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug));
+  // Tags you can actually choose. City and Region are NOT offered: they attach
+  // spatially by boundary, so asking is meaningless. Trip is not offered either —
+  // a trip is a visit you marked, not a kind of place (docs/SCHEMA.md). Trail is
+  // the one container a person sets by hand.
+  const NOT_A_TAG = new Set(['city', 'region', 'trip']);
+  const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug) && !NOT_A_TAG.has(c.slug));
 
   // Guard against losing entered work: confirm before closing a dirty draft.
   const dirty = !!name.trim() || files.length > 0 || !!visitDate || tags.length > 0 || !!website;
@@ -251,7 +271,7 @@ export default function NewPlaceDraft({
         tabIndex={-1}
       >
         <div className="npd-head">
-          <b>New place</b>
+          <b>{wanted ? 'Somewhere to go later' : 'A place I’ve been'}</b>
           <button className="npd-x" onClick={requestCancel} aria-label="Cancel">
             ×
           </button>
@@ -319,13 +339,15 @@ export default function NewPlaceDraft({
           {website && <div className="npd-current label">Website: {website}</div>}
         </div>
 
-        <div className="npd-row">
-          <span>Visit date</span>
-          <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
-        </div>
+        {!wanted && (
+          <div className="npd-row">
+            <span>Visit date</span>
+            <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+          </div>
+        )}
 
         <div className="npd-row">
-          <span>Tags</span>
+          <span>What is it?</span>
           <div className="pe-chips">
             {tags.map((slug) => (
               <button
@@ -353,21 +375,40 @@ export default function NewPlaceDraft({
           )}
         </div>
 
-        <div className="npd-row">
-          <span>Who was there</span>
-          <div className="ps-who-toggle">
-            {(['both', 'mine', 'josh'] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                className={who === k ? 'on' : ''}
-                onClick={() => setWho(k)}
-              >
-                {k === 'both' ? 'Both' : k === 'mine' ? 'Just me' : 'Just Josh'}
-              </button>
-            ))}
+        {/* Where does it belong? Nothing, or a trail. Cities and regions attach by
+            boundary, so they are never asked. Hidden entirely when no trail exists
+            — an empty question is still a question. */}
+        {trails.length > 0 && !tags.includes('trail') && (
+          <div className="npd-row">
+            <span>Part of a trail?</span>
+            <select value={partOf} onChange={(e) => setPartOf(e.target.value)}>
+              <option value="">Nothing</option>
+              {trails.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
+        )}
+
+        {!wanted && (
+          <div className="npd-row">
+            <span>Who was there</span>
+            <div className="ps-who-toggle">
+              {(['both', 'mine', 'josh'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={who === k ? 'on' : ''}
+                  onClick={() => setWho(k)}
+                >
+                  {k === 'both' ? 'Both' : k === 'mine' ? 'Just me' : 'Just Josh'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="npd-row">
           <span>Photos {files.length ? `(${files.length})` : ''}</span>
@@ -405,7 +446,7 @@ export default function NewPlaceDraft({
         {busy && <div className="label">{busy}</div>}
         <div className="btn-row" style={{ marginTop: 8 }}>
           <button className="primary" disabled={!!busy} onClick={() => void save()}>
-            Save place
+            {wanted ? 'Save to the list' : 'Save place'}
           </button>
           <button onClick={requestCancel} disabled={!!busy}>
             Cancel

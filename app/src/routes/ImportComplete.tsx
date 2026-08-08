@@ -134,7 +134,7 @@ export default function ImportComplete() {
       {phase === 'nothing' && (
         <div className="ic-card">
           <p>There’s no import to finish.</p>
-          <button className="primary" onClick={() => navigate('/add')}>
+          <button className="primary" onClick={() => navigate('/?add=1')}>
             Add photos
           </button>
         </div>

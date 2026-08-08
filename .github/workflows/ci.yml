@@ -514,7 +514,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: echo "probe ran; gate output was '${{ needs['release-gate'].outputs.deploy_enabled }}'"
+      # Pass the gate output through env rather than expanding it straight into the
+      # shell — zizmor's template-injection audit is a hard gate here and it has
+      # failed every CI run since 2026-08-08 on exactly this line.
+      - env:
+          DEPLOY_ENABLED: ${{ needs['release-gate'].outputs.deploy_enabled }}
+        run: echo "probe ran; gate output was '$DEPLOY_ENABLED'"
 
   deploy-production:
     if: ${{ needs['release-gate'].outputs.deploy_enabled == 'true' }}

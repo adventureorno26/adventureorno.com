@@ -7,6 +7,7 @@ import {
   fetchPhotoObjectUrl,
   fetchPhotosForPlace,
   fetchPhotosForPlaceOnDay,
+  fetchPhotosForPlaceTree,
   mapPool,
   photosEnabled,
   setPhotoDate,
@@ -60,8 +61,14 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const touchX = useRef<number | null>(null);
 
+  // A container (a trail) shows its sections' photos too — it holds almost none
+  // of its own, and its sections' pictures are the trail's pictures.
   const load = (): Promise<Photo[]> =>
-    day ? fetchPhotosForPlaceOnDay(place.id, day) : fetchPhotosForPlace(place.id);
+    day
+      ? fetchPhotosForPlaceOnDay(place.id, day)
+      : place.holds_children
+        ? fetchPhotosForPlaceTree(place.id)
+        : fetchPhotosForPlace(place.id);
   const loadVideos = () =>
     fetchVideosForPlace(place.id)
       .then((v) => setVideos(day ? v.filter((x) => (x.taken_at ?? '').slice(0, 10) === day) : v))
