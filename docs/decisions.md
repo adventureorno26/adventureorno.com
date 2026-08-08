@@ -291,3 +291,66 @@ ONLY sanctioned edit of an old migration.
   CHILD place with `part_of` hierarchy the RPC doesn't model). These keep their
   specialized helpers by design. Bulk import remains the one genuine convergence
   debt (kept on the older path for now).
+
+## 2026-08-07 — Phase 1 completion, Phase 2 creation convergence, and delivery gates
+
+**SUPERSEDES the "What deliberately does NOT use create_experience" note above.**
+All five of those exceptions now DO use it. Migration `0122` extended the RPC's
+place contract with the fields they actually needed — `is_trail`, `bucket`,
+`needs_geocode`, `website`, `auto`, `part_of[]`, `review` — plus an explicit
+`allow_unnamed` opt-in for the map's blank-name placeholder draft. The blank-name
+guard stays ON by default for every other caller, so the protection the old note
+cited is preserved rather than removed. `part_of` now goes through the RPC, so the
+child-place hierarchy IS modelled. Because the RPC performs the same INSERT, the
+existing triggers (`sync_place_category`, `sync_membership_from_part_of`,
+`neutralize_junk_place`, `set_place_park`) fire identically.
+
+- **All nine client call sites** moved from `createPlace` to `createPlaceAtomic`.
+  `PlacePanel.addSpot` collapsed from THREE writes (create, then updatePlace for
+  rating/review, then addVisit) to one — previously a mid-sequence failure left a
+  spot with no review and no visit, and a retry created a second place.
+  `createPlace` is deprecated with zero callers and an eslint
+  `no-restricted-imports` rule prevents its return.
+- **Truthful success.** The Add wizard mapped every failed photo upload to `null`
+  and then showed an unconditional "Saved!", so a save where every photo failed
+  looked identical to a complete success. Media stays outside the atomic core on
+  purpose — a failed upload must not roll back a correctly saved visit — but the
+  outcome is now counted and reported via a pure, unit-tested
+  `saveOutcomeMessage()`. Three more silent failures fixed: visit-delete Undo
+  (which left the visit deleted while the user believed it was restored),
+  PlaceQuickEdit rename/retag/rate and who-went, and BucketMap add.
+- **`0123`** revoked `anon`/`authenticated` table grants on `google_tokens` and
+  `strava_accounts`. RLS already denied all client access, but the grants would
+  have become live the moment anyone added a permissive policy — and those tables
+  hold Google and Strava refresh tokens. `oauth_states` was already locked down in
+  `0120`; these two were missed.
+
+**Delivery gates.** OSV and Semgrep ran with `|| true` and therefore could never
+fail. Both are now hard gates with owner/reason/expiry exception files. Semgrep was
+additionally scanning a `src` directory that does not exist at the repo root, and
+`MapView.tsx` only partially parses, so the largest route file was never fully
+scanned while the job reported green — both now recorded rather than hidden. A new
+`deploy-preview` job deploys the merge candidate to a real Pages preview and smokes
+it; `release-gate` depends on it.
+
+**Bugs that only driving the app could find.** On iPhone the place card's primary
+action, "Log a visit", was 91% covered by the floating bottom nav — `elementFromPoint`
+at its centre returned the Add tab, so tapping it navigated to `/add`. The build was
+green and the button passed `toBeVisible()`. A live audit found the same defect on
+five more routes, including `/health`'s GPX/KML/CSV export buttons. Root cause: 14
+route files each repeated the same inline page wrapper reserving zero bottom space,
+and because the padding was inline it beat any stylesheet rule. They now share a
+`.page` class carrying `--pnav-clearance`. `scripts/audit-live.mjs` makes that sweep
+repeatable.
+
+**Accessibility.** Axe only covered `/login` and `/add`, hiding the app's largest
+defect: every row checkbox on `/places` was unlabelled (183 rows, 366 nodes),
+announced as a bare "checkbox" while driving a bulk, destructive tag/untag.
+
+**Testing note worth keeping.** Two guards written this session were initially
+VACUOUS — they passed with the bug present. A hit-test-only nav check passed on the
+sparse disposable dataset because the card never grew tall enough to reach the nav;
+and an authenticated bundle measurement reported "no heavy chunks" when an expired
+token had silently redirected every route to `/login`. Both were caught by running a
+negative control. **Assert the invariant, not just the symptom, and always verify a
+new gate fails when the thing it guards is broken.**
