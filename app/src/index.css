@@ -1432,36 +1432,6 @@ a {
 
 /* Editing a visit's dates — "stretch a visit into a trip by adding more days".
    Solid controls, no glass/blur (Erica's standing preference). */
-.visit-edit {
-  font-size: 12px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: var(--panel-2);
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.visit-edit:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-.visit-dates-edit {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 0 10px;
-}
-.visit-dates-edit input[type='date'] {
-  width: auto;
-  padding: 6px 8px;
-  font-size: 13px;
-}
-.visit-dates-edit button {
-  font-size: 13px;
-  padding: 6px 12px;
-}
 
 /* ---------- Visit row (activity name + date) ---------- */
 .visit-main {
@@ -6155,4 +6125,58 @@ button.mi-row:hover {
 }
 .trip-contents a:hover {
   text-decoration: underline;
+}
+
+/* One editor per visit (replaces the "Dates" pill, which opened a second row for a
+   single field). Tapping the visit row opens dates, who, trip and delete together. */
+.visit-item.open {
+  background: var(--panel-glass);
+  border-radius: 10px;
+}
+.visit-open {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.visit-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+.ve-dates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ve-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.ve-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ve-actions button,
+.ve-link {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--text);
 }

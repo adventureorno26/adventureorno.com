@@ -1183,112 +1183,134 @@ export default function PlacePanel({
                 </p>
               ) : (
                 <div className="visits">
-                  {rows.map((r) => (
-                    <div key={r.key}>
-                      <div className="visit-row">
-                        <Link className="visit-main" to={r.to}>
-                          <span className="visit-date">{r.date}</span>
-                          {r.sub && <span className="muted">{r.sub}</span>}
-                        </Link>
-                        {canEdit && people.length >= 2 && (
-                          <select
-                            className="attribution-select visit-who"
-                            value={r.solo ?? ''}
-                            title="Who was here"
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
-                          >
-                            <option value="">Both</option>
-                            {people.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
-                              </option>
+                  {rows.map((r) => {
+                    // A visit row IS the control. Tapping it opens the one editor for
+                    // that visit — dates, who, trip, delete, and the places visited
+                    // inside it. There is no separate "Dates" pill: a pill that opens
+                    // a second row for one field is the thing that made this confusing.
+                    const open = editingVisit === r.key;
+                    const contents = r.trip ? (tripContents[r.key] ?? []) : [];
+                    const isVisit = !!r.del;
+                    return (
+                      <div key={r.key} className={open ? 'visit-item open' : 'visit-item'}>
+                        <div className="visit-row">
+                          {isVisit ? (
+                            <button
+                              type="button"
+                              className="visit-main visit-open"
+                              aria-expanded={open}
+                              onClick={() => {
+                                setEditingVisit(open ? null : r.key);
+                                setEvStart(r.start || '');
+                                setEvEnd(r.end || r.start || '');
+                              }}
+                            >
+                              <span className="visit-date">{r.date}</span>
+                              {r.sub && <span className="muted">{r.sub}</span>}
+                              {contents.length > 0 && (
+                                <span className="muted">
+                                  {contents.length} {contents.length === 1 ? 'place' : 'places'}
+                                </span>
+                              )}
+                            </button>
+                          ) : (
+                            <Link className="visit-main" to={r.to}>
+                              <span className="visit-date">{r.date}</span>
+                              {r.sub && <span className="muted">{r.sub}</span>}
+                            </Link>
+                          )}
+                          {canEdit && people.length >= 2 && (
+                            <select
+                              className="attribution-select visit-who"
+                              value={r.solo ?? ''}
+                              title="Who was here"
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
+                            >
+                              <option value="">Both</option>
+                              {people.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+
+                        {/* The places we visited during this visit to the bigger
+                            place. They are places in their own right — not stops,
+                            not spots — and they belong inside this visit. */}
+                        {contents.length > 0 && (
+                          <ul className="trip-contents">
+                            {contents.map((c) => (
+                              <li key={c.visit_id}>
+                                <Link to={`/place/${c.place_id}`}>{c.place_name}</Link>
+                                <span className="muted">
+                                  {c.start_date === c.end_date
+                                    ? fmtRunDate(c.start_date)
+                                    : `${fmtRunDate(c.start_date)} – ${fmtRunDate(c.end_date)}`}
+                                </span>
+                              </li>
                             ))}
-                          </select>
+                          </ul>
                         )}
-                        {canEdit && r.del && (
-                          <button
-                            className="visit-edit"
-                            title="Edit dates — add days to make this a multi-day trip"
-                            onClick={() => {
-                              setEditingVisit(editingVisit === r.del ? null : r.del!);
-                              setEvStart(r.start || '');
-                              setEvEnd(r.end || r.start || '');
-                            }}
-                          >
-                            Dates
-                          </button>
-                        )}
-                        {canEdit && r.del && (
-                          <button
-                            className="visit-edit"
-                            title={
-                              r.trip
-                                ? 'This visit is a trip — the places you went to during it are listed below'
-                                : 'Mark this visit as a trip'
-                            }
-                            aria-pressed={r.trip}
-                            onClick={() => void toggleVisitIsTrip(r.del!, !r.trip)}
-                          >
-                            {r.trip ? 'Not a trip' : 'Trip'}
-                          </button>
-                        )}
-                        {canEdit && r.del && (
-                          <button
-                            className="visit-del"
-                            title="Delete visit"
-                            onClick={() => void removeVisit(r.del!)}
-                          >
-                            ×
-                          </button>
+
+                        {canEdit && open && isVisit && (
+                          <div className="visit-editor">
+                            <div className="ve-dates">
+                              <label>
+                                <span className="sr-only">Visit start date</span>
+                                <input
+                                  type="date"
+                                  value={evStart}
+                                  aria-label="Visit start date"
+                                  onChange={(e) => setEvStart(e.target.value)}
+                                />
+                              </label>
+                              <span className="muted">to</span>
+                              <label>
+                                <span className="sr-only">Visit end date</span>
+                                <input
+                                  type="date"
+                                  value={evEnd}
+                                  aria-label="Visit end date"
+                                  onChange={(e) => setEvEnd(e.target.value)}
+                                />
+                              </label>
+                              <button
+                                className="primary"
+                                onClick={() => void saveVisitDates(r.del!)}
+                              >
+                                Save
+                              </button>
+                            </div>
+                            <p className="muted ve-hint">
+                              {evEnd > evStart
+                                ? 'More than one day — this can be a trip.'
+                                : 'Add days to make this a longer visit.'}
+                            </p>
+                            <div className="ve-actions">
+                              <button
+                                aria-pressed={r.trip}
+                                onClick={() => void toggleVisitIsTrip(r.del!, !r.trip)}
+                              >
+                                {r.trip ? 'Not a trip' : 'Mark as a trip'}
+                              </button>
+                              <Link className="ve-link" to={r.to}>
+                                Open this day
+                              </Link>
+                              <button
+                                className="visit-del"
+                                onClick={() => void removeVisit(r.del!)}
+                              >
+                                Delete visit
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
-                      {/* A trip contains the places you went to inside its dates.
-                          Each one is a place in its own right and counts once; the
-                          week itself is a single occasion. */}
-                      {r.trip && (tripContents[r.key] ?? []).length > 0 && (
-                        <ul className="trip-contents">
-                          {(tripContents[r.key] ?? []).map((c) => (
-                            <li key={c.visit_id}>
-                              <Link to={`/place/${c.place_id}`}>{c.place_name}</Link>
-                              <span className="muted">
-                                {c.start_date === c.end_date
-                                  ? fmtRunDate(c.start_date)
-                                  : `${fmtRunDate(c.start_date)} – ${fmtRunDate(c.end_date)}`}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {canEdit && editingVisit && editingVisit === r.del && (
-                        <div className="visit-dates-edit">
-                          <label>
-                            <span className="sr-only">Visit start date</span>
-                            <input
-                              type="date"
-                              value={evStart}
-                              aria-label="Visit start date"
-                              onChange={(e) => setEvStart(e.target.value)}
-                            />
-                          </label>
-                          <span className="muted">to</span>
-                          <label>
-                            <span className="sr-only">Visit end date</span>
-                            <input
-                              type="date"
-                              value={evEnd}
-                              aria-label="Visit end date"
-                              onChange={(e) => setEvEnd(e.target.value)}
-                            />
-                          </label>
-                          <button className="primary" onClick={() => void saveVisitDates(r.del!)}>
-                            Save
-                          </button>
-                          <button onClick={() => setEditingVisit(null)}>Cancel</button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </details>
