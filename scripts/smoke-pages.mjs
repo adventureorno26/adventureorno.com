@@ -77,6 +77,25 @@ for (const [header, pattern] of Object.entries(required)) {
   else if (!pattern.test(value)) failures.push(`Header ${header} did not match expectation: ${value}`);
 }
 
+// The CSP must permit the third-party SDKs the app actually loads. Google Photos
+// never worked — not once, no rows in google_tokens ever — because
+// accounts.google.com was in frame-src and connect-src but NOT script-src, so the
+// browser blocked the Identity Services SDK and the only symptom was a banner
+// reading "Could not load Google sign-in". Nothing in CI noticed. Now it would.
+const csp = login.headers.get('content-security-policy') || '';
+const scriptSrc = csp.match(/script-src([^;]*)/)?.[1] ?? '';
+const connectSrc = csp.match(/connect-src([^;]*)/)?.[1] ?? '';
+check(
+  scriptSrc.includes('https://accounts.google.com'),
+  `CSP script-src must allow https://accounts.google.com or the Google sign-in SDK ` +
+    `cannot load (script-src:${scriptSrc}).`,
+);
+check(
+  connectSrc.includes('googleusercontent.com'),
+  `CSP connect-src must allow googleusercontent.com or picked photos cannot be ` +
+    `downloaded (connect-src:${connectSrc}).`,
+);
+
 // The SPA shell must never be cached, or a new deploy serves stale HTML against
 // new hashed assets (the "unstyled page" failure mode).
 check(
@@ -85,10 +104,24 @@ check(
 );
 
 // --- Build provenance ---------------------------------------------------------
-const version = await (await get('/version.json')).json();
+// A Cloudflare Pages deploy does NOT take over the production alias the instant
+// wrangler returns; it took ~1 minute the first time CI deployed, and the smoke
+// test read the PREVIOUS sha one second later and failed a deploy that had in fact
+// worked. So poll for it, and cache-bust — an edge-cached version.json is the other
+// way this reads stale.
+// Overridable so the wait itself can be tested without a three-minute run.
+const shaWaitMs = Number(process.env.SMOKE_SHA_TIMEOUT_MS || 180_000);
+const deadline = Date.now() + shaWaitMs;
+let version = { sha: 'none' };
+for (;;) {
+  version = await (await get(`/version.json?cb=${Date.now()}`)).json();
+  if (version.sha === expectedSha || Date.now() > deadline) break;
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+}
 check(
   version.sha === expectedSha,
-  `SHA mismatch: expected ${expectedSha}, received ${version.sha || 'none'}.`,
+  `SHA mismatch after waiting for the deploy to take over: expected ${expectedSha}, ` +
+    `received ${version.sha || 'none'}.`,
 );
 
 if (failures.length) {
