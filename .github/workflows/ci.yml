@@ -456,6 +456,24 @@ jobs:
             exit 1
           fi
           echo "All required Phase 1 jobs succeeded."
+      # Why deploy-production runs or does not. It skipped silently on runs #39
+      # and #40 with steps=0, meaning its `if` evaluated false, while every input
+      # looked correct. Print the actual values so the next run answers it.
+      - name: Report what the production deploy gate sees
+        env:
+          # Via env, never interpolated into the script body (zizmor: injection).
+          FLAG: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          echo "event_name = '$EVENT'  (needs 'push')"
+          echo "ref        = '$REF'    (needs 'refs/heads/main')"
+          echo "flag       = '$FLAG'   (needs exactly 'true')"
+          if [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ] && [ "$FLAG" = "true" ]; then
+            echo "=> deploy-production SHOULD run"
+          else
+            echo "=> deploy-production will be skipped"
+          fi
 
   # Disabled by default. Enable only after Cloudflare automatic production-branch
   # deployments are off and the production environment secrets are configured.
