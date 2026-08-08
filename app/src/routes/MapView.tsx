@@ -20,6 +20,7 @@ import {
   fetchMapProjection,
   fetchPings,
   fetchPlaceIdsForView,
+  fetchPlaceVisitCounts,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
@@ -96,7 +97,10 @@ function coverIcon(p: Place, childCoverByParent: Map<string, string>): string {
   return '';
 }
 
-function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+function toFeatureCollection(
+  places: Place[],
+  visitCounts: Map<string, number>,
+): GeoJSON.FeatureCollection<GeoJSON.Point> {
   // Precompute parent-place → the first child's cover photo ONCE (O(n)); coverIcon
   // used to linear-scan all places per trail marker, i.e. O(n²) every feature rebuild.
   const childCoverByParent = new Map<string, string>();
@@ -117,7 +121,7 @@ function toFeatureCollection(places: Place[]): GeoJSON.FeatureCollection<GeoJSON
         properties: {
           id: p.id,
           photo: icon ? 1 : 0,
-          visits: p.visit_count ?? 0,
+          visits: visitCounts.get(p.id) ?? 0,
           icon,
           color: categoryColor(primary),
           // White type indicator on no-photo pins (R=Restaurant, W=Winery, …).
@@ -335,11 +339,16 @@ export default function MapView() {
   addModeRef.current = addMode;
   navigateRef.current = navigate;
   placesRef.current = places;
+  // Per-view visit counts for the badge, held in a ref so syncSource can stay a
+  // zero-dependency callback like the other map plumbing.
+  const visitCountsRef = useRef<Map<string, number>>(new Map());
 
   const syncSource = useCallback((rows: Place[]) => {
     const map = mapRef.current;
     if (!map || !map.getSource(SOURCE_ID)) return;
-    (map.getSource(SOURCE_ID) as GeoJSONSource).setData(toFeatureCollection(rows));
+    (map.getSource(SOURCE_ID) as GeoJSONSource).setData(
+      toFeatureCollection(rows, visitCountsRef.current),
+    );
   }, []);
 
   const showPopup = useCallback((place: Place, coords: [number, number]) => {
@@ -818,6 +827,27 @@ export default function MapView() {
       active = false;
     };
   }, [personFilter, places.length]);
+
+  // Visit counts for the SAME view, so the "xN" badge matches the pins shown.
+  // Reading places.visit_count here was wrong: it is global, so Potomac Station
+  // showed 67 in Erica's view although all 39 of its visits are Josh's.
+  const [visitCounts, setVisitCounts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let active = true;
+    fetchPlaceVisitCounts(personFilter)
+      .then((m) => active && setVisitCounts(m))
+      .catch(() => active && setVisitCounts(new Map()));
+    return () => {
+      active = false;
+    };
+  }, [personFilter, places.length]);
+
+  // Push new counts into the ref and repaint, so switching Just me / Just Josh /
+  // Both updates the badges immediately.
+  useEffect(() => {
+    visitCountsRef.current = visitCounts;
+    syncSource(placesRef.current);
+  }, [visitCounts, syncSource]);
 
   // Trailheads = leaf places that belong to a trail. They're landmarks Erica
   // wants ALWAYS on the map (e.g. the Appalachian / Tuscarora / W&OD trailheads),

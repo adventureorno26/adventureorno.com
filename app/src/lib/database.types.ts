@@ -2340,6 +2340,13 @@ export type Database = {
           rating: number
         }[]
       }
+      place_visit_counts: {
+        Args: { p_profile?: string }
+        Returns: {
+          place_id: string
+          visits: number
+        }[]
+      }
       place_visit_stats: {
         Args: { p_place: string }
         Returns: {

@@ -631,6 +631,30 @@ export async function fetchSpatialMembers(containerId: string): Promise<string[]
 }
 
 /** Place ids that should show for a person view (null = Both, post-cutoff only). */
+/**
+ * Per-place visit counts FOR THE ACTIVE VIEW (map badge).
+ *
+ * The badge used to read `places.visit_count`, which is global, so it showed the
+ * same number in Just me / Just Josh / Both — Potomac Station advertised 67 visits
+ * in Erica's view although every one of them is Josh's. This RPC applies exactly
+ * the same filter as `place_ids_for_view`, so the badge can never disagree with
+ * which pins are on the map.
+ *
+ * `null` = the Both view (visits attributed to both); a profile id = that person's
+ * visits plus the Both ones.
+ */
+export async function fetchPlaceVisitCounts(
+  profileId: string | null,
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase.rpc('place_visit_counts', { p_profile: profileId });
+  if (error) throw error;
+  const out = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ place_id: string; visits: number }>) {
+    out.set(row.place_id, row.visits);
+  }
+  return out;
+}
+
 export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('place_ids_for_view', {
     p_profile: profileId ?? null,
