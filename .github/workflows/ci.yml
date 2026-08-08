@@ -498,8 +498,26 @@ jobs:
 
   # Disabled by default. Enable only after Cloudflare automatic production-branch
   # deployments are off and the production environment secrets are configured.
+  # DIAGNOSTIC (temporary). deploy-production has skipped on every single push to
+  # main under two different `if:` conditions, while a step inside release-gate on
+  # the SAME run printed event=push, ref=refs/heads/main, flag=true. Two suspects
+  # remain and this probe separates them in one run:
+  #   * it uses the bracket form needs['release-gate'], since a hyphen in a context
+  #     property can be parsed as a minus operator
+  #   * it declares NO `environment:`, which is the only other thing the deploy job
+  #     has that no other job has
+  # probe runs + deploy-production skips  -> the `environment: production` binding
+  # both skip                             -> the needs/output expression
+  deploy-probe:
+    if: ${{ needs['release-gate'].outputs.deploy_enabled == 'true' }}
+    needs: release-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "probe ran; gate output was '${{ needs['release-gate'].outputs.deploy_enabled }}'"
+
   deploy-production:
-    if: ${{ needs.release-gate.result == 'success' && needs.release-gate.outputs.deploy_enabled == 'true' }}
+    if: ${{ needs['release-gate'].outputs.deploy_enabled == 'true' }}
     needs: release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
