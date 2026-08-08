@@ -84,9 +84,11 @@ if [ -n "$UNEXPECTED" ]; then
 fi
 
 # Verify the schema is actually complete (never report success on a partial apply).
-CORE=$(psql_db -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name in ('places','visits','entries','activities','photos','videos','profiles','place_membership','trips','trip_stops','settings','location_pings');" | tr -d ' ')
-if [ "$CORE" != "12" ]; then
-  echo "FAILED: expected 12 core tables, found $CORE. See $ERRLOG." >&2
+# trips/trip_stops are NOT here: migration 0137 dropped them (a trip is a visit you
+# marked — docs/SCHEMA.md). If they ever come back, something restored the retired model.
+CORE=$(psql_db -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name in ('places','visits','entries','activities','photos','videos','profiles','place_membership','settings','location_pings');" | tr -d ' ')
+if [ "$CORE" != "10" ]; then
+  echo "FAILED: expected 10 core tables, found $CORE. See $ERRLOG." >&2
   exit 1
 fi
 

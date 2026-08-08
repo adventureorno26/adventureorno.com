@@ -23,12 +23,8 @@ insert into public.visits (id,place_id,start_date,end_date,manual)
 insert into public.activities (id,type,distance,lat,lng,place_id,start_date)
   values ('c1c1c1c1-0000-0000-0000-000000000001','Hike',1609.344,10,20,'a1a1a1a1-0000-0000-0000-000000000001','2026-06-01T10:00:00Z')
   on conflict (id) do nothing;
-insert into public.trips (id,name,start_date,end_date,status)
-  values ('d1d1d1d1-0000-0000-0000-000000000001','RT Trip','2026-06-01','2026-06-10','taken')
-  on conflict (id) do nothing;
-insert into public.trip_stops (id,trip_id,place_id,status)
-  values ('e1e1e1e1-0000-0000-0000-000000000001','d1d1d1d1-0000-0000-0000-000000000001','a1a1a1a1-0000-0000-0000-000000000001','planned')
-  on conflict (id) do nothing;
+update public.visits set is_trip = true
+  where id = 'b1b1b1b1-0000-0000-0000-000000000001';
 reset session_replication_role;
 SQL
 
@@ -51,8 +47,6 @@ fi
 # Clean the fixture so the disposable db is left as the tests expect.
 psql_db >/dev/null <<'SQL'
 set session_replication_role = replica;
-delete from public.trip_stops where id='e1e1e1e1-0000-0000-0000-000000000001';
-delete from public.trips where id='d1d1d1d1-0000-0000-0000-000000000001';
 delete from public.activities where id='c1c1c1c1-0000-0000-0000-000000000001';
 delete from public.visits where id='b1b1b1b1-0000-0000-0000-000000000001';
 delete from public.places where id='a1a1a1a1-0000-0000-0000-000000000001';

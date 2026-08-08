@@ -2,132 +2,145 @@
 
 Work on adventureorno.com. Read `docs/SCHEMA.md` FIRST — it is the authoritative data
 model and it beats every other document. Do not redesign the schema; it was settled on
-2026-08-08 (migrations 0129–0135) and re-litigating it is the single thing that has
+2026-08-08 (migrations 0129–0137) and re-litigating it is the single thing that has
 wasted the most time on this project.
 
-**Deploy rule:** production is Cloudflare Pages **Direct Upload**, so pushing to GitHub
-does NOT deploy. `deploy-production` in CI still skips. Deploy by hand, verify, and
-always end by telling Erica to hard-refresh (Cmd-Shift-R):
+**Deploying.** Production is Cloudflare Pages. Deploy by hand, verify the sha, and end
+by telling Erica to hard-refresh (Cmd-Shift-R):
 
-```
+```bash
 npm run build && npx wrangler pages deploy app/dist --project-name adventureorno
-curl -s https://adventureorno.com/version.json     # must equal git rev-parse HEAD
+curl -s "https://adventureorno.com/version.json?cb=$RANDOM"   # must equal git rev-parse HEAD
 ```
 
-`npm run build` stamps `version.json` from git HEAD, so it is trustworthy now. Verify
-the deploy by comparing that sha, not by looking at a directory listing.
+Cache-bust that URL and allow ~1 minute — a fresh deploy does not take over instantly,
+and a stale read looks exactly like a failed deploy.
+
+**CI can deploy too, and its `deploy-production` job is NOT hardwired to skip** — the
+old brief said it was, which is out of date. `vars.PRODUCTION_DEPLOY_ENABLED` is `true`
+and the job gates on `release-gate`, which requires every CI job green. See item 3.
 
 **Verify visually before shipping UI.** Login is Google-only so you cannot drive the
-authenticated app. Instead: build, then render the real markup against the built CSS in
-a local harness and screenshot it at 390x844. Two bugs shipped this week that a
-screenshot would have caught in seconds. Do not skip this.
+authenticated app. Build, then render the real markup against `app/src/index.css` in a
+Playwright harness and screenshot at 390x844. That is how the lightbox, the add sheet
+and the place card were checked this session. Do not skip it.
 
 ---
 
-## 1. Attribution leaks across views — ONE root cause, two visible bugs
+## Done on 2026-08-08 (do not redo)
 
-`places.solo_profile` is a **legacy place-level attribution column, superseded by
-visit-level attribution**. It is `null` for almost every place, and `null` silently
-means "show it to everyone".
+* **Attribution leaks — fixed at the root.** `places.solo_profile` is **dropped**
+  (migration 0136). It was null for 129 of 132 places and null meant "show everyone",
+  which is why the Army Ten Miler appeared under "Just Josh". The three labels it held
+  were carried down onto their visits with `solo_override` first, so no "just me" label
+  was lost; exactly two visits changed (Purcellville 2026-03-07, Beaverdam 2025-12-27,
+  both Both→Erica). `place_attribution()` derives a place's Who from its visits.
+  StatsBar's drill-down uses `place_ids_for_view`, so it agrees with the headline.
+  Live: Both 50 / Erica 111 / Josh 55 places; repeat-visit places 14 / 47 / 16.
 
-* `app/src/components/StatsBar.tsx:75` filters the drill-down list with
-  `!(personFilter && p.solo_profile && p.solo_profile !== personFilter)`. Because
-  `p.solo_profile` is null, nothing is ever excluded — which is why **the Army Ten
-  Miler shows in Josh's "Just Josh" view with Erica's stats**. The race RPCs
-  (`races_list`, `race_stats`) are CORRECT and already filter by view, and both Army
-  Ten Miler activities are correctly attributed to Erica. Only the client leaks.
-* The same null column makes **Rehoboth Beach read "Both"** when its visit is
-  correctly `solo_profile = Erica`, `solo_override = true`.
+* **The map visit badge — the previous TWO diagnoses were both wrong.** `visits` was
+  never 0 and the layer was never misconfigured. The badge only draws on an
+  **unclustered** marker, and `clusterMaxZoom: 12` kept nearly every repeat place inside
+  a cluster at the zooms Erica uses. Measured with a Playwright probe over the real 116
+  places: DC metro at z10 rendered **1** badge at maxZoom 12 and **4** at 9. Now 9.
+  If it ever looks wrong again, measure before theorising — the probe pattern is worth
+  rebuilding.
 
-**Do:** delete `places.solo_profile` entirely and route every attribution read through
-visit-level attribution (`place_ids_for_view`, `place_visit_counts`, `wander_stats`,
-`races_list` — all of which already take `p_profile` and filter correctly). Snapshot
-first; it is a destructive schema change. Then confirm all three toggles — Just Erica /
-Just Josh / Both — produce different, correct numbers in every stat and dropdown.
+* **The add flow is one sheet** (`AddSheet.tsx`): what are you adding (Photos · A place
+  I've been · Somewhere to go later) → where does it belong (nothing, or a trail) → what
+  is it (tags). The map's `+ Add` menu, the five-step `/add` wizard and the separate
+  "make this a city / region / trail" row are gone; `/add` redirects. Photos and the
+  Google Photos import moved into the sheet **before** the button changed. The City and
+  Region **tags** now fetch the OSM boundary themselves.
 
-Live truth to check against: places with more than one visit are **14** in Both,
-**47** in Erica's view, **16** in Josh's.
+* **Trail cards**: segments are listed once, as Sections (they were also being grouped
+  into "Hiking"/"Trail"/"Places"); a container's gallery includes its members' photos
+  (`fetchPhotosForPlaceTree`); Sections done/todo follows the current person view.
 
-## 2. The visit badge on the map
+* **Place card**: evidence nests inside its visit. Brewster is one 2-day visit
+  containing a ride and a run, not three rows.
 
-Erica wants a count on any place visited more than once. `MapView.tsx:669` already adds
-a `place-visit-badge` symbol layer filtered `['>', ['get','visits'], 1]`, fed by
-per-view `place_visit_counts`. The code reads correct and the data is right (14/47/16
-above), so **the previous diagnosis was wrong** — do not guess again. Load the map,
-inspect the actual GeoJSON feature properties, and find where `visits` is 0 or missing.
-Likely suspects: `toFeatureCollection` running before counts load, or the ref/sync in
-`MapView.tsx:342-350` and `831-850`.
+* **Photo viewer**: no "add a caption" link — tap the picture. The reaction marks and
+  the date/download row sit against the bottom edge of the photo.
 
-## 3. Trail sections are split across two lists
+* **`trips` / `trip_stops` are dropped** (migration 0137), with Erica's confirmation,
+  along with the `trip` place category, /trips, /trip/:id, /trips/review/:id,
+  `lib/trips.ts` and nine trip-only DB functions. `rebuild_place_visits` takes its
+  fusing window from `visits.is_trip`; `create_experience` raises on a trip link.
+  Snapshots: `supabase/snapshots/2026-08-08-*.json`.
 
-On the Appalachian Trail card, segments appear under both "hikes" and "places". They
-should be one **Sections** list, and anything added to the trail later should land
-there too. `PlacePanel.tsx` already has a `trailSections` block (~line 1388) and
-`fetchActivitiesForPlaceTree` aggregates a container's members' activities — but photos
-are NOT aggregated, so a trail shows only its own. Consolidate into one section list and
-aggregate member photos the same way.
+---
 
-Section counts must also differ per view (Just Erica / Just Josh / Both). `PlacePanel`
-does not currently receive the person filter — that plumbing is needed and is the same
-plumbing item 1 needs.
+## 1. Google Photos still has never connected
 
-## 4. Redesign the add / "what is this place" flow  ← the big one
+`google_tokens` has **zero rows, ever**.
 
-Erica has asked for this repeatedly and it keeps getting patched instead of designed.
-Today there are FOUR surfaces asking one question: the map's `+ Add` menu, "Add a place
-here", "Add to a trail", the "make this a city / region / trail" tags, and the 5-step
-`/add` wizard.
+**The old hypothesis is disproven — do not send Erica to the Google console for it.**
+Probing Google's authorize endpoint shows `https://adventureorno.com` IS an authorized
+JavaScript origin: the GIS `storagerelay://https/adventureorno.com` redirect reaches the
+consent screen for the `photospicker.mediaitems.readonly` scope, app name
+"Adventureorno". The only registered **redirect URI** is the Supabase auth callback, so
+a redirect-based flow WOULD need a console change — the popup flow does not.
 
-Design it as **one sheet**, then delete what it replaces:
+Fixed in code this session: connecting is its own tap (a click may open one pop-up and
+the flow needed two), the picker window opens before any `await`, `serverToken` reports
+a reason instead of swallowing every failure, and the edge function now errors when
+Google returns no refresh token or the upsert fails.
 
-* **What are you adding?** — Photos · A place I've been · Somewhere to go later
-* **Where does it belong?** (only for a place) — nothing, or a trail. Cities and regions
-  attach SPATIALLY by boundary, so they are never a question to ask.
-* **What is it?** — tags. There is no separate "make this a city/region/trail"; trail is
-  the only container ever set by hand.
+**Next step is evidence, not another guess.** Ask Erica to tap Google Photos and send
+the exact banner text. The likely one is `google returned no refresh token (consent was
+not offline)`, which means Google already has a grant and won't re-issue a refresh
+token; the fix for that is for her to remove "Adventureorno" at
+myaccount.google.com/permissions once and connect again. Supabase edge-function logs
+are empty for this project (`function_edge_logs` returns 0 rows), so the banner is the
+only channel — don't burn time on the logs.
 
-**Before deleting the top `+ Add` button:** it is NOT redundant, despite appearances.
-It is the only entry point for **Add photos** and the **Google Photos import** — the
-bottom Add tab opens the wizard and covers neither. Removing it orphaned 91 lines and
-`importGooglePhotos` and had to be reverted. Move those two actions into the new sheet
-first, then remove the button.
+## 2. Smaller things
 
-Erica's standing UI rules: **no icons** (the reaction marks are the one agreed
-exception), no blur/glass controls, do not change the locked map-control layout, and
-far fewer options — she has said "6000 stupid options" and she is right. The "Add to a
-trail" dropdown used to list ~115 places; it now lists trails only.
+* Activity names are raw Strava strings ("cycling 2018-07-16 19:05") and read badly in
+  the nested evidence list on a place card. 0130 stopped auto-naming PLACES; activities
+  were never covered.
+* The `detect-trips` edge function is still deployed. It creates `suggested=true`
+  PLACES, which SCHEMA.md lists under "Retired — do not restore", and the UI that
+  reviewed them is gone. It is NOT scheduled (cron has only rebuild-revealed-area,
+  dedupe-joint-outings, purge-trash) and there are 0 suggested places right now, so
+  nothing is orphaned — but if it is ever wired to a schedule it will create drafts
+  nobody can see. Ask Erica before deleting it.
+* `trip_notes` (0 rows) and `trip_migration_exceptions` (52 rows) were deliberately
+  left alone — outside the scope Erica confirmed. They still export/restore.
+* `activity_reactions` was missing from `scripts/export-data.sh`, so the backup never
+  covered it since 0135. Added.
+* `deleted_at` / soft-delete: `fetchPhotosForPlaceTree` mirrors the existing
+  `fetchPhotosForPlace`, which does not filter `deleted_at`. Worth checking whether the
+  RLS policy already does.
 
-## 5. Google Photos import has never worked
+## 3. The release gate never lets CI deploy
 
-`google_tokens` has **zero rows, ever**. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are
-set as Supabase secrets, the edge function is deployed, and the client ID IS in the
-shipped bundle — so the server side is fine and the browser consent step never
-completes. Most likely the OAuth client's Authorized JavaScript origins / redirect URIs
-do not include `https://adventureorno.com`. That is a Google Cloud Console change only
-Erica can make; ask her to check rather than guessing at code.
+`deploy-production` and the `deploy-probe` diagnostic have **skipped on every green run,
+including #44 and #45**, while the gate step logged `event=push ref=refs/heads/main
+flag=true`. Per the note in `ci.yml`, both skipping points at the needs/output
+expression rather than the `environment: production` binding.
 
-## 6. Smaller, already diagnosed
+The step now logs the DECISION it published (`-> enabled=...`) and puts it in the step
+summary, and trims whitespace off the variable. Read that line on the next green run
+before changing anything: if it says `enabled=true` and the deploy still skips, the
+problem is `needs['release-gate'].outputs.deploy_enabled` and not the flag.
 
-* **Brewster shows 3 rows for 1 visit.** The visit is correct (one fused 2-day stay);
-  the card renders photos and activities as siblings of the visit instead of nested
-  inside it. Evidence should nest under the visit — this is the remaining half of the
-  place-card work.
-* **`trips` / `trip_stops` tables** are retired by the model and Erica approved dropping
-  them (8 trips, 13 stops, 0 notes — all migrated to visits with `is_trip`). Snapshot,
-  confirm the exact scope with her, then drop.
-* **Reaction marks** shipped: Love it + Crushed it, sticker style, on photos and
-  activities (`ReactionMarks.tsx`, `lib/reactions.ts`, migration 0135). Erica chose
-  these from a comparison of six style directions.
+Everything shipped so far IS in production regardless — hand deploys covered it. Verify
+with `git merge-base --is-ancestor <sha> <live sha>`, not by assuming.
 
 ## Ground rules that were learned the hard way
 
-1. **A one-shot data fix that a trigger can undo is not a fix.** Migration 0127 cleaned
-   up the `trip` category; `sync_place_category` re-derived it on the next write and the
-   bug came back. Remove the mechanism, not the rows.
-2. **Never let a test pass vacuously.** A "no trip-category places" assertion passed on
-   an empty local table and proved nothing. Seed the real shape, then assert, and add a
-   negative control that fails when the rule is removed.
+1. **A one-shot data fix that a trigger can undo is not a fix.** Remove the mechanism,
+   not the rows. `places.solo_profile` and the `trips` tables both lingered for exactly
+   this reason: the rows were cleaned, the mechanism stayed, and the next session found
+   two models again.
+2. **Never let a test pass vacuously.** Seed the real shape, then assert, and add a
+   negative control that fails when the rule is removed. See
+   `supabase/tests/0136_*.test.sql` and `0137_*.test.sql`.
 3. **Never mass-delete or overwrite without exact-scope confirmation from Erica**, and
-   snapshot first.
+   snapshot first into `supabase/snapshots/`.
 4. Do not reintroduce the home exclusion zone anywhere. Never force-push.
 5. Batch changes and deploy ONCE; rapid successive deploys leave half-updated bundles.
+6. **Measure before diagnosing.** The visit badge was misdiagnosed twice by reading the
+   code. A 40-line Playwright probe with the real data answered it in one run.

@@ -29,8 +29,8 @@ SCHEMA_VERSION="$(ls "$MIGR"/*.sql | sed -E 's:.*/([0-9]{4})_.*:\1:' | sort -n |
 TABLES=(
   profiles people places place_membership place_membership_exceptions
   place_categories visits entries activities location_pings photos videos
-  trips trip_stops trip_migration_exceptions trip_notes
-  place_ratings place_wishes photo_reactions peaks parks peak_bags
+  trip_migration_exceptions trip_notes
+  place_ratings place_wishes photo_reactions activity_reactions peaks parks peak_bags
   board_items shared_links revealed_area deleted_hashes dup_dismissed settings
 )
 

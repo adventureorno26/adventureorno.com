@@ -32,7 +32,7 @@ const STORAGE_KEY = 'sb-aanfyhsjbtnqzphuoiem-auth-token';
 
 const ROUTES = [
   '/', '/places', '/timeline', '/add', '/settings', '/health',
-  '/trips', '/bucket', '/wrapped', '/photos/sort', '/places/edit',
+  '/bucket', '/wrapped', '/photos/sort', '/places/edit',
 ];
 
 const VIEWPORTS = [
