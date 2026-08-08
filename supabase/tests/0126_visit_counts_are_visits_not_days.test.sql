@@ -14,10 +14,12 @@ set local request.jwt.claims = '{"sub":"eeeeeeee-0000-0000-0000-00000000c001"}';
 -- 1) DAYS -> TIMES. Five photo days across one trip window is ONE visit, so the
 --    badge must read 1, not 5. This is the exact Cape Cod complaint.
 do $$
-declare p uuid; c int;
+declare p uuid; c int; t uuid; tw uuid;
 begin
   insert into public.places (name, lat, lng, saved) values ('V126 Cape Cod', 41.7, -70.0, true) returning id into p;
-  insert into public.trips (name, start_date, end_date) values ('V126 CC trip', '2026-08-02', '2026-08-07');
+  insert into public.places (name, lat, lng, saved) values ('V126 CC trip', 41.71, -70.01, true) returning id into tw;
+  insert into public.visits (place_id, start_date, end_date, manual) values (tw, '2026-08-02', '2026-08-07', true) returning id into t;
+  perform public.set_visit_is_trip(t, true);
   insert into public.photos (place_id, lat, lng, taken_at, r2_key, thumb_key, sha256) values
     (p,41.7,-70.0,'2026-08-02T12:00:00Z','a1','b1','s1'),
     (p,41.7,-70.0,'2026-08-03T12:00:00Z','a2','b2','s2'),

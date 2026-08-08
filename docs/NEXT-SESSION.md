@@ -129,6 +129,21 @@ problem is `needs['release-gate'].outputs.deploy_enabled` and not the flag.
 Everything shipped so far IS in production regardless — hand deploys covered it. Verify
 with `git merge-base --is-ancestor <sha> <live sha>`, not by assuming.
 
+## Running the SQL tests against LIVE
+
+`scripts/db-test.sh` needs a local stack. You can also run a single
+`supabase/tests/*.test.sql` straight at production through the Management API — they
+are all `begin … rollback`, so it is safe, and it is the fastest way to check a
+migration you just applied. Two files collide with real data when you do and are NOT
+broken:
+
+* `0134_a_trip_is_one_occasion` seeds 2026-08-02..07, which is Erica's real Cape Cod
+  trip, so its fictional visits fold into that trip and the occasion count does not
+  move.
+* whole-dataset invariants (e.g. 0126's "visit_count equals visit rows") are checking
+  production, not the fixture. That one caught a genuine drift on Cape Cod, fixed with
+  `recompute_place_stats`.
+
 ## Ground rules that were learned the hard way
 
 1. **A one-shot data fix that a trigger can undo is not a fix.** Remove the mechanism,
@@ -142,5 +157,10 @@ with `git merge-base --is-ancestor <sha> <live sha>`, not by assuming.
    snapshot first into `supabase/snapshots/`.
 4. Do not reintroduce the home exclusion zone anywhere. Never force-push.
 5. Batch changes and deploy ONCE; rapid successive deploys leave half-updated bundles.
-6. **Measure before diagnosing.** The visit badge was misdiagnosed twice by reading the
+6. **When you edit a live function by slicing between two markers, diff the result
+   against the original.** 0137 cut sections 3 and 4 out of `create_experience` and
+   silently took the unnumbered rating block with them, so `{rating: 5}` stopped
+   writing `place_ratings` — no error, the rating just vanished. 0111's test caught it;
+   0139 restored it.
+7. **Measure before diagnosing.** The visit badge was misdiagnosed twice by reading the
    code. A 40-line Playwright probe with the real data answered it in one run.

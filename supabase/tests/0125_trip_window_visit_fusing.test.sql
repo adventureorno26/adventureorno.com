@@ -1,4 +1,6 @@
 -- DB test for 0125 — trip-window visit fusing + hand-edited visit dates.
+-- Updated by 0137: the window is a MARKED VISIT now, not a `trips` row. The rules
+-- being tested are unchanged.
 -- LOCAL disposable stack only. Shapes are taken from the real production data.
 
 begin;
@@ -14,10 +16,12 @@ set local request.jwt.claims = '{"sub":"dddddddd-0000-0000-0000-00000000b001"}';
 -- 1) THE CAPE COD CASE. Photos on Aug 2,3,5,6,7 with a blank Aug 4 previously
 --    produced TWO visits. Inside a trip window it must become ONE.
 do $$
-declare p uuid; t uuid; n int; s date; e date;
+declare p uuid; t uuid; tw uuid; n int; s date; e date;
 begin
   insert into public.places (name, lat, lng, saved) values ('V125 Cape Cod', 41.7, -70.0, true) returning id into p;
-  insert into public.trips (name, start_date, end_date) values ('V125 Cape Cod trip', '2026-08-02', '2026-08-07') returning id into t;
+  insert into public.places (name, lat, lng, saved) values ('V125 Cape Cod trip', 41.71, -70.01, true) returning id into tw;
+  insert into public.visits (place_id, start_date, end_date, manual) values (tw, '2026-08-02', '2026-08-07', true) returning id into t;
+  perform public.set_visit_is_trip(t, true);
   insert into public.photos (place_id, lat, lng, taken_at, r2_key, thumb_key, sha256) values
     (p,41.7,-70.0,'2026-08-02T12:00:00Z','k1','t1','h1'),
     (p,41.7,-70.0,'2026-08-03T12:00:00Z','k2','t2','h2'),
@@ -37,10 +41,12 @@ end $$;
 -- 2) RETURNING is a SECOND visit on the SAME place — "count the place once, count
 --    the visits every time".
 do $$
-declare p uuid; n int;
+declare p uuid; t uuid; tw uuid; n int;
 begin
   select id into p from public.places where name = 'V125 Cape Cod';
-  insert into public.trips (name, start_date, end_date) values ('V125 Cape Cod trip 2', '2027-07-10', '2027-07-14');
+  insert into public.places (name, lat, lng, saved) values ('V125 Cape Cod trip 2', 41.72, -70.02, true) returning id into tw;
+  insert into public.visits (place_id, start_date, end_date, manual) values (tw, '2027-07-10', '2027-07-14', true) returning id into t;
+  perform public.set_visit_is_trip(t, true);
   insert into public.photos (place_id, lat, lng, taken_at, r2_key, thumb_key, sha256) values
     (p,41.7,-70.0,'2027-07-11T12:00:00Z','k6','t6','h6'),
     (p,41.7,-70.0,'2027-07-13T12:00:00Z','k7','t7','h7');
@@ -71,10 +77,12 @@ end $$;
 --    2026-05-10 over 7 unrelated single-day visits. An untrusted window must NOT
 --    fuse them, or 21 months of history collapses into one visit.
 do $$
-declare p uuid; n int;
+declare p uuid; t uuid; tw uuid; n int;
 begin
   insert into public.places (name, lat, lng, saved) values ('V125 Campground', 38.9, -78.3, true) returning id into p;
-  insert into public.trips (name, start_date, end_date) values ('V125 Bogus 637-day trip', '2024-08-11', '2026-05-10');
+  insert into public.places (name, lat, lng, saved) values ('V125 Bogus 637-day trip', 38.91, -78.31, true) returning id into tw;
+  insert into public.visits (place_id, start_date, end_date, manual) values (tw, '2024-08-11', '2026-05-10', true) returning id into t;
+  perform public.set_visit_is_trip(t, true);
   insert into public.entries (place_id, kind, title, date) values
     (p,'note','a','2024-08-11'), (p,'note','b','2024-08-25'), (p,'note','c','2024-09-01'),
     (p,'note','d','2025-01-26'), (p,'note','e','2025-02-02'), (p,'note','f','2025-04-06'),

@@ -52,28 +52,9 @@ begin
   raise notice 'PASS 2: retry after partial failure — idempotent, no duplicates';
 end $$;
 
--- 3) Planned → completed stop: logging a visit inside a trip's window promotes the
---    place's planned stop to completed and links it to the visit.
-do $$
-declare r jsonb; v_place uuid; v_visit uuid; v_status text; v_link uuid;
-begin
-  insert into public.places (id,name,lat,lng,saved) values
-    ('bbbbbbbb-0000-0000-0000-0000000000e1','Planned Park',1,1,true);
-  insert into public.trips (id,name,start_date,end_date,status) values
-    ('cccccccc-0000-0000-0000-0000000000e1','CE Trip','2026-05-01','2026-05-31','taken');
-  insert into public.trip_stops (trip_id,place_id,status) values
-    ('cccccccc-0000-0000-0000-0000000000e1','bbbbbbbb-0000-0000-0000-0000000000e1','planned');
-
-  r := public.create_experience('ce-planned',
-    jsonb_build_object('id','bbbbbbbb-0000-0000-0000-0000000000e1'),
-    jsonb_build_object('date','2026-05-15','who','me'));
-  v_visit := (r->>'visit_id')::uuid;
-  select status, visit_id into v_status, v_link from public.trip_stops
-    where place_id='bbbbbbbb-0000-0000-0000-0000000000e1';
-  if v_status <> 'completed' then raise exception 'FAIL: planned stop not promoted (got %)', v_status; end if;
-  if v_link <> v_visit then raise exception 'FAIL: stop not linked to the new visit'; end if;
-  raise notice 'PASS 3: planned stop promoted to completed and linked';
-end $$;
+-- 3) (retired) Planned → completed trip-stop promotion. trip_stops is gone with
+--    migration 0137 — a trip is a visit you marked, and there is no stop to
+--    promote. 0137's test asserts create_experience now REJECTS a trip link.
 
 -- 4) Non-login people: a child attaches to a visit via person_ids.
 do $$
