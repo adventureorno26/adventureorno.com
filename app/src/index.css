@@ -6103,34 +6103,11 @@ button.mi-row:hover {
   opacity: 1;
 }
 
-/* A trip's contents — the places visited inside its dates (migration 0134).
-   Indented under the trip's own visit row, because they belong to that occasion
-   rather than standing beside it. */
-.trip-contents {
-  list-style: none;
-  margin: 2px 0 6px 0;
-  padding: 0 0 0 18px;
-  border-left: 2px solid var(--border-soft);
-}
-.trip-contents li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 13px;
-}
-.trip-contents a {
-  color: var(--text);
-  text-decoration: none;
-}
-.trip-contents a:hover {
-  text-decoration: underline;
-}
-
-/* One editor per visit (replaces the "Dates" pill, which opened a second row for a
-   single field). Tapping the visit row opens dates, who, trip and delete together. */
+/* A visit row: ONE line, then one editor. The previous version stacked three blue
+   chips, a Save pill, a hint sentence and four actions — six controls for what is
+   really "when was it, who was there, was it a trip". */
 .visit-item.open {
-  background: var(--panel-glass);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 10px;
 }
 .visit-open {
@@ -6143,40 +6120,101 @@ button.mi-row:hover {
   border: 0;
   padding: 0;
   text-align: left;
-  color: inherit;
   font: inherit;
   cursor: pointer;
+  color: inherit;
+  overflow: hidden;
+}
+/* the summary is secondary information — never link-blue */
+.visit-meta {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 .visit-editor {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px 10px 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 10px 10px;
 }
 .ve-dates {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
-.ve-hint {
-  margin: 0;
+.ve-dates input[type='date'] {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 7px;
+}
+.ve-to {
+  color: var(--muted);
   font-size: 12px;
 }
 .ve-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
-.ve-actions button,
-.ve-link {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
+.ve-btn {
+  min-height: 30px;
   padding: 0 12px;
   border-radius: 999px;
-  font-size: 13px;
-  text-decoration: none;
+  border: 1px solid var(--border-soft);
+  background: transparent;
   color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ve-btn.on {
+  background: var(--grad);
+  color: #04121f;
+  border-color: transparent;
+  font-weight: 600;
+}
+.ve-danger {
+  color: var(--muted);
+}
+.ve-danger:hover {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+/* The places visited during a trip, inside that visit. */
+.trip-contents {
+  list-style: none;
+  margin: 0 0 4px 0;
+  padding: 0 10px 0 22px;
+  border-left: 2px solid var(--border-soft);
+  margin-left: 10px;
+}
+.trip-contents li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.trip-contents a {
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trip-contents a:hover {
+  text-decoration: underline;
+}
+.trip-contents .muted {
+  font-size: 12px;
+  white-space: nowrap;
 }

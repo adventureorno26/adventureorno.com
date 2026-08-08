@@ -29,8 +29,8 @@ import {
   updatePlace,
   type MapPerson,
 } from '../lib/data';
-import type { Activity, Entry, NewEntry, Place, Trip, Visit } from '../lib/types';
-import { fetchTripBySourcePlace, fetchTripsForPlace } from '../lib/trips';
+import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
+import { fetchTripBySourcePlace } from '../lib/trips';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
@@ -162,7 +162,6 @@ export default function PlacePanel({
   }, [place.id, place.category, place.suggested, navigate]);
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
-  const [tripsHere, setTripsHere] = useState<Trip[]>([]);
   const [visitStats, setVisitStats] = useState<Record<string, { photos: number; videos: number }>>(
     {},
   );
@@ -347,10 +346,6 @@ export default function PlacePanel({
     let active = true;
     setVisits(null);
     setSpots(null);
-    setTripsHere([]);
-    fetchTripsForPlace(place.id)
-      .then((rows) => active && setTripsHere(rows))
-      .catch(() => active && setTripsHere([]));
     fetchVisits(place.id)
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
@@ -472,15 +467,19 @@ export default function PlacePanel({
       setError(e instanceof Error ? e.message : 'Could not add visit');
     }
   }
-  async function saveVisitDates(id: string) {
-    if (!evStart || !evEnd) return;
-    if (evEnd < evStart) {
+  // Saves as you change a date. Takes the values explicitly because React state
+  // hasn't updated yet at the moment onChange fires. Keeps the row OPEN — closing
+  // it mid-edit is what made the old pill feel like it fought you.
+  async function saveVisitDates(id: string, start?: string, end?: string) {
+    const s0 = start ?? evStart;
+    const e0 = end ?? evEnd;
+    if (!s0 || !e0) return;
+    if (e0 < s0) {
       setError('A visit cannot end before it starts.');
       return;
     }
     try {
-      await setVisitDates(id, evStart, evEnd);
-      setEditingVisit(null);
+      await setVisitDates(id, s0, e0);
       await reloadVisits();
       await refreshPlace();
       showSnack({ message: 'Visit dates updated.' });
@@ -885,8 +884,8 @@ export default function PlacePanel({
       {!place.is_home && <WeatherLine lat={place.lat} lng={place.lng} />}
 
       {/* Tags — always visible. Tap a pill to toggle it; selected pills stay
-          highlighted (no separate chip list). Includes Trip/Trail so any card,
-          even one added from a photo, can be marked as a trip or trail. */}
+          highlighted (no separate chip list). A card is marked a TRAIL here; a
+          TRIP is not a tag — it is a visit you marked, in the Visits list. */}
       {canEdit && (
         <div className="cat-edit">
           <div className="cat-picker">
@@ -1206,12 +1205,18 @@ export default function PlacePanel({
                               }}
                             >
                               <span className="visit-date">{r.date}</span>
-                              {r.sub && <span className="muted">{r.sub}</span>}
-                              {contents.length > 0 && (
-                                <span className="muted">
-                                  {contents.length} {contents.length === 1 ? 'place' : 'places'}
-                                </span>
-                              )}
+                              {/* One muted summary, not a stack of chips. */}
+                              {(() => {
+                                const meta = [
+                                  r.sub,
+                                  contents.length > 0
+                                    ? `${contents.length} ${contents.length === 1 ? 'place' : 'places'}`
+                                    : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ');
+                                return meta ? <span className="visit-meta">{meta}</span> : null;
+                              })()}
                             </button>
                           ) : (
                             <Link className="visit-main" to={r.to}>
@@ -1257,53 +1262,42 @@ export default function PlacePanel({
 
                         {canEdit && open && isVisit && (
                           <div className="visit-editor">
+                            {/* Dates save on change — a Save button for two fields is
+                                one control too many. */}
                             <div className="ve-dates">
-                              <label>
-                                <span className="sr-only">Visit start date</span>
-                                <input
-                                  type="date"
-                                  value={evStart}
-                                  aria-label="Visit start date"
-                                  onChange={(e) => setEvStart(e.target.value)}
-                                />
-                              </label>
-                              <span className="muted">to</span>
-                              <label>
-                                <span className="sr-only">Visit end date</span>
-                                <input
-                                  type="date"
-                                  value={evEnd}
-                                  aria-label="Visit end date"
-                                  onChange={(e) => setEvEnd(e.target.value)}
-                                />
-                              </label>
-                              <button
-                                className="primary"
-                                onClick={() => void saveVisitDates(r.del!)}
-                              >
-                                Save
-                              </button>
+                              <input
+                                type="date"
+                                value={evStart}
+                                aria-label="Visit start date"
+                                onChange={(e) => {
+                                  setEvStart(e.target.value);
+                                  void saveVisitDates(r.del!, e.target.value, evEnd);
+                                }}
+                              />
+                              <span className="ve-to">to</span>
+                              <input
+                                type="date"
+                                value={evEnd}
+                                aria-label="Visit end date"
+                                onChange={(e) => {
+                                  setEvEnd(e.target.value);
+                                  void saveVisitDates(r.del!, evStart, e.target.value);
+                                }}
+                              />
                             </div>
-                            <p className="muted ve-hint">
-                              {evEnd > evStart
-                                ? 'More than one day — this can be a trip.'
-                                : 'Add days to make this a longer visit.'}
-                            </p>
                             <div className="ve-actions">
                               <button
+                                className={r.trip ? 've-btn on' : 've-btn'}
                                 aria-pressed={r.trip}
                                 onClick={() => void toggleVisitIsTrip(r.del!, !r.trip)}
                               >
-                                {r.trip ? 'Not a trip' : 'Mark as a trip'}
+                                Trip
                               </button>
-                              <Link className="ve-link" to={r.to}>
-                                Open this day
-                              </Link>
                               <button
-                                className="visit-del"
+                                className="ve-btn ve-danger"
                                 onClick={() => void removeVisit(r.del!)}
                               >
-                                Delete visit
+                                Delete
                               </button>
                             </div>
                           </div>
@@ -1382,26 +1376,11 @@ export default function PlacePanel({
         );
       })()}
 
-      {place.category !== 'trip' && tripsHere.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 22 }}>Trips to this place</h3>
-          <div className="trip-places">
-            {tripsHere.map((t) => (
-              <Link key={t.id} className="trip-place" to={`/trip/${t.id}`}>
-                {t.name || 'Untitled trip'}
-                {t.start_date && (
-                  <span className="place-row-cats" style={{ marginLeft: 8, color: 'var(--muted)' }}>
-                    {new Date(t.start_date + 'T00:00:00').toLocaleDateString(undefined, {
-                      month: 'long',
-                      year: 'numeric',
-                    })}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
+      {/* There is no "Trips to this place" section any more. A trip is a VISIT you
+          marked, so it belongs in the Visits list above with the places you went to
+          during it nested inside it — not in a second list beside it. This section
+          read from the retired `trips` table and was the last thing showing trips and
+          visits as two different kinds of thing on one card. */}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} onUploaded={refreshPlace} />
@@ -1648,7 +1627,7 @@ export default function PlacePanel({
 
       {canEdit && (
         <div className="btn-row bottom-actions" style={{ marginTop: 22 }}>
-          <button onClick={() => setMerging((v) => !v)}>Add to a trip or trail</button>
+          <button onClick={() => setMerging((v) => !v)}>Add to a trail</button>
           <button className="danger" onClick={() => void removePlace()}>
             Delete
           </button>
@@ -1691,13 +1670,13 @@ export default function PlacePanel({
           >
             <option value="">Select…</option>
             {allPlaces
-              // Only offer top-level containers — not places already part of
-              // something, not this place, not ones already chosen.
+              // TRAILS ONLY. This used to list every place not already inside
+              // something — ~115 options — and offered "trip" containers that no
+              // longer exist (a trip is a visit you marked, migration 0133).
+              // Cities and regions attach SPATIALLY by boundary, so picking one by
+              // hand was never how containment worked.
               .filter(
-                (p) =>
-                  p.id !== place.id &&
-                  (p.part_of ?? []).length === 0 &&
-                  !(place.part_of ?? []).includes(p.id),
+                (p) => p.is_trail && p.id !== place.id && !(place.part_of ?? []).includes(p.id),
               )
               .sort((a, b) => a.name.localeCompare(b.name))
               .map((p) => (
