@@ -18,7 +18,8 @@
     "preview": "npm run preview --workspace app",
     "check:edge-config": "node scripts/check-edge-config.mjs",
     "audit:production": "node scripts/check-production-audit.mjs",
-    "check:bundle": "node scripts/check-bundle-budget.mjs app/dist"
+    "check:bundle": "node scripts/check-bundle-budget.mjs app/dist",
+    "check:env": "node scripts/check-env-example.mjs"
   },
   "engines": {
     "node": ">=20"

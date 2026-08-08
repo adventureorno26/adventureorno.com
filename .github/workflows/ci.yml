@@ -59,6 +59,11 @@ jobs:
       # an oversized chunk, and a missing asset each fail this step.
       - name: App — login bundle budget
         run: npm run check:bundle
+      # An undocumented VITE_* is baked in as `undefined` at build time and its
+      # feature silently disappears — it never fails loudly. This keeps
+      # .env.example an accurate inventory of what the app actually reads.
+      - name: Env example covers every client variable
+        run: npm run check:env
 
       - name: Worker — typecheck
         working-directory: workers/photo-gateway

@@ -486,8 +486,18 @@ distinguishable from a known one. Summary:
 ### Remaining
 
 - Resolve service-role rotation and mutable search paths.
-- Synchronize `.env.example`, CI, Pages, Worker bindings, Edge Function secrets, and runbooks; the
-  example currently omits part of the code-used variable inventory.
+- DONE 2026-08-07 for the client inventory — `.env.example` was missing two variables the app
+  actually reads: `VITE_GOOGLE_CLIENT_ID` (Google Photos picker) and `VITE_MAPBOX_TOKEN`
+  (business/POI search). That matters more than it looks: `VITE_*` values are baked in at BUILD
+  time, so an undocumented one ships as `undefined` and the feature it gates silently disappears
+  rather than failing loudly. The file now documents all 7 client variables plus the server-only
+  secrets and the local test identities, each with what it enables and what happens when blank.
+  `scripts/check-env-example.mjs` runs in CI and fails if any `import.meta.env.VITE_*` read by
+  `app/src` is undocumented; a documented-but-unused variable is reported as a note, not a failure.
+  Validated by negative control. Server secrets are deliberately not exact-matched — they vary per
+  environment and arrive via Supabase/Wrangler secrets.
+- Still to do: reconcile Pages env vars, Worker bindings and Edge Function secrets against this
+  inventory, and refresh the runbooks.
 - Restore only approved cron/geocode schedules and rerun only the approved Strava backfill.
 - Perform an encrypted database-plus-R2 backup and disposable restore drill with object-byte checksum
   proof.
