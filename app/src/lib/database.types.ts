@@ -1733,39 +1733,42 @@ export type Database = {
           created_by: string | null
           end_date: string
           id: string
-          is_trip: boolean | null
+          is_trip: boolean
           manual: boolean
           note: string | null
           place_id: string
           solo_override: boolean
           solo_profile: string | null
           start_date: string
+          status: string
         }
         Insert: {
           created_at?: string
           created_by?: string | null
           end_date: string
           id?: string
-          is_trip?: boolean | null
+          is_trip?: boolean
           manual?: boolean
           note?: string | null
           place_id: string
           solo_override?: boolean
           solo_profile?: string | null
           start_date: string
+          status?: string
         }
         Update: {
           created_at?: string
           created_by?: string | null
           end_date?: string
           id?: string
-          is_trip?: boolean | null
+          is_trip?: boolean
           manual?: boolean
           note?: string | null
           place_id?: string
           solo_override?: boolean
           solo_profile?: string | null
           start_date?: string
+          status?: string
         }
         Relationships: [
           {
@@ -2558,13 +2561,37 @@ export type Database = {
           created_by: string | null
           end_date: string
           id: string
-          is_trip: boolean | null
+          is_trip: boolean
           manual: boolean
           note: string | null
           place_id: string
           solo_override: boolean
           solo_profile: string | null
           start_date: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_visit_is_trip: {
+        Args: { p_is_trip: boolean; p_visit: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          start_date: string
+          status: string
         }
         SetofOptions: {
           from: "*"

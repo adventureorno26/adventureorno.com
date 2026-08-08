@@ -51,7 +51,13 @@ adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventur
    RLS requiring a `profiles` row. Signups disabled in Supabase Auth — access only via the invite
    flow. Never log photo coordinates or tokens.
 
-## Schema quick reference (authoritative version = migrations)
+## Schema quick reference
+
+**The data model is defined in [`docs/SCHEMA.md`](docs/SCHEMA.md) — read that first.**
+A place counts once; a visit counts every time; a trip is a visit you marked. There is
+no `trips` table and no `trip` place category.
+
+(Table list below; authoritative version = migrations)
 `places`, `entries`, `photos`, `location_pings`, `activities`, `trips`, `profiles`, `invites`,
 `deleted_hashes`, `settings`, `ingest_tokens` — as defined in `0001_init.sql`. Geometry columns
 are `geography(Point,4326)`. Cluster job uses `ST_ClusterDBSCAN` over unassigned photos + pings,

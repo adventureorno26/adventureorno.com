@@ -49,6 +49,7 @@ export interface Place {
   activity_categories: string[]; // auto tags from Strava
   solo_profile: string | null; // legacy place-level attribution (superseded by visit-level)
   favorite: string | null; // favorite wine / meal / beer at this place
+  counts_as_place: boolean; // false ONLY for a trail (a rollup of segments that already counted)
   holds_children: boolean; // container (trail/trip/city) — no attribution toggle
   category: string | null; // normalized singular category
   park: string | null; // national park / public land this place falls inside
@@ -71,7 +72,10 @@ export interface Visit {
   start_date: string; // date
   end_date: string; // date (= start_date for a single-day visit)
   note: string | null;
-  is_trip: boolean; // end_date > start_date (multi-day)
+  // A PERSON marked this visit as a trip (migration 0133). Never derived — duration
+  // means nothing. The Trips statistic counts these.
+  is_trip: boolean;
+  status: 'taken' | 'planned'; // planned = a future-dated trip
   solo_profile: string | null; // who was on this visit (null = both of us)
   solo_override: boolean; // true = human-set; kept across rebuilds
   created_at: string;
@@ -199,9 +203,9 @@ export type NewPlace = Pick<Place, 'name' | 'country' | 'admin1' | 'lat' | 'lng'
 export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
   Partial<Pick<Entry, 'body' | 'rating' | 'url' | 'date' | 'address' | 'lat' | 'lng'>>;
 
-// A Trip is a first-class planning + journal container (ADR 0001, Option A). It is
-// NOT a Place — it is a trip TO one or more Places, linked by explicit `trip_stops`
-// (a Trip only ever contains what you put on it; nothing auto-attaches by date).
+// RETIRED (migration 0133) — a trip is a VISIT you marked (`Visit.is_trip`), not a
+// separate noun. These types remain only until the trips/trip_stops tables are
+// dropped; do not build anything new on them. See docs/SCHEMA.md.
 export type TripStatus = 'taken' | 'upcoming';
 export type TripStopStatus = 'planned' | 'completed' | 'skipped';
 

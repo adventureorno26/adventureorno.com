@@ -1,5 +1,8 @@
 # AdventureOrNo completion plan
 
+> **The data model is [`SCHEMA.md`](SCHEMA.md), not this file.** Phase text below that
+> describes trips as a `trips` table predates migration 0133 and is superseded.
+
 Authoritative operational status and execution order as of 2026-08-07. This replaces status claims
 in old phase briefs, completion summaries, and the historical checklist in `CLAUDE.md`.
 

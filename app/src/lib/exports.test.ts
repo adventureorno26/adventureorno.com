@@ -20,6 +20,7 @@ function place(overrides: Partial<Place>): Place {
     auto: false,
     needs_geocode: false,
     name_locked: false,
+    counts_as_place: true,
     named_by: null,
     name_scope: null,
     visit_count: 0,

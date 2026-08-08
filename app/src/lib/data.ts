@@ -34,7 +34,7 @@ export async function addCategory(
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, holds_children, category, park, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, name_locked, named_by, name_scope, counts_as_place, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, holds_children, category, park, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -521,7 +521,7 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
 }
 
 const VISIT_COLS =
-  'id, place_id, start_date, end_date, note, is_trip, solo_profile, solo_override, created_at';
+  'id, place_id, start_date, end_date, note, is_trip, status, solo_profile, solo_override, created_at';
 
 /** Manually set who a visit belongs to (null = both). Sticks across rebuilds. */
 export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {
@@ -774,6 +774,22 @@ export function canRenamePlace(place: Place, me: string | null | undefined): boo
   return !!me && place.name_scope === me; // someone's own space: only them
 }
 
+/**
+ * Mark a visit as a trip, or unmark it.
+ *
+ * A trip IS a visit you marked — nothing derives it. Until migration 0133 `is_trip`
+ * was a generated column (`end_date > start_date`), so any multi-day stay was
+ * silently promoted to a trip: 50 of 485 visits were flagged that nobody marked.
+ */
+export async function setVisitIsTrip(visitId: string, isTrip: boolean): Promise<Visit> {
+  const { data, error } = await supabase.rpc('set_visit_is_trip', {
+    p_visit: visitId,
+    p_is_trip: isTrip,
+  });
+  if (error) throw error;
+  return data as unknown as Visit;
+}
+
 export async function deleteVisit(id: string): Promise<void> {
   const { error } = await supabase.from('visits').delete().eq('id', id);
   if (error) throw error;
@@ -790,8 +806,9 @@ export async function restoreVisit(v: Visit): Promise<Visit> {
       start_date: v.start_date,
       end_date: v.end_date,
       note: v.note,
-      // is_trip is a generated column (end_date > start_date) — never write it;
-      // restoring the dates reproduces it automatically.
+      // is_trip is set by a PERSON (migration 0133), so an undo must restore it
+      // explicitly — it is no longer implied by the dates.
+      is_trip: v.is_trip,
       solo_profile: v.solo_profile,
       solo_override: v.solo_override,
       manual: true,

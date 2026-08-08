@@ -1,3 +1,10 @@
+> **SUPERSEDED — do not follow the model described below.**
+> The authoritative data model is [`docs/SCHEMA.md`](../SCHEMA.md) (migration 0133):
+> a **place counts once**, a **visit counts every time**, and a **trip is a visit you
+> marked**. There is no `trips` table, no `trip` place category, and `is_trip` is never
+> derived. This file is kept only as the historical record of a decision that was
+> reversed; it is the reason the same work was redone five times.
+
 I n
 
 # Frontend Trip cutover plan (canonical model)
