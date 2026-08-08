@@ -76,7 +76,9 @@ unchanged.
    CORS wildcard, so a dropped CSP or HSTS would have passed; it now asserts CSP, HSTS, frame
    options, nosniff, referrer policy, permissions policy, COOP, immutable asset caching and
    no-cache HTML, and it passes against live production at `7a3d98eb`.
-5. Review and merge the current branch.
+5. DONE 2026-08-07 — reviewed and merged as PR #21 (merge commit `135c7bc`), with CI fully green
+   on the branch AND on `main` afterwards: build, security, secret-scan, osv-scan, semgrep, zizmor,
+   db-types-drift, edge-config-drift, e2e, db-tests, deploy-preview, release-gate.
    CORRECTED 2026-08-07: the remote ledger *does* record both migrations —
    `supabase_migrations.schema_migrations` contains `20260807153357 / 0120` and
    `20260807153627 / 0121`. The earlier "never recorded remotely" claim was wrong. Note the
@@ -98,12 +100,28 @@ unchanged.
    - Automatic production-branch deployment was never on: the Pages project has `source: null`
      (Direct Upload only), so nothing to disable.
    - `PRODUCTION_DEPLOY_ENABLED` remains unset, per the rule that earlier blockers go green first.
-7. Because required branch checks are unavailable for this private repository on its current GitHub
-   plan, treat the in-workflow `release-gate` as the production safety boundary. Do not claim that it
-   prevents a human from merging red code; it prevents that code from using this deploy job.
-8. With separate production authority, deploy one fully green SHA and verify the new smoke job,
-   exact `/version.json` SHA, removal of live wildcard HTML CORS, and authenticated production flows.
-   No hosted or production mutation is authorized by this document.
+7. UNCHANGED, and still true: required branch checks are unavailable on this repository's GitHub
+   plan, so the in-workflow `release-gate` is the production safety boundary. It does not prevent a
+   human from merging red code; it prevents that code from using the deploy job.
+8. DONE 2026-08-07, with Erica's explicit authority — one fully green SHA (`135c7bc`) is deployed
+   and verified live:
+   - `/version.json` reports exactly `135c7bcea5f5e1e7d023cc44e45547fa727a097d`, matching `main`.
+   - The strengthened smoke passes: routing, SPA fallback, immutable asset caching, no-cache HTML,
+     CSP, HSTS, frame options, nosniff, referrer policy, permissions policy, COOP, and exact SHA.
+   - Wildcard HTML CORS is gone; the response carries
+     `Access-Control-Allow-Origin: https://adventureorno.com`.
+   - Authenticated production flows confirmed with the dedicated test bot: RLS-scoped reads on
+     places/visits/photos/activities/trips/entries and the `data_health`, `place_ids_for_view` and
+     `race_stats` RPCs all 200; the full 11-route x 3-viewport audit reports zero console errors,
+     failed requests, blank pages, overflow or broken images; and the two headline fixes are live —
+     "Log a visit" is hit-testable on iPhone and `/health`'s GPX/KML/CSV exports are tappable.
+   - Independent confirmation the app is working for its actual user: Erica manually uploaded nine
+     photos at 19:19 UTC on the deployed build (`source=manual`, her own profile), taking the photo
+     count 159 -> 168.
+
+**Phase 1 is complete.** Every blocker above is closed. `PRODUCTION_DEPLOY_ENABLED` remains unset by
+choice: promotion is still a deliberate manual step, and the now-corrected `deploy-production` job is
+ready whenever Erica wants merges to promote automatically.
 
 ## Working rules
 
@@ -375,8 +393,20 @@ deploy once, then hard-refresh" rule — wait for edge propagation before verify
 - Finish mobile Place-sheet, bottom-nav/safe-area/keyboard, map-control, dialog, touch-target,
   reduced-motion, serious Axe, and physical iPhone/Android work.
 - Run Axe and overlap/layout tests across authenticated routes and all seven target viewports.
-- Add bundle budgets; lazy-load HEIC/video and other optional heavy processors. Confirm login fetches
-  neither MapLibre nor HEIC.
+- DONE 2026-08-07 — bundle budgets exist and the login waterfall is confirmed clean.
+  A real browser waterfall against production shows `/login` fetching exactly four assets — the app
+  entry, React, supabase-js and the stylesheet, 178 KB gzipped — and **neither MapLibre (~1.0 MB)
+  nor heic2any (~1.3 MB)**. `scripts/check-bundle-budget.mjs` now enforces that in CI on every
+  build: it fails if either heavy chunk enters the login entry graph, if any chunk exceeds its
+  per-file gzip budget, if the shell exceeds 200 KB gzipped, or if a referenced asset is missing
+  from `dist`. Validated by negative control — a simulated MapLibre leak, an artificially oversized
+  chunk, and a deleted asset each exit non-zero.
+  This is a regression guard rather than an optimisation: MapView is EAGER on purpose, because
+  making it `lazy()` once moved maplibre-gl's CSS after index.css and collapsed every map on the
+  site to zero height. The budget ensures staying eager cannot quietly start dragging MapLibre into
+  the login shell.
+- Still to do: lazy-load HEIC/video and other optional heavy processors behind the authenticated
+  routes that use them.
 - Split oversized CSS, MapView, PlacePanel, Settings, and data modules only behind behavior-preserving
   tests.
 

@@ -2,7 +2,7 @@
   "name": "adventureorno",
   "private": true,
   "version": "0.1.0",
-  "description": "Private travel-map web app — adventureorno.com",
+  "description": "Private travel-map web app \u2014 adventureorno.com",
   "workspaces": [
     "app",
     "workers/*"
@@ -17,7 +17,8 @@
     "seed:e2e": "node scripts/seed-e2e-users.mjs",
     "preview": "npm run preview --workspace app",
     "check:edge-config": "node scripts/check-edge-config.mjs",
-    "audit:production": "node scripts/check-production-audit.mjs"
+    "audit:production": "node scripts/check-production-audit.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs app/dist"
   },
   "engines": {
     "node": ">=20"
