@@ -2463,6 +2463,28 @@ export type Database = {
         Args: { p_place: string; p_profile: string }
         Returns: undefined
       }
+      set_visit_dates: {
+        Args: { p_end: string; p_start: string; p_visit: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          end_date: string
+          id: string
+          is_trip: boolean | null
+          manual: boolean
+          note: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          start_date: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_visit_solo: {
         Args: { p_profile: string; p_visit: string }
         Returns: undefined

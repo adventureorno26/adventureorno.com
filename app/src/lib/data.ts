@@ -696,6 +696,27 @@ export async function addVisit(placeId: string, start: string, end: string): Pro
   return data as Visit;
 }
 
+/**
+ * Change a visit's date range — "stretch a visit into a trip by adding more days".
+ *
+ * Goes through the `set_visit_dates` RPC rather than a direct update because the
+ * RPC also sets `manual = true`. That matters: `rebuild_place_visits` DELETES and
+ * recreates every non-manual visit, and all live visits are manual=false, so a
+ * plain update would be silently wiped the next time anything touched the place.
+ *
+ * Editors and the owner can both do this (same rule as visits_write). Attribution
+ * — Just me / Just Josh / Both — records who was there and never gates editing.
+ */
+export async function setVisitDates(id: string, start: string, end: string): Promise<Visit> {
+  const { data, error } = await supabase.rpc('set_visit_dates', {
+    p_visit: id,
+    p_start: start,
+    p_end: end,
+  });
+  if (error) throw error;
+  return data as unknown as Visit;
+}
+
 export async function deleteVisit(id: string): Promise<void> {
   const { error } = await supabase.from('visits').delete().eq('id', id);
   if (error) throw error;

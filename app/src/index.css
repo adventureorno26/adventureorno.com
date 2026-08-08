@@ -1430,6 +1430,39 @@ a {
   }
 }
 
+/* Editing a visit's dates — "stretch a visit into a trip by adding more days".
+   Solid controls, no glass/blur (Erica's standing preference). */
+.visit-edit {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.visit-edit:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.visit-dates-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0 10px;
+}
+.visit-dates-edit input[type='date'] {
+  width: auto;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.visit-dates-edit button {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
 /* ---------- Visit row (activity name + date) ---------- */
 .visit-main {
   display: flex;

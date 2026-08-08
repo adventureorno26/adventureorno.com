@@ -19,6 +19,7 @@ import {
   newExperienceKey,
   setCityBoundary,
   setMyRating,
+  setVisitDates,
   setVisitSolo,
   updatePlace,
   type MapPerson,
@@ -164,6 +165,10 @@ export default function PlacePanel({
   const [vMulti, setVMulti] = useState(false);
   const [vWho, setVWho] = useState(''); // '' = both; else a profile id
   const visitKeyRef = useRef<string | null>(null); // idempotency key per visit submit
+  // Editing a visit's dates — "stretch a visit into a trip by adding more days".
+  const [editingVisit, setEditingVisit] = useState<string | null>(null);
+  const [evStart, setEvStart] = useState('');
+  const [evEnd, setEvEnd] = useState('');
   const [merging, setMerging] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
@@ -431,6 +436,23 @@ export default function PlacePanel({
       setError(e instanceof Error ? e.message : 'Could not add visit');
     }
   }
+  async function saveVisitDates(id: string) {
+    if (!evStart || !evEnd) return;
+    if (evEnd < evStart) {
+      setError('A visit cannot end before it starts.');
+      return;
+    }
+    try {
+      await setVisitDates(id, evStart, evEnd);
+      setEditingVisit(null);
+      await reloadVisits();
+      await refreshPlace();
+      showSnack({ message: 'Visit dates updated.' });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update the visit dates.');
+    }
+  }
+
   async function removeVisit(id: string) {
     // Soft UX: remove immediately, offer Undo that restores the FULL original visit
     // (date, note, attribution, override, trip flag) — friendlier than a browser
@@ -1055,6 +1077,7 @@ export default function PlacePanel({
               to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
               del: null as string | null,
               start: '' as string,
+              end: '' as string,
               sort: (a.start_date ?? '').slice(0, 10),
               solo: a.solo_profile as string | null,
               target: { type: 'activity' as const, id: a.id },
@@ -1082,6 +1105,7 @@ export default function PlacePanel({
                 to: `/place/${place.id}/day/${v.start_date}`,
                 del: v.id as string | null,
                 start: v.start_date as string,
+                end: v.end_date as string,
                 sort: v.start_date,
                 solo: v.solo_profile as string | null,
                 target: { type: 'visit' as const, id: v.id },
@@ -1127,6 +1151,19 @@ export default function PlacePanel({
                         )}
                         {canEdit && r.del && (
                           <button
+                            className="visit-edit"
+                            title="Edit dates — add days to make this a multi-day trip"
+                            onClick={() => {
+                              setEditingVisit(editingVisit === r.del ? null : r.del!);
+                              setEvStart(r.start || '');
+                              setEvEnd(r.end || r.start || '');
+                            }}
+                          >
+                            Dates
+                          </button>
+                        )}
+                        {canEdit && r.del && (
+                          <button
                             className="visit-del"
                             title="Delete visit"
                             onClick={() => void removeVisit(r.del!)}
@@ -1135,6 +1172,33 @@ export default function PlacePanel({
                           </button>
                         )}
                       </div>
+                      {canEdit && editingVisit && editingVisit === r.del && (
+                        <div className="visit-dates-edit">
+                          <label>
+                            <span className="sr-only">Visit start date</span>
+                            <input
+                              type="date"
+                              value={evStart}
+                              aria-label="Visit start date"
+                              onChange={(e) => setEvStart(e.target.value)}
+                            />
+                          </label>
+                          <span className="muted">to</span>
+                          <label>
+                            <span className="sr-only">Visit end date</span>
+                            <input
+                              type="date"
+                              value={evEnd}
+                              aria-label="Visit end date"
+                              onChange={(e) => setEvEnd(e.target.value)}
+                            />
+                          </label>
+                          <button className="primary" onClick={() => void saveVisitDates(r.del!)}>
+                            Save
+                          </button>
+                          <button onClick={() => setEditingVisit(null)}>Cancel</button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
