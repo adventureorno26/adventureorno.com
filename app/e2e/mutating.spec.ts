@@ -202,7 +202,7 @@ test.describe('mutating acceptance — owner/editor/viewer', () => {
 
   test('viewer CAN read the shared dataset', async ({ request }) => {
     const c = await ctx('viewer');
-    for (const table of ['places', 'visits', 'photos', 'activities', 'trips']) {
+    for (const table of ['places', 'visits', 'photos', 'activities', 'entries']) {
       const res = await request.get(`${c.url}/rest/v1/${table}?select=id&limit=1`, {
         headers: headers(c),
       });

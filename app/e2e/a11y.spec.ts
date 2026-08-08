@@ -15,16 +15,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 // '/?add=1' opens the add sheet over the map — Add is a sheet, not a page, so
 // this is how that surface gets scanned now.
-const ROUTES = [
-  '/',
-  '/places',
-  '/timeline',
-  '/?add=1',
-  '/settings',
-  '/health',
-  '/trips',
-  '/bucket',
-];
+const ROUTES = ['/', '/places', '/timeline', '/?add=1', '/settings', '/health', '/bucket'];
 
 // Phone and desktop. The full seven-viewport sweep lives in layout.spec.ts; axe
 // findings are overwhelmingly viewport-independent, so two shapes catch the

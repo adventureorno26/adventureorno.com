@@ -26,7 +26,6 @@ const ROUTES = [
   '/timeline',
   '/settings',
   '/health',
-  '/trips',
   '/bucket',
   '/trash',
   '/albums',

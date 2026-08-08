@@ -53,9 +53,6 @@ const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
-const Trips = lazyWithReload(() => import('./routes/Trips'));
-const TripView = lazyWithReload(() => import('./routes/TripView'));
-const SuggestedTripReview = lazyWithReload(() => import('./routes/SuggestedTripReview'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
 const BucketList = lazyWithReload(() => import('./routes/BucketList'));
 const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
@@ -125,30 +122,6 @@ export default function App() {
               element={
                 <RequireAuth>
                   <DayView />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/trips"
-              element={
-                <RequireAuth>
-                  <Trips />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/trip/:id"
-              element={
-                <RequireAuth>
-                  <TripView />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/trips/review/:id"
-              element={
-                <RequireAuth>
-                  <SuggestedTripReview />
                 </RequireAuth>
               }
             />
@@ -264,6 +237,9 @@ export default function App() {
                 </RequireAuth>
               }
             />
+            {/* /trips, /trip/:id and /trips/review/:id are gone with the trips
+                table (migration 0137). A trip is a visit you marked, shown on the
+                place's own card. */}
             {/* /add was a five-step wizard that could add neither photos nor a
                 Google Photos import. It is one sheet over the map now; the old
                 path still works so bookmarks and the import-return flow don't

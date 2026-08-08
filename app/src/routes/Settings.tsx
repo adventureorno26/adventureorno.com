@@ -604,9 +604,6 @@ function StatsSection() {
         <PlacesByStateCard personId={person} placePeople={placePeople} />
         <NationalParksCard personId={person} placePeople={placePeople} />
         <PeaksCard personId={person} />
-        <Link className="card stat-navcard" to="/trips">
-          Trips
-        </Link>
         <Link className="card stat-navcard" to="/wrapped">
           Years
         </Link>

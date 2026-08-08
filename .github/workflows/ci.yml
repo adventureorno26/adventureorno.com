@@ -457,12 +457,22 @@ jobs:
           REF: ${{ github.ref }}
           FLAG: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
         run: |
-          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ] && [ "$FLAG" = true ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          # Trimmed and lower-cased: a stray space in the repository variable would
+          # make this false while the diagnostic line below still printed "true",
+          # which is indistinguishable from the expression itself failing.
+          FLAG_NORM="$(printf '%s' "$FLAG" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ] && [ "$FLAG_NORM" = true ]; then
+            ENABLED=true
           else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            ENABLED=false
           fi
-          echo "event=$EVENT ref=$REF flag=$FLAG"
+          echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
+          # State the DECISION, not just the inputs. deploy-production and
+          # deploy-probe have skipped on every green run including #44 and #45,
+          # and the old line only proved the inputs were right — it never showed
+          # what this step actually published.
+          echo "event=$EVENT ref=$REF flag=[$FLAG] flag_norm=[$FLAG_NORM] -> enabled=$ENABLED"
+          echo "release gate: enabled=$ENABLED (event=$EVENT ref=$REF)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require every Phase 1 CI job to succeed
         env:

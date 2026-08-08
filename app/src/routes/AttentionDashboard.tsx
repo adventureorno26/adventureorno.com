@@ -53,13 +53,9 @@ const ROWS: Row[] = [
     to: '/',
     action: 'Open map',
   },
-  {
-    key: 'suggestedTrips',
-    label: 'Trips awaiting confirmation',
-    hint: 'Auto-detected trips to keep or reject',
-    to: '/trips',
-    action: 'Review trips',
-  },
+  // "Trips awaiting confirmation" is gone: auto-detected trip drafts were retired
+  // with the trips table (0137). Nothing suggests a trip any more — a trip is a
+  // visit a person marked.
 ];
 
 /** Everything that needs a human touch, in one place — so the automation is easy

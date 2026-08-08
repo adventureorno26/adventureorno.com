@@ -1,6 +1,6 @@
 # The data model — THE single source of truth
 
-**Authoritative as of 2026-08-08 (migration 0133). If any other document, comment, or
+**Authoritative as of 2026-08-08 (migrations 0136–0137). If any other document, comment, or
 plan contradicts this file, this file wins and the other one is wrong.**
 
 Read this before touching places, visits, trips, stats, or containment.
@@ -61,7 +61,9 @@ visits at one place.
 - `manual` — protects the row from `rebuild_place_visits`, which deletes derived
   visits. Any marked trip is `manual = true` for exactly this reason.
 - `solo_profile` — attribution. `null` = **Both**; otherwise that person. Attribution
-  lives on the visit only, never on the place.
+  lives on the visit only, never on the place. `places.solo_profile` was the last
+  place-level remnant and was **dropped in 0136**; read a place's attribution from
+  `place_attribution()`, which derives it from the visits.
 
 **Photos and activities are evidence hanging off a visit.** They are not sibling rows
 and never their own visits. Brewster is one 2-day visit that contains a ride and a
@@ -117,7 +119,11 @@ creation paths cannot drift out of sync one at a time.
 
 ## Retired — do not restore
 
-- The `trips` / `trip_stops` tables (a trip is a visit).
+- The `trips` / `trip_stops` tables (a trip is a visit). **Dropped in 0137**, along
+  with the `trip` place category, the /trips + /trip/:id + suggested-review pages,
+  and every `*_trip_stops_*` function. `rebuild_place_visits` takes its fusing
+  window from `visits.is_trip` now; `create_experience` raises on a trip link.
+- `places.solo_profile` (dropped in 0136).
 - `places.category = 'trip'`, and `holds_children` including `'trip'`.
 - `visits.is_trip` as a generated column.
 - Auto-detected / `suggested` trips that reappeared as new suggestions daily.

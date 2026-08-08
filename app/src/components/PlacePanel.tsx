@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   addExperience,
   clearCity,
@@ -30,7 +30,6 @@ import {
   type MapPerson,
 } from '../lib/data';
 import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
-import { fetchTripBySourcePlace } from '../lib/trips';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
@@ -150,22 +149,10 @@ export default function PlacePanel({
   // Keep a place in the space it was already named in; a brand-new name goes to the
   // shared space, which is where the two of you curate together.
   const nameScope = place.name_locked ? place.name_scope : null;
-  const navigate = useNavigate();
 
-  // A confirmed container-Place trip now lives as a canonical Trip — send old
-  // /place/:containerId links to /trip/:id (suggested drafts stay as-is).
-  useEffect(() => {
-    if (place.category !== 'trip' || place.suggested) return;
-    let active = true;
-    fetchTripBySourcePlace(place.id)
-      .then((t) => {
-        if (active && t) navigate(`/trip/${t.id}`, { replace: true });
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [place.id, place.category, place.suggested, navigate]);
+  // The redirect that sent a container place to its `trips` row is gone with the
+  // table. A trip is a visit you marked, so it lives on THIS card, in the Visits
+  // list, with the places visited during it nested inside it.
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [visitStats, setVisitStats] = useState<Record<string, { photos: number; videos: number }>>(

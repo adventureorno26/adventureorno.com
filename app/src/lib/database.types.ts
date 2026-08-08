@@ -1503,15 +1503,7 @@ export type Database = {
           note?: string
           trip_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "trip_notes_trip_id_fkey"
-            columns: ["trip_id"]
-            isOneToOne: false
-            referencedRelation: "trips"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       trip_people: {
         Row: {
@@ -1535,130 +1527,6 @@ export type Database = {
             columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "people"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "trip_people_trip_id_fkey"
-            columns: ["trip_id"]
-            isOneToOne: false
-            referencedRelation: "trips"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      trip_stops: {
-        Row: {
-          created_at: string
-          id: string
-          note: string | null
-          place_id: string
-          sort_order: number
-          status: string
-          trip_id: string
-          visit_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          note?: string | null
-          place_id: string
-          sort_order?: number
-          status?: string
-          trip_id: string
-          visit_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          note?: string | null
-          place_id?: string
-          sort_order?: number
-          status?: string
-          trip_id?: string
-          visit_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trip_stops_place_id_fkey"
-            columns: ["place_id"]
-            isOneToOne: false
-            referencedRelation: "place_counts"
-            referencedColumns: ["place_id"]
-          },
-          {
-            foreignKeyName: "trip_stops_place_id_fkey"
-            columns: ["place_id"]
-            isOneToOne: false
-            referencedRelation: "places"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "trip_stops_trip_id_fkey"
-            columns: ["trip_id"]
-            isOneToOne: false
-            referencedRelation: "trips"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "trip_stops_visit_id_fkey"
-            columns: ["visit_id"]
-            isOneToOne: false
-            referencedRelation: "visits"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      trips: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          end_date: string | null
-          id: string
-          name: string
-          source_place_id: string | null
-          start_date: string | null
-          status: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          end_date?: string | null
-          id?: string
-          name: string
-          source_place_id?: string | null
-          start_date?: string | null
-          status?: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          end_date?: string | null
-          id?: string
-          name?: string
-          source_place_id?: string | null
-          start_date?: string | null
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trips_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "trips_source_place_id_fkey"
-            columns: ["source_place_id"]
-            isOneToOne: false
-            referencedRelation: "place_counts"
-            referencedColumns: ["place_id"]
-          },
-          {
-            foreignKeyName: "trips_source_place_id_fkey"
-            columns: ["source_place_id"]
-            isOneToOne: false
-            referencedRelation: "places"
             referencedColumns: ["id"]
           },
         ]
@@ -2095,8 +1963,6 @@ export type Database = {
       }
       cluster_now: { Args: never; Returns: Json }
       cluster_unassigned: { Args: never; Returns: Json }
-      complete_stops_on_taken_trips: { Args: never; Returns: number }
-      confirm_suggested_trip: { Args: { p_place: string }; Returns: string }
       consume_oauth_state: {
         Args: { p_provider?: string; p_state: string }
         Returns: string
@@ -2333,7 +2199,6 @@ export type Database = {
         Args: { p_loser: string; p_winner: string }
         Returns: undefined
       }
-      migrate_container_place_trips: { Args: never; Returns: undefined }
       mileage_by_person: {
         Args: { p_profile?: string }
         Returns: {
@@ -2472,10 +2337,6 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
-      promote_trip_stops_for_place: {
-        Args: { p_place: string }
-        Returns: undefined
-      }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
       race_stats: {
@@ -3281,18 +3142,6 @@ export type Database = {
           place_name: string
           start_date: string
           visit_id: string
-        }[]
-      }
-      trip_place_ids: { Args: { p_trip: string }; Returns: string[] }
-      trip_stats: { Args: { p_trip: string }; Returns: Json }
-      trip_timeline: {
-        Args: { p_trip: string }
-        Returns: {
-          day: string
-          kind: string
-          place_id: string
-          sub: string
-          title: string
         }[]
       }
       unlockrows: { Args: { "": string }; Returns: number }
