@@ -129,6 +129,34 @@ unchanged.
 choice: promotion is still a deliberate manual step, and the now-corrected `deploy-production` job is
 ready whenever Erica wants merges to promote automatically.
 
+## INCIDENT 2026-08-08 — migrations were deleted from git tracking, and recovered
+
+`origin/main` carried ZERO migrations for part of the morning. A fresh clone would have had none
+and the next CI `db-tests` run would have failed at bootstrap.
+
+**Cause.** `supabase start` cannot apply this migration chain, so the documented workaround — the
+one `ci.yml` still uses — moves `supabase/migrations/*.sql` aside, starts the stack, then moves them
+back. That leaves the tracked directory EMPTY for a minute or two. The repo's auto-save hook fired
+inside that window, committed the empty directory as 123 deletions (`dde5f56`), and pushed.
+
+**Recovery.** Nothing was lost. Every one of the 123 files was verified byte-identical to `bbfa3a3`
+before restoring, and `git diff --cached --name-status bbfa3a3` reported only the new `0124` as
+added — nothing modified. Fixed by moving FORWARD (`611e966`), not by rewriting history; no
+force-push. A fresh clone was then verified to contain 124 migrations and 21 SQL tests.
+
+**Prevention.** `scripts/local-stack-up.sh` removes the window entirely: it runs `supabase start`
+from a throwaway project directory containing a copy of `config.toml` and an EMPTY migrations
+folder. The CLI keys its containers off `project_id`, so the containers that come up are the same
+ones the repo's tooling talks to over `docker exec` — and the tracked tree is never modified.
+Verified end to end: stack up, full 124-migration bootstrap, 21/21 SQL tests, `git status` clean
+throughout. It also strips the `supabase/.temp/*-version` pins that `supabase link` writes, which
+otherwise make `supabase start` pull several GB and fail on a storage migration.
+
+**Two things worth Erica's attention.** The auto-save hook commits AND pushes as her identity, so it
+can publish any intermediate state a tool leaves on disk — this was one. And `ci.yml`'s `e2e` and
+`db-tests` jobs still use the move-aside technique; that is safe on a CI runner (no hook, throwaway
+checkout) but should move to this script for consistency.
+
 ## Working rules
 
 1. Start from current remote `main`; record HEAD, branch, ahead/behind, and `git status`.
