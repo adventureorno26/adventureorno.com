@@ -8,24 +8,30 @@ import {
 import ReactionMark from './ReactionMarks';
 import { MARKS, labelFor } from '../lib/reactions';
 
-/** Caption + emoji reactions for one photo, shown under it in the lightbox. */
+/** Caption + emoji reactions for one photo, shown under it in the lightbox.
+ *  There is no "add a caption" link — tapping the photo itself opens the editor,
+ *  so the parent owns `editing` and we just render it. */
 export default function PhotoReactions({
   photoId,
   caption,
   canEdit,
+  editing,
+  onEditing,
 }: {
   photoId: string;
   caption: string | null;
   canEdit: boolean;
+  editing: boolean;
+  onEditing: (v: boolean) => void;
 }) {
   const [reactions, setReactions] = useState<PhotoReaction[]>([]);
   const [cap, setCap] = useState(caption ?? '');
-  const [editingCap, setEditingCap] = useState(false);
+  const editingCap = editing && canEdit;
+  const setEditingCap = onEditing;
 
   useEffect(() => {
     let active = true;
     setCap(caption ?? '');
-    setEditingCap(false);
     fetchPhotoReactions(photoId)
       .then((r) => active && setReactions(r))
       .catch(() => active && setReactions([]));
@@ -42,7 +48,7 @@ export default function PhotoReactions({
     await reload();
   }
   async function saveCaption() {
-    setEditingCap(false);
+    onEditing(false);
     try {
       await setPhotoCaption(photoId, cap);
     } catch {
@@ -73,10 +79,6 @@ export default function PhotoReactions({
         >
           {cap}
         </p>
-      ) : canEdit ? (
-        <button className="link-btn" onClick={() => setEditingCap(true)}>
-          + Add a caption
-        </button>
       ) : null}
 
       {/* Two reactions, always visible — no "+" picker to open first. The eight-emoji

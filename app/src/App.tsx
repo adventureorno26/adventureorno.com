@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
@@ -8,6 +8,7 @@ import Snackbar from './components/Snackbar';
 import UploadQueue from './components/UploadQueue';
 import PrimaryNav from './components/PrimaryNav';
 import ImportResumeBanner from './components/ImportResumeBanner';
+import { googlePhotosEnabled, prewarmGooglePhotos } from './lib/googlePhotos';
 
 // After a redeploy, a browser holding a STALE index.html asks for old chunk
 // hashes that no longer exist (404) → the dynamic import rejects and the page
@@ -68,6 +69,15 @@ function FullScreenMessage({ children }: { children: React.ReactNode }) {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, profile, loading } = useAuth();
   const location = useLocation();
+
+  // Ask once, on sign-in, whether Google Photos is already connected. A click can
+  // only open ONE pop-up, so the picker flow has to know the answer before the tap
+  // rather than discovering it half a second too late.
+  const signedIn = Boolean(session && profile);
+  useEffect(() => {
+    if (!signedIn || !googlePhotosEnabled()) return;
+    void prewarmGooglePhotos().catch(() => undefined);
+  }, [signedIn]);
 
   if (loading) return <FullScreenMessage>Loading…</FullScreenMessage>;
   if (!session || !profile) {

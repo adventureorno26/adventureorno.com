@@ -19,6 +19,9 @@ interface Props {
   onFilterCategory: (slug: string | null) => void;
   // "Just me / Just Josh" filter: scope the stats to that person.
   personFilter?: string | null;
+  // Place ids in the current person view, from place_ids_for_view — the SAME
+  // filter the map and wander_stats use. Null while it is still loading.
+  viewSet?: Set<string> | null;
 }
 
 // Strava activity type → map filter category.
@@ -64,15 +67,25 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({ places, onFilterCategory, personFilter = null }: Props) {
-  // Only saved, non-bucket places count. "Just me / Just Josh" hides only places
-  // explicitly marked the other person's; "both"-tagged places count for either.
+export default function StatsBar({
+  places,
+  onFilterCategory,
+  personFilter = null,
+  viewSet = null,
+}: Props) {
+  // Only saved, non-bucket places count, and only those in the current view.
+  //
+  // This used to filter on the place-level `solo_profile` column, which was null
+  // for 129 of 132 places — so nothing was ever excluded and the Army Ten Miler
+  // showed up under "Just Josh". Attribution lives on the VISIT (docs/SCHEMA.md),
+  // so the list now uses place_ids_for_view: the same filter as the map markers
+  // and the headline count, which is why they agree.
   const visited = places.filter(
     (p) =>
       !p.bucket &&
       p.saved &&
       p.name.trim() !== '' && // skip unnamed drafts
-      !(personFilter && p.solo_profile && p.solo_profile !== personFilter),
+      (!viewSet || viewSet.has(p.id)),
   );
   // Main bar shows Places + Miles + Races. Cities/States moved to Settings.
   const [detail, setDetail] = useState<null | 'places' | 'miles' | 'races'>(null);
@@ -98,7 +111,10 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       )
       .catch(() => setSpots([]));
   }, [places.length]);
-  const placesTotal = visited.length + spots.length;
+  // A spot belongs to its place, so it follows the same view filter.
+  const visitedIds = new Set(visited.map((p) => p.id));
+  const viewSpots = spots.filter((s) => visitedIds.has(s.place_id));
+  const placesTotal = visited.length + viewSpots.length;
 
   // Combined drill-down: every place AND every spot, alphabetical.
   const placeName = (id: string) => places.find((p) => p.id === id)?.name ?? '';
@@ -109,7 +125,7 @@ export default function StatsBar({ places, onFilterCategory, personFilter = null
       sub: p.admin1 ?? '',
       to: `/place/${p.id}`,
     })),
-    ...spots.map((s) => ({
+    ...viewSpots.map((s) => ({
       id: s.id,
       label: s.title,
       sub: placeName(s.place_id),

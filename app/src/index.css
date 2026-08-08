@@ -468,15 +468,42 @@ a {
   inset: 0;
   z-index: 50;
   background: rgba(0, 0, 0, 0.88);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 52px 12px calc(14px + env(safe-area-inset-bottom));
   cursor: zoom-out;
 }
+/* The photo and its chrome are ONE column that shrink-wraps the picture, so the
+   reaction marks and the date/download row sit against the bottom edge of the
+   photo instead of floating in the black well below it. */
+.lightbox-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  cursor: default;
+}
 .lightbox-img {
-  max-width: 94vw;
-  max-height: 92vh;
+  max-width: min(94vw, 100%);
+  min-height: 0;
+  flex: 0 1 auto;
   object-fit: contain;
   border-radius: 8px;
+}
+.lightbox-img.captionable {
+  cursor: text;
+}
+.lightbox-chrome {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 .lightbox-close {
   position: fixed;
@@ -513,33 +540,26 @@ a {
 .lightbox-nav.next {
   right: 12px;
 }
-/* Date + download bar, bottom center */
+/* Date + download row — sits under the photo inside .lightbox-chrome, not pinned
+   to the viewport (solid, no glass). */
 .lightbox-bar {
-  position: fixed;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 52;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 8px 14px;
+  padding: 7px 14px;
   border-radius: 999px;
-  background: rgba(6, 10, 20, 0.72);
-  backdrop-filter: blur(10px);
+  background: #0a0e18;
   cursor: default;
 }
 .photo-social {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(74px + env(safe-area-inset-bottom));
-  z-index: 52;
-  width: min(92vw, 560px);
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
   align-items: center;
+}
+.photo-social:empty {
+  display: none;
 }
 .photo-caption {
   color: #fff;

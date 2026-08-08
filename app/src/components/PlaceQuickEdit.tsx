@@ -19,6 +19,7 @@ export default function PlaceQuickEdit({
   hideWho,
   visitWho,
   onVisitWho,
+  soloProfile = null,
 }: {
   place: Place;
   people: MapPerson[];
@@ -29,9 +30,14 @@ export default function PlaceQuickEdit({
   // place-level attribution (used by the photo sorter).
   visitWho?: Who;
   onVisitWho?: (w: Who) => void;
+  // Attribution DERIVED from this place's visits (place_attribution). There is no
+  // place-level column any more — reading one was why Rehoboth Beach said "Both"
+  // while its visit was correctly Erica's.
+  soloProfile?: string | null;
 }) {
   const [name, setName] = useState(place.name);
   const [busy, setBusy] = useState<string | null>(null);
+  const [solo, setSolo] = useState<string | null>(soloProfile);
   const joshId = people.find((p) => p.id !== meId)?.id ?? null;
 
   async function patch(p: Partial<Place>, label = 'Saving…') {
@@ -51,15 +57,18 @@ export default function PlaceQuickEdit({
   }
 
   function who(): Who {
-    // Place-level view: null solo = both.
-    return place.solo_profile == null ? 'both' : place.solo_profile === joshId ? 'josh' : 'mine';
+    // Derived from the visits: null = both.
+    return solo == null ? 'both' : solo === joshId ? 'josh' : 'mine';
   }
   async function setWho(k: Who) {
     const profileId = k === 'both' ? null : k === 'mine' ? meId : joshId;
     setBusy('Saving…');
     try {
+      // setPlaceSolo writes every VISIT at this place; the place itself holds no
+      // attribution.
       await setPlaceSolo(place.id, profileId ?? null);
-      onUpdated({ ...place, solo_profile: profileId ?? null });
+      setSolo(profileId ?? null);
+      onUpdated(place);
     } catch (e) {
       showSnack({
         message:

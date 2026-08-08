@@ -532,7 +532,13 @@ export default function MapView() {
         data: { type: 'FeatureCollection', features: [] },
         promoteId: 'id',
         cluster: true,
-        clusterMaxZoom: 12,
+        // Stop clustering at z9, not z12. The "×N" repeat-visit badge can only be
+        // drawn on an UNCLUSTERED marker, and Erica's places are dense enough
+        // (the DC metro) that at z12 almost every repeat place was still swallowed
+        // by a cluster: measured over the real data, the DC metro at z10 rendered
+        // 1 badge with clusterMaxZoom 12 and 4 with 9. Clustering still applies to
+        // the continental/regional views where individual pins are meaningless.
+        clusterMaxZoom: 9,
         clusterRadius: 45,
       });
 
@@ -673,8 +679,11 @@ export default function MapView() {
         layout: {
           'text-field': ['concat', '×', ['to-string', ['get', 'visits']]],
           'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
-          'text-size': 11,
-          'text-offset': [1.1, -1.1],
+          'text-size': 12,
+          // A cover-photo marker is ~50px across, so 1.1em (~13px) put the badge
+          // inside the photo where it competed with the picture. Sit it on the
+          // top-right edge instead.
+          'text-offset': [1.6, -1.6],
           'text-anchor': 'center',
           'text-allow-overlap': true,
           'text-ignore-placement': true,
@@ -1488,7 +1497,12 @@ export default function MapView() {
         meId={profile?.id}
       />
 
-      <StatsBar places={places} onFilterCategory={setFilterCat} personFilter={personFilter} />
+      <StatsBar
+        places={places}
+        onFilterCategory={setFilterCat}
+        personFilter={personFilter}
+        viewSet={viewSet}
+      />
 
       <FilterChips
         filterCat={filterCat}

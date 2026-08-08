@@ -34,7 +34,8 @@ export async function addCategory(
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, name_locked, named_by, name_scope, counts_as_place, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, solo_profile, favorite, holds_children, category, park, created_by, created_at';
+  // No solo_profile: attribution lives on the visit (migration 0136, docs/SCHEMA.md).
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, name_locked, named_by, name_scope, counts_as_place, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, favorite, holds_children, category, park, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
@@ -87,7 +88,6 @@ export async function updatePlace(
     is_trail?: boolean;
     part_of?: string[];
     saved?: boolean;
-    solo_profile?: string | null;
     favorite?: string | null;
   },
 ): Promise<Place> {

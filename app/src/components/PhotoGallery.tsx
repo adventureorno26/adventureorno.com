@@ -52,6 +52,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const [overridable, setOverridable] = useState<File[]>([]);
   const [pending, setPending] = useState<{ id: string; url: string }[]>([]); // optimistic previews
   const [lightIdx, setLightIdx] = useState<number | null>(null); // carousel position
+  const [capEditing, setCapEditing] = useState(false); // caption editor (opened by tapping the photo)
   const [datingId, setDatingId] = useState<string | null>(null); // undated photo getting a date
   const [dragOver, setDragOver] = useState(false);
   const [pickMenu, setPickMenu] = useState(false);
@@ -243,8 +244,14 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
       )
     : [];
   const openPhoto = lightIdx != null ? list[lightIdx] : null;
-  const step = (d: number) =>
+  const step = (d: number) => {
+    setCapEditing(false); // a half-typed caption shouldn't follow you to the next photo
     setLightIdx((i) => (i == null || list.length === 0 ? i : (i + d + list.length) % list.length));
+  };
+  const closeLightbox = () => {
+    setCapEditing(false);
+    setLightIdx(null);
+  };
 
   async function download(p: Photo) {
     try {
@@ -275,14 +282,20 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   useEffect(() => {
     if (lightIdx == null) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightIdx(null);
+      // While the caption is being typed, Escape backs out of the editor and the
+      // arrows belong to the text field, not the carousel.
+      if (capEditing) {
+        if (e.key === 'Escape') setCapEditing(false);
+        return;
+      }
+      if (e.key === 'Escape') closeLightbox();
       else if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lightIdx, list.length]);
+  }, [lightIdx, list.length, capEditing]);
 
   function fmtTaken(p: Photo): string {
     if (!p.taken_at) return '';
@@ -538,7 +551,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
         createPortal(
           <div
             className="lightbox"
-            onClick={() => setLightIdx(null)}
+            onClick={closeLightbox}
             onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
             onTouchEnd={(e) => {
               if (touchX.current == null) return;
@@ -547,7 +560,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
               touchX.current = null;
             }}
           >
-            <button className="lightbox-close" onClick={() => setLightIdx(null)} title="Close">
+            <button className="lightbox-close" onClick={closeLightbox} title="Close">
               ×
             </button>
 
@@ -564,13 +577,51 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
               </button>
             )}
 
-            <AuthedImg
-              key={openPhoto.id}
-              photoId={openPhoto.id}
-              size="full"
-              alt=""
-              className="lightbox-img"
-            />
+            {/* Photo + its chrome share one column, so the marks and the
+                date/download row sit against the bottom edge of the PICTURE
+                rather than floating far below it in the black. */}
+            <div className="lightbox-stage" onClick={(e) => e.stopPropagation()}>
+              <AuthedImg
+                key={openPhoto.id}
+                photoId={openPhoto.id}
+                size="full"
+                alt=""
+                className={`lightbox-img ${canUpload ? 'captionable' : ''}`}
+                onClick={() => canUpload && setCapEditing(true)}
+              />
+
+              <div className="lightbox-chrome">
+                <PhotoReactions
+                  key={openPhoto.id}
+                  photoId={openPhoto.id}
+                  caption={openPhoto.caption}
+                  canEdit={canUpload}
+                  editing={capEditing}
+                  onEditing={setCapEditing}
+                />
+
+                {/* Date + count on one line; download as a compact icon. */}
+                <div className="lightbox-bar">
+                  <span className="lightbox-meta">
+                    {fmtTaken(openPhoto)}
+                    {list.length > 1 && (
+                      <span className="lightbox-count">
+                        {fmtTaken(openPhoto) ? ' · ' : ''}
+                        {(lightIdx ?? 0) + 1} / {list.length}
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    className="lightbox-dl"
+                    onClick={() => void download(openPhoto)}
+                    title="Download photo"
+                    aria-label="Download"
+                  >
+                    ⤓
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {list.length > 1 && (
               <button
@@ -584,34 +635,6 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                 ›
               </button>
             )}
-
-            {/* Date + count on one line; download as a compact icon. */}
-            <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
-              <span className="lightbox-meta">
-                {fmtTaken(openPhoto)}
-                {list.length > 1 && (
-                  <span className="lightbox-count">
-                    {fmtTaken(openPhoto) ? ' · ' : ''}
-                    {(lightIdx ?? 0) + 1} / {list.length}
-                  </span>
-                )}
-              </span>
-              <button
-                className="lightbox-dl"
-                onClick={() => void download(openPhoto)}
-                title="Download photo"
-                aria-label="Download"
-              >
-                ⤓
-              </button>
-            </div>
-
-            <PhotoReactions
-              key={openPhoto.id}
-              photoId={openPhoto.id}
-              caption={openPhoto.caption}
-              canEdit={canUpload}
-            />
           </div>,
           document.body,
         )}

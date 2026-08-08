@@ -47,7 +47,6 @@ export interface Place {
   website: string | null; // optional link for a bucket-list place
   categories: string[]; // manual tags
   activity_categories: string[]; // auto tags from Strava
-  solo_profile: string | null; // legacy place-level attribution (superseded by visit-level)
   favorite: string | null; // favorite wine / meal / beer at this place
   counts_as_place: boolean; // false ONLY for a trail (a rollup of segments that already counted)
   holds_children: boolean; // container (trail/trip/city) — no attribution toggle

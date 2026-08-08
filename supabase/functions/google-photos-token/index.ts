@@ -98,9 +98,18 @@ Deno.serve(async (req) => {
       return json({ error: data.error ?? 'exchange failed' }, 400);
     }
     if (data.refresh_token) {
-      await admin
+      const { error: saveErr } = await admin
         .from('google_tokens')
         .upsert({ profile_id: profileId, refresh_token: data.refresh_token, updated_at: new Date().toISOString() });
+      // A failed upsert used to be discarded, so a connect that never persisted
+      // looked identical to one that did — and google_tokens stayed empty with no
+      // trace of why. Say so.
+      if (saveErr) return json({ error: `could not store connection: ${saveErr.message}` }, 500);
+    } else {
+      // No refresh token means the consent was not offline-access, so the
+      // connection cannot survive this hour. Report it rather than appearing to
+      // succeed and silently re-prompting forever.
+      return json({ error: 'google returned no refresh token (consent was not offline)' }, 400);
     }
     return json({ access_token: data.access_token, expires_in: data.expires_in ?? 3600 });
   }

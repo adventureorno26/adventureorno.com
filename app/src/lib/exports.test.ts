@@ -35,7 +35,6 @@ function place(overrides: Partial<Place>): Place {
     website: null,
     categories: [],
     activity_categories: [],
-    solo_profile: null,
     favorite: null,
     holds_children: false,
     category: null,

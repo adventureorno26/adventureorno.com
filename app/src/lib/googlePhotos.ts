@@ -78,14 +78,26 @@ function storeToken(token: string, expiresInS?: number): void {
   memToken = { token, exp: Date.now() + ((expiresInS ?? 3600) - 120) * 1000 };
 }
 
+// Why this reports a REASON instead of just null: every failure here used to be
+// swallowed (`if (!res.ok) return null`, `catch { return null }`) and silently fell
+// through to the implicit-token path, so a broken connect looked identical to a
+// working one and the only thing the user ever saw was "Google Photos import
+// failed." google_tokens has never had a row, and no error was ever recorded.
+export type TokenReason =
+  'ok' | 'needs-consent' | 'not-signed-in' | `http-${number}` | `error-${string}`;
+
 // Persistent path: ask our edge function for an access token minted from a stored
-// refresh token. null = function unavailable → fall back to the in-browser flow.
-async function serverToken(
-  code?: string,
-): Promise<{ token?: string; needsConsent?: boolean } | null> {
+// refresh token.
+async function serverToken(code?: string): Promise<{ token?: string; reason: TokenReason }> {
+  const r = await serverTokenInner(code);
+  warmed = r.reason; // every answer refreshes what the next click already knows
+  return r;
+}
+
+async function serverTokenInner(code?: string): Promise<{ token?: string; reason: TokenReason }> {
   const { data } = await supabase.auth.getSession();
   const jwt = data.session?.access_token;
-  if (!jwt || !SUPABASE_URL) return null;
+  if (!jwt || !SUPABASE_URL) return { reason: 'not-signed-in' };
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/google-photos-token`, {
       method: 'POST',
@@ -96,21 +108,41 @@ async function serverToken(
       },
       body: JSON.stringify(code ? { code } : {}),
     });
-    if (!res.ok) return null;
-    const j = (await res.json()) as {
+    const body = (await res.json().catch(() => ({}))) as {
       access_token?: string;
       expires_in?: number;
       needsConsent?: boolean;
+      error?: string;
     };
-    if (j.needsConsent) return { needsConsent: true };
-    if (j.access_token) {
-      storeToken(j.access_token, j.expires_in);
-      return { token: j.access_token };
+    if (!res.ok) {
+      return { reason: body.error ? `error-${body.error}` : `http-${res.status}` };
     }
-    return null;
-  } catch {
-    return null;
+    if (body.needsConsent) return { reason: 'needs-consent' };
+    if (body.access_token) {
+      storeToken(body.access_token, body.expires_in);
+      return { token: body.access_token, reason: 'ok' };
+    }
+    return { reason: 'error-empty-response' };
+  } catch (e) {
+    return { reason: `error-${e instanceof Error ? e.message : 'network'}` };
   }
+}
+
+// What the connect step will need, worked out BEFORE the user clicks. Google's
+// consent popup and the picker window both have to be opened from inside the click
+// handler to survive a pop-up blocker, so the async question "am I already
+// connected?" must already be answered by then.
+let warmed: TokenReason | null = null;
+export async function prewarmGooglePhotos(): Promise<TokenReason> {
+  if (!CLIENT_ID) return 'error-not-configured';
+  void loadGis().catch(() => undefined); // fetch Google's SDK now, not on the click
+  const s = await serverToken();
+  warmed = s.reason;
+  return s.reason;
+}
+/** True when a click can go straight to the picker with no Google sign-in step. */
+export function googlePhotosConnected(): boolean {
+  return validCached() !== null || warmed === 'ok';
 }
 
 // One-time Google consent → an auth CODE, exchanged server-side for a lasting
@@ -137,11 +169,17 @@ async function getAccessToken(): Promise<string> {
   if (cached) return cached;
   // 1) Persistent server path — no prompt after the first connect.
   const s = await serverToken();
-  if (s?.token) return s.token;
-  if (s?.needsConsent) {
+  if (s.token) return s.token;
+  if (s.reason === 'needs-consent') {
     const code = await runConsent();
     const c = await serverToken(code);
-    if (c?.token) return c.token;
+    if (c.token) return c.token;
+    // The consent popup came back with a code but the exchange failed. Say which
+    // half broke instead of quietly retrying a different flow.
+    throw new Error(`Google accepted the sign-in but the connection failed (${c.reason}).`);
+  }
+  if (s.reason !== 'ok') {
+    throw new Error(`Could not reach the Google Photos connection (${s.reason}).`);
   }
   // 2) Fallback: the in-browser implicit token (short-lived; pre-persistence path).
   return getImplicitToken();
@@ -317,13 +355,55 @@ export function deleteGoogleSession(sessionId: string): void {
  */
 export async function pickFromGooglePhotos(
   onStatus?: (s: string) => void,
-  ctx?: { returnTo?: string; placeId?: string | null; label?: string },
+  ctx?: { returnTo?: string; placeId?: string | null; label?: string; win?: Window | null },
 ): Promise<File[]> {
   if (!CLIENT_ID) throw new Error('Google Photos is not configured.');
   cancelRequested = false;
 
+  // FIRST TIME ONLY: Google's consent window and the picker window are two separate
+  // pop-ups, and a browser grants a click ONE. So connecting is its own tap. Doing
+  // both on one tap is why nothing ever appeared and why google_tokens has never
+  // held a row — the second window was opened long after the click, with no user
+  // gesture left to justify it.
+  if (!googlePhotosConnected()) {
+    onStatus?.('Connecting to Google Photos…');
+    const code = await runConsent();
+    const c = await serverToken(code);
+    if (!c.token) {
+      throw new Error(`Google sign-in did not complete (${c.reason}).`);
+    }
+    throw new Error('Connected to Google Photos — tap Google Photos again to pick your pictures.');
+  }
+
+  // Opened SYNCHRONOUSLY, before any await: opening it after a token fetch, an
+  // OAuth roundtrip and a session POST is a pop-up a browser is entitled to block,
+  // and a blocked window looks exactly like "nothing happened".
+  const win = ctx?.win !== undefined ? ctx.win : window.open('', 'ao-gphotos');
+  if (!win) {
+    throw new Error(
+      'Your browser blocked the Google Photos window. Allow pop-ups for adventureorno.com, then try again.',
+    );
+  }
+  try {
+    win.document.write(
+      '<title>Google Photos</title><body style="background:#0b1220;color:#eaf1ff;font:16px system-ui;padding:40px">Opening Google Photos…</body>',
+    );
+  } catch {
+    /* cross-origin already — harmless */
+  }
+
   onStatus?.('Opening Google Photos…');
-  const session = await createSession();
+  let session: { id: string; pickerUri: string };
+  try {
+    session = await createSession();
+  } catch (e) {
+    try {
+      win.close();
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  }
 
   // Persist BEFORE opening the picker so an interrupted flow is recoverable.
   savePendingImport({
@@ -334,9 +414,12 @@ export async function pickFromGooglePhotos(
     startedAt: Date.now(),
   });
 
-  // Named popup (not a bare _blank) so we keep a handle and can close it. On
-  // mobile this may still open as a full tab — the resume path covers that.
-  const win = window.open(session.pickerUri, 'ao-gphotos');
+  // Send the window we already hold to Google's picker.
+  try {
+    win.location.href = session.pickerUri;
+  } catch {
+    throw new Error('Could not open the Google Photos picker window.');
+  }
 
   onStatus?.('Waiting for you to pick photos…');
   let picked = false;
