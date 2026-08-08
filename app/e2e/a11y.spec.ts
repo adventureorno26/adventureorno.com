@@ -13,7 +13,18 @@ import AxeBuilder from '@axe-core/playwright';
 //     reason. That list is deliberately tiny and every entry is a decision, not a
 //     shrug — see the note on color-contrast below.
 
-const ROUTES = ['/', '/places', '/timeline', '/add', '/settings', '/health', '/trips', '/bucket'];
+// '/?add=1' opens the add sheet over the map — Add is a sheet, not a page, so
+// this is how that surface gets scanned now.
+const ROUTES = [
+  '/',
+  '/places',
+  '/timeline',
+  '/?add=1',
+  '/settings',
+  '/health',
+  '/trips',
+  '/bucket',
+];
 
 // Phone and desktop. The full seven-viewport sweep lives in layout.spec.ts; axe
 // findings are overwhelmingly viewport-independent, so two shapes catch the
@@ -82,12 +93,13 @@ test.describe('accessibility — authenticated routes', () => {
     const count = await boxes.count();
     test.skip(count === 0, 'No places in this dataset (or the user cannot edit).');
 
-    const unnamed = await page.evaluate(() =>
-      [...document.querySelectorAll('.place-row input[type="checkbox"]')].filter((el) => {
-        const aria = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
-        const wrapped = el.closest('label');
-        return !aria && !wrapped;
-      }).length,
+    const unnamed = await page.evaluate(
+      () =>
+        [...document.querySelectorAll('.place-row input[type="checkbox"]')].filter((el) => {
+          const aria = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
+          const wrapped = el.closest('label');
+          return !aria && !wrapped;
+        }).length,
     );
     expect(unnamed, 'place-row checkboxes without an accessible name').toBe(0);
 
@@ -99,7 +111,10 @@ test.describe('accessibility — authenticated routes', () => {
         (el) => el.getAttribute('aria-label') || '',
       ),
     );
-    expect(labels.filter((l) => !l.trim()), 'checkboxes with an empty label').toEqual([]);
+    expect(
+      labels.filter((l) => !l.trim()),
+      'checkboxes with an empty label',
+    ).toEqual([]);
     expect(
       labels.every((l) => /^Select .+/.test(l)),
       'every label should read "Select <place name>"',

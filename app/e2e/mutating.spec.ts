@@ -322,9 +322,10 @@ test.describe('mutating acceptance — owner/editor/viewer', () => {
       p_place: { name: '', lat: 30.1, lng: -90.1 },
       p_visit: {},
     });
-    expect(blocked.status(), 'a blank name must be rejected without the opt-in').toBeGreaterThanOrEqual(
-      400,
-    );
+    expect(
+      blocked.status(),
+      'a blank name must be rejected without the opt-in',
+    ).toBeGreaterThanOrEqual(400);
 
     const allowed = await rpc(request, c, 'create_experience', {
       p_key: key('unnamed-allowed', testInfo.project.name),
