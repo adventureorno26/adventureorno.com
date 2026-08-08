@@ -430,11 +430,22 @@ jobs:
   release-gate:
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    # deploy-production gated on `vars.PRODUCTION_DEPLOY_ENABLED` in its own job-level
-    # `if:` and skipped every time, even though a diagnostic step here printed
-    # event_name='push', ref='refs/heads/main', flag='true' on the very same run. The
-    # flag is resolved HERE, where it demonstrably reads correctly, and published as a
-    # job output; the deploy job then gates on that output instead of re-reading vars.
+    # WHY THE FLAG LIVES HERE: deploy-production used to read
+    # `vars.PRODUCTION_DEPLOY_ENABLED` in its own job-level `if:` and skipped every
+    # time. The flag is resolved HERE, where it demonstrably reads correctly, and
+    # published as a job output.
+    #
+    # That was only half the story, and the other half cost several sessions. Even
+    # with the output reading "true", deploy-production still skipped on every green
+    # run. A probe job that ran unconditionally printed the answer:
+    #     BRACKET: true      GATE_RESULT: success
+    #     {"release-gate": {"result": "success", "outputs": {"deploy_enabled": "true"}}}
+    # The expression was right all along. `deploy-preview` only runs on
+    # pull_request, so on a push to main it is SKIPPED; this job survives that via
+    # `if: always()`, but a skip propagates transitively to anything downstream that
+    # does not opt out. deploy-production's `if` had no `always()`/`!cancelled()`, so
+    # GitHub skipped it before the condition ever mattered. Hence the `!cancelled()`
+    # on that job — remove it and production silently stops deploying again.
     outputs:
       deploy_enabled: ${{ steps.gateflag.outputs.enabled }}
     needs:
@@ -467,10 +478,9 @@ jobs:
             ENABLED=false
           fi
           echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
-          # State the DECISION, not just the inputs. deploy-production and
-          # deploy-probe have skipped on every green run including #44 and #45,
-          # and the old line only proved the inputs were right — it never showed
-          # what this step actually published.
+          # State the DECISION, not just the inputs — the old line proved the
+          # inputs were right and never showed what this step published, which is
+          # what made the skipping deploy so hard to pin down.
           echo "event=$EVENT ref=$REF flag=[$FLAG] flag_norm=[$FLAG_NORM] -> enabled=$ENABLED"
           echo "release gate: enabled=$ENABLED (event=$EVENT ref=$REF)" >> "$GITHUB_STEP_SUMMARY"
 
@@ -518,31 +528,14 @@ jobs:
   #     has that no other job has
   # probe runs + deploy-production skips  -> the `environment: production` binding
   # both skip                             -> the needs/output expression
-  # Runs UNCONDITIONALLY so it can report what the gate expression actually
-  # resolves to. release-gate logged `-> enabled=true` on a fully green run and
-  # both this job and deploy-production still skipped, so the flag is NOT the
-  # problem — `needs['release-gate'].outputs.deploy_enabled` is. This prints the
-  # raw needs context; delete the job once that is understood.
-  deploy-probe:
-    if: ${{ always() }}
-    needs: release-gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      # Everything goes through env, never straight into the shell — zizmor's
-      # template-injection audit is a hard gate here.
-      - env:
-          BRACKET: ${{ needs['release-gate'].outputs.deploy_enabled }}
-          GATE_RESULT: ${{ needs['release-gate'].result }}
-          ALL_NEEDS: ${{ toJson(needs) }}
-        run: |
-          echo "bracket form  -> [$BRACKET]"
-          echo "gate result   -> [$GATE_RESULT]"
-          echo "full needs context:"
-          echo "$ALL_NEEDS"
-
   deploy-production:
-    if: ${{ needs['release-gate'].outputs.deploy_enabled == 'true' }}
+    # `!cancelled()` opts out of the transitive skip from deploy-preview (see the
+    # note on release-gate). The explicit result check keeps a red build from
+    # deploying — the implicit "only on success" gating is what we just gave up.
+    if: >-
+      ${{ !cancelled()
+          && needs['release-gate'].result == 'success'
+          && needs['release-gate'].outputs.deploy_enabled == 'true' }}
     needs: release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
