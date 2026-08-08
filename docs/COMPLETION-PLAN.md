@@ -55,10 +55,16 @@ unchanged.
 3. DONE 2026-08-07 — OSV and Semgrep are hard gates; no `|| true` remains in any scanner job.
    - `scripts/check-osv.mjs` fails on any advisory without an unexpired, owned exception in
      `security/osv-exceptions.json`, and distinguishes **production-reachable** findings (resolved
-     from `npm ls --omit=dev`) from dev/build-only ones. Current state: 27 advisories, of which
-     exactly **1 is production-reachable** (the already-accepted React Router RSC advisory); the
-     other 26 are dev/build tooling (undici, vite, esbuild, vitest, sharp, ws, postcss, js-yaml,
-     brace-expansion) and expire 2026-11-06.
+     from `npm ls --omit=dev`) from dev/build-only ones. State as of 2026-08-07: 27 advisories,
+     **zero production-reachable** — all 27 are dev/build tooling (undici, vite, esbuild, vitest,
+     sharp, ws, postcss, js-yaml, brace-expansion, nanoid), expiring 2026-11-06. The React Router
+     RSC advisory that was the single production-reachable finding no longer matches, and
+     `npm audit --omit=dev` likewise now reports 0 affected packages; its exception in
+     `security/audit-exceptions.json` and `security/osv-exceptions.json` is retained but inert,
+     and both gates report unused exceptions as a note rather than a failure.
+     The gate has already earned its keep: it caught a NEW HIGH advisory on the very first PR
+     after it went live (GHSA-2v37-7h3g-55p8, nanoid, reached via vite -> postcss), which was
+     verified dev-only and accepted with an expiry rather than silently absorbed.
    - `scripts/check-semgrep.mjs` fails on any finding without an exception, on any scan path that
      does not exist, and on any newly-unparseable file. Two real defects surfaced: the old job
      scanned a phantom `src` directory that does not exist at the repo root, and `MapView.tsx`
