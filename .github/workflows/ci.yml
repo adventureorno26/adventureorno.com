@@ -518,18 +518,28 @@ jobs:
   #     has that no other job has
   # probe runs + deploy-production skips  -> the `environment: production` binding
   # both skip                             -> the needs/output expression
+  # Runs UNCONDITIONALLY so it can report what the gate expression actually
+  # resolves to. release-gate logged `-> enabled=true` on a fully green run and
+  # both this job and deploy-production still skipped, so the flag is NOT the
+  # problem — `needs['release-gate'].outputs.deploy_enabled` is. This prints the
+  # raw needs context; delete the job once that is understood.
   deploy-probe:
-    if: ${{ needs['release-gate'].outputs.deploy_enabled == 'true' }}
+    if: ${{ always() }}
     needs: release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Pass the gate output through env rather than expanding it straight into the
-      # shell — zizmor's template-injection audit is a hard gate here and it has
-      # failed every CI run since 2026-08-08 on exactly this line.
+      # Everything goes through env, never straight into the shell — zizmor's
+      # template-injection audit is a hard gate here.
       - env:
-          DEPLOY_ENABLED: ${{ needs['release-gate'].outputs.deploy_enabled }}
-        run: echo "probe ran; gate output was '$DEPLOY_ENABLED'"
+          BRACKET: ${{ needs['release-gate'].outputs.deploy_enabled }}
+          GATE_RESULT: ${{ needs['release-gate'].result }}
+          ALL_NEEDS: ${{ toJson(needs) }}
+        run: |
+          echo "bracket form  -> [$BRACKET]"
+          echo "gate result   -> [$GATE_RESULT]"
+          echo "full needs context:"
+          echo "$ALL_NEEDS"
 
   deploy-production:
     if: ${{ needs['release-gate'].outputs.deploy_enabled == 'true' }}
