@@ -676,6 +676,16 @@ export async function fetchPlaceVisitStats(
   return out;
 }
 
+/**
+ * @deprecated Use {@link addExperience} / {@link createPlaceAtomic}. A bare visit
+ * insert is not idempotent, so a retry after a dropped connection logs the visit
+ * twice, and it cannot be transactional with the place/attribution/rating that
+ * normally accompany it.
+ *
+ * Zero callers as of COMPLETION-PLAN Phase 2 — `PlacePanel.addSpot` was the last
+ * one and now uses the canonical path. Retained only as a compatibility export;
+ * a lint rule keeps it unused.
+ */
 export async function addVisit(placeId: string, start: string, end: string): Promise<Visit> {
   const { data, error } = await supabase
     .from('visits')
@@ -781,6 +791,18 @@ export type ExperiencePlaceInput =
        * "a new place requires a name" guard on for everyone else.
        */
       allow_unnamed?: boolean;
+      /**
+       * Attach the place to a Trip as a stop, in the SAME transaction (migration
+       * 0124). `status` defaults to 'planned'; 'completed' is only valid when this
+       * call also creates a visit, because a completed stop must carry its
+       * evidence visit.
+       */
+      trip?: {
+        id: string;
+        status?: 'planned' | 'completed' | 'skipped';
+        sort_order?: number;
+        note?: string | null;
+      };
     };
 
 /** The optional visit to attach. Omit `date` to only create/reuse the place. */

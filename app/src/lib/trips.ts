@@ -202,6 +202,14 @@ export async function fetchTripPlaces(trip: Trip): Promise<Place[]> {
 }
 
 /** Add a Place to a trip as a planned stop (idempotent per trip+place). */
+/**
+ * @deprecated Pass `trip: { id }` to {@link createPlaceAtomic} instead (migration
+ * 0124), so the place and its stop commit together and a retry cannot duplicate
+ * either. A standalone stop insert is a second, separately-failing request.
+ *
+ * Zero callers as of COMPLETION-PLAN Phase 2. Retained only as a compatibility
+ * export; a lint rule keeps it unused.
+ */
 export async function addStop(
   tripId: string,
   placeId: string,
@@ -219,11 +227,19 @@ export async function removeStop(stopId: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Add a place to a trip by name: geocode it, create the Place, add it as a stop. */
+/**
+ * Add a place to a trip by name: geocode it, then create the Place AND its trip
+ * stop in one atomic, idempotent call (migration 0124).
+ *
+ * This used to be two requests — createPlaceAtomic then addStop. If the second
+ * failed, the trip gained nothing while a stray place was left behind, and the
+ * retry minted a fresh idempotency key so it created a SECOND place instead of
+ * completing the first attempt. One key, one transaction fixes both.
+ */
 export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> {
   const geo = await forwardGeocode(query.trim());
   if (!geo) throw new Error(`Couldn't find "${query}". Try a more specific name.`);
-  const place = await createPlaceAtomic({
+  return createPlaceAtomic({
     name: geo.name,
     country: geo.country,
     admin1: geo.admin1,
@@ -231,7 +247,6 @@ export async function addPlaceToTrip(trip: Trip, query: string): Promise<Place> 
     lat: geo.lat,
     lng: geo.lng,
     saved: true,
+    trip: { id: trip.id, status: 'planned' },
   });
-  await addStop(trip.id, place.id, 'planned');
-  return place;
 }

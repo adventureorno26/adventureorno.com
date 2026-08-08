@@ -22,18 +22,21 @@ module.exports = {
         paths: [
           {
             name: '../lib/data',
-            importNames: ['createPlace'],
-            message: 'Use createPlaceAtomic — createPlace is a non-atomic, non-idempotent insert.',
+            importNames: ['createPlace', 'addVisit'],
+            message:
+              'Use createPlaceAtomic/addExperience — createPlace and addVisit are non-atomic, non-idempotent inserts.',
           },
           {
             name: './data',
-            importNames: ['createPlace'],
-            message: 'Use createPlaceAtomic — createPlace is a non-atomic, non-idempotent insert.',
+            importNames: ['createPlace', 'addVisit'],
+            message:
+              'Use createPlaceAtomic/addExperience — createPlace and addVisit are non-atomic, non-idempotent inserts.',
           },
           {
             name: '../../lib/data',
-            importNames: ['createPlace'],
-            message: 'Use createPlaceAtomic — createPlace is a non-atomic, non-idempotent insert.',
+            importNames: ['createPlace', 'addVisit'],
+            message:
+              'Use createPlaceAtomic/addExperience — createPlace and addVisit are non-atomic, non-idempotent inserts.',
           },
         ],
       },
