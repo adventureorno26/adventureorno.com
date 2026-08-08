@@ -2027,6 +2027,7 @@ export type Database = {
       }
       cluster_now: { Args: never; Returns: Json }
       cluster_unassigned: { Args: never; Returns: Json }
+      complete_stops_on_taken_trips: { Args: never; Returns: number }
       confirm_suggested_trip: { Args: { p_place: string }; Returns: string }
       consume_oauth_state: {
         Args: { p_provider?: string; p_state: string }
