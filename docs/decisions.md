@@ -354,3 +354,63 @@ and an authenticated bundle measurement reported "no heavy chunks" when an expir
 token had silently redirected every route to `/login`. Both were caught by running a
 negative control. **Assert the invariant, not just the symptom, and always verify a
 new gate fails when the thing it guards is broken.**
+
+## 2026-08-08 — Place-model corrections, Slice 1: stop the nightly trip duplication
+
+Erica reported four symptoms; all trace to three causes, and **none is covered by
+any COMPLETION-PLAN phase** (Phase 6 covers trip *planning* features, not visit
+derivation or the counting model). The authoritative spec, `NewClaude.md`, is
+TRUNCATED — §2–§6, exactly the visit/revisit and trip sections, are collapsed into
+a literal "108 lines hidden" marker — so the answers cannot be looked up.
+
+**Approved model decisions (Erica, 2026-08-08):**
+- The map badge counts **visits, not days**.
+- Stays separated by **≤2 days** fuse into one visit. Cape Cod Aug 2–7 (no photos
+  Aug 4) becomes ONE visit; returning next year is a SECOND visit on the SAME
+  place — "count the place once, count the visits every time".
+- Cape Cod becomes a **destination (region)** that counts once and holds its
+  children, rather than a rollup `category='trip'` that counts zero. This matches
+  the spec's own rule: *"A city is both a place you visited AND a box that holds
+  other places."* Only trails and trips are non-counting rollups.
+- Delete the duplicate suggestions; retire the legacy trip system.
+
+**Slice 1 — done.** `detect-trips` re-created the same drafts nightly since
+2026-07-21: 54 rows for 4 destinations. It documents itself as idempotent, but the
+guard reads `places.first_visit`, which it never populates (it inserts a `visits`
+row without triggering the recompute), so **all 54 rows had first_visit NULL**, the
+candidate range list came back empty, and the overlap check could never match.
+Dismissing was futile too: `resolveSuggestedTrip(id,false)` DELETES the row and
+records nothing, so the next run recreated it.
+
+`detect-trips-nightly` is now **unscheduled** rather than patched, because the
+legacy `places.category='trip'` system it feeds is being retired and the function
+must be rewritten against the canonical `trips` table. Restore SQL:
+
+```sql
+select cron.schedule('detect-trips-nightly', '30 7 * * *', $$
+  select net.http_post(
+    url:='https://aanfyhsjbtnqzphuoiem.supabase.co/functions/v1/detect-trips',
+    headers:=jsonb_build_object('Content-Type','application/json','apikey',
+             (select decrypted_secret from vault.decrypted_secrets where name='service_role_key')),
+    body:='{}'::jsonb) $$);
+```
+
+Do NOT restore it before the rewrite, or the duplicates return.
+
+Cleanup was verified safe before executing: 0 photos / activities / entries /
+videos / trip_stops referenced the 54 rows, and every real place referencing them
+keeps its own visits. Removed 54 places, 496 junk membership links, 126 derived
+container visits. places 186→132, visits 571→445, memberships 510→14; **photos 168
+and activities 444 unchanged**. 24 real places became top-level — intended. Also
+fixed 7 pre-existing dangling `part_of` references (that parent id was NOT among
+the 54; it had been deleted long before). Zero dangling references remain.
+
+Raw snapshot (gitignored — contains exact coordinates):
+`supabase/snapshots/2026-08-08-suggested-trip-cleanup/`.
+
+**A per-view defect found while planning Slice 3.** `visit_count` is global and not
+person-aware, so the badge is identical in Just Erica / Just Josh / Both. Potomac
+Station shows **67** in Erica's view though all 39 of its visits are Josh's; Lake of
+the Red Rocks shows **52** in Josh's view with zero Josh visits. Slice 3 therefore
+needs a per-person `place_visit_counts(p_profile)` RPC, mirroring the existing
+`settings_stats(p_profile)` / `race_stats(p_profile)` pattern — not a single column.
