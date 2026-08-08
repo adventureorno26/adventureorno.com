@@ -173,7 +173,11 @@ a {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 5; /* below the place panel on desktop so the card sits in front of the actions */
+  /* Above the search row (z-index 6) so the stats dropdowns are readable, and
+     still far below the place panel (z-index 60) so an open card covers them.
+     This was 5 against the search row's 7, so every dropdown opened BEHIND the
+     search bar on desktop. */
+  z-index: 14;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -186,7 +190,7 @@ a {
    +Add / stats dropdowns in front of an open card. */
 @media (max-width: 640px) {
   .stats-bar {
-    z-index: 12;
+    z-index: 14;
   }
 }
 .stats-bar .stat {
@@ -3305,7 +3309,9 @@ a {
   position: relative;
 }
 
-/* +Add + search — BENEATH the stats bar (both web & mobile). */
+/* Search row — deliberately BENEATH the stats bar (14) on every size, so a stats
+   dropdown is never occluded. The +Add that used to live here is gone: the bottom
+   nav already has Add, and two Adds on one screen is one too many. */
 .map-top-row {
   position: absolute;
   top: calc(48px + env(safe-area-inset-top));
@@ -3315,7 +3321,7 @@ a {
   align-items: stretch;
   gap: 8px;
   width: min(420px, calc(100vw - 32px));
-  z-index: 7;
+  z-index: 6;
 }
 .map-top-row .map-search {
   position: relative;
