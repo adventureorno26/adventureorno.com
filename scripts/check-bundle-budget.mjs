@@ -5,13 +5,14 @@
 // in it: MapLibre (~1.0 MB) and heic2any (~1.3 MB). Both are legitimately large;
 // they just have to stay behind the authenticated routes that need them.
 //
-// This is a REGRESSION GUARD, not an optimisation. It has already happened once
-// in the other direction: making MapView `lazy()` to shrink this shell moved
-// maplibre-gl's CSS after index.css, which collapsed every map on the site to
-// zero height (see the note in CLAUDE.md / the gotchas). MapView is therefore
-// EAGER on purpose. The budget exists so that staying eager cannot quietly start
-// dragging MapLibre into the login graph, and so the shell cannot creep upward
-// unnoticed.
+// This is a REGRESSION GUARD, not an optimisation. MapView IS lazy
+// (`lazyWithReload(() => import('./routes/MapView'))` in App.tsx) — that is what
+// keeps MapLibre out of this shell. Lazy-loading it once caused a nasty bug:
+// maplibre-gl's CSS ended up after index.css and every map on the site collapsed
+// to zero height. The fix was to keep only the small `maplibre-gl.css` EAGER in
+// main.tsx, imported BEFORE `./index.css`, while the JS stays lazy. So the
+// invariant to protect is twofold: MapLibre JS must stay out of the login graph
+// (enforced here) and that CSS import order must not be reordered (see main.tsx).
 //
 // `dist/index.html` is the right thing to inspect: Vite emits a <script> for the
 // entry plus <link rel="modulepreload"> for everything statically reachable from

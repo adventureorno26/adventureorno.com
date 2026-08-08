@@ -418,10 +418,12 @@ deploy once, then hard-refresh" rule — wait for edge propagation before verify
   per-file gzip budget, if the shell exceeds 200 KB gzipped, or if a referenced asset is missing
   from `dist`. Validated by negative control — a simulated MapLibre leak, an artificially oversized
   chunk, and a deleted asset each exit non-zero.
-  This is a regression guard rather than an optimisation: MapView is EAGER on purpose, because
-  making it `lazy()` once moved maplibre-gl's CSS after index.css and collapsed every map on the
-  site to zero height. The budget ensures staying eager cannot quietly start dragging MapLibre into
-  the login shell.
+  CORRECTION: an earlier draft of this entry claimed MapView is eager. It is NOT — `App.tsx` uses
+  `lazyWithReload(() => import('./routes/MapView'))`, which is precisely why MapLibre stays out of
+  the login shell. The historical zero-height bug came from lazy-loading moving maplibre-gl's CSS
+  after `index.css`; the fix was to keep **only the small `maplibre-gl.css` eager in `main.tsx`,
+  imported BEFORE `./index.css`**, while the JS stays lazy. That CSS ordering — not eager JS — is
+  the safeguard, and it must not be reordered.
 - ALSO ALREADY DONE — heic2any is genuinely deferred, not merely code-split. `app/src/lib/photos.ts`
   reaches it through `await import('heic2any')` inside the HEIC branch only, so it downloads when a
   HEIC file is actually chosen and never before. Confirmed on production with an authenticated

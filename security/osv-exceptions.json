@@ -13,6 +13,17 @@
       "reason": "Dev/build-only dependency: not reachable from the production bundle (`npm ls --omit=dev` does not contain it), so it never reaches a browser or the deployed Worker. Exploitation requires local access to a developer machine or CI runner. Tracked for upgrade; dependency bumps are held until Phase 1 completes so the delivery pipeline is trustworthy before the tree moves."
     },
     {
+      "id": "GHSA-2v37-7h3g-55p8",
+      "scope": "development",
+      "packages": [
+        "nanoid"
+      ],
+      "owner": "repository owner",
+      "expires": "2026-11-06",
+      "summary": "nanoid: custom generators can loop indefinitely when size is zero",
+      "reason": "Dev/build-only: nanoid 3.3.16 is reached solely via vite -> postcss and is NOT in the production tree (`npm ls --omit=dev` has 99 packages and nanoid is not among them), so it never ships to a browser or the deployed Worker. The advisory needs a CUSTOM generator invoked with size zero; this repo never calls nanoid at all, let alone with a custom alphabet, and postcss uses it internally with fixed sizes. Resolves when vite/postcss bump the transitive pin; dependency bumps are batched and reviewed per-family rather than taken ad hoc."
+    },
+    {
       "id": "GHSA-35p6-xmwp-9g52",
       "scope": "development",
       "packages": [
