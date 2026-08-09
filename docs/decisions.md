@@ -516,3 +516,43 @@ everyone with no account.
 
 Snapshots (gitignored): `2026-08-09-place-names-pre-rename.json`,
 `2026-08-09-visits-pre-rebuild.json`.
+
+## 2026-08-09 — 29 activities moved to where they actually happened
+
+Erica: "There are hikes in Elizabeth Furnace Family Campground that do not belong
+there." The old importer snapped an activity to the nearest place within 30 km, so
+eight hikes across three counties landed on one campground.
+
+Each activity's real location came from its **route midpoint**, not its start point
+— an activity starts in a trailhead car park, which is why geocoding the start
+returns SR630, 211 and TR408 while the midpoint returns "Tuscarora–Overall Run
+Trail" and "Strickler Knob Trail". AllTrails cross-checked the hikes against the
+recorded distance. **Distances were never touched.**
+
+Result: **Elizabeth Furnace 8 hikes → 0.** Activities more than 3 miles from a
+non-trail place: 29 → 6, and those 6 are legitimately far (a county place, and the
+Tuscarora Trail, which is linear).
+
+Care taken while planning, because a sloppy version of this is worse than the bug:
+* names cleaned of map-marker colours ("Strickler Knob Trail (pink)")
+* "Strickler Knob" and "Strickler Knob Trail" recognised as one feature
+* clustered on the MIDPOINT within 5 km, so two hikes at one trailhead share a
+  place instead of making two
+* an existing place with the same name is reused (60 km for a county/locality name,
+  25 km otherwise) rather than inventing a second "Loudoun"
+* a road run that geocodes to a business is not "a place we went" — "Cutt-N-Up" and
+  "Oak Grove Baptist Church" fell back to the locality
+
+15 new places created, 132 → 147 (plus one for a new hike that arrived mid-work).
+
+### Every new activity was leaving a place called "New place"
+
+`place_for_activity` inserts new leaf places named literally `New place` with
+`needs_geocode`, expecting the nightly geocoder to name them — but that job was
+unscheduled in 0130 because sweeping every place overwrote names Erica had given.
+So nothing named them. Erica's hike this morning proved it live.
+
+`ingestActivity` now names the ONE place it just created, from the route midpoint,
+and only while that place is still called "New place" and unlocked — so it can
+never touch a name a person chose. strava-webhook v18 and strava-backfill v20
+deployed. This morning's hike is "Camp Fraser".

@@ -114,6 +114,99 @@ export interface StravaActivity {
   map?: { summary_polyline?: string | null };
 }
 
+/** Decode a Strava summary polyline to [lat, lng] points. */
+function decodePolyline(p: string): [number, number][] {
+  const out: [number, number][] = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < p.length) {
+    for (const isLat of [true, false]) {
+      let shift = 0, result = 0, b: number;
+      do {
+        b = p.charCodeAt(i++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const d = result & 1 ? ~(result >> 1) : result >> 1;
+      if (isLat) lat += d; else lng += d;
+    }
+    out.push([lat / 1e5, lng / 1e5]);
+  }
+  return out;
+}
+
+/**
+ * Name a place the placement RPC just created.
+ *
+ * place_for_activity inserts new leaf places called literally "New place" with
+ * needs_geocode set, on the assumption that a nightly geocoder would name them.
+ * That job was unscheduled in migration 0130 because sweeping every place
+ * overwrote names Erica had given — so nothing named them, and every hike in a
+ * new spot left a "New place" behind.
+ *
+ * This names only the ONE place just created, and only while it is still called
+ * "New place" and unlocked, so it can never touch a name a person chose.
+ *
+ * It geocodes the route MIDPOINT, not the start: an activity starts in a
+ * trailhead car park, which is why the start point returns things like "SR630"
+ * and "TR408" while the midpoint returns "Tuscarora-Overall Run Trail".
+ */
+async function nameNewPlace(
+  admin: SupabaseClient,
+  placeId: string,
+  a: StravaActivity,
+  lat: number,
+  lng: number,
+): Promise<void> {
+  const key = Deno.env.get('MAPTILER_KEY');
+  if (!key) return;
+
+  const { data: place } = await admin
+    .from('places')
+    .select('name, needs_geocode, name_locked')
+    .eq('id', placeId)
+    .maybeSingle();
+  if (!place || place.name_locked || place.name !== 'New place') return;
+
+  let [mlat, mlng] = [lat, lng];
+  const poly = a.map?.summary_polyline;
+  if (poly) {
+    try {
+      const pts = decodePolyline(poly);
+      if (pts.length) [mlat, mlng] = pts[Math.floor(pts.length / 2)];
+    } catch {
+      /* fall back to the start point */
+    }
+  }
+
+  for (const types of ['poi', 'address', 'municipality']) {
+    try {
+      const r = await fetch(
+        `https://api.maptiler.com/geocoding/${mlng},${mlat}.json` +
+          `?key=${key}&limit=1&types=${types}`,
+      );
+      if (!r.ok) continue;
+      const f = (await r.json())?.features?.[0];
+      const text: string | undefined = f?.text;
+      if (!text) continue;
+      const ctx: { id?: string; text?: string }[] = f.context ?? [];
+      await admin
+        .from('places')
+        .update({
+          name: text,
+          address: f.place_name ?? null,
+          admin1: ctx.find((c) => c.id?.startsWith('region'))?.text ?? null,
+          country: ctx.find((c) => c.id?.startsWith('country'))?.text ?? null,
+          needs_geocode: false,
+        })
+        .eq('id', placeId)
+        .eq('name', 'New place');   // never clobber a name set meanwhile
+      return;
+    } catch {
+      /* try the next granularity */
+    }
+  }
+}
+
 /** Upsert one Strava activity. Placed activities get a leaf place; coordinate-free
  *  (indoor/GPS-less) activities are still ingested when they carry real movement —
  *  they count toward mileage + the timeline but stay UNPLACED (place_id null) and OFF
@@ -179,6 +272,8 @@ export async function ingestActivity(
     if (error) throw new Error(`insert activity failed: ${error.message}`);
   }
   if (placeId) {
+    // Name it before the stats run, so the card never shows "New place".
+    if (!existing && hasCoords) await nameNewPlace(admin, placeId, a, lat!, lng!);
     await admin.rpc('recompute_place_stats', { p_place: placeId });
     await admin.rpc('rebuild_place_visits', { p_place: placeId });
   }
