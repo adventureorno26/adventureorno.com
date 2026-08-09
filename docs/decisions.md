@@ -466,3 +466,53 @@ activity belongs to, the day view, and duplicate detection in both directions.
 Snapshots are gitignored (they contain exact coordinates):
 `supabase/snapshots/2026-08-08-activities-pre-dedupe.json` and
 `supabase/snapshots/2026-08-08-approved-activity-merges.md`, both local only.
+
+## 2026-08-09 — Places know where they are, and stop being named after roads
+
+**State/country** filled on all 36 places that lacked one, by reverse geocoding —
+Erica approved this explicitly and asked that the NAME be left alone, so the update
+touches `admin1`/`country` only and `coalesce` means an existing value always wins.
+3 remain without a state and that is correct: Florida (resolves by longitude) and
+two Barbados places (by country).
+
+Local times were then recomputed, because `local_zone()` prefers a known state over
+a longitude band — Utah is west of −112.5 but Mountain, Nevada is east of −114 but
+Pacific.
+
+**Addresses** on 90 of the 91 places that had none. Erica: "I DO want the address of
+the trailhead added so I can find it easily." This is what the Directions button
+reads, which is why it so rarely appeared. MapTiler prefixes `-, ` when there is no
+house number; that is stripped.
+
+**Renames.** The old geocoder named places after the street at the activity's start
+point — a hike begins in a trailhead parking lot, so 14 places were called things
+like Freedom Drive and Old Rag Fire Road. Renamed only where the evidence is clear,
+and only where `not name_locked`, so the 60 names Erica gave are untouched:
+
+| was | now | evidence |
+|---|---|---|
+| Old Rag Fire Road | Old Rag Mountain | AllTrails: 5.1 mi hike vs 5.6 mi trail, Shenandoah NP |
+| Edwards Ferry Rd | Red Rock Wilderness Overlook | AllTrails: 1.0 vs 1.1 mi, 0.28 mi from trailhead |
+| Freedom Drive | Reston Town Center | POI at the coordinates, 12 runs |
+| Exchange Street | One Loudoun | POI, 3 runs |
+| Browns Chapel Road | Brown's Park | POI, Lake Anne Village |
+| Water Vista Drive | Brambleton Community Park West | POI |
+| Jefferson Drive Southwest | National Mall | Smithsonian grounds, 3 runs |
+
+**Left alone on purpose** — no confident answer, and a wrong rename on a place with
+a dozen visits is worse than a bad one: Riverpoint Drive (19.5 mi longest, probably
+W&OD), Isaac Newton Square, Fairway Drive, North Courthouse Road (geocodes to a
+Subway), N Moore Street, North Street Northeast, Broadlands.
+
+Renames deliberately do NOT set `name_locked` — that flag means "a person chose
+this". These are machine suggestions Erica can overwrite freely.
+
+**Method note.** Plain reverse geocoding on an activity's START point returns the
+road: SR630, 211, TR408. The route MIDPOINT lands on the trail instead
+("Tuscarora–Overall Run Trail", "Strickler Knob Trail"), and AllTrails on that
+midpoint, cross-checked against the recorded distance, is better still. AllTrails
+has no public API, so the app itself cannot call it; OSM covers trailheads for
+everyone with no account.
+
+Snapshots (gitignored): `2026-08-09-place-names-pre-rename.json`,
+`2026-08-09-visits-pre-rebuild.json`.
