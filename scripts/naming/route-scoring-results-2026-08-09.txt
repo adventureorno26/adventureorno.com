@@ -1,0 +1,40 @@
+Warren County                  -> Dickey Ridge Trail                            [trail]
+      trails={'Dickey Ridge Trail': 7, 'Snead Farm Road': 2, 'Fox Hollow Trail': 2, 'Snead Farm Loop Trail': 1, 'Pumphouse Access Trail': 1}
+      parks ={'Shenandoah National Park': 9}
+Shenandoah County              -> Massanutten Trail                             [trail]
+      trails={'Massanutten Trail': 6, 'Veach GapTrail': 1, 'Veach Gap Trail': 1}
+      parks ={'George Washington National Forest': 9}
+Top Hill                       -> Appalachian Trail                             [trail]
+      trails={'Appalachian Trail': 8}
+      parks ={'Appalachian National Scenic Trail': 8}
+Locust Valley                  -> Appalachian National Scenic Trail             [trail]
+      trails={'Appalachian National Scenic Trail': 8, 'Bear Spring Cabin Trail': 1}
+      parks ={'South Mountain State Battlefield': 6, 'Appalachian National Scenic Trail': 3}
+Clarke County                  -> Appalachian Trail                             [trail]
+      trails={'Appalachian Trail': 9}
+      parks ={'Sky Meadows State Park': 8}
+Madison                        -> Shenandoah National Park                      [park]
+      trails={'Berry Hollow Fire Road': 4, 'Berry Hollow Trail': 4, 'Old Rag Fire Road': 3, 'Weakley Hollow Fire Road': 1}
+      parks ={'Shenandoah National Park': 9}
+Chesterfield                   -> Pocahontas State Park                         [park]
+      trails={'Beaver Lake Trail': 2, 'Fendley Station Loop B': 1, 'Loop Forest Trail': 1, 'Co-Op Trail': 1, 'FR 341': 1}
+      parks ={'Pocahontas State Park': 9}
+Bern Township                  -> Lake Border Trail                             [trail]
+      trails={'Lake Border Trail': 7}
+      parks ={'Blue Marsh Lake Recreation Area': 8, 'State Game Lands Number 280': 1}
+Stream Weir                    -> George Washington National Forest             [park]
+      trails={'Shawl Gap Trail': 4, 'Massanutten Trail': 3, 'Tuscarora-Massanutten Trail': 2}
+      parks ={'George Washington National Forest': 9}
+Riverpoint Drive Trailhead     -> Riverpoint Drive Trailhead                    [park]
+      trails={'Potomac Heritage Trail': 3}
+      parks ={'Riverpoint Drive Trailhead': 6}
+Red Rock Regional Park         -> None                                          [None]
+      trails={}
+      parks ={}
+Washington & Old Dominion Trail -> Washington & Old Dominion Trail               [trail]
+      trails={'Washington & Old Dominion Trail': 11, 'W&OD Bridle Trail': 5}
+      parks ={'Washington & Old Dominion Trail Regional Park': 7}
+Loudoun                        -> W&OD Bridle Trail                             [trail]
+      trails={'W&OD Bridle Trail': 9, 'Washington & Old Dominion Trail': 9}
+      parks ={'Washington and Old Dominion Railroad Regional Park': 9}
+Reston Town Center             ERROR HTTP Error 504: Gateway Timeout

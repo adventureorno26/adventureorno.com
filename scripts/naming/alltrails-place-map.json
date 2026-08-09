@@ -1,0 +1,138 @@
+{
+ "Connector": {
+  "to": "Seneca Regional Park",
+  "src": "AllTrails: Seneca Bridle/Potomac Heritage loops"
+ },
+ "Top Hill": {
+  "to": "Appalachian Trail \u2014 Bluemont",
+  "src": "AllTrails: Buzzard Hill / Ashby Hollow via AT"
+ },
+ "Warren County": {
+  "to": "Shenandoah National Park \u2014 Dickey Ridge",
+  "src": "AllTrails: Lands Run Falls / Snead Farm Dickey Ridge"
+ },
+ "Shenandoah County": {
+  "to": "George Washington National Forest \u2014 Massanutten",
+  "src": "AllTrails: Veach Gap / Massanutten Trail"
+ },
+ "Madison": {
+  "to": "Shenandoah National Park \u2014 Old Rag",
+  "src": "AllTrails: Old Rag Mountain Loop"
+ },
+ "Clarke County": {
+  "to": "Sky Meadows State Park",
+  "src": "AllTrails: Ashby Gap / Piedmont Overlook loops"
+ },
+ "Rappahannock County": {
+  "to": "Shenandoah National Park \u2014 Mount Marshall",
+  "src": "AllTrails: North/South Mount Marshall via AT"
+ },
+ "Stream Weir": {
+  "to": "George Washington National Forest \u2014 Buzzard Rock",
+  "src": "AllTrails: Buzzard Rock via Tuscarora Trail"
+ },
+ "Clark County": {
+  "to": "Valley of Fire State Park",
+  "src": "AllTrails: Fire Wave / Seven Wonders"
+ },
+ "Washington County": {
+  "to": "Zion National Park",
+  "src": "coords in Springdale/Zion; AllTrails had no match"
+ },
+ "Chesterfield": {
+  "to": "Pocahontas State Park",
+  "src": "AllTrails: Beaver Lake / Co-op Trail"
+ },
+ "Prince William": {
+  "to": "Prince William Forest Park",
+  "src": "AllTrails: Turkey Run Ridge / Pyrite Mine"
+ },
+ "Bern Township": {
+  "to": "Blue Marsh Lake",
+  "src": "AllTrails: Blue Marsh / Lake Border Trail"
+ },
+ "Mathias": {
+  "to": "Lost River State Park",
+  "src": "AllTrails: Cranny Crow Overlook / Big Ridge"
+ },
+ "Anacortes": {
+  "to": "Mount Erie Park",
+  "src": "AllTrails: Sugarloaf & Mount Erie Loop"
+ },
+ "Rohrersville": {
+  "to": "Appalachian Trail \u2014 South Mountain, Maryland",
+  "src": "AllTrails: Crampton Gap to Harpers Ferry"
+ },
+ "Locust Valley": {
+  "to": "Appalachian Trail \u2014 South Mountain, Maryland",
+  "src": "AllTrails: Crampton Gap / Lambs Knoll"
+ },
+ "Zittlestown": {
+  "to": "Appalachian Trail \u2014 Washington Monument State Park",
+  "src": "AllTrails: Turners Gap to Monument Knob"
+ },
+ "Wolfsville Crossing": {
+  "to": "Appalachian Trail \u2014 South Mountain, Maryland",
+  "src": "AllTrails: Washington Monument to Annapolis Rock"
+ },
+ "Highland Farms": {
+  "to": "Appalachian Trail \u2014 South Mountain, Maryland",
+  "src": "AllTrails: High Rock & Raven Rock via AT"
+ },
+ "Highfield-Cascade": {
+  "to": "Appalachian Trail \u2014 Michaux State Forest",
+  "src": "AllTrails: Route 16 to Snowy Mountain Rd"
+ },
+ "Brighton Knolls": {
+  "to": "Brighton Dam Park",
+  "src": "AllTrails: Brighton Dam Loop / Triadelphia Reservoir"
+ },
+ "Town of Dix": {
+  "to": "Watkins Glen State Park",
+  "src": "AllTrails: Glen Creek Gorge Trail"
+ },
+ "Town of Lysander": {
+  "to": "Baldwinsville Community Park",
+  "src": "AllTrails: Baldwinsville Community Park Trail"
+ },
+ "Loudoun County": {
+  "to": "Morven Park",
+  "src": "AllTrails: Morven Park"
+ },
+ "Leesburg, VA": {
+  "to": "Leesburg",
+  "src": "canonicalised duplicate"
+ },
+ "W&OD": {
+  "to": "Washington & Old Dominion Trail",
+  "src": "canonicalised duplicate"
+ },
+ "North Street Northeast": {
+  "to": "Leesburg",
+  "src": "road name -> town"
+ },
+ "N Moore Street": {
+  "to": "Rosslyn",
+  "src": "road name -> neighbourhood"
+ },
+ "North Courthouse Road": {
+  "to": "Arlington",
+  "src": "road name -> town"
+ },
+ "Park Chalet Place": {
+  "to": "Belmont Country Club",
+  "src": "road name -> the place it serves"
+ },
+ "Fairway Drive": {
+  "to": "Belmont Country Club",
+  "src": "road name -> the place it serves"
+ },
+ "Loudoun": {
+  "to": "Washington & Old Dominion Trail",
+  "src": "AllTrails: W&OD Sterling to Leesburg"
+ },
+ "White Loop": {
+  "to": "Schaeffer Farms White Loop",
+  "src": "AllTrails: Schaeffer Farms White Loop, Seneca Creek SP"
+ }
+}
