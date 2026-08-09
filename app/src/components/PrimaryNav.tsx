@@ -13,17 +13,22 @@ import { useAuth } from '../auth/AuthProvider';
 // wizard at /add that could not add photos or import from Google Photos, which
 // is how the app ended up with two different answers to "add something".
 
-const TABS: { to: string; label: string; match?: (path: string) => boolean }[] = [
-  { to: '/', label: 'Map', match: (p) => p === '/' || p.startsWith('/place/') },
+/** The Add sheet opens OVER the map, so while it is open the map is not the
+ *  current tab — Add is. */
+const addOpen = (search: string) => new URLSearchParams(search).get('add') === '1';
+
+const TABS: { to: string; label: string; match?: (path: string, search: string) => boolean }[] = [
+  { to: '/', label: 'Map', match: (p, s) => (p === '/' || p.startsWith('/place/')) && !addOpen(s) },
   { to: '/places', label: 'Places', match: (p) => p === '/places' || p === '/places/edit' },
-  { to: '/?add=1', label: 'Add', match: () => false },
+  // Add is a sheet, not a page, so it highlights on its query flag rather than a path.
+  { to: '/?add=1', label: 'Add', match: (_p, s) => addOpen(s) },
   { to: '/timeline', label: 'Timeline' },
   { to: '/settings', label: 'More', match: (p) => p === '/settings' || p.startsWith('/settings/') },
 ];
 
 export default function PrimaryNav() {
   const { session, profile } = useAuth();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
 
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
@@ -31,12 +36,12 @@ export default function PrimaryNav() {
   return (
     <nav className="primary-nav" aria-label="Primary">
       {TABS.map((t) => {
-        const active = t.match ? t.match(pathname) : pathname === t.to;
+        const active = t.match ? t.match(pathname, search) : pathname === t.to && !addOpen(search);
         return (
           <NavLink
             key={t.to}
             to={t.to}
-            className={`pnav-tab${active ? ' active' : ''}${t.label === 'Add' ? ' pnav-add' : ''}`}
+            className={`pnav-tab${active ? ' active' : ''}`}
             aria-current={active ? 'page' : undefined}
           >
             {t.label}

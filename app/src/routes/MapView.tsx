@@ -883,11 +883,16 @@ export default function MapView() {
   // The bottom Add tab is a link to /?add=1 rather than a page, so tapping it
   // again from anywhere re-opens the same sheet.
   useEffect(() => {
-    if (searchParams.get('add') === '1') {
-      setAddSheet(true);
-      navigate('/', { replace: true });
-    }
-  }, [searchParams, navigate]);
+    // The flag STAYS in the URL while the sheet is open: it is what tells the
+    // bottom nav that Add — not Map — is the tab you are on, and it makes Back
+    // close the sheet.
+    setAddSheet(searchParams.get('add') === '1');
+  }, [searchParams]);
+
+  const closeAddSheet = () => {
+    setAddSheet(false);
+    if (searchParams.get('add') === '1') navigate('/', { replace: true });
+  };
 
   // Deep link: /?cat=dining (tapping a category on a card) → filter the map to
   // that category and zoom to fit those photo-pins.
@@ -1449,14 +1454,14 @@ export default function MapView() {
           people={people}
           meId={profile?.id ?? null}
           onSaved={(placeId) => {
-            setAddSheet(false);
+            closeAddSheet();
             void fetchPlaces()
               .then(setPlaces)
               .catch(() => undefined);
             navigate(`/place/${placeId}`);
           }}
           onPhotos={(files) => void handleAddPhotos(files)}
-          onClose={() => setAddSheet(false)}
+          onClose={closeAddSheet}
         />
       )}
 
@@ -1515,7 +1520,7 @@ export default function MapView() {
                 one question, plus a "Trip" entry that created the retired
                 trip-category place. AddSheet asks the three questions that matter
                 and carries the photo + Google Photos import that only lived here. */}
-            <button className="add-btn" onClick={() => setAddSheet(true)}>
+            <button className="add-btn" onClick={() => navigate('/?add=1')}>
               + Add
             </button>
             <input

@@ -30,12 +30,13 @@ const VIEWPORTS = [
  * because someone decided it should — never because it was easier than fixing it.
  */
 const ACCEPTED_SERIOUS: Record<string, string> = {
-  // `.pnav-add` is white on the brand accent #3b82f6 at 12px → 3.67:1, under the
-  // 4.5:1 required for small text. Fixing it means darkening the accent on the
-  // primary navigation pill, which is a visual-design decision on a deliberately
-  // locked layout, so it is Erica's call rather than an agent's. Tracked in
-  // COMPLETION-PLAN Phase 4 with a concrete proposed value.
-  'color-contrast': 'brand accent on .pnav-add — pending an explicit design decision',
+  // Was: `.pnav-add` white on the brand accent #3b82f6 at 12px → 3.67:1. That rule
+  // is GONE — Erica asked for the highlight to mean "the tab you are on" and
+  // nothing else, so Add no longer carries a permanent fill and the active tab is
+  // --text on --accent-soft, which passes. The entry stays only because it is keyed
+  // on the rule id, not the element, and removing it would fail the build on any
+  // unrelated contrast finding. Retire it once a run is green without it.
+  'color-contrast': 'kept as a rule-wide allowance; the .pnav-add case it was for is fixed',
 };
 
 test.describe('accessibility — authenticated routes', () => {

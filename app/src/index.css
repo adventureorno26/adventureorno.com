@@ -2344,18 +2344,11 @@ a {
 .pnav-tab:hover {
   color: var(--text);
 }
+/* The highlight means "this is where you are" — nothing else. Add used to carry a
+   filled accent permanently, which read as though it were always selected. */
 .pnav-tab.active {
   color: var(--text);
   background: var(--accent-soft);
-}
-/* Add is the primary CTA — filled accent even when inactive. */
-.pnav-add:not(.active) {
-  color: #fff;
-  background: var(--accent);
-}
-.pnav-add.active {
-  color: #fff;
-  background: var(--accent-hover);
 }
 .pnav-tab:focus-visible {
   outline: 2px solid var(--accent-hover);
