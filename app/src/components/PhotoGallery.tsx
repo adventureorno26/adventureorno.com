@@ -17,7 +17,7 @@ import { showSnack } from '../lib/snackbar';
 import { updatePlace } from '../lib/data';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
-import type { Photo, Place, Video } from '../lib/types';
+import { photoDay, type Photo, type Place, type Video } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import PhotoReactions from './PhotoReactions';
 import VideoTile from './VideoTile';
@@ -316,7 +316,7 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   // span several days) so each visit is one horizontal carousel; on a single-day
   // view we bucket by day. Every item keeps its flat `list` index so the
   // full-screen carousel still lines up. Within a group photos read oldest→newest.
-  const dateOf = (p: Photo) => (p.taken_at ?? '').slice(0, 10);
+  const dateOf = (p: Photo) => photoDay(p);
   const dayLabel = (d: string) =>
     d === 'undated'
       ? 'Undated'

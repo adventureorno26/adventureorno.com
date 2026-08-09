@@ -5,7 +5,9 @@ import { supabase } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
-  'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
+  // local_date is the day it ACTUALLY happened. start_date is UTC, so an evening
+  // outing after ~20:00 ET lands on the next calendar day (migration 0143).
+  'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, local_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
 
 /** Set who an activity belongs to (null = both of us). Rebuilds the place's visits. */
 export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {
@@ -203,6 +205,8 @@ export interface SearchActivity {
   type: string;
   place_id: string | null;
   start_date: string | null;
+  /** The day it happened locally (0143) — start_date is UTC. */
+  local_date: string | null;
   place_name: string | null;
 }
 
@@ -211,7 +215,7 @@ export interface SearchActivity {
 export async function fetchSearchActivities(): Promise<SearchActivity[]> {
   const { data, error } = await supabase
     .from('activities')
-    .select('id, name, type, place_id, start_date, places(name)')
+    .select('id, name, type, place_id, start_date, local_date, places(name)')
     .order('start_date', { ascending: false, nullsFirst: false });
   if (error) return [];
   return (data ?? []).map((a) => {
@@ -221,6 +225,7 @@ export async function fetchSearchActivities(): Promise<SearchActivity[]> {
       type: string;
       place_id: string | null;
       start_date: string | null;
+      local_date: string | null;
       places: { name: string } | { name: string }[] | null;
     };
     const pl = Array.isArray(row.places) ? row.places[0] : row.places;
@@ -230,6 +235,7 @@ export async function fetchSearchActivities(): Promise<SearchActivity[]> {
       type: row.type,
       place_id: row.place_id,
       start_date: row.start_date,
+      local_date: row.local_date,
       place_name: pl?.name ?? null,
     };
   });

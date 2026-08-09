@@ -104,7 +104,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
       });
     }
     for (const a of activities) {
-      const day = (a.start_date ?? '').slice(0, 10);
+      const day = a.local_date ?? (a.start_date ?? '').slice(0, 10);
       const label = a.name || `${a.type}${a.place_name ? ` · ${a.place_name}` : ''}`;
       out.push({
         placeId: a.place_id ?? '',

@@ -32,6 +32,7 @@ export type Database = {
           is_race: boolean
           lat: number | null
           lng: number | null
+          local_date: string | null
           moving_time: number | null
           name: string | null
           owner_profile: string | null
@@ -41,6 +42,7 @@ export type Database = {
           source: string | null
           source_id: string | null
           start_date: string | null
+          start_date_local: string | null
           strava_id: number | null
           summary_polyline: string | null
           trailhead: string | null
@@ -59,6 +61,7 @@ export type Database = {
           is_race?: boolean
           lat?: number | null
           lng?: number | null
+          local_date?: string | null
           moving_time?: number | null
           name?: string | null
           owner_profile?: string | null
@@ -68,6 +71,7 @@ export type Database = {
           source?: string | null
           source_id?: string | null
           start_date?: string | null
+          start_date_local?: string | null
           strava_id?: number | null
           summary_polyline?: string | null
           trailhead?: string | null
@@ -86,6 +90,7 @@ export type Database = {
           is_race?: boolean
           lat?: number | null
           lng?: number | null
+          local_date?: string | null
           moving_time?: number | null
           name?: string | null
           owner_profile?: string | null
@@ -95,6 +100,7 @@ export type Database = {
           source?: string | null
           source_id?: string | null
           start_date?: string | null
+          start_date_local?: string | null
           strava_id?: number | null
           summary_polyline?: string | null
           trailhead?: string | null
@@ -844,11 +850,13 @@ export type Database = {
           is_landscape: boolean | null
           lat: number | null
           lng: number | null
+          local_date: string | null
           place_id: string | null
           r2_key: string
           sha256: string
           source: string
           taken_at: string | null
+          taken_at_local: string | null
           thumb_key: string
           uploaded_by: string | null
           width: number | null
@@ -864,11 +872,13 @@ export type Database = {
           is_landscape?: boolean | null
           lat?: number | null
           lng?: number | null
+          local_date?: string | null
           place_id?: string | null
           r2_key: string
           sha256: string
           source?: string
           taken_at?: string | null
+          taken_at_local?: string | null
           thumb_key: string
           uploaded_by?: string | null
           width?: number | null
@@ -884,11 +894,13 @@ export type Database = {
           is_landscape?: boolean | null
           lat?: number | null
           lng?: number | null
+          local_date?: string | null
           place_id?: string | null
           r2_key?: string
           sha256?: string
           source?: string
           taken_at?: string | null
+          taken_at_local?: string | null
           thumb_key?: string
           uploaded_by?: string | null
           width?: number | null
@@ -2144,6 +2156,18 @@ export type Database = {
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
       gettransactionid: { Args: never; Returns: unknown }
+      group_duplicate_activities: {
+        Args: { p_apply?: boolean; p_minutes?: number; p_pct?: number }
+        Returns: {
+          dropped: string
+          dropped_name: string
+          kept: string
+          kept_name: string
+          minutes_apart: number
+          pct_diff: number
+          reason: string
+        }[]
+      }
       import_file_activity: {
         Args: {
           p_date: string
@@ -2170,6 +2194,15 @@ export type Database = {
           label: string
           place_id: string
         }[]
+      }
+      local_zone: {
+        Args: {
+          p_admin1?: string
+          p_country?: string
+          p_lat: number
+          p_lng: number
+        }
+        Returns: string
       }
       longtransactionsenabled: { Args: never; Returns: boolean }
       map_people: {

@@ -29,7 +29,14 @@ import {
   updatePlace,
   type MapPerson,
 } from '../lib/data';
-import type { Activity, Entry, NewEntry, Place, Visit } from '../lib/types';
+import {
+  activityDay,
+  type Activity,
+  type Entry,
+  type NewEntry,
+  type Place,
+  type Visit,
+} from '../lib/types';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
@@ -793,7 +800,7 @@ export default function PlacePanel({
   const _isTrailCard = place.is_trail;
   const _isRollupCard = !!place.holds_children && !_isTrailCard;
   const _actsForCount = trailActs ?? [];
-  const _actDaysForCount = new Set(_actsForCount.map((a) => (a.start_date ?? '').slice(0, 10)));
+  const _actDaysForCount = new Set(_actsForCount.map(activityDay));
   const visitCount = _isTrailCard
     ? _actsForCount.length
     : (_isRollupCard ? 0 : _actsForCount.length) +
@@ -1130,7 +1137,7 @@ export default function PlacePanel({
             const end = v.end_date || v.start_date;
             if (!v.is_trip && end <= v.start_date) continue;
             const mine = acts.filter((a) => {
-              const d = (a.start_date ?? '').slice(0, 10);
+              const d = activityDay(a);
               return d !== '' && d >= v.start_date && d <= end;
             });
             if (mine.length === 0) continue;
@@ -1147,16 +1154,16 @@ export default function PlacePanel({
                 key: a.id,
                 date: fmtRunDate(a.start_date),
                 sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-                to: `/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`,
+                to: `/place/${place.id}/day/${activityDay(a)}`,
                 del: null as string | null,
                 start: '' as string,
                 end: '' as string,
-                sort: (a.start_date ?? '').slice(0, 10),
+                sort: activityDay(a),
                 solo: a.solo_profile as string | null,
                 trip: false,
                 target: { type: 'activity' as const, id: a.id },
               }));
-        const actDays = new Set(acts.map((a) => (a.start_date ?? '').slice(0, 10)));
+        const actDays = new Set(acts.map(activityDay));
         // Non-trail places also surface visit rows an activity doesn't already
         // cover: multi-day trips, and single days with photos/entries but no run.
         const visitRows = isTrail
@@ -1290,9 +1297,7 @@ export default function PlacePanel({
                           <ul className="trip-contents visit-evidence">
                             {inside.map((a) => (
                               <li key={a.id}>
-                                <Link
-                                  to={`/place/${place.id}/day/${(a.start_date ?? '').slice(0, 10)}`}
-                                >
+                                <Link to={`/place/${place.id}/day/${activityDay(a)}`}>
                                   {a.name || a.type}
                                 </Link>
                                 <span className="muted">

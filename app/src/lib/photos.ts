@@ -157,7 +157,8 @@ export async function postWithRetry(url: string, init: RequestInit, tries = 3): 
 }
 
 const PHOTO_COLS =
-  'id, place_id, lat, lng, taken_at, width, height, is_landscape, source, uploaded_by, entry_id, created_at, caption';
+  // local_date: the day the photo was actually taken, not its UTC day (0143).
+  'id, place_id, lat, lng, taken_at, local_date, width, height, is_landscape, source, uploaded_by, entry_id, created_at, caption';
 
 export interface PhotoReaction {
   emoji: string;

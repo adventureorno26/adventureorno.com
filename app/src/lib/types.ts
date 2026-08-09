@@ -97,6 +97,9 @@ export interface Photo {
   lat: number | null; // null = no GPS (stored unassigned → Sorter inbox)
   lng: number | null;
   taken_at: string | null;
+  /** The day it was actually taken, locally. taken_at is UTC, so an evening photo
+   *  rolls to the next calendar day (migration 0143). Use this for grouping. */
+  local_date: string | null;
   width: number | null;
   height: number | null;
   is_landscape: boolean | null;
@@ -143,6 +146,9 @@ export interface Activity {
   moving_time: number | null; // seconds
   elapsed_time: number | null;
   start_date: string | null;
+  /** The day it ACTUALLY happened, locally. start_date is UTC, so an evening
+   *  outing rolls to the next calendar day (migration 0143). Group by this. */
+  local_date: string | null;
   lat: number;
   lng: number;
   summary_polyline: string | null;
@@ -236,4 +242,17 @@ export interface TripStats {
   visits: number;
   miles: number;
   days: number | null;
+}
+
+/** The day an activity happened, as YYYY-MM-DD, in the timezone where it happened.
+ *  start_date is UTC, so slicing it puts an evening outing on the next day — that
+ *  is how a 5:25pm San Diego walk ended up counted as a third walk the next day
+ *  (migration 0143). Falls back to the UTC slice for anything not yet backfilled. */
+export function activityDay(a: Pick<Activity, 'local_date' | 'start_date'>): string {
+  return a.local_date ?? (a.start_date ?? '').slice(0, 10);
+}
+
+/** The day a photo was taken, as YYYY-MM-DD, in the timezone where it was taken. */
+export function photoDay(p: Pick<Photo, 'local_date' | 'taken_at'>): string {
+  return p.local_date ?? (p.taken_at ?? '').slice(0, 10);
 }
