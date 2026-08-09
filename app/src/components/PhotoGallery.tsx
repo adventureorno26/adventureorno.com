@@ -17,7 +17,7 @@ import { showSnack } from '../lib/snackbar';
 import { updatePlace } from '../lib/data';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
-import { photoDay, type Photo, type Place, type Video } from '../lib/types';
+import { photoDay, type Photo, type Place, type Video, type Visit } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import PhotoReactions from './PhotoReactions';
 import VideoTile from './VideoTile';
@@ -26,6 +26,9 @@ import PhotoMatchReview from './PhotoMatchReview';
 
 interface Props {
   place: Place;
+  /** The place's visits, so photos group under the occasion they belong to rather
+   *  than forming one undifferentiated row. Omit to keep the flat row. */
+  visits?: Visit[];
   // When set, the gallery shows only this date's photos and pins uploads to it.
   day?: string;
   // Fired after photos are added, so the parent can refresh the place (e.g. to
@@ -43,7 +46,7 @@ const SKIP_LABELS: Record<string, string> = {
 // Skips a deliberate manual upload is allowed to override.
 const OVERRIDABLE = new Set(['screenshot']);
 
-export default function PhotoGallery({ place, day, onUploaded }: Props) {
+export default function PhotoGallery({ place, visits, day, onUploaded }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -304,6 +307,18 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightIdx, list.length, capEditing]);
 
+  /** "Aug 2 – 7, 2026" or a single day — the heading over a visit's photos. */
+  function fmtVisitSpan(v: Visit): string {
+    const s0 = new Date(v.start_date + 'T00:00:00');
+    const e0 = new Date((v.end_date || v.start_date) + 'T00:00:00');
+    const full: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' };
+    const base =
+      v.start_date === (v.end_date || v.start_date)
+        ? s0.toLocaleDateString(undefined, full)
+        : `${s0.toLocaleDateString(undefined, s0.getFullYear() === e0.getFullYear() ? { month: 'long', day: 'numeric' } : full)} – ${e0.toLocaleDateString(undefined, full)}`;
+    return v.is_trip ? `${base} · Trip` : base;
+  }
+
   function fmtTaken(p: Photo): string {
     if (!p.taken_at) return '';
     const d = new Date(p.taken_at);
@@ -347,9 +362,28 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     const withIdx = list.map((photo, idx) => ({ photo, idx }));
     if (day) {
       pushDayGroups(withIdx, photoGroups); // day view: this one day
+    } else if (visits && visits.length > 1) {
+      // GROUP BY VISIT. A visit is the occasion; its photos belong under it. One
+      // long row for the whole place made a dozen trips look like one pile.
+      // Newest visit first, and anything outside every visit keeps its own group
+      // rather than disappearing.
+      const spans = [...visits].sort((a, b) => b.start_date.localeCompare(a.start_date));
+      const taken = new Set<string>();
+      for (const v of spans) {
+        const its = withIdx.filter(({ photo }) => {
+          if (taken.has(photo.id)) return false;
+          const d = photoDay(photo);
+          return d >= v.start_date && d <= (v.end_date || v.start_date);
+        });
+        if (!its.length) continue;
+        for (const it of its) taken.add(it.photo.id);
+        its.sort((a, b) => (a.photo.taken_at ?? '').localeCompare(b.photo.taken_at ?? ''));
+        photoGroups.push({ key: `v-${v.id}`, label: fmtVisitSpan(v), items: its });
+      }
+      const rest = withIdx.filter(({ photo }) => !taken.has(photo.id));
+      if (rest.length) photoGroups.push({ key: 'other', label: 'Other', items: rest });
     } else {
-      // Every place/trip/trail card: ONE horizontal scrollable row of all photos,
-      // newest first. `list` (and thus withIdx) is already sorted newest → oldest.
+      // A single visit (or none): one horizontal row, newest first.
       photoGroups.push({ key: 'all', label: '', items: withIdx });
     }
   }

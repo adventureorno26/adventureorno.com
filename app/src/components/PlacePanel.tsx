@@ -1443,7 +1443,7 @@ export default function PlacePanel({
           visits as two different kinds of thing on one card. */}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
-      <PhotoGallery place={place} onUploaded={refreshPlace} />
+      <PhotoGallery place={place} visits={visits ?? undefined} onUploaded={refreshPlace} />
 
       {/* SECTIONS — a trail's member places are its sections. Shows the ones
           you've done (with dates) up top, then any not-yet-done, all in one place. */}
