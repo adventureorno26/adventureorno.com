@@ -44,6 +44,41 @@ function text(el: Element | null | undefined): string | null {
 }
 
 /** Parse a GPX or TCX file's text into a ParsedActivity (or null if no track). */
+/**
+ * A readable name for an imported activity.
+ *
+ * Bulk exports from Garmin and Strava are named after the file — "hiking
+ * 2018-01-14 14:34.gpx" — which is how 181 activities ended up called that in the
+ * database. Erica's own activities use Strava's convention ("Morning Hike",
+ * "Evening Walk"), so match it, from the activity's own LOCAL start time.
+ *
+ * A filename that is genuinely descriptive ("Old Rag with Josh.gpx") is kept.
+ */
+export function activityName(filename: string, type: string, startMs: number): string {
+  const stem = filename.replace(/\.[^.]+$/, '').trim();
+  const looksLikeAnExport =
+    /^(hiking|running|cycling|walking|swimming|activity|workout)[\s_-]*\d{4}-\d{2}-\d{2}/i.test(
+      stem,
+    ) ||
+    /^\d{4}-\d{2}-\d{2}[\s_T-]/.test(stem) ||
+    /^activity_?\d+$/i.test(stem);
+  if (stem && !looksLikeAnExport) return stem;
+
+  const h = new Date(startMs).getHours(); // the device's local hours
+  const when =
+    h >= 3 && h < 12
+      ? 'Morning'
+      : h >= 12 && h < 14
+        ? 'Lunch'
+        : h >= 14 && h < 17
+          ? 'Afternoon'
+          : h >= 17 && h < 21
+            ? 'Evening'
+            : 'Night';
+  const kind = type ? type[0].toUpperCase() + type.slice(1).toLowerCase() : 'Workout';
+  return `${when} ${kind}`;
+}
+
 export function parseActivityFile(raw: string, filename: string): ParsedActivity | null {
   const doc = new DOMParser().parseFromString(raw, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) return null;
@@ -109,7 +144,9 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
   const moving = Math.max(0, Math.round((end - start) / 1000));
 
   return {
-    name,
+    // A <name> inside the file wins; otherwise this is still the filename, so the
+    // helper turns an export name like "hiking 2018-01-14 14:34" into "Morning Hike".
+    name: activityName(name, type, start),
     type,
     polyline: polyline.encode(clean),
     distance: Math.round(distanceMeters),
@@ -184,7 +221,7 @@ export async function parseFitActivity(
       : Math.max(0, Math.round((end - start) / 1000));
 
   return {
-    name: filename.replace(/\.[^.]+$/, ''),
+    name: activityName(filename, type, start),
     type,
     polyline: polyline.encode(clean),
     distance: Math.round(distanceMeters),
