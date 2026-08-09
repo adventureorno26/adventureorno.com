@@ -6346,3 +6346,103 @@ button.mi-row:hover {
 .act-reactions {
   margin-top: 6px;
 }
+
+/* ---------- One visit, on its own page (/visit/:id) ---------- */
+.visit-page h2 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 22px 0 8px;
+}
+.visit-head h1 {
+  font-size: 24px;
+  margin: 6px 0 2px;
+}
+.visit-sub {
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.visit-sub a {
+  color: var(--accent-hover);
+  text-decoration: none;
+}
+.visit-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* Global `input { width: 100% }` made each date its own full-width row, so the
+   header pushed the actual content off the first screen. Two dates and a to. */
+.visit-controls input[type='date'] {
+  width: auto;
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.visit-controls .ve-to {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+.visit-controls .attribution-select {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+/* One row per thing you did, with its correction on the right. */
+.visit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.visit-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.vl-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.vl-title {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.vl-main .muted {
+  font-size: 12px;
+}
+.visit-note {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+/* "Open" on a visit row in the place card. */
+.visit-open-link {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-hover);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.visit-open-link:hover {
+  background: var(--accent-soft);
+}

@@ -1254,6 +1254,16 @@ export default function PlacePanel({
                               {r.sub && <span className="muted">{r.sub}</span>}
                             </Link>
                           )}
+                          {isVisit && (
+                            <Link
+                              className="visit-open-link"
+                              to={`/visit/${r.key}`}
+                              onClick={(e) => e.stopPropagation()}
+                              title="Open this visit"
+                            >
+                              Open
+                            </Link>
+                          )}
                           {canEdit && people.length >= 2 && (
                             <select
                               className="attribution-select visit-who"

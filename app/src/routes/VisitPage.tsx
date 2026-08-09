@@ -1,0 +1,367 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  fetchVisitDetail,
+  setPhotoVisit,
+  setVisitNote,
+  setVisitPlace,
+  type VisitDetail,
+} from '../lib/visitDetail';
+import {
+  deleteVisit,
+  fetchMapPeople,
+  fetchPlaces,
+  setVisitDates,
+  setVisitIsTrip,
+  setVisitSolo,
+  type MapPerson,
+} from '../lib/data';
+import { reassignActivity } from '../lib/strava';
+import { uploadPhoto } from '../lib/photos';
+import { showSnack } from '../lib/snackbar';
+import { useAuth } from '../auth/AuthProvider';
+import type { Place } from '../lib/types';
+import AuthedImg from '../components/AuthedImg';
+
+/** "Aug 2 – 7, 2026", or a single day. */
+function fmtSpan(start: string, end: string): string {
+  const s = new Date(start + 'T00:00:00');
+  const e = new Date(end + 'T00:00:00');
+  const full: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' };
+  if (start === end) return s.toLocaleDateString(undefined, full);
+  const sameYear = s.getFullYear() === e.getFullYear();
+  return `${s.toLocaleDateString(undefined, sameYear ? { month: 'long', day: 'numeric' } : full)} – ${e.toLocaleDateString(undefined, full)}`;
+}
+const fmtDay = (d: string | null): string =>
+  d
+    ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : '';
+const miles = (m: number): string => `${(m / 1609.344).toFixed(1)} mi`;
+
+/**
+ * ONE VISIT, on its own page.
+ *
+ * Marking a visit used to get you a dropdown, two dates and Delete — there was
+ * nowhere to put the photos, nowhere to say what you did, and no way to move
+ * something that landed wrong. This is that page: what you did, the photos, a
+ * note, and the two corrections that matter (move one activity, or move the whole
+ * visit).
+ */
+export default function VisitPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { profile } = useAuth();
+  const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
+
+  const [d, setD] = useState<VisitDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [movingAct, setMovingAct] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      const v = await fetchVisitDetail(id);
+      if (!v) {
+        setError('That visit no longer exists.');
+        return;
+      }
+      setD(v);
+      setNote(v.visit.note ?? '');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this visit.');
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    void fetchPlaces()
+      .then(setPlaces)
+      .catch(() => undefined);
+    void fetchMapPeople()
+      .then(setPeople)
+      .catch(() => undefined);
+  }, []);
+
+  async function run(label: string, fn: () => Promise<unknown>) {
+    setBusy(label);
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'That did not save.' });
+    }
+    setBusy(null);
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <Link className="back-bar" to="/">
+          Back to the map
+        </Link>
+        <p style={{ color: 'var(--muted)' }}>{error}</p>
+      </div>
+    );
+  }
+  if (!d) {
+    return (
+      <div className="page">
+        <p style={{ color: 'var(--muted)' }}>Loading…</p>
+      </div>
+    );
+  }
+
+  const v = d.visit;
+  const otherPlaces = places
+    .filter((p) => p.id !== d.place.id && p.name.trim() !== '')
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div className="page visit-page">
+      <Link className="back-bar" to={`/place/${d.place.id}`}>
+        {d.place.name}
+      </Link>
+
+      <header className="visit-head">
+        <h1>{fmtSpan(v.start_date, v.end_date)}</h1>
+        <div className="visit-sub">
+          <Link to={`/place/${d.place.id}`}>{d.place.name}</Link>
+          {d.place.admin1 ? <span className="muted"> · {d.place.admin1}</span> : null}
+        </div>
+
+        {canEdit && (
+          <div className="visit-controls">
+            <input
+              type="date"
+              value={v.start_date}
+              aria-label="Start date"
+              onChange={(e) =>
+                void run('Saving dates…', () =>
+                  setVisitDates(
+                    v.id,
+                    e.target.value,
+                    v.end_date < e.target.value ? e.target.value : v.end_date,
+                  ),
+                )
+              }
+            />
+            <span className="ve-to">to</span>
+            <input
+              type="date"
+              value={v.end_date}
+              aria-label="End date"
+              onChange={(e) =>
+                void run('Saving dates…', () => setVisitDates(v.id, v.start_date, e.target.value))
+              }
+            />
+            <button
+              className={v.is_trip ? 've-btn on' : 've-btn'}
+              aria-pressed={v.is_trip}
+              onClick={() => void run('Saving…', () => setVisitIsTrip(v.id, !v.is_trip))}
+            >
+              Trip
+            </button>
+            {people.length >= 2 && (
+              <select
+                className="attribution-select"
+                value={v.solo_profile ?? ''}
+                aria-label="Who was here"
+                onChange={(e) =>
+                  void run('Saving…', () => setVisitSolo(v.id, e.target.value || null))
+                }
+              >
+                <option value="">Both</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+      </header>
+
+      {/* WHAT WE DID ---------------------------------------------------------- */}
+      <h2>What we did</h2>
+      {d.activities.length === 0 && d.contents.length === 0 ? (
+        <p className="muted">Nothing recorded during this visit yet.</p>
+      ) : (
+        <ul className="visit-list">
+          {d.activities.map((a) => (
+            <li key={a.id}>
+              <div className="vl-main">
+                <span className="vl-title">{a.name || a.type}</span>
+                <span className="muted">
+                  {[a.type, miles(a.distance), fmtDay(a.local_date)].filter(Boolean).join(' · ')}
+                </span>
+              </div>
+              {canEdit &&
+                (movingAct === a.id ? (
+                  <select
+                    autoFocus
+                    className="kind-select"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const to = e.target.value;
+                      setMovingAct(null);
+                      if (to) void run('Moving…', () => reassignActivity(a.id, to));
+                    }}
+                    onBlur={() => setMovingAct(null)}
+                  >
+                    <option value="">Move to…</option>
+                    {otherPlaces.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <button className="link-btn" onClick={() => setMovingAct(a.id)}>
+                    Wrong place?
+                  </button>
+                ))}
+            </li>
+          ))}
+          {/* On a marked trip: the places you went to during it. */}
+          {d.contents.map((c) => (
+            <li key={c.visit_id}>
+              <div className="vl-main">
+                <Link className="vl-title" to={`/visit/${c.visit_id}`}>
+                  {c.place_name}
+                </Link>
+                <span className="muted">{fmtDay(c.start_date)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* PHOTOS --------------------------------------------------------------- */}
+      <h2>
+        Photos{d.photos.length ? ` (${d.photos.length})` : ''}
+        {canEdit && (
+          <button
+            className="link-btn"
+            style={{ marginLeft: 10 }}
+            onClick={() => fileRef.current?.click()}
+          >
+            + Add
+          </button>
+        )}
+      </h2>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/heic,image/heif"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = '';
+          if (!files.length) return;
+          void run(`Adding ${files.length} photo${files.length > 1 ? 's' : ''}…`, async () => {
+            for (const f of files) {
+              // The photo keeps its own date; pinning is what puts it on this visit.
+              const r = await uploadPhoto(f, {
+                placeId: d.place.id,
+                lat: d.place.lat,
+                lng: d.place.lng,
+                override: true,
+              });
+              if (r?.ok && r.id) await setPhotoVisit(r.id, v.id);
+            }
+          });
+        }}
+      />
+      {d.photos.length === 0 ? (
+        <p className="muted">No photos on this visit yet.</p>
+      ) : (
+        <div className="gallery carousel">
+          {d.photos.map((ph) => (
+            <div className="thumb" key={ph.id}>
+              <AuthedImg photoId={ph.id} size="thumb" />
+              {ph.pinned && canEdit && (
+                <button
+                  className="thumb-date"
+                  title="Added to this visit by hand — put it back on its own date"
+                  onClick={() => void run('Unpinning…', () => setPhotoVisit(ph.id, null))}
+                >
+                  Unpin
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* NOTES ---------------------------------------------------------------- */}
+      <h2>Notes</h2>
+      {canEdit ? (
+        <textarea
+          className="visit-note"
+          rows={3}
+          value={note}
+          placeholder="What happened?"
+          onChange={(e) => setNote(e.target.value)}
+          onBlur={() =>
+            note !== (v.note ?? '') && void run('Saving note…', () => setVisitNote(v.id, note))
+          }
+        />
+      ) : (
+        <p className={v.note ? '' : 'muted'}>{v.note || 'No notes.'}</p>
+      )}
+
+      {/* CORRECTIONS ---------------------------------------------------------- */}
+      {canEdit && (
+        <div className="btn-row" style={{ marginTop: 22 }}>
+          <button onClick={() => setMoving((m) => !m)}>Move this visit</button>
+          <button
+            className="danger"
+            onClick={() =>
+              void run('Removing…', async () => {
+                await deleteVisit(v.id);
+                navigate(`/place/${d.place.id}`);
+              })
+            }
+          >
+            Delete
+          </button>
+        </div>
+      )}
+      {moving && (
+        <div className="entry">
+          <label>Move this whole visit — and everything on it — to:</label>
+          <select
+            className="kind-select"
+            defaultValue=""
+            onChange={(e) => {
+              const to = e.target.value;
+              setMoving(false);
+              if (to) void run('Moving the visit…', () => setVisitPlace(v.id, to));
+            }}
+          >
+            <option value="">Choose a place…</option>
+            {otherPlaces.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.admin1 ? ` — ${p.admin1}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {busy && <div className="label">{busy}</div>}
+    </div>
+  );
+}

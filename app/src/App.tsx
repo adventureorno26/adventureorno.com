@@ -56,6 +56,7 @@ const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
 const BucketList = lazyWithReload(() => import('./routes/BucketList'));
 const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
+const VisitPage = lazyWithReload(() => import('./routes/VisitPage'));
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
   return <div className="center-screen">{children}</div>;
@@ -234,6 +235,16 @@ export default function App() {
               element={
                 <RequireAuth>
                   <DataHealth />
+                </RequireAuth>
+              }
+            />
+            {/* A visit is a thing you can open: what you did, its photos, a note,
+                and the corrections for when something landed in the wrong place. */}
+            <Route
+              path="/visit/:id"
+              element={
+                <RequireAuth>
+                  <VisitPage />
                 </RequireAuth>
               }
             />
