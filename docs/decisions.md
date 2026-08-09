@@ -414,3 +414,55 @@ Station shows **67** in Erica's view though all 39 of its visits are Josh's; Lak
 the Red Rocks shows **52** in Josh's view with zero Josh visits. Slice 3 therefore
 needs a per-person `place_visit_counts(p_profile)` RPC, mirroring the existing
 `settings_stats(p_profile)` / `race_stats(p_profile)` pattern — not a single column.
+
+---
+
+## 2026-08-08 — One outing counts once (migrations 0140–0142)
+
+Erica's 2026-03-07 Purcellville run was stored **three times**: her Strava record
+(45.1 mi), a file import of the same run (44.9), and Josh's record of the outing they
+did together (44.7). The headline mileage counted all three — **134.7 miles for one
+45-mile run**.
+
+Duplicates are **grouped** on `shared_group_id`, never deleted. Every record survives
+and ungrouping restores the previous totals.
+
+**`dedupe_joint_outings` was deleting activities nightly.** It ran at 04:20 with
+`delete from public.activities`, against Erica's standing rule that nothing
+mass-deletes her data. It never caught this run — it only compared owner vs
+non-owner and required both starts within 800 m — and was blind to same-person
+duplicates entirely. Same name (the cron entry still works); it groups now.
+
+**`wander_stats` was the only stat that didn't dedupe.** `mileage_by_person`,
+`settings_stats` and `wrapped_year_miles` all did. That asymmetry is why the map's
+headline total disagreed with its own per-type breakdown.
+
+Automatic rule is deliberately tight — same type, within 20 minutes, distance within
+10% — and matched only the March 7 triple. Everything looser went to Erica.
+
+Merged with her approval: 2018-08-01 W · 2018-08-13 W · 2020-05-12 R · 2022-12-04 H ·
+2023-05-24 R · 2023-05-30 R · 2023-08-01 R · 2023-08-02 R · 2025-10-04 R.
+Result: Erica 2064.8 → 1950.5 mi, Josh 1048.0 → 986.3, Both 474.9 → 430.2. 444
+activities before and after.
+
+### DATES ARE BUCKETED IN UTC — open, and it bit twice here
+
+`start_date::date` is UTC, so any evening outing after ~20:00 ET (17:00 PT) is filed
+on the **next day**. 12 activities are currently on the wrong calendar day.
+
+* Erica: "on the 13th I only did a 4.1 and 4.7 walk — where did the other come from?"
+  She was right. The 4.35 mi "San Diego walkabout" started 00:25 UTC = **17:25 local
+  on 12 July**. Not a third walk on the 13th.
+* She approved merging the 2024-09-03 pair; its "Evening Walk" was 00:04 UTC =
+  **2 September** local. Two real walks, two different days — excluded and flagged
+  back to her rather than merged on stale facts.
+* It also **hid** a real duplicate: the 2018-08-13 walk crossed midnight UTC, so its
+  two records sat on different days and at two different places ("Lake of the Red
+  Rocks" and "Red Rock Regional Park").
+
+Strava sends `start_date_local` and we never stored it. This drives which visit an
+activity belongs to, the day view, and duplicate detection in both directions.
+
+Snapshots are gitignored (they contain exact coordinates):
+`supabase/snapshots/2026-08-08-activities-pre-dedupe.json` and
+`supabase/snapshots/2026-08-08-approved-activity-merges.md`, both local only.
