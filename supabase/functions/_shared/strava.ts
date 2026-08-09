@@ -135,6 +135,78 @@ function decodePolyline(p: string): [number, number][] {
 }
 
 /**
+ * Would this geocoder result read as a place you'd recognise?
+ *
+ * MapTiler returns "-" as its placeholder when an address has no house number,
+ * and its nearest-POI results near a trail are often infrastructure rather than
+ * anywhere you went: "Reston Community Storage Lot", "Potomac Interceptor Long
+ * Term Odor Abatement Program", "BriteWash Auto Wash". Reject those and try the
+ * next granularity rather than writing a name Erica would have to undo.
+ */
+export function usablePlaceName(text: string | undefined | null): text is string {
+  const s = (text ?? '').trim();
+  if (!s || s === '-') return false;
+  if (/^[\d\s.,-]+$/.test(s)) return false; // "-", "1200", "12-14"
+  if (/^\p{L}$/u.test(s)) return false; // a single letter
+  // Plumbing, parking and retail: not a destination.
+  if (
+    /\b(storage|odor|abatement|interceptor|substation|pump(ing)?\s+station|water\s+treatment|sewer|utility|maintenance\s+(yard|facility)|auto\s+wash|car\s+wash|self[\s-]storage|cell\s+tower|transfer\s+station)\b/i.test(
+      s,
+    )
+  ) {
+    return false;
+  }
+  // A road is where you drove to the trail, not the trail — unless the name is
+  // itself outdoorsy ("Skyline Drive", "Blue Ridge Parkway", "Trail Road").
+  const roady =
+    /\b(rd|road|st|street|ave|avenue|dr|drive|ln|lane|ct|court|blvd|boulevard|hwy|highway|pkwy|parkway|way|circle|cir|ter|terrace|route|rte|sr|tr)\b\.?$/i;
+  const outdoorsy =
+    /\b(trail|trailhead|park|forest|preserve|reserve|refuge|wilderness|mountain|mtn|peak|summit|ridge|gap|hollow|falls|creek|river|lake|pond|overlook|canyon|gorge|beach|island|battlefield|monument|greenway|towpath|skyline|parkway)\b/i;
+  if (roady.test(s) && !outdoorsy.test(s)) return false;
+  // A pure road designation: "SR630", "TR408", "US-15".
+  if (/^(sr|tr|us|va|md|wv|pa|i)[\s-]?\d+$/i.test(s)) return false;
+  return true;
+}
+
+/**
+ * Is this a name, or just a clock reading?
+ *
+ * Strava names almost everything "Morning Hike" / "Evening Walk" from the time of
+ * day. Erica: "I want the names of real places, not 'morning walk'." The date
+ * already says when; the name should say where. This is the TypeScript twin of
+ * `public.is_generic_activity_name` (migration 0147) — keep the two in step.
+ */
+export function isGenericActivityName(name: string | null | undefined): boolean {
+  const s = (name ?? '').trim();
+  if (!s) return true;
+  return (
+    /^(morning|afternoon|evening|night|lunch|late[\s-]?night)[\s_-]+(walk|run|hike|ride|swim|workout|activity|jog|cycle)s?$/i.test(
+      s,
+    ) ||
+    /^(hiking|running|cycling|walking|swimming|activity|workout)[\s_-]*\d{4}-\d{2}-\d{2}/i.test(s) ||
+    /^\d{4}-\d{2}-\d{2}[\sT_-]/.test(s) ||
+    /^activity_?\d+$/i.test(s) ||
+    /^(walk|run|hike|ride|swim|workout|activity)$/i.test(s)
+  );
+}
+
+/** What to call an activity: the name a person wrote, else the place it happened at. */
+async function activityNameFor(
+  admin: SupabaseClient,
+  given: string | null | undefined,
+  placeId: string | null,
+  type: string,
+): Promise<string> {
+  if (!isGenericActivityName(given)) return given!.trim();
+  if (placeId) {
+    const { data } = await admin.from('places').select('name').eq('id', placeId).maybeSingle();
+    const placeName = (data?.name ?? '').trim();
+    if (placeName && placeName !== 'New place') return placeName;
+  }
+  return (given ?? '').trim() || type || 'Activity';
+}
+
+/**
  * Name a place the placement RPC just created.
  *
  * place_for_activity inserts new leaf places called literally "New place" with
@@ -187,7 +259,7 @@ async function nameNewPlace(
       if (!r.ok) continue;
       const f = (await r.json())?.features?.[0];
       const text: string | undefined = f?.text;
-      if (!text) continue;
+      if (!usablePlaceName(text)) continue;
       const ctx: { id?: string; text?: string }[] = f.context ?? [];
       await admin
         .from('places')
@@ -235,7 +307,6 @@ export async function ingestActivity(
 
   const stravaFields = {
     type,
-    name: a.name ?? null,
     distance: a.distance ?? 0,
     elevation_gain: a.total_elevation_gain ?? null,
     moving_time: a.moving_time ?? null,
@@ -251,7 +322,15 @@ export async function ingestActivity(
   let placeId: string | null = null;
   if (existing) {
     placeId = existing.place_id as string | null;
-    const { error } = await admin.from('activities').update(stravaFields).eq('id', existing.id);
+    // NAME IS NOT A STRAVA-OWNED FIELD. Strava calls almost everything "Morning
+    // Hike"; those rows have been renamed after the place they happened at, and a
+    // routine re-sync must not put the clock reading back. Only a name Strava's
+    // user actually typed comes across.
+    const nameUpdate = isGenericActivityName(a.name) ? {} : { name: a.name };
+    const { error } = await admin
+      .from('activities')
+      .update({ ...stravaFields, ...nameUpdate })
+      .eq('id', existing.id);
     if (error) throw new Error(`update activity failed: ${error.message}`);
   } else {
     // A placed activity gets its OWN leaf place at its start point (reusing a leaf
@@ -265,15 +344,19 @@ export async function ingestActivity(
         p_name: a.name ?? null,
       });
       placeId = (assigned as string | null) ?? null;
+      // Name the PLACE first, so the activity below can be named after it and the
+      // card never shows "New place".
+      if (placeId) await nameNewPlace(admin, placeId, a, lat!, lng!);
     }
-    const { error } = await admin
-      .from('activities')
-      .insert({ strava_id: a.id, place_id: placeId, ...stravaFields });
+    const { error } = await admin.from('activities').insert({
+      strava_id: a.id,
+      place_id: placeId,
+      name: await activityNameFor(admin, a.name, placeId, type),
+      ...stravaFields,
+    });
     if (error) throw new Error(`insert activity failed: ${error.message}`);
   }
   if (placeId) {
-    // Name it before the stats run, so the card never shows "New place".
-    if (!existing && hasCoords) await nameNewPlace(admin, placeId, a, lat!, lng!);
     await admin.rpc('recompute_place_stats', { p_place: placeId });
     await admin.rpc('rebuild_place_visits', { p_place: placeId });
   }

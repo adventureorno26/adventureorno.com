@@ -45,38 +45,32 @@ function text(el: Element | null | undefined): string | null {
 
 /** Parse a GPX or TCX file's text into a ParsedActivity (or null if no track). */
 /**
- * A readable name for an imported activity.
+ * The name to send for an imported activity — or '' to let the server name it.
  *
- * Bulk exports from Garmin and Strava are named after the file — "hiking
- * 2018-01-14 14:34.gpx" — which is how 181 activities ended up called that in the
- * database. Erica's own activities use Strava's convention ("Morning Hike",
- * "Evening Walk"), so match it, from the activity's own LOCAL start time.
+ * This used to mint "Morning Walk" / "Evening Hike" from the clock, matching
+ * Strava's convention. Erica: "I want the names of real places, not 'morning
+ * walk'." She's right — the time of day is already the date, and it says nothing
+ * about where you were.
  *
- * A filename that is genuinely descriptive ("Old Rag with Josh.gpx") is kept.
+ * So: a descriptive filename ("Old Rag with Josh.gpx") is a person's own words and
+ * is kept. A bulk-export filename ("hiking 2018-01-14 14:34.gpx", "activity_881.fit")
+ * is not a name at all, and we send nothing — `import_file_activity` then names the
+ * row after the place it geocodes to (migration 0147).
  */
-export function activityName(filename: string, type: string, startMs: number): string {
+export function activityName(filename: string, _type: string, _startMs: number): string {
   const stem = filename.replace(/\.[^.]+$/, '').trim();
   const looksLikeAnExport =
     /^(hiking|running|cycling|walking|swimming|activity|workout)[\s_-]*\d{4}-\d{2}-\d{2}/i.test(
       stem,
     ) ||
     /^\d{4}-\d{2}-\d{2}[\s_T-]/.test(stem) ||
-    /^activity_?\d+$/i.test(stem);
-  if (stem && !looksLikeAnExport) return stem;
-
-  const h = new Date(startMs).getHours(); // the device's local hours
-  const when =
-    h >= 3 && h < 12
-      ? 'Morning'
-      : h >= 12 && h < 14
-        ? 'Lunch'
-        : h >= 14 && h < 17
-          ? 'Afternoon'
-          : h >= 17 && h < 21
-            ? 'Evening'
-            : 'Night';
-  const kind = type ? type[0].toUpperCase() + type.slice(1).toLowerCase() : 'Workout';
-  return `${when} ${kind}`;
+    /^activity_?\d+$/i.test(stem) ||
+    // the clock-reading names this function itself used to produce
+    /^(morning|afternoon|evening|night|lunch|late[\s-]?night)[\s_-]+(walk|run|hike|ride|swim|workout|activity|jog|cycle)s?$/i.test(
+      stem,
+    ) ||
+    /^(walk|run|hike|ride|swim|workout|activity)$/i.test(stem);
+  return looksLikeAnExport ? '' : stem;
 }
 
 export function parseActivityFile(raw: string, filename: string): ParsedActivity | null {
@@ -144,8 +138,8 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
   const moving = Math.max(0, Math.round((end - start) / 1000));
 
   return {
-    // A <name> inside the file wins; otherwise this is still the filename, so the
-    // helper turns an export name like "hiking 2018-01-14 14:34" into "Morning Hike".
+    // A <name> inside the file wins; otherwise this is still the filename, and an
+    // export-shaped one yields '' so the server names it after the place.
     name: activityName(name, type, start),
     type,
     polyline: polyline.encode(clean),
