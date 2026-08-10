@@ -905,3 +905,26 @@ table the caller can already see).
 
 Verified afterwards that nothing broke: the login page still renders for anon, and a
 member still reads the Inbox (12 cards) and Places (149 rows) with no page errors.
+
+## 2026-08-10 — The accessibility pass, and retiring an allowance
+
+Axe (WCAG 2.0/2.1 A + AA) across /login, /inbox, /timeline, /places and /settings found
+exactly one violation, and it was one I had just introduced: the active nav pill.
+
+Erica asked for the bright accent fill on whichever tab you are on. White on `--accent`
+(#3b82f6) at 12-13px bold is **3.68:1**, below the 4.5:1 AA requires for text that size,
+and axe flagged it as serious on every authenticated page. The nearest passing blue to
+hers is #396ef0 at exactly 4.50:1 — too close to the line to rely on — so the pill now
+uses a new `--accent-strong` (#2563eb, **5.17:1**). `--accent` is unchanged, so nothing
+else in the app shifted; the pill still reads as the same bright blue.
+
+**The allowance is gone.** `e2e/a11y.spec.ts` carried a rule-wide `color-contrast` entry
+in ACCEPTED_SERIOUS with a note to "retire it once a run is green without it". A
+rule-wide allowance also hides unrelated findings — that same entry would have
+swallowed any new contrast bug anywhere in the app, including this one. ACCEPTED_SERIOUS
+is now empty, and the comment says an entry may come back only for a decision.
+
+`/inbox` was added to the scanned routes: it is the newest surface and has the most
+controls per card — radio groups, a free-text alternative, per-option "Never", and photo
+checkboxes. **17/17 pass** (8 routes × 2 viewports, plus the place-row checkbox naming
+test) with nothing accepted.

@@ -13,6 +13,11 @@
   --accent-2: #22d3ee;
   --accent-hover: #60a5fa;
   --accent-soft: rgba(59, 130, 246, 0.16);
+  /* The SAME bright blue, one shade deeper, for filled pills carrying white text.
+     White on --accent (#3b82f6) is 3.68:1 — below the 4.5:1 WCAG AA needs for text
+     this size, and axe flags it on every authed page. This is 5.17:1. --accent itself
+     is untouched, so nothing else in the app shifts. */
+  --accent-strong: #2563eb;
   --danger: #f87171;
   --radius: 14px;
   --shadow: 0 10px 40px rgba(2, 8, 23, 0.55);
@@ -2358,7 +2363,7 @@ a {
    --accent-soft (a 16% wash) was too faint to read as a selection at a glance. */
 .pnav-tab.active {
   color: #fff;
-  background: var(--accent);
+  background: var(--accent-strong);
 }
 .pnav-tab:focus-visible {
   outline: 2px solid var(--accent-hover);

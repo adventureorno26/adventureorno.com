@@ -15,7 +15,18 @@ import AxeBuilder from '@axe-core/playwright';
 
 // '/?add=1' opens the add sheet over the map — Add is a sheet, not a page, so
 // this is how that surface gets scanned now.
-const ROUTES = ['/', '/places', '/timeline', '/?add=1', '/settings', '/health', '/bucket'];
+const ROUTES = [
+  '/',
+  '/places',
+  '/timeline',
+  '/?add=1',
+  '/settings',
+  '/health',
+  '/bucket',
+  // The review queue. New surface, and the one with the most controls per card:
+  // radio groups, a free-text alternative, per-option "Never", and photo checkboxes.
+  '/inbox',
+];
 
 // Phone and desktop. The full seven-viewport sweep lives in layout.spec.ts; axe
 // findings are overwhelmingly viewport-independent, so two shapes catch the
@@ -30,13 +41,19 @@ const VIEWPORTS = [
  * because someone decided it should — never because it was easier than fixing it.
  */
 const ACCEPTED_SERIOUS: Record<string, string> = {
-  // Was: `.pnav-add` white on the brand accent #3b82f6 at 12px → 3.67:1. That rule
-  // is GONE — Erica asked for the highlight to mean "the tab you are on" and
-  // nothing else, so Add no longer carries a permanent fill and the active tab is
-  // --text on --accent-soft, which passes. The entry stays only because it is keyed
-  // on the rule id, not the element, and removing it would fail the build on any
-  // unrelated contrast finding. Retire it once a run is green without it.
-  'color-contrast': 'kept as a rule-wide allowance; the .pnav-add case it was for is fixed',
+  // EMPTY, and that is the point.
+  //
+  // The old entry was a rule-wide allowance for color-contrast, left in place with a
+  // note to "retire it once a run is green without it". That day came: Erica asked for
+  // the active tab to carry the bright accent fill, which put white on #3b82f6 at
+  // 12-13px — 3.68:1, below the 4.5:1 AA needs — and axe flagged it on every
+  // authenticated page. Rather than widen the allowance, the pill now uses
+  // --accent-strong (#2563eb, 5.17:1); --accent is unchanged everywhere else.
+  //
+  // A rule-wide allowance also hides unrelated findings, which is exactly what it did
+  // here: the same rule id would have swallowed any new contrast bug anywhere in the
+  // app. Verified green across /login, /inbox, /timeline, /places and /settings with
+  // nothing accepted. Add an entry back only for a decision, never for convenience.
 };
 
 test.describe('accessibility — authenticated routes', () => {
