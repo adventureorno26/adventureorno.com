@@ -582,3 +582,56 @@ overnight and no data was lost.
 Lesson worth keeping: the failure was invisible because it happened *after* the useful
 work, and the caller's own error handling swallowed the symptom into a generic
 `ok:false`. Deploy-then-exercise-the-real-path caught what reading the diff did not.
+
+## 2026-08-09 — Ingest rebuild steps 1 and 2: the ledger, and the suggester
+
+**Step 1 — `0148_a_machine_may_only_propose`.** `suggestions`, `approved_fields`,
+`ingest_runs`, and `may_autowrite()`. Pure addition: nothing reads the guard until step
+4, so it shipped the day it was written. Backfilled the locks that already existed in
+four inconsistent forms — 61 `name_locked` places and 12 `manual` visits. No photo
+backfill (0 of 168 photos carry a `visit_id`, so §9.3 was a no-op) and no activity
+backfill, deliberately: the 328 names fixed today were machine-written, so they stay open
+to a better suggestion.
+
+`may_autowrite` is SECURITY DEFINER, departing from the design's plain SQL. A guard whose
+answer depends on the caller's row visibility is worse than no guard — a caller who
+cannot see the lock would be told "yes, go ahead".
+
+**Step 2 — the `suggest` edge function.** Ports `scripts/naming/route_namer.py` to Deno.
+The pure parts (`_shared/polyline.ts`, `_shared/routescore.ts`) are plain TypeScript and
+are covered by the existing vitest runner via one added include path — there is no local
+Deno, and shipping the scorer untested was not acceptable when a silent bug there would
+poison every suggestion at once. 24 tests assert the recorded output of the prototype on
+13 real routes, from the recorded tallies, so a pass cannot be an Overpass fluke.
+
+Four judgement calls that departed from the written design, each because the design
+contradicted itself or reality:
+
+1. **Ranked list, not a winner.** "Appalachian Trail 9/9, inside Sky Meadows 8/9" is one
+   hike with two correct names. The prototype had to choose; the Inbox does not, and
+   choosing silently is what this rebuild exists to stop. Rank 0 only pre-selects.
+2. **Total tie-breaking.** Python's `Counter.most_common` breaks ties by insertion order —
+   by whatever order Overpass happened to reply in. That decided a real case (Loudoun:
+   W&OD Bridle Trail 9 vs Washington & Old Dominion Trail 9). Ties now break by count,
+   then longer name, then alphabetically.
+3. **The geocoder fallback only fills a void.** §5.1 says fall back to MapTiler when OSM is
+   silent; §5.4 says Red Rock must produce nothing. Those collide, because MapTiler will
+   return a nearby town for Red Rock. Resolved by what the fallback is FOR: it runs only
+   when the activity has no real name to lose.
+4. **Already on one of the right answers = say nothing.** Today's hike is "Seneca Regional
+   Park" because Erica corrected it herself, and the scorer ranks Potomac Heritage Trail
+   (10 hits) above it (8). Offering to rename her own correction is asking her to decide
+   the same thing twice. If the current name is ANY candidate, the question is settled.
+
+**Overpass reality, measured not assumed.** The endpoint rate-limits to 2 slots PER IP and
+an edge function egresses from shared Supabase infrastructure, so the first live run drew
+four 504s and two 429s. Fixed by rotating independent mirrors (private.coffee answered in
+1.0s while the main endpoint 504'd), a 25s hard abort per attempt, and a 110s overall
+deadline that returns partial work with a `remaining` count instead of being killed by the
+runtime — which is how the second attempt died, losing work it had already done.
+
+**Verified live.** "Loudoun County Running" → rank 0 Washington & Old Dominion Trail
+(7 of 9, 0.78), rank 1 the containing regional park (6 of 9), rank 2 the bridle trail.
+The activity's name is UNCHANGED, `approved_fields` is untouched at 73, both runs are in
+`ingest_runs`, and an identical re-run added no rows (`already_offered: 4`). Red Rock and
+the Seneca hike correctly produce nothing.

@@ -25,6 +25,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: [
+      'src/**/*.test.ts',
+      // Edge-function logic that is pure TypeScript (no Deno APIs) is tested by the
+      // same runner. There is no local Deno, so without this the route scorer — the
+      // piece where a silent bug would poison every suggestion — would ship untested.
+      '../supabase/functions/_shared/**/*.test.ts',
+    ],
   },
 });

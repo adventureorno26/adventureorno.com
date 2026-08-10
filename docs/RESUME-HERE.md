@@ -104,6 +104,32 @@ joint-outing dedup was only ever delayed to overnight — no data was lost.
 
 ---
 
+## 2b. Steps 1 and 2 of the rebuild are BUILT (2026-08-09, 20:40 ET)
+
+- **Step 1 — migration `0148`** applied: `suggestions`, `approved_fields`,
+  `ingest_runs`, `may_autowrite()`, RLS, and the backfill (61 locked place names +
+  12 manual visits = 73 rows; no photo or activity backfill, both deliberate).
+  Test `supabase/tests/0148_a_machine_may_only_propose.test.sql`, 7 assertions,
+  verified on prod in a rolled-back transaction that left nothing behind.
+- **Step 2 — the `suggest` edge function** deployed. Writes ONLY to `suggestions`.
+  Pure logic in `_shared/polyline.ts` + `_shared/routescore.ts`, covered by 24
+  vitest tests asserting the prototype's recorded output on 13 real routes.
+- **Proven live:** "Loudoun County Running" → rank 0 *Washington & Old Dominion
+  Trail* (7 of 9), rank 1 the containing regional park (6 of 9), rank 2 the bridle
+  trail — and the activity's name did not change. Red Rock and today's Seneca hike
+  correctly produce nothing.
+- **4 real pending suggestions are sitting in the table right now**, left there on
+  purpose so `/inbox` (step 3) has genuine content to render.
+
+Four departures from the written design, each because the design contradicted itself
+or reality — all recorded with reasoning in `docs/decisions.md`: a ranked list rather
+than a single winner; total tie-breaking; the geocoder fallback only fills a void
+(so Red Rock is safe); and "already on one of the right answers = say nothing".
+
+Overpass rate-limits 2 slots PER IP and edge functions share egress, so the suggester
+rotates mirrors, hard-aborts at 25s, and stops at a 110s deadline returning a
+`remaining` count. Batches are small by design: `limit` defaults to 3, max 8.
+
 ## 3. The design that is written but not built
 
 `docs/INGEST-REBUILD.md` — 477 lines, 13 sections. The short version:
