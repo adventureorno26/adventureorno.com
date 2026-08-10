@@ -105,10 +105,16 @@ Nothing gets added *beside* this page. Things get removed *into* it.
 - Accessibility: zero WCAG A/AA violations across the authed routes, nothing allowlisted.
 
 ### Broken or wrong right now
-1. **The map is blank.** MapTiler suspended the account for exceeding quota. Root cause
-   found: the idle globe auto-rotate had **no stop condition** — it panned ~7°/second
-   for as long as a tab stayed open, streaming tiles for hours. Now bounded to 45s and
-   never while hidden, but **unverified**, because tiles cannot load to prove it.
+1. ~~**The map is blank.**~~ FIXED 2026-08-10, and it was TWO faults stacked:
+   - MapTiler suspended the account for exceeding quota (the idle auto-rotate had no
+     stop condition; now bounded to 45s and never while hidden). The basemap is now
+     **Mapbox raster tiles** — the OpenStreetMap/Mapbox look Erica asked for — with a
+     30k/day tile meter, because through MapLibre Mapbox bills per TILE not per load.
+   - **MapLibre 6 broke every worker-backed source.** Vector tiles, GeoJSON sources,
+     clusters, routes and fog all silently rendered NOTHING — no error, no console
+     message. Reproduced with a one-point GeoJSON source. Reverted to MapLibre 5,
+     which CLAUDE.md pins as the stack anyway. Do not upgrade to 6 without checking a
+     GeoJSON layer actually draws.
 2. ~~**Containers are invisible in Places**~~ — fixed 2026-08-10. Places now lists each
    container once, holding its sections; `lib/containers.ts` decides what a container is,
    under test.

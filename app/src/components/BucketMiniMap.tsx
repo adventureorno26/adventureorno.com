@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 // MapLibre 6 dropped the default export; the namespace import keeps every
 // maplibregl.X call site below working unchanged.
 import * as maplibregl from 'maplibre-gl';
-import { MAPTILER_STYLE_URL } from '../lib/maptiler';
+import { basemapOptions } from '../lib/basemap';
 import type { Place } from '../lib/types';
 
 /** Small map above the bucket list: framed on the densest cluster of pins when
@@ -36,7 +36,7 @@ export default function BucketMiniMap({ places }: { places: Place[] }) {
     if (!ref.current || mapRef.current || places.length === 0) return;
     const map = new maplibregl.Map({
       container: ref.current,
-      style: MAPTILER_STYLE_URL,
+      ...basemapOptions,
       interactive: false,
       attributionControl: false,
       bounds: denseBounds(),

@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 // maplibregl.X call site below working unchanged.
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource } from 'maplibre-gl';
-import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
+import { reverseGeocode } from '../lib/maptiler';
+import { basemapOptions } from '../lib/basemap';
 import { createPlaceAtomic } from '../lib/data';
 import { showSnack } from '../lib/snackbar';
 import type { Place } from '../lib/types';
@@ -37,7 +38,7 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
     for (const p of places) bounds.extend([p.lng, p.lat]);
     const map = new maplibregl.Map({
       container: ref.current,
-      style: MAPTILER_STYLE_URL,
+      ...basemapOptions,
       bounds: bounds.isEmpty() ? undefined : bounds,
       center: bounds.isEmpty() ? [-98, 39] : undefined,
       zoom: bounds.isEmpty() ? 3 : undefined,

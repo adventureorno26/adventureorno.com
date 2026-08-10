@@ -28,6 +28,7 @@ import {
   trackingPref,
   trackingSupported,
 } from '../lib/tracking';
+import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
@@ -478,11 +479,31 @@ function NationalParksCard({
 function TrackingCard({ myId }: { myId: string }) {
   const [on, setOn] = useState(trackingPref());
   const [rows, setRows] = useState<TrackingStatus[] | null>(null);
+  // Ghost mode. Separate from tracking on purpose: recording where you have been
+  // and showing the other person where you are now are two different consents.
+  const [sharing, setSharing] = useState<boolean | null>(null);
+  const [sharingBusy, setSharingBusy] = useState(false);
   useEffect(() => {
     fetchTrackingStatus()
       .then(setRows)
       .catch(() => setRows([]));
+    fetchShareLocation()
+      .then(setSharing)
+      .catch(() => setSharing(true));
   }, []);
+  async function toggleSharing() {
+    if (sharing === null || sharingBusy) return;
+    const next = !sharing;
+    setSharingBusy(true);
+    setSharing(next);
+    try {
+      await setShareLocation(next);
+    } catch {
+      setSharing(!next); // put the switch back rather than lie about it
+    } finally {
+      setSharingBusy(false);
+    }
+  }
   function toggle() {
     const next = !on;
     setOn(next);
@@ -515,6 +536,26 @@ function TrackingCard({ myId }: { myId: string }) {
       ) : (
         <p className="label">This device can’t share its location.</p>
       )}
+      {/* GHOST MODE. Off means nobody else sees where you are — you still do. */}
+      <div style={{ marginTop: 14, borderTop: '1px solid var(--border-soft)', paddingTop: 12 }}>
+        <b>Where we are</b>
+        <p className="label" style={{ margin: '6px 0 10px' }}>
+          Puts your last known spot on the map for the other person, with how long ago it was.
+          Because a phone only pings while the app is open, it is usually hours old — it says so,
+          and never pretends to be live.
+        </p>
+        {sharing === null ? (
+          <p className="label">Checking…</p>
+        ) : (
+          <button
+            className={sharing ? 'primary' : ''}
+            disabled={sharingBusy}
+            onClick={() => void toggleSharing()}
+          >
+            {sharing ? 'Sharing my spot — tap to hide it' : 'Hidden — tap to share my spot'}
+          </button>
+        )}
+      </div>
       {rows && (
         <div className="our-stats" style={{ marginTop: 10 }}>
           {rows

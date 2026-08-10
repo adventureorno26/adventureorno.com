@@ -1086,3 +1086,59 @@ response for an immutable URL and keeps showing an unstyled, broken page until a
 refresh. Observed live, and it is exactly the "white dots" Erica has reported before.
 Verify against the deploy-hash URL (`https://<id>.adventureorno.pages.dev`), which is
 never in that window, and always tell her to hard-refresh.
+
+## 2026-08-10 — The map is back, and MapLibre 6 was half the reason it was gone
+
+Erica: "I like the OpenStreetMap and Mapbox that Snapchat uses." The basemap is now
+Mapbox — with a token that already existed in `.env.local` and had never been used for
+tiles. Chasing it down took four wrong turns, all worth writing down.
+
+**1. The CSP blocked Mapbox.** `connect-src` allowed api.maptiler.com and not
+api.mapbox.com. Which also means the Mapbox POI search — wired up weeks ago — had been
+silently blocked for its entire existence.
+
+**2. A Mapbox style is not a MapLibre style.** It carries `projection: {name: "globe"}`
+(MapLibre spells it `type`) and a `fog` block MapLibre does not implement, whose colours
+are black. MapLibre throws "unknown property" on the first; with validation off, you get
+a black rectangle with correct attribution over it.
+
+**3. So the basemap is RASTER tiles now.** Mapbox serves any style as raster, every
+renderer handles those, and it needs no `mapbox://` rewriting and no copy of their style
+document. Labels are baked into the image — irrelevant here, where every marker is a
+photo drawn on top.
+
+**4. And then the markers still did not appear — because MAPLIBRE 6 BREAKS EVERY
+WORKER-BACKED SOURCE.** Vector tiles never arrived; `isSourceLoaded` stayed false
+forever; no error event ever fired. Reduced it to a MapLibre map with ONE GeoJSON point
+and one circle layer: same silent nothing. Raster tiles work because they are decoded on
+the main thread. That single fact explains all of it — the app's places, clusters,
+routes, fog and heat are all GeoJSON, so **the entire map contents were broken**, and it
+was invisible because the basemap was already dead from MapTiler.
+
+Reverted to MapLibre 5.24, which is what CLAUDE.md pins as the stack; 6 was a dependency
+bump this morning, not a feature we needed. On 5, the same build renders 23 markers and
+the two people. **Do not upgrade to MapLibre 6 without opening the map and counting
+markers** — a green build and a clean console both lie about this.
+
+**The tile budget.** Through MapLibre, Mapbox bills per tile REQUEST, not per map load —
+the exact shape of the MapTiler blowout. `lib/basemap.ts` now meters every tile against
+30,000/day per browser, warns at half, and refuses beyond it. During this session's
+debugging the meter read 2,653 in a few minutes while the idle globe spin was running,
+which is precisely the runaway it exists to catch.
+
+## 2026-08-10 — Where we are
+
+The Snap-Map feature, built on data that already existed: 16,988 pings for Erica, 14 for
+Josh. That gap IS the feature's honest limit — a web app gets no background location on
+iOS, so a ping only lands while the app is open.
+
+So it reports LAST SEEN, never "live": each person's most recent position as a photo
+marker (their latest photo — every marker here is a photo), labelled with its age, and
+dimmed once it is more than a day old. `ageLabel` goes deliberately coarse past an hour,
+because "677 minutes ago" claims a precision the data does not have.
+
+Ghost mode (`profiles.share_location`, migration 0156) hides you from the other person
+while you still see yourself, so the switch is legible. `last_seen()` is member-gated and
+anon holds no EXECUTE, like every other SECDEF function here.
+
+Verified on production: "Erica · 3 hours ago" on the map, with her photo as the marker.

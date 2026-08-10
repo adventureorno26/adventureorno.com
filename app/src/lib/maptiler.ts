@@ -126,10 +126,9 @@ async function mapboxForward(query: string, proximity?: [number, number]): Promi
     .filter((x): x is SearchResult => x !== null);
 }
 
-// Dark style to match the app's blue theme (sleeker than the default light streets).
-export const MAPTILER_STYLE_URL = `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${KEY}`;
-// Terrain-RGB DEM tiles for the 3D flyover (used only on the isolated Routes map).
-export const MAPTILER_TERRAIN_URL = `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${KEY}`;
+// The basemap and terrain URLs moved to lib/basemap.ts, which chooses the
+// provider and meters tiles. MapTiler survives there as the FAILOVER only —
+// keeping a second copy here is how one fact ends up with two mechanisms.
 
 export interface ReverseGeocodeResult {
   name: string; // best-guess place name

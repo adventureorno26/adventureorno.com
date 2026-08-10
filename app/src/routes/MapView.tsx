@@ -7,12 +7,13 @@ import type { GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
 import {
-  MAPTILER_STYLE_URL,
   forwardGeocode,
   reverseGeocode,
   snapWalkingRoute,
   type SearchResult,
 } from '../lib/maptiler';
+import { basemapOptions } from '../lib/basemap';
+import { ageLabel, fetchLastSeen, isStale, type LastSeen } from '../lib/lastSeen';
 import {
   createPlaceAtomic,
   updatePlace,
@@ -54,6 +55,9 @@ import SearchPalette from '../components/SearchPalette';
 import MemoryBanner from '../components/MemoryBanner';
 
 const SOURCE_ID = 'places';
+// "Where we are" — the people layer, kept separate from places so a person is
+// never mistaken for somewhere you have been.
+const PEOPLE_SOURCE = 'people';
 
 type MapLayer = 'fog' | 'heat' | 'none';
 
@@ -343,6 +347,56 @@ export default function MapView() {
       .catch(() => undefined);
   }, [places.length]);
 
+  // WHERE WE ARE: everyone's last known position, fed to the people layer.
+  //
+  // Refreshed on a slow timer and ONLY while the tab is visible. The idle globe
+  // auto-rotate that ran forever in a hidden tab is what got the MapTiler
+  // account suspended; nothing in this file may poll a hidden tab again.
+  useEffect(() => {
+    if (!ready) return;
+    let live = true;
+
+    const paint = (rows: LastSeen[]) => {
+      const map = mapRef.current;
+      if (!live || !map || !map.getSource(PEOPLE_SOURCE)) return;
+      (map.getSource(PEOPLE_SOURCE) as GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: rows
+          .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng))
+          .map((r) => ({
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [r.lng, r.lat] },
+            properties: {
+              id: r.profile_id,
+              // Every marker is a photo. Someone with no photo yet gets their
+              // label only, rather than an icon standing in for one.
+              icon: r.photo_id ? `ph-${r.photo_id}` : '',
+              hasPhoto: Boolean(r.photo_id),
+              name: r.is_me ? 'You' : (r.display_name ?? 'Someone'),
+              age: ageLabel(r.age_seconds),
+              stale: isStale(r),
+            },
+          })),
+      });
+    };
+
+    const load = () => {
+      if (document.visibilityState !== 'visible') return;
+      void fetchLastSeen()
+        .then(paint)
+        .catch(() => undefined);
+    };
+
+    load();
+    const timer = setInterval(load, 120_000);
+    document.addEventListener('visibilitychange', load);
+    return () => {
+      live = false;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', load);
+    };
+  }, [ready]);
+
   // Draw every activity's route line on the main map (tap a line → its place card).
   useEffect(() => {
     if (!ready) return;
@@ -388,7 +442,8 @@ export default function MapView() {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAPTILER_STYLE_URL,
+      ...basemapOptions,
+
       // Open framed on the whole contiguous US (responsive to screen size).
       bounds: [
         [-125, 24.5],
@@ -672,7 +727,10 @@ export default function MapView() {
       }
 
       // Draw-a-trail overlay (waypoints + snapped line).
-      map.addSource('draw', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('draw', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       map.addLayer({
         id: 'draw-line',
         type: 'line',
@@ -691,6 +749,49 @@ export default function MapView() {
           'circle-color': '#fff',
           'circle-stroke-color': '#f43f5e',
           'circle-stroke-width': 2,
+        },
+      });
+
+      // WHERE WE ARE. Each person's last known position — a photo marker, like
+      // every marker here, with the AGE under it. A web app gets no background
+      // location on iOS, so most readings are hours or days old; a stale one is
+      // dimmed and says so rather than passing for current.
+      map.addSource(PEOPLE_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'people-photos',
+        type: 'symbol',
+        source: PEOPLE_SOURCE,
+        filter: ['==', ['get', 'hasPhoto'], true],
+        layout: {
+          'icon-image': ['get', 'icon'],
+          'icon-size': 0.85,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: { 'icon-opacity': ['case', ['get', 'stale'], 0.45, 1] },
+      });
+      map.addLayer({
+        id: 'people-label',
+        type: 'symbol',
+        source: PEOPLE_SOURCE,
+        layout: {
+          // Name and age together: the age is not an optional detail, it is what
+          // stops the dot from lying.
+          'text-field': ['concat', ['get', 'name'], '\n', ['get', 'age']],
+          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-size': 11,
+          'text-offset': [0, 1.9],
+          'text-anchor': 'top',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': ['case', ['get', 'stale'], '#9aa7bd', '#ffffff'],
+          'text-halo-color': ['case', ['get', 'stale'], '#0b1220', '#2563eb'],
+          'text-halo-width': 2,
         },
       });
 

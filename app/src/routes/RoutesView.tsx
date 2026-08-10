@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
-import { MAPTILER_STYLE_URL, MAPTILER_TERRAIN_URL } from '../lib/maptiler';
+import { TERRAIN_DEM_URL, basemapOptions } from '../lib/basemap';
 import { fetchPlace } from '../lib/data';
 import { fetchActivitiesForPlace } from '../lib/strava';
 import ActivityReactions from '../components/ActivityReactions';
@@ -57,7 +57,7 @@ export default function RoutesView() {
     if (path.length < 2) return;
     setFlying(true);
     if (!map.getSource('terrain')) {
-      map.addSource('terrain', { type: 'raster-dem', url: MAPTILER_TERRAIN_URL, tileSize: 256 });
+      map.addSource('terrain', { type: 'raster-dem', url: TERRAIN_DEM_URL, tileSize: 256 });
     }
     map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
     const N = 60;
@@ -111,7 +111,7 @@ export default function RoutesView() {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAPTILER_STYLE_URL,
+      ...basemapOptions,
       center: [-98, 39],
       zoom: 3,
       attributionControl: { compact: true },

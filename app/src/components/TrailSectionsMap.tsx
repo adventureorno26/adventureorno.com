@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 // maplibregl.X call site below working unchanged.
 import * as maplibregl from 'maplibre-gl';
 import polyline from '@mapbox/polyline';
-import { MAPTILER_STYLE_URL } from '../lib/maptiler';
+import { basemapOptions } from '../lib/basemap';
 import { fetchActivitiesForPlace } from '../lib/strava';
 import type { Place } from '../lib/types';
 
@@ -70,7 +70,7 @@ export default function TrailSectionsMap({ trail, sections }: { trail: Place; se
         if (cancelled || !containerRef.current || mapRef.current) return;
         const map = new maplibregl.Map({
           container: containerRef.current,
-          style: MAPTILER_STYLE_URL,
+          ...basemapOptions,
           center: [trail.lng, trail.lat],
           zoom: 9,
           interactive: true,

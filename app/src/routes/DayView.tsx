@@ -5,7 +5,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
-import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
+import { reverseGeocode } from '../lib/maptiler';
+import { basemapOptions } from '../lib/basemap';
 import {
   createEntry,
   createPlaceAtomic,
@@ -148,7 +149,7 @@ export default function DayView() {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAPTILER_STYLE_URL,
+      ...basemapOptions,
       center: [-98, 39],
       zoom: 3,
       attributionControl: { compact: true },
