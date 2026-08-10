@@ -176,6 +176,44 @@ export type Database = {
           },
         ]
       }
+      approved_fields: {
+        Row: {
+          approved_at: string
+          approved_by: string
+          field: string
+          subject_id: string
+          subject_type: string
+          value: Json
+          via: string
+        }
+        Insert: {
+          approved_at?: string
+          approved_by: string
+          field: string
+          subject_id: string
+          subject_type: string
+          value: Json
+          via?: string
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string
+          field?: string
+          subject_id?: string
+          subject_type?: string
+          value?: Json
+          via?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approved_fields_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       board_items: {
         Row: {
           board: string
@@ -423,6 +461,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ingest_runs: {
+        Row: {
+          failed: number
+          finished_at: string | null
+          id: string
+          notes: Json | null
+          ok: number
+          source: string
+          started_at: string
+        }
+        Insert: {
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          notes?: Json | null
+          ok?: number
+          source: string
+          started_at?: string
+        }
+        Update: {
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          notes?: Json | null
+          ok?: number
+          source?: string
+          started_at?: string
+        }
+        Relationships: []
       }
       ingest_tokens: {
         Row: {
@@ -1482,6 +1550,71 @@ export type Database = {
           },
         ]
       }
+      suggestions: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          current_value: Json | null
+          decided_at: string | null
+          decided_by: string | null
+          evidence: Json | null
+          field: string
+          group_key: string
+          id: string
+          label: string
+          proposed_value: Json
+          rank: number
+          source: string
+          status: string
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          current_value?: Json | null
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: Json | null
+          field: string
+          group_key: string
+          id?: string
+          label: string
+          proposed_value: Json
+          rank?: number
+          source: string
+          status?: string
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          current_value?: Json | null
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: Json | null
+          field?: string
+          group_key?: string
+          id?: string
+          label?: string
+          proposed_value?: Json
+          rank?: number
+          source?: string
+          status?: string
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_migration_exceptions: {
         Row: {
           detected_at: string
@@ -2237,6 +2370,10 @@ export type Database = {
           reason: string
           score: number
         }[]
+      }
+      may_autowrite: {
+        Args: { p_field: string; p_id: string; p_type: string }
+        Returns: boolean
       }
       merge_nearby_dupes: { Args: never; Returns: number }
       merge_places: {
