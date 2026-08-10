@@ -963,3 +963,38 @@ says so.
 **The lesson, plainly:** running SQL tests only against production in a rolled-back
 transaction is not equivalent to running them against a fresh database, and deploying
 by hand is not equivalent to shipping through CI. Both gaps hid real defects.
+
+## 2026-08-10 — Phase 0: one planning document, and the Appalachian Trail
+
+**Six competing "what to do next" documents became one.** ~40 markdown files, ~380 KB,
+of which COMPLETION-PLAN (41 KB), CLAUDE-CODE-INSTRUCTIONS-2-70 (58 KB), NewClaude
+(52 KB), CLAUDE.md's backlog (29 KB), RESUME-HERE (15 KB) and INGEST-BUILD-PLAN all
+claimed to say what to do next. Every session picked a different one, which is the
+mechanical reason Erica kept re-asking for the same work.
+
+`docs/STATE.md` is now the only planning document: what the app is, the one model
+(place → visits → the day), the single Edit page that absorbs add/import/ingest/sort/
+edit/organize/delete/fix, the five remaining phases, a register of things removed **on
+purpose** with the commit to restore them, and the facts that must not be relearned.
+Everything else moved to `docs/archive/`, whose README says plainly that it is history.
+CLAUDE.md now points at STATE.md rather than the archived COMPLETION-PLAN.
+
+**The Appalachian Trail.** Erica: "the appalachian trail no longer exists in Places…
+why do segments of it appear?" It was never deleted — `app/src/lib/data.ts:443` filters
+out anything with `holds_children`, so every container (AT, Tuscarora, W&OD, trips,
+cities) vanished while its sections remained. A stats rule ("containers don't count
+twice") had leaked into visibility. Fix is Phase 2.
+
+The card also renders one row per outing, so "Maryland Heights" appears nine times
+rather than once with nine dates. Her instruction — section listed once, opening to its
+dates, dates opening to the card — is the Sections shape applied everywhere.
+
+**"downtown Leesburg, VA" — approved for deletion, and NOT deleted.** She approved it on
+my report that it had 0 activities. That was true but incomplete: it also holds **3
+photos and 2 visits**. It is a real place she has been; it simply is not on the
+Appalachian Trail. Removed the membership row only, so the trail is correct and nothing
+of hers was destroyed. Flagged for her to decide whether the place itself should go.
+
+Decision recorded: **the map goes straight to self-hosted** (Protomaps pmtiles in R2
+behind a Worker), not a proxy first. Nobody outside can suspend it, and it is the only
+version that scales commercially.
