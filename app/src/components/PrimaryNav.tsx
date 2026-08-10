@@ -69,7 +69,12 @@ export default function PrimaryNav() {
           <NavLink
             key={t.to}
             to={t.to}
-            className={`pnav-tab${active ? ' active' : ''}`}
+            // The FUNCTION form on purpose. With a string, NavLink appends its own
+            // "active" class from route matching — and "/?add=1" matches the pathname
+            // "/", so Add lit up permanently on the map. The faint old highlight hid
+            // it; the bright one does not. Here the tab's own `match` is the only
+            // thing that decides.
+            className={() => `pnav-tab${active ? ' active' : ''}`}
             aria-current={active ? 'page' : undefined}
           >
             {t.label}
