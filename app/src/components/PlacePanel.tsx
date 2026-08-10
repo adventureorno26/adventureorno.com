@@ -831,11 +831,13 @@ export default function PlacePanel({
   // take all of it: the Appalachian Trail listed nine separate "Maryland
   // Heights" rows. A section's dates belong to the SECTION, listed once below.
   const ownActs = (trailActs ?? []).filter((a) => a.place_id === place.id);
-  // A trip/city/region rollup shows its FUSED visit(s) — one trip is ONE visit
-  // (e.g. "San Diego · Jul 11–16 · Trip"), never a row per activity. It is a
-  // rollup when it actually holds places; the `holds_children` flag is set on
-  // five places that hold nothing, and it was hiding their own outings.
-  const isRollup = isContainer && !place.is_trail;
+  // A trip/city/region shows its FUSED visit(s) — one trip is ONE visit ("San
+  // Diego · Jul 11–16 · Trip"), never a row per activity. That was done by
+  // DROPPING the activity rows, which hides them: San Diego's six outings and
+  // Leesburg's four appeared nowhere. Nesting them inside the visit they
+  // happened on keeps the one-row-per-occasion reading AND keeps the evidence.
+  // An outing no visit covers still gets its own row — invisible is worse than
+  // untidy.
 
   // A visit is the occasion; the ride and the run are what we DID during it, so
   // they hang off it (docs/SCHEMA.md) rather than sitting beside it. Brewster is
@@ -845,44 +847,40 @@ export default function PlacePanel({
   // already one flat row and gains nothing from nesting.
   const nestedActs = new Map<string, Activity[]>();
   const nestedIds = new Set<string>();
-  if (!isRollup) {
-    for (const v of visits ?? []) {
-      const end = v.end_date || v.start_date;
-      if (!v.is_trip && end <= v.start_date) continue;
-      const mine = ownActs.filter((a) => {
-        const d = activityDay(a);
-        return d !== '' && d >= v.start_date && d <= end;
-      });
-      if (mine.length === 0) continue;
-      nestedActs.set(v.id, mine);
-      for (const a of mine) nestedIds.add(a.id);
-    }
+  for (const v of visits ?? []) {
+    const end = v.end_date || v.start_date;
+    if (!v.is_trip && end <= v.start_date) continue;
+    const mine = ownActs.filter((a) => {
+      const d = activityDay(a);
+      return d !== '' && d >= v.start_date && d <= end;
+    });
+    if (mine.length === 0) continue;
+    nestedActs.set(v.id, mine);
+    for (const a of mine) nestedIds.add(a.id);
   }
 
-  const actRows = isRollup
-    ? []
-    : ownActs
-        .filter((a) => !nestedIds.has(a.id))
-        .map((a) => ({
-          key: a.id,
-          date: fmtRunDate(a.start_date),
-          sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-          to: `/place/${place.id}/day/${activityDay(a)}`,
-          del: null as string | null,
-          start: '' as string,
-          end: '' as string,
-          sort: activityDay(a),
-          solo: a.solo_profile as string | null,
-          trip: false,
-          target: { type: 'activity' as const, id: a.id },
-        }));
+  const actRows = ownActs
+    .filter((a) => !nestedIds.has(a.id))
+    .map((a) => ({
+      key: a.id,
+      date: fmtRunDate(a.start_date),
+      sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+      to: `/place/${place.id}/day/${activityDay(a)}`,
+      del: null as string | null,
+      start: '' as string,
+      end: '' as string,
+      sort: activityDay(a),
+      solo: a.solo_profile as string | null,
+      trip: false,
+      target: { type: 'activity' as const, id: a.id },
+    }));
   const actDays = new Set(ownActs.map(activityDay));
   // Visit rows an activity doesn't already cover: multi-day trips, and single
   // days with photos/entries but no run. A TRAIL used to be excluded here, which
   // hid the 32 days Erica logged on the Appalachian Trail itself — a trail is a
   // place you went, and the days you went are its dates.
   const visitRows = (visits ?? [])
-    .filter((v) => isRollup || v.is_trip || nestedActs.has(v.id) || !actDays.has(v.start_date))
+    .filter((v) => v.is_trip || nestedActs.has(v.id) || !actDays.has(v.start_date))
     .map((v) => ({
       key: v.id,
       trip: v.is_trip,
