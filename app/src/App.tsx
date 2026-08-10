@@ -51,6 +51,8 @@ const Timeline = lazyWithReload(() => import('./routes/Timeline'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
+// The review queue, and the recent-activities page — they are the same screen.
+const Inbox = lazyWithReload(() => import('./routes/Inbox'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -235,6 +237,15 @@ export default function App() {
               element={
                 <RequireAuth>
                   <DataHealth />
+                </RequireAuth>
+              }
+            />
+            {/* A machine may only propose; this is where a person decides. */}
+            <Route
+              path="/inbox"
+              element={
+                <RequireAuth>
+                  <Inbox />
                 </RequireAuth>
               }
             />

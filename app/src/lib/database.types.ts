@@ -176,6 +176,41 @@ export type Database = {
           },
         ]
       }
+      approval_undo: {
+        Row: {
+          created_at: string
+          created_by: string
+          group_key: string
+          id: string
+          payload: Json
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          group_key: string
+          id?: string
+          payload: Json
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          group_key?: string
+          id?: string
+          payload?: Json
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_undo_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       approved_fields: {
         Row: {
           approved_at: string
@@ -2080,6 +2115,14 @@ export type Database = {
             }
             Returns: string
           }
+      apply_inbox_field: {
+        Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
+        Returns: Json
+      }
+      approve_card: {
+        Args: { p_choices: Json; p_group_key: string }
+        Returns: Json
+      }
       approve_join_request: {
         Args: { p_id: string; p_role: string }
         Returns: undefined
@@ -2111,6 +2154,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      clear_approval: {
+        Args: { p_field: string; p_id: string; p_type: string }
+        Returns: Json
       }
       clear_city: { Args: { p_place: string }; Returns: undefined }
       climbing_stats: {
@@ -2328,6 +2375,8 @@ export type Database = {
         }
         Returns: string
       }
+      inbox: { Args: { p_cursor?: string; p_limit?: number }; Returns: Json }
+      inbox_counts: { Args: never; Returns: Json }
       is_editor_or_owner: { Args: never; Returns: boolean }
       is_generic_activity_name: { Args: { p_name: string }; Returns: boolean }
       is_member: { Args: never; Returns: boolean }
@@ -2550,6 +2599,7 @@ export type Database = {
       rebuild_place_visits: { Args: { p_place: string }; Returns: undefined }
       rebuild_revealed_area: { Args: never; Returns: undefined }
       recompute_place_stats: { Args: { p_place: string }; Returns: undefined }
+      reject_suggestion: { Args: { p_id: string }; Returns: Json }
       remove_from_container: {
         Args: { p_child: string; p_parent: string }
         Returns: undefined
@@ -3345,6 +3395,7 @@ export type Database = {
           visit_id: string
         }[]
       }
+      undo_approval: { Args: { p_token: string }; Returns: Json }
       unlockrows: { Args: { "": string }; Returns: number }
       update_activity: {
         Args: { p_id: string; p_name: string; p_type?: string }

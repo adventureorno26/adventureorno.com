@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { fetchInboxCounts } from '../lib/inbox';
 
 // The app's single persistent primary navigation. Text-only (no icons, per
 // Erica's standing preference), styled as a bottom-center glass pill to match
@@ -29,13 +31,37 @@ const TABS: { to: string; label: string; match?: (path: string, search: string) 
 export default function PrimaryNav() {
   const { session, profile } = useAuth();
   const { pathname, search } = useLocation();
+  const [waiting, setWaiting] = useState(0);
+
+  // The Inbox tab appears only when something is actually waiting. Six permanent
+  // tabs do not fit a 320px phone — the pill is capped at calc(100vw - 20px) and
+  // never wraps — and a tab that is usually a dead end is worse than one that shows
+  // up when it has something to say. Settings keeps a permanent link either way.
+  useEffect(() => {
+    if (!session || !profile) return;
+    let live = true;
+    fetchInboxCounts()
+      .then((c) => {
+        if (live) setWaiting(c.cards ?? 0);
+      })
+      .catch(() => {
+        /* the badge is a nicety; never let it break navigation */
+      });
+    return () => {
+      live = false;
+    };
+  }, [session, profile, pathname]);
 
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
 
+  const tabs = waiting
+    ? [...TABS, { to: '/inbox', label: `Inbox ${waiting}` } as (typeof TABS)[number]]
+    : TABS;
+
   return (
     <nav className="primary-nav" aria-label="Primary">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = t.match ? t.match(pathname, search) : pathname === t.to && !addOpen(search);
         return (
           <NavLink

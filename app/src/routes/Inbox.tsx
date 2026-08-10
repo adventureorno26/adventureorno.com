@@ -1,0 +1,270 @@
+// /inbox — one card, one button, and the decision is permanent.
+//
+// This is also the "recent activities" page Erica asked for; they are the same
+// screen. What happened recently, and what the machine would like to call it.
+//
+// Rules this screen keeps, all of them hers:
+//   - NO ICONS. Text controls only.
+//   - The evidence is on the face of the card ("underfoot at 7 of 9 route points").
+//     A suggestion you cannot check is just another guess.
+//   - One button finishes a card, and everything commits together.
+//   - Skip is free: it writes nothing and the card comes back.
+//   - Undo is offered immediately, and every decision stays reversible later.
+import { useCallback, useEffect, useState } from 'react';
+import {
+  approveCard,
+  evidenceLine,
+  fetchInbox,
+  miles,
+  rejectSuggestion,
+  undoApproval,
+  type Choice,
+  type InboxCard,
+  type SuggestionOption,
+} from '../lib/inbox';
+import { showSnack } from '../lib/snackbar';
+import { useAuth } from '../auth/AuthProvider';
+
+const CUSTOM = '__custom__';
+
+function dayLabel(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/** The line under the title: when, what, how far. */
+function subtitle(card: InboxCard): string {
+  const a = card.activity;
+  if (!a) return '';
+  return [dayLabel(a.start_date), a.type, miles(a.distance)].filter(Boolean).join(' · ');
+}
+
+export default function Inbox() {
+  const { profile } = useAuth();
+  const canDecide = profile?.role === 'owner' || profile?.role === 'editor';
+
+  const [cards, setCards] = useState<InboxCard[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Per-card, per-field: which option id is picked (or CUSTOM), and the typed words.
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [typed, setTyped] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const rows = await fetchInbox();
+      setCards(rows);
+      // Pre-select rank 0 per field — the recommendation, not a decision.
+      const initial: Record<string, string> = {};
+      for (const c of rows) {
+        for (const f of c.fields) {
+          const key = `${c.group_key}:${f.field}`;
+          if (!(key in initial)) initial[key] = f.id;
+        }
+      }
+      setPicked((p) => ({ ...initial, ...p }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the inbox');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const visible = (cards ?? []).filter((c) => !skipped.has(c.group_key));
+
+  async function onApprove(card: InboxCard) {
+    const fields = [...new Set(card.fields.map((f) => f.field))];
+    const choices: Record<string, Choice> = {};
+    for (const field of fields) {
+      const key = `${card.group_key}:${field}`;
+      const sel = picked[key];
+      if (!sel) continue;
+      if (sel === CUSTOM) {
+        const words = (typed[key] ?? '').trim();
+        if (!words) {
+          showSnack({ message: 'Type a name, or pick one of the suggestions.' });
+          return;
+        }
+        choices[field] = { value: words };
+      } else {
+        choices[field] = { suggestion_id: sel };
+      }
+    }
+    if (!Object.keys(choices).length) return;
+
+    setBusy(card.group_key);
+    try {
+      const token = await approveCard(card.group_key, choices);
+      setCards((cs) => (cs ?? []).filter((c) => c.group_key !== card.group_key));
+      showSnack({
+        message: 'Saved. It will not be changed again.',
+        actionLabel: 'Undo',
+        onAction: async () => {
+          try {
+            await undoApproval(token);
+            showSnack({ message: 'Put back.' });
+            await load();
+          } catch {
+            showSnack({ message: 'Could not undo that.' });
+          }
+        },
+      });
+    } catch (e) {
+      // A stale card fails whole rather than half-applying — reload and let her retry.
+      showSnack({ message: e instanceof Error ? e.message : 'Could not save that.' });
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onReject(option: SuggestionOption) {
+    try {
+      await rejectSuggestion(option.id);
+      showSnack({ message: `Won't suggest "${option.proposed}" again.` });
+      await load();
+    } catch {
+      showSnack({ message: 'Could not do that.' });
+    }
+  }
+
+  return (
+    <div className="page inbox-page">
+      <div className="page-head">
+        <h1>Inbox</h1>
+        <p className="muted">
+          Suggestions from the map data. Nothing here has changed anything yet — a name is only
+          written when you say so, and once you do, nothing overwrites it.
+        </p>
+      </div>
+
+      {error && (
+        <div className="inbox-state">
+          <p>{error}</p>
+          <button className="btn" onClick={() => void load()}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!error && cards === null && <div className="inbox-state">Loading…</div>}
+
+      {!error && cards !== null && visible.length === 0 && (
+        <div className="inbox-state">
+          <p>Nothing to review.</p>
+          <p className="muted">
+            When an activity is recorded somewhere the map data recognises, it will show up here to
+            be named.
+          </p>
+        </div>
+      )}
+
+      {visible.map((card) => {
+        const fields = [...new Set(card.fields.map((f) => f.field))];
+        return (
+          <article className="inbox-card" key={card.group_key}>
+            <header className="ic-head">
+              <h2>{card.activity?.name ?? 'Something to name'}</h2>
+              <p className="muted">{subtitle(card)}</p>
+            </header>
+
+            {fields.map((field) => {
+              const options = card.fields
+                .filter((f) => f.field === field)
+                .sort((a, b) => a.rank - b.rank);
+              const key = `${card.group_key}:${field}`;
+              return (
+                <section className="ic-field" key={field}>
+                  <h3>{field === 'name' ? 'Call it' : field}</h3>
+                  {options.map((o) => (
+                    <label className="ic-option" key={o.id}>
+                      <input
+                        type="radio"
+                        name={key}
+                        checked={picked[key] === o.id}
+                        onChange={() => setPicked((p) => ({ ...p, [key]: o.id }))}
+                      />
+                      <span className="ic-option-body">
+                        <span className="ic-option-name">{o.proposed}</span>
+                        <span className="ic-option-why">{evidenceLine(o)}</span>
+                      </span>
+                      {canDecide && (
+                        <button
+                          type="button"
+                          className="ic-never"
+                          onClick={() => void onReject(o)}
+                          aria-label={`Never suggest ${o.proposed} again`}
+                        >
+                          Never
+                        </button>
+                      )}
+                    </label>
+                  ))}
+
+                  <label className="ic-option">
+                    <input
+                      type="radio"
+                      name={key}
+                      checked={picked[key] === CUSTOM}
+                      onChange={() => setPicked((p) => ({ ...p, [key]: CUSTOM }))}
+                    />
+                    <span className="ic-option-body">
+                      <span className="ic-option-name">Your own words</span>
+                      <input
+                        type="text"
+                        className="ic-custom"
+                        value={typed[key] ?? ''}
+                        placeholder={card.activity?.name ?? ''}
+                        aria-label="Your own name for this"
+                        onFocus={() => setPicked((p) => ({ ...p, [key]: CUSTOM }))}
+                        onChange={(e) => setTyped((t) => ({ ...t, [key]: e.target.value }))}
+                      />
+                    </span>
+                  </label>
+
+                  {options[0]?.current != null && (
+                    <p className="ic-current muted">Currently called “{options[0].current}”</p>
+                  )}
+                </section>
+              );
+            })}
+
+            <footer className="ic-actions">
+              <button
+                className="btn btn-primary"
+                disabled={!canDecide || busy === card.group_key}
+                onClick={() => void onApprove(card)}
+              >
+                {busy === card.group_key ? 'Saving…' : 'Looks right'}
+              </button>
+              <button
+                className="btn"
+                onClick={() => setSkipped((s) => new Set(s).add(card.group_key))}
+              >
+                Skip
+              </button>
+            </footer>
+          </article>
+        );
+      })}
+
+      {/* Required by the OpenStreetMap licence wherever its data is shown, and it is
+          shown on every card above. Visible without interaction — not behind a menu. */}
+      <p className="osm-credit">
+        Place and trail names from{' '}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+          © OpenStreetMap contributors
+        </a>
+      </p>
+    </div>
+  );
+}

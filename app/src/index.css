@@ -2321,6 +2321,14 @@ a {
   border: 1px solid var(--border-soft);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   max-width: calc(100vw - 20px);
+  /* With the Inbox tab present there are six destinations, which do not fit a
+     320px phone. Scroll the pill itself rather than letting the PAGE scroll
+     sideways — a horizontally scrolling page is the bug e2e/layout.spec.ts guards. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.primary-nav::-webkit-scrollbar {
+  display: none;
 }
 .pnav-tab {
   appearance: none;
@@ -6445,4 +6453,138 @@ button.mi-row:hover {
 }
 .visit-open-link:hover {
   background: var(--accent-soft);
+}
+
+/* ---------------------------------------------------------------------------
+   The Inbox (/inbox) — one card, one button. No icons: text controls only.
+   --------------------------------------------------------------------------- */
+.inbox-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 14px 120px;
+}
+.inbox-page .page-head h1 {
+  margin: 0 0 4px;
+}
+.inbox-page .page-head p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.inbox-state {
+  padding: 28px 16px;
+  text-align: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.inbox-state p {
+  margin: 0 0 8px;
+}
+.inbox-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.ic-head h2 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.ic-head p {
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.ic-field {
+  margin-bottom: 14px;
+}
+.ic-field h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ic-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.ic-option:hover {
+  background: var(--hover-soft, rgba(255, 255, 255, 0.04));
+}
+/* The app's global input styling is display:block; width:100%, which is right for
+   text fields and very wrong for a radio — it made the dot 238px wide, collapsed the
+   label beside it to zero, and pushed the row off a 320px screen. Pin the size. */
+.ic-option input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
+  margin-top: 3px;
+}
+.ic-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.ic-option-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* The evidence. A suggestion you cannot check is just another guess. */
+.ic-option-why {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ic-custom {
+  margin-top: 4px;
+  width: 100%;
+  max-width: 100%;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--input-bg, rgba(0, 0, 0, 0.25));
+  color: inherit;
+  font: inherit;
+}
+.ic-never {
+  flex: none;
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ic-never:hover {
+  color: inherit;
+}
+.ic-current {
+  margin: 6px 0 0 10px;
+  font-size: 12px;
+}
+.ic-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+/* Required wherever OpenStreetMap data is shown, and visible without interaction. */
+.osm-credit {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
 }

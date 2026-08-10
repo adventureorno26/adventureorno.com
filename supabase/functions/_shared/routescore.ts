@@ -6,8 +6,9 @@
 // ever describe one point.
 //
 // This looks at the whole route: sample it, ask OpenStreetMap what is underfoot and
-// what contains it, and count. A trail that carries most of the route is what you
-// would call it; otherwise the park that contains most of it.
+// what contains it, and count. When a park contains most of the route it wins; a
+// trail that carries most of the route wins when no park qualifies. Both are always
+// offered — see scoreRoute for why the park is the one pre-selected.
 //
 // Ported from scripts/naming/route_namer.py, whose measured output on 13 real routes
 // is recorded in scripts/naming/route-scoring-results-2026-08-09.txt and asserted in
@@ -154,14 +155,20 @@ export function scoreRoute(elements: OverpassElement[], sampleCount: number): Ro
   let winner: Tally | undefined;
   let winnerKind: CandidateKind = 'trail';
 
-  if (topTrail && topTrail.count >= trailMin) {
-    strength = 'trail';
-    winner = topTrail;
-    winnerKind = 'trail';
-  } else if (topPark && topPark.count >= parkMin) {
+  // WHEN BOTH ARE TRUE, THE PARK WINS. Erica's decision, 2026-08-09, asked because
+  // "Appalachian Trail 9/9, inside Sky Meadows State Park 8/9" is one hike with two
+  // correct names and the machine must not pick silently.
+  //
+  // This only sets what is PRE-SELECTED on the card: a qualifying trail is always
+  // offered at rank 1, one tap away, and step 7 will learn her per-area preference.
+  if (topPark && topPark.count >= parkMin) {
     strength = 'park';
     winner = topPark;
     winnerKind = 'park';
+  } else if (topTrail && topTrail.count >= trailMin) {
+    strength = 'trail';
+    winner = topTrail;
+    winnerKind = 'trail';
   } else if (topPark && topPark.count >= 2) {
     // Below threshold but real. Offered, with honest confidence, never written.
     // The >= 2 matters: a single stray hit is noise, and offering it as the headline

@@ -635,3 +635,47 @@ runtime — which is how the second attempt died, losing work it had already don
 The activity's name is UNCHANGED, `approved_fields` is untouched at 73, both runs are in
 `ingest_runs`, and an identical re-run added no rows (`already_offered: 4`). Red Rock and
 the Seneca hike correctly produce nothing.
+
+## 2026-08-09 — When both are true, the PARK wins (Erica's decision)
+
+Asked because "Appalachian Trail 9/9, inside Sky Meadows State Park 8/9" is one hike
+with two correct names. Erica: "go with the park." Implemented in `scoreRoute`: a park
+clearing 40% of samples takes rank 0; a trail wins only when no park qualifies. This
+sets which option is PRE-SELECTED — the trail is always offered at rank 1, one tap away.
+
+A consequence worth having seen: the W&OD now defaults to "Washington & Old Dominion
+Trail Regional Park" rather than the trail she actually calls it, and a long
+point-to-point on the AT will default to whichever park that particular hike crossed.
+Both remain one tap from the right answer, and step 7 (`naming_rules`) is what makes a
+per-area preference stick permanently.
+
+## 2026-08-09 — Step 3: the Inbox
+
+Migration `0149`: `approval_undo`, `apply_inbox_field`, `inbox`, `inbox_counts`,
+`approve_card`, `reject_suggestion`, `undo_approval`, `clear_approval`. Route `/inbox`,
+`app/src/routes/Inbox.tsx`, `app/src/lib/inbox.ts`.
+
+- **approve_card is one transaction.** A stale option raises rather than approving half
+  a card — a name written without its lock is the exact state this design prevents.
+- **Undo restores the values AND removes the locks.** Either alone is not undo.
+- **No `skip_card` RPC.** Skipping writes nothing by definition, so it is client-side;
+  the card returns on the next load. An RPC that does nothing is a thing to maintain.
+- **`apply_inbox_field` uses an explicit CASE, not dynamic SQL.** The set of fields the
+  Inbox may write is small and fixed and worth stating out loud; anything else raises.
+  Changing an activity's place rebuilds stats and visits at BOTH ends.
+- **The Inbox nav tab appears only when something is waiting.** Six permanent tabs do
+  not fit a 320px phone. Settings-side entry still needs adding.
+- **Step 8 folded in:** `© OpenStreetMap contributors`, linked, visible without
+  interaction, on the screen where OSM names are shown. That compliance gap is closed.
+
+**A real bug caught only by driving it.** The app's global input styling is
+`display:block; width:100%`, which is right for text fields and very wrong for a radio:
+the dot rendered **238px wide**, collapsed the label beside it to zero width, and pushed
+the row off a 320px screen (`scrollWidth` 386 vs 320). Typecheck, lint and unit tests
+were all green throughout — only measuring the real page at 320px found it. Fixed by
+pinning the radio to 16px.
+
+Verified on the deployed build: the card reads "Loudoun County Running", offers the park
+(contains 6 of 9 route points) pre-selected with the trail at rank 1, evidence in words
+on every option, "Looks right" / "Skip", nav shows "Inbox 1", no console errors, and no
+horizontal overflow at 320px.
