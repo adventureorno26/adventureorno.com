@@ -6358,11 +6358,20 @@ button.mi-row:hover {
   color: var(--text);
   border-color: var(--accent);
 }
-/* The dates a section opens to. Each one opens the day. */
+/* The dates a section opens to. Each one opens the day. The DATE never
+   truncates — `.trip-contents a` ellipsises, and a long activity name was
+   pushing "Jun 20, 2026" down to "Jun 20, 2…". The date is the point of the
+   row; the description is what gives way. */
 .section-dates {
   margin-top: 2px;
 }
+.section-dates a {
+  flex: none;
+  overflow: visible;
+}
 .section-dates .muted {
+  flex: 1;
+  min-width: 0;
   white-space: normal;
   text-align: right;
 }
