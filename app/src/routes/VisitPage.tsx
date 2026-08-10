@@ -179,7 +179,7 @@ export default function VisitPage() {
                   void run('Saving…', () => setVisitSolo(v.id, e.target.value || null))
                 }
               >
-                <option value="">Both</option>
+                <option value="">Together</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}

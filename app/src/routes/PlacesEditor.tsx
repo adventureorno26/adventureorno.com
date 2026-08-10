@@ -447,7 +447,13 @@ export default function PlacesEditor() {
               onClick={() => setPerson(k)}
               type="button"
             >
-              {k === 'all' ? 'All' : k === 'mine' ? 'Just me' : k === 'josh' ? 'Just Josh' : 'Both'}
+              {k === 'all'
+                ? 'All'
+                : k === 'mine'
+                  ? 'Just me'
+                  : k === 'josh'
+                    ? 'Just Josh'
+                    : 'Together'}
             </button>
           ))}
         </div>
@@ -584,7 +590,7 @@ export default function PlacesEditor() {
                   </td>
                   <td className="pe-col-who">
                     <select value={who} onChange={(e) => void setWho(p, e.target.value as Who)}>
-                      <option value="both">Both</option>
+                      <option value="both">Together</option>
                       <option value="mine">Just me</option>
                       <option value="josh">Just Josh</option>
                     </select>

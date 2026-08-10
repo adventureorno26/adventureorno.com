@@ -389,8 +389,13 @@ function PlacesByStateCard({
   );
 }
 
-/** National Parks visited — counts saved places whose name reads like a national
- *  park / monument / forest, with a dropdown of which ones. */
+/** National Parks visited — grouped by the park a place FALLS INSIDE.
+ *
+ *  This used to match the place's NAME against /national (park|monument|…)/, which
+ *  counted zero of the 15 places that are actually inside one: Archangel Falls and
+ *  Zion Lodge are in Zion, Old Rag is in Shenandoah, and none of them are *called*
+ *  "national park". `places.park` is set by a spatial join against the park
+ *  boundaries (trg_place_park), and it is the truth. */
 function NationalParksCard({
   personId,
   placePeople,
@@ -406,15 +411,25 @@ function NationalParksCard({
   }, []);
   if (!places) return null;
 
-  const parks = places
-    .filter(
-      (p) =>
-        p.saved &&
-        !p.bucket &&
-        (!personId || (placePeople.get(p.id)?.has(personId) ?? false)) &&
-        /national (park|monument|forest|seashore|recreation area|historic)/i.test(p.name),
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const inside = places.filter(
+    (p) =>
+      p.saved &&
+      !p.bucket &&
+      Boolean(p.park) &&
+      (!personId || (placePeople.get(p.id)?.has(personId) ?? false)),
+  );
+  // One row per PARK, listing the places you have been inside it.
+  const byPark = new Map<string, Place[]>();
+  for (const p of inside) {
+    const key = p.park as string;
+    byPark.set(key, [...(byPark.get(key) ?? []), p]);
+  }
+  const parks = [...byPark.entries()]
+    .map(([park, places_]) => ({
+      park,
+      places: places_.sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => a.park.localeCompare(b.park));
 
   return (
     <div className="card">
@@ -429,11 +444,28 @@ function NationalParksCard({
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>None logged yet.</p>
         ) : (
           <div className="visit-list">
-            {parks.map((p) => (
-              <Link key={p.id} className="visit-row" to={`/place/${p.id}`}>
-                <span className="visit-main">{p.name}</span>
-                {p.admin1 ? <span className="label"> · {p.admin1}</span> : null}
-              </Link>
+            {parks.map((g) => (
+              <div key={g.park}>
+                <div className="visit-row">
+                  <span className="visit-main">
+                    <b>{g.park}</b>
+                  </span>
+                  <span className="label">
+                    {' '}
+                    · {g.places.length} {g.places.length === 1 ? 'place' : 'places'}
+                  </span>
+                </div>
+                {g.places.map((pl) => (
+                  <Link
+                    key={pl.id}
+                    className="visit-row"
+                    to={`/place/${pl.id}`}
+                    style={{ paddingLeft: 18 }}
+                  >
+                    <span className="visit-main">{pl.name}</span>
+                  </Link>
+                ))}
+              </div>
             ))}
           </div>
         )}

@@ -176,13 +176,13 @@ export default function PlaceQuickEdit({
                 value={visitWho ?? 'both'}
                 onChange={(e) => onVisitWho(e.target.value as Who)}
               >
-                <option value="both">Both</option>
+                <option value="both">Together</option>
                 <option value="mine">Just me</option>
                 <option value="josh">Just Josh</option>
               </select>
             ) : (
               <select value={who()} onChange={(e) => void setWho(e.target.value as Who)}>
-                <option value="both">Both</option>
+                <option value="both">Together</option>
                 <option value="mine">Just me</option>
                 <option value="josh">Just Josh</option>
               </select>

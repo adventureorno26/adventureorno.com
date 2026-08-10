@@ -543,7 +543,7 @@ export default function PhotoSorter() {
                             setGroupWho((cur) => ({ ...cur, [g.id]: e.target.value as Who }))
                           }
                         >
-                          <option value="both">Both</option>
+                          <option value="both">Together</option>
                           <option value="mine">Just me</option>
                           <option value="josh">Just Josh</option>
                         </select>

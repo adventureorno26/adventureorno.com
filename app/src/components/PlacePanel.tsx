@@ -1272,7 +1272,7 @@ export default function PlacePanel({
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
                             >
-                              <option value="">Both</option>
+                              <option value="">Together</option>
                               {people.map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}

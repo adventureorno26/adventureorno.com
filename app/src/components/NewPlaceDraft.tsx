@@ -403,7 +403,7 @@ export default function NewPlaceDraft({
                   className={who === k ? 'on' : ''}
                   onClick={() => setWho(k)}
                 >
-                  {k === 'both' ? 'Both' : k === 'mine' ? 'Just me' : 'Just Josh'}
+                  {k === 'both' ? 'Together' : k === 'mine' ? 'Just me' : 'Just Josh'}
                 </button>
               ))}
             </div>

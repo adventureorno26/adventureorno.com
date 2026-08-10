@@ -1,6 +1,6 @@
 import type { MapPerson } from '../lib/data';
 
-/** "Both / Just me / Just Josh" toggle. Only appears once at least two people
+/** "Together / Just me / Just Josh" toggle. Only appears once at least two people
  *  have added or recorded something. */
 export default function PersonFilter({
   people,
@@ -20,7 +20,7 @@ export default function PersonFilter({
   return (
     <div className="person-filter">
       <button className={value === null ? 'on' : ''} onClick={() => onChange(null)}>
-        Both
+        Together
       </button>
       {people.map((p) => (
         <button key={p.id} className={value === p.id ? 'on' : ''} onClick={() => onChange(p.id)}>

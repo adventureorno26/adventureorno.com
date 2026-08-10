@@ -25,7 +25,11 @@ const TABS: { to: string; label: string; match?: (path: string, search: string) 
   // Add is a sheet, not a page, so it highlights on its query flag rather than a path.
   { to: '/?add=1', label: 'Add', match: (_p, s) => addOpen(s) },
   { to: '/timeline', label: 'Timeline' },
-  { to: '/settings', label: 'More', match: (p) => p === '/settings' || p.startsWith('/settings/') },
+  {
+    to: '/settings',
+    label: 'Settings',
+    match: (p) => p === '/settings' || p.startsWith('/settings/'),
+  },
 ];
 
 export default function PrimaryNav() {
@@ -56,10 +60,12 @@ export default function PrimaryNav() {
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
 
-  const tabs: typeof TABS = [
-    ...TABS,
-    { to: '/inbox', label: waiting ? `Inbox ${waiting}` : 'Inbox' },
-  ];
+  // FIVE tabs. The Inbox tab is gone — adding and sorting both live behind Add, so
+  // there is one door for getting things in and one (Places) for fixing what is there.
+  // The pending count rides on Add instead of adding a sixth destination.
+  const tabs: typeof TABS = TABS.map((t) =>
+    t.label === 'Add' && waiting ? { ...t, label: `Add ${waiting}` } : t,
+  );
 
   return (
     <nav className="primary-nav" aria-label="Primary">
