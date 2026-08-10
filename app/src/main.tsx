@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { registerServiceWorker } from './lib/pwa';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import App from './App';
@@ -21,18 +22,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// Stale service-worker caches were serving old code and blocking updates.
-// Unregister any existing worker and clear all caches so the app ALWAYS loads
-// the latest code from the network.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((regs) => regs.forEach((r) => r.unregister()))
-    .catch(() => undefined);
-}
-if ('caches' in window) {
-  caches
-    .keys()
-    .then((keys) => keys.forEach((k) => caches.delete(k)))
-    .catch(() => undefined);
-}
+// Offline mode. The worker caches the HTML shell network-first and content-hashed
+// assets permanently, so a deploy is always picked up while the app still opens on a
+// bad connection. `?sw=off` unregisters it and clears every cache — see lib/pwa.ts.
+registerServiceWorker();

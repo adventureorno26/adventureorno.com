@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import Login from './routes/Login';
@@ -65,6 +65,43 @@ function FullScreenMessage({ children }: { children: React.ReactNode }) {
 }
 
 /** Gate: no authenticated session OR no profile row → bounce to /login. */
+/** "Loading…" that eventually admits something is wrong instead of spinning forever.
+ *
+ *  Deliberately NOT driven by navigator.onLine alone: with the network cut, Chromium
+ *  still reported onLine === true in testing, and captive portals lie the same way.
+ *  A timer measures what actually matters — nothing has arrived — so this is honest
+ *  whether the cause is being offline, a captive portal, or a dead backend. */
+function LoadingOrOffline() {
+  const [stalled, setStalled] = useState(false);
+  const [offline, setOffline] = useState(!navigator.onLine);
+  useEffect(() => {
+    const t = setTimeout(() => setStalled(true), 6000);
+    const on = () => setOffline(false);
+    const off = () => setOffline(true);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+  if (offline)
+    return (
+      <FullScreenMessage>
+        You&rsquo;re offline — this will load when you&rsquo;re back.
+      </FullScreenMessage>
+    );
+  if (stalled) {
+    return (
+      <FullScreenMessage>
+        Still trying — you may be offline. This will load when the connection is back.
+      </FullScreenMessage>
+    );
+  }
+  return <FullScreenMessage>Loading…</FullScreenMessage>;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, profile, loading } = useAuth();
   const location = useLocation();
@@ -78,7 +115,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     void prewarmGooglePhotos().catch(() => undefined);
   }, [signedIn]);
 
-  if (loading) return <FullScreenMessage>Loading…</FullScreenMessage>;
+  // Offline, the session check cannot complete, so "Loading…" would spin forever.
+  // The shell is cached and boots fine; say what is actually wrong instead.
+  if (loading) return <LoadingOrOffline />;
   if (!session || !profile) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
@@ -88,7 +127,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<FullScreenMessage>Loading…</FullScreenMessage>}>
+      <Suspense fallback={<LoadingOrOffline />}>
         <LocationTracker />
         {/* Main landmark — display:contents adds the semantic landmark for screen
             readers without introducing any box/layout change. */}

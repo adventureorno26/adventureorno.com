@@ -830,3 +830,36 @@ string parses as UTC midnight, which renders as the previous day west of Greenwi
 the same class of bug migrations 0143/0144 fixed server-side, reintroduced in the
 client. `dayLabel` now parses `YYYY-MM-DD` as a local date. Verified against the DB:
 Fort Rosecrans 07-14, Cape Cod 08-02, San Diego 07-11 all now read correctly.
+
+## 2026-08-10 — Offline mode, re-enabled safely
+
+The service worker was ripped out once because a cached shell served old code and
+blocked updates, leaving the app with no offline mode. Re-enabling it required fixing
+the reason it failed, not just turning it back on.
+
+**The old worker cached everything the same way, including index.html.** A stale
+index.html points at hashed assets that no longer exist — the white-screen failure.
+The new one splits by kind:
+
+- **Navigations / HTML — network first, always.** Cache is only an offline fallback,
+  so stale HTML online is impossible.
+- **`/assets/<hash>.*` — cache first.** Vite content-hashes these, so a URL's bytes
+  can never change; caching them forever is the definition of the file, not a risk.
+- **Cross-origin — untouched.** Supabase, the photo gateway and MapTiler are other
+  origins, so private photo bytes and authed API responses are never written to a
+  cache. Rule #8 holds by construction. **Verified: 0 cross-origin cache entries.**
+
+**A kill switch, because the fear was well earned.** `adventureorno.com/?sw=off`
+unregisters the worker, clears every cache, remembers the choice and reloads; `?sw=on`
+restores it. The reload matters: clearing caches while the old worker still CONTROLS
+the page loses the race — it services a fetch and re-caches it, which left a cache
+behind in testing. Verified end to end: 0 registrations, 0 caches, flag dropped.
+
+**The offline message is stall-based, not `navigator.onLine`-based.** With the network
+cut, Chromium still reported `onLine === true`; captive portals lie the same way. A 6s
+timer measures what actually matters — nothing has arrived — so the message is honest
+whether the cause is offline, a portal, or a dead backend. Both loading gates (the auth
+check and the lazy-route Suspense fallback) use it.
+
+Verified on production: registered, controlling, caches `aon-shell-v4` / `aon-assets-v4`,
+6 nav tabs, no page errors; offline, the shell boots from cache and explains itself.
