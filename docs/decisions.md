@@ -863,3 +863,45 @@ check and the lazy-route Suspense fallback) use it.
 
 Verified on production: registered, controlling, caches `aon-shell-v4` / `aon-assets-v4`,
 6 nav tabs, no page errors; offline, the shell boots from cache and explains itself.
+
+## 2026-08-10 — The authz matrix, and the two gaps it found
+
+The backlog called this "pgTAP authz matrices". **pgTAP is available (1.3.3) but was
+deliberately not installed:** it puts ~200 functions into a PRODUCTION database purely
+so a test can say `ok()` instead of `raise exception`, and these tests already run
+against production in a rolled-back transaction because there is no local Docker. The
+grid is the deliverable; the framework is not.
+
+`supabase/tests/0154_authz_matrix.test.sql` asserts eight invariants: every public
+table has RLS; anon holds no table grant; the token tables are service-role only; the
+ledger is member-readable and client-unwritable; no table is reachable with zero
+policies; a signed-in non-member reads nothing anywhere; a member reads through the
+same policies (the negative control, so test 6 cannot pass on empty tables); and no
+SECURITY DEFINER function is anon-executable.
+
+**It failed on first run, twice, and both were real.**
+
+1. **`anon` held SELECT/INSERT/UPDATE/DELETE grants on ~35 tables**, including
+   `settings`, `ingest_tokens`, `deleted_hashes` and `parks`. No data was exposed —
+   every policy is `to public` with an `is_member()` predicate, so anon was refused by
+   the predicate. But it left one correctly-written USING clause, forever, as the only
+   thing between the anon key (which ships in the client bundle) and the data. 0093
+   made exactly this argument for functions and revoked EXECUTE from anon on all 83
+   SECDEF ones; tables were never given the same treatment. Now revoked, plus
+   `alter default privileges` so the next `create table` cannot silently re-open it.
+
+2. **The ledger was writable by `authenticated` at the grant layer** — and that one was
+   mine. 0148/0149/0151 each did `revoke all … from public, anon` then granted SELECT.
+   That is not enough: Supabase's DEFAULT PRIVILEGES give `authenticated` its own
+   direct grant of ALL, and revoking from PUBLIC does not touch a role's own grant.
+   RLS still refused the writes (SELECT policy, no write policy), which is exactly why
+   the 0148 test passed — an RLS refusal and a missing grant both raise 42501, and that
+   test could not tell them apart. An audit trail should not rest on a single policy.
+
+Two exclusions, both stated in the test rather than hidden: `spatial_ref_sys` (PostGIS
+EPSG reference data, not ours to re-grant) and extension-owned functions (PostGIS ships
+`st_estimatedextent` as SECDEF and anon-executable; it reads planner statistics for a
+table the caller can already see).
+
+Verified afterwards that nothing broke: the login page still renders for anon, and a
+member still reads the Inbox (12 cards) and Places (149 rows) with no page errors.
