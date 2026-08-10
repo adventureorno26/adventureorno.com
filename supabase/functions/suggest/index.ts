@@ -245,32 +245,6 @@ Deno.serve(async (req) => {
       }
       if (index > 0) await sleep(PAUSE_MS);
 
-      // A LEARNED RULE COMES FIRST, and short-circuits everything below.
-      //
-      // She does the same runs constantly — 76 activities called "Loudoun County
-      // Running". Once she has told us what routes here are called, asking again is
-      // the exact complaint this rebuild started from. It also saves an Overpass call,
-      // which matters given how often that endpoint is busy.
-      //
-      // Applying a rule still writes an audit row and an approval, so an automatic
-      // name is never silent. It refuses to touch anything already decided.
-      if (!dryRun) {
-        const { data: ruled } = await admin.rpc('apply_naming_rule', { p_activity: row.id });
-        const r = ruled as { applied?: boolean; changed?: boolean; name?: string } | null;
-        if (r?.applied) {
-          notes.rule_applied = (notes.rule_applied ?? 0) + 1;
-          results.push({
-            activity_id: row.id,
-            current: row.name,
-            source: 'rule',
-            applied: r.name,
-            changed: r.changed === true,
-          });
-          ok++;
-          continue;
-        }
-      }
-
       const pts = decodePolyline(row.summary_polyline);
       if (pts.length < 2) {
         notes.no_polyline = (notes.no_polyline ?? 0) + 1;
@@ -319,6 +293,33 @@ Deno.serve(async (req) => {
           source = 'maptiler';
           candidates = [{ name, kind: 'park', count: 0, rank: 0, confidence: 0.3 }];
           evidenceBase = { samples: samples.length, via: 'maptiler midpoint' };
+        }
+      }
+
+      // A LEARNED RULE, ONLY IF THE ROUTE AGREES.
+      //
+      // Erica's rule is "Washington & Old Dominion Trail" within 1500 m of her house.
+      // On the geofence alone that would have renamed 76 activities, most of them
+      // neighbourhood street runs. So the rule is offered the names the scorer
+      // actually found, and applies only if its own name is among them. It costs an
+      // Overpass call we used to skip; correctness is worth more than the call.
+      if (!dryRun && candidates.length) {
+        const { data: ruled } = await admin.rpc('apply_naming_rule', {
+          p_activity: row.id,
+          p_candidates: candidates.map((c) => c.name),
+        });
+        const rr = ruled as { applied?: boolean; changed?: boolean; name?: string } | null;
+        if (rr?.applied) {
+          notes.rule_applied = (notes.rule_applied ?? 0) + 1;
+          results.push({
+            activity_id: row.id,
+            current: row.name,
+            source: 'rule',
+            applied: rr.name,
+            changed: rr.changed === true,
+          });
+          ok++;
+          continue;
         }
       }
 

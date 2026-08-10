@@ -6,9 +6,8 @@
 // ever describe one point.
 //
 // This looks at the whole route: sample it, ask OpenStreetMap what is underfoot and
-// what contains it, and count. When a park contains most of the route it wins; a
-// trail that carries most of the route wins when no park qualifies. Both are always
-// offered — see scoreRoute for why the park is the one pre-selected.
+// what contains it, and count. A trail carrying most of the route wins; otherwise the
+// park containing most of it. Both are always offered — see scoreRoute.
 //
 // Ported from scripts/naming/route_namer.py, whose measured output on 13 real routes
 // is recorded in scripts/naming/route-scoring-results-2026-08-09.txt and asserted in
@@ -155,20 +154,23 @@ export function scoreRoute(elements: OverpassElement[], sampleCount: number): Ro
   let winner: Tally | undefined;
   let winnerKind: CandidateKind = 'trail';
 
-  // WHEN BOTH ARE TRUE, THE PARK WINS. Erica's decision, 2026-08-09, asked because
-  // "Appalachian Trail 9/9, inside Sky Meadows State Park 8/9" is one hike with two
-  // correct names and the machine must not pick silently.
+  // WHEN BOTH ARE TRUE, THE TRAIL WINS.
   //
-  // This only sets what is PRE-SELECTED on the card: a qualifying trail is always
-  // offered at rank 1, one tap away, and step 7 will learn her per-area preference.
-  if (topPark && topPark.count >= parkMin) {
-    strength = 'park';
-    winner = topPark;
-    winnerKind = 'park';
-  } else if (topTrail && topTrail.count >= trailMin) {
+  // Erica first chose park-first (2026-08-09), then cleared the first seven real cards
+  // and picked the TRAIL six times out of six — every one of them from rank 1, because
+  // the park was pre-selected. Asked again on 2026-08-10 she said trail first. The
+  // measured behaviour and the stated preference now agree.
+  //
+  // This only sets what is PRE-SELECTED: the containing park is always offered at
+  // rank 1, one tap away, and a learned rule can override the whole question per area.
+  if (topTrail && topTrail.count >= trailMin) {
     strength = 'trail';
     winner = topTrail;
     winnerKind = 'trail';
+  } else if (topPark && topPark.count >= parkMin) {
+    strength = 'park';
+    winner = topPark;
+    winnerKind = 'park';
   } else if (topPark && topPark.count >= 2) {
     // Below threshold but real. Offered, with honest confidence, never written.
     // The >= 2 matters: a single stray hit is noise, and offering it as the headline

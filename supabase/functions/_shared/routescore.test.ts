@@ -27,7 +27,7 @@ function hits(trails: Record<string, number>, parks: Record<string, number>): Ov
 const top = (els: OverpassElement[], n = 9) => scoreRoute(els, n).candidates[0];
 
 describe('route scoring reproduces the measured prototype output', () => {
-  it('Warren County -> Shenandoah NP (park 9/9 outranks Dickey Ridge Trail 7/9)', () => {
+  it('Warren County -> Dickey Ridge Trail (trail 7/9, inside Shenandoah NP 9/9)', () => {
     const s = scoreRoute(
       hits(
         {
@@ -41,18 +41,14 @@ describe('route scoring reproduces the measured prototype output', () => {
       ),
       9,
     );
-    // Erica chose the park as the default when both are true.
-    expect(s.strength).toBe('park');
-    expect(s.candidates[0]).toMatchObject({
-      name: 'Shenandoah National Park',
-      kind: 'park',
-      count: 9,
-    });
-    // The trail underfoot is always offered second, never hidden.
-    expect(s.candidates[1]).toMatchObject({ name: 'Dickey Ridge Trail', kind: 'trail' });
+    // Trail first: she picked the trail 6 of 6 times on the real cards.
+    expect(s.strength).toBe('trail');
+    expect(s.candidates[0]).toMatchObject({ name: 'Dickey Ridge Trail', kind: 'trail', count: 7 });
+    // The park it runs through is always offered second, never hidden.
+    expect(s.candidates[1]).toMatchObject({ name: 'Shenandoah National Park', kind: 'park' });
   });
 
-  it('Shenandoah County -> George Washington National Forest (park wins)', () => {
+  it('Shenandoah County -> Massanutten Trail', () => {
     expect(
       top(
         hits(
@@ -60,16 +56,16 @@ describe('route scoring reproduces the measured prototype output', () => {
           { 'George Washington National Forest': 9 },
         ),
       ).name,
-    ).toBe('George Washington National Forest');
+    ).toBe('Massanutten Trail');
   });
 
-  it('Top Hill -> the containing area, which here IS the AT corridor', () => {
+  it('Top Hill -> Appalachian Trail', () => {
     expect(
       top(hits({ 'Appalachian Trail': 8 }, { 'Appalachian National Scenic Trail': 8 })).name,
-    ).toBe('Appalachian National Scenic Trail');
+    ).toBe('Appalachian Trail');
   });
 
-  it('Locust Valley -> South Mountain State Battlefield (park 6/9 wins)', () => {
+  it('Locust Valley -> Appalachian National Scenic Trail', () => {
     expect(
       top(
         hits(
@@ -77,15 +73,15 @@ describe('route scoring reproduces the measured prototype output', () => {
           { 'South Mountain State Battlefield': 6, 'Appalachian National Scenic Trail': 3 },
         ),
       ).name,
-    ).toBe('South Mountain State Battlefield');
+    ).toBe('Appalachian National Scenic Trail');
   });
 
-  it('Clarke County -> Sky Meadows State Park, with the AT offered second', () => {
+  it('Clarke County -> Appalachian Trail, with Sky Meadows offered second', () => {
     // THE case for the whole design: both names are true, so neither is chosen
-    // silently. Erica picked the park; the trail sits at rank 1, one tap away.
+    // silently. Trail is pre-selected; the park sits at rank 1, one tap away.
     const s = scoreRoute(hits({ 'Appalachian Trail': 9 }, { 'Sky Meadows State Park': 8 }), 9);
-    expect(s.candidates[0]).toMatchObject({ name: 'Sky Meadows State Park', kind: 'park' });
-    expect(s.candidates[1]).toMatchObject({ name: 'Appalachian Trail', confidence: 1 });
+    expect(s.candidates[0]).toMatchObject({ name: 'Appalachian Trail', confidence: 1 });
+    expect(s.candidates[1]).toMatchObject({ name: 'Sky Meadows State Park', kind: 'park' });
   });
 
   it('Madison -> Shenandoah National Park (no single trail carries the route)', () => {
@@ -122,7 +118,7 @@ describe('route scoring reproduces the measured prototype output', () => {
     ).toBe('Pocahontas State Park');
   });
 
-  it('Bern Township -> Blue Marsh Lake Recreation Area (park 8/9 wins)', () => {
+  it('Bern Township -> Lake Border Trail', () => {
     expect(
       top(
         hits(
@@ -130,7 +126,7 @@ describe('route scoring reproduces the measured prototype output', () => {
           { 'Blue Marsh Lake Recreation Area': 8, 'State Game Lands Number 280': 1 },
         ),
       ).name,
-    ).toBe('Blue Marsh Lake Recreation Area');
+    ).toBe('Lake Border Trail');
   });
 
   it('Stream Weir -> George Washington National Forest', () => {
@@ -150,10 +146,9 @@ describe('route scoring reproduces the measured prototype output', () => {
     ).toBe('Riverpoint Drive Trailhead');
   });
 
-  it('W&OD -> the regional park by default, the trail at rank 1', () => {
-    // A consequence of the park-first rule worth seeing plainly: the W&OD is a place
-    // she calls a TRAIL, and the park name is the clunky official one. It is still
-    // one tap to rank 1, and step 7 (naming_rules) is what makes that stick.
+  it('W&OD -> the trail she actually calls it, park at rank 1', () => {
+    // The case that settled the argument: offered the park first, she chose the trail
+    // 6 times out of 6.
     const s = scoreRoute(
       hits(
         { 'Washington & Old Dominion Trail': 11, 'W&OD Bridle Trail': 5 },
@@ -161,11 +156,11 @@ describe('route scoring reproduces the measured prototype output', () => {
       ),
       9,
     );
-    expect(s.candidates[0].name).toBe('Washington & Old Dominion Trail Regional Park');
-    expect(s.candidates[1].name).toBe('Washington & Old Dominion Trail');
+    expect(s.candidates[0].name).toBe('Washington & Old Dominion Trail');
+    expect(s.candidates[1].name).toBe('Washington & Old Dominion Trail Regional Park');
   });
 
-  it('Loudoun -> park first, and a 9/9 trail tie still breaks deterministically', () => {
+  it('Loudoun -> trail first, and a 9/9 trail tie breaks deterministically', () => {
     // The prototype returned "W&OD Bridle Trail" here purely because Overpass listed
     // it first — Python's Counter breaks ties by insertion order. Both tally 9. We
     // break ties by the longer, more specific name, which is also the trail she
@@ -177,9 +172,9 @@ describe('route scoring reproduces the measured prototype output', () => {
       ),
       9,
     );
-    expect(s.candidates[0].name).toBe('Washington and Old Dominion Railroad Regional Park');
-    // Of the two tied trails, the longer/more specific one is the one offered next.
-    expect(s.candidates[1].name).toBe('Washington & Old Dominion Trail');
+    // Of the two tied trails, the longer/more specific one wins.
+    expect(s.candidates[0].name).toBe('Washington & Old Dominion Trail');
+    expect(s.candidates[1].name).toBe('Washington and Old Dominion Railroad Regional Park');
     // The bridle path is still offered — it is a real answer, just not the default.
     expect(s.candidates.map((c) => c.name)).toContain('W&OD Bridle Trail');
   });
