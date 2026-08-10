@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
+// MapLibre 6 dropped the default export; the namespace import keeps every
+// maplibregl.X call site below working unchanged.
+import * as maplibregl from 'maplibre-gl';
+import type { GeoJSONSource } from 'maplibre-gl';
 import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';
 import { createPlaceAtomic } from '../lib/data';
 import { showSnack } from '../lib/snackbar';

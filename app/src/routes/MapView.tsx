@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import maplibregl, { type GeoJSONSource } from 'maplibre-gl';
+// MapLibre 6 dropped the default export; the namespace import keeps every
+// maplibregl.X call site below working unchanged.
+import * as maplibregl from 'maplibre-gl';
+import type { GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
 import {
@@ -872,7 +875,9 @@ export default function MapView() {
     vis('pings-dots', mapLayer === 'heat');
 
     const dim = mapLayer === 'heat' ? 0.2 : 1;
-    const props: [string, string][] = [
+    // MapLibre 6 constrains the paint-property name to a known key rather than any
+    // string, so these are typed as the literals they actually are.
+    const props: [string, 'circle-opacity' | 'text-opacity' | 'icon-opacity'][] = [
       ['place-dots', 'circle-opacity'],
       ['place-glyphs', 'text-opacity'],
       ['place-photos', 'icon-opacity'],
