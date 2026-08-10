@@ -710,6 +710,19 @@ export async function fetchAllVisits(): Promise<Visit[]> {
   return (data ?? []) as Visit[];
 }
 
+/** Visits for several places at once — a container's card needs its sections'
+ *  dates, and one request beats one per section. */
+export async function fetchVisitsForPlaces(placeIds: string[]): Promise<Visit[]> {
+  if (placeIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('visits')
+    .select(VISIT_COLS)
+    .in('place_id', placeIds)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as Visit[];
+}
+
 export async function fetchVisits(placeId: string): Promise<Visit[]> {
   const { data, error } = await supabase
     .from('visits')

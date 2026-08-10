@@ -109,13 +109,13 @@ Nothing gets added *beside* this page. Things get removed *into* it.
    found: the idle globe auto-rotate had **no stop condition** — it panned ~7°/second
    for as long as a tab stayed open, streaming tiles for hours. Now bounded to 45s and
    never while hidden, but **unverified**, because tiles cannot load to prove it.
-2. **Containers are invisible in Places** — `app/src/lib/data.ts:443` filters out
-   anything with `holds_children`, so the Appalachian Trail vanished while its sections
-   remained. A stats rule ("containers don't count twice") leaked into visibility.
-3. **Sections repeat.** The trail card renders one row per outing, so "Maryland Heights"
-   appears 9 times instead of once-with-9-dates.
+2. ~~**Containers are invisible in Places**~~ — fixed 2026-08-10. Places now lists each
+   container once, holding its sections; `lib/containers.ts` decides what a container is,
+   under test.
+3. ~~**Sections repeat.**~~ — fixed 2026-08-10. Each section is listed once and opens to
+   its dates.
 4. **Data work is scattered** across six screens with different words for the same thing.
-5. **Three doors to Add**: nav tab, map button, `/add` redirect.
+5. ~~**Three doors to Add**~~ — fixed 2026-08-10: `/add` is the one door.
 6. **Transient UI is not transient** (upload box, "finish importing").
 7. **Sorting photos cannot edit the location** — removed 2026-07-26, see §7.
 
@@ -143,12 +143,18 @@ purpose" register in §7 exists so nothing is silently lost again.
 - An acceptance list for the things she cares about, as tests that fail loudly if a
   feature is removed.
 
-### Phase 2 — Make the model show through
-- Containers back in Places, as containers.
-- **Sections listed once**, opening to their dates; dates opening to the card.
-- Card wording that says what it does ("Add a place here" / "Add existing places" read as
-  the same button twice).
-- One Add.
+### Phase 2 — Make the model show through ✅ (2026-08-10)
+- ✅ Containers back in Places, as containers — each listed once, holding its sections.
+- ✅ **Sections listed once**, opening to their dates; dates opening to the card. Applies
+  to every container now, not only trails.
+- ✅ Card wording that says what it does ("Add a place here" → "Write a note or review";
+  "Add existing places" → "Put a place inside this one").
+- ✅ One Add.
+
+What a place *holds* is now the fact, and `holds_children` is only a copy of it
+(`app/src/lib/containers.ts`, 11 tests). The flag was wrong in both directions: set on 5
+places that hold nothing — which hid their own outings — and unset on Leesburg, which
+holds one.
 
 ### Phase 3 — The one page
 Inbox → **Edit**, absorbing add / import / ingest / sort / edit / organize / delete /
@@ -204,7 +210,7 @@ lost work and can be restored in minutes.
 | The 5-step Add wizard | 2026-08-08 | Replaced by one add sheet | commit `fd3004d` |
 | Service-worker registration | earlier | A cached shell served stale code | restored 2026-08-10 with HTML network-first |
 | `apply_naming_rule(uuid)` (geofence-only) | 2026-08-10 | It could rename 76 activities on start-point alone | migration `0152` |
-| "downtown Leesburg, VA" as an Appalachian Trail section | 2026-08-10 | Not on the AT. **The place itself was kept** — it holds 3 photos and 2 visits | membership row only |
+| "downtown Leesburg, VA" as an Appalachian Trail section | 2026-08-10 | Not on the AT. **The place itself was kept** — it holds 3 photos and 2 visits | migration `0155` (the earlier membership-row delete did not take: `part_of` is the record and its trigger rebuilds membership) |
 
 ---
 
@@ -216,7 +222,10 @@ lost work and can be restored in minutes.
   suggestion must mean leave it alone.
 - **`admin.rpc(...).catch()` is a TypeError** — an rpc() is a thenable, not a Promise.
 - **A date-only string parses as UTC midnight** and renders as the previous day west of
-  Greenwich. Parse `YYYY-MM-DD` with local components.
+  Greenwich. Parse `YYYY-MM-DD` with local components. (`fmtRunDate` now does this itself.)
+- **`places.part_of` is the record of membership; `place_membership` is a copy.** A
+  trigger rebuilds the table from the array on every update of that place, so deleting a
+  membership row alone does nothing and undoes itself. Write `part_of`.
 - **The app's global input CSS is `display:block; width:100%`** — it makes a radio 238px
   wide. Pin size on any radio or checkbox.
 - **MapLibre 6** removed the default export; **Vite 8** removed object `manualChunks` and

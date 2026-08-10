@@ -16,6 +16,7 @@ import {
   fetchPlaceVisitStats,
   fetchSpatialMembers,
   fetchVisits,
+  fetchVisitsForPlaces,
   newExperienceKey,
   setCityBoundary,
   setMyRating,
@@ -38,6 +39,7 @@ import {
   type Visit,
 } from '../lib/types';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
+import { buildSectionRows, sectionDone, sectionsOf } from '../lib/containers';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
@@ -118,10 +120,13 @@ function trailMilesSummary(miles: Record<string, number>): string {
     .join(' · ');
 }
 
-/** ISO timestamp → "Mar 7, 2026". */
+/** ISO timestamp OR a plain date → "Mar 7, 2026". */
 function fmtRunDate(iso: string | null): string {
   if (!iso) return 'Undated';
-  return new Date(iso).toLocaleDateString(undefined, {
+  // A date-only string parses as UTC midnight and renders as the PREVIOUS day
+  // west of Greenwich (docs/STATE.md §8). Parse YYYY-MM-DD with local components.
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00`) : new Date(iso);
+  return d.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -167,6 +172,10 @@ export default function PlacePanel({
   );
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
+  // Visits belonging to this container's SECTIONS, so each section can open to
+  // its own dates without a request per section.
+  const [sectionVisits, setSectionVisits] = useState<Visit[]>([]);
+  const [openSection, setOpenSection] = useState<string | null>(null);
   const [spots, setSpots] = useState<Entry[] | null>(null);
   const [addingSpot, setAddingSpot] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
@@ -393,27 +402,45 @@ export default function PlacePanel({
     .filter((p) => (p.part_of ?? []).includes(place.id))
     .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
 
-  // Trail card: its member places ARE its sections. Split into done (visited) and
-  // not-yet so a long trail's progress lives in one place. Done first, most-recent
-  // first; not-yet alphabetical.
-  //
-  // "Done" means done IN THE CURRENT VIEW. places.visit_count is global, so a
-  // section only Josh has walked read as done in Erica's "Just me" — the same
-  // mistake the map badge made before it moved to place_visit_counts. When the
-  // per-view counts haven't loaded (or a card is opened outside the map) it falls
-  // back to the global count rather than showing an empty trail.
-  const sectionDone = (p: Place): boolean =>
-    visitCounts ? (visitCounts.get(p.id) ?? 0) > 0 : p.visit_count > 0 || Boolean(p.first_visit);
-  const trailSections = place.is_trail
-    ? {
-        done: memberPlaces
-          .filter(sectionDone)
-          .sort((a, b) => (b.last_visit ?? '').localeCompare(a.last_visit ?? '')),
-        todo: memberPlaces
-          .filter((p) => !sectionDone(p))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      }
-    : null;
+  // THE SECTIONS OF THIS CONTAINER. A container is a place that HOLDS other
+  // places — what it holds, not the `holds_children` flag, which is set on 14
+  // places that hold nothing and unset on one that does. Listed once each.
+  const sections = sectionsOf(allPlaces, place.id);
+  const isContainer = sections.length > 0;
+
+  // The sections' visits, for the dates each section opens to.
+  useEffect(() => {
+    let active = true;
+    setSectionVisits([]);
+    setOpenSection(null);
+    const ids = allPlaces
+      .filter((p) => p.id !== place.id && (p.part_of ?? []).includes(place.id))
+      .map((p) => p.id);
+    if (ids.length === 0) return;
+    fetchVisitsForPlaces(ids)
+      .then((rows) => active && setSectionVisits(rows))
+      .catch(() => active && setSectionVisits([]));
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [place.id, allPlaces]);
+
+  // Each section ONCE, with its dates. The card used to render one row per
+  // outing, so Maryland Heights appeared nine times instead of once with nine
+  // dates — the whole reason this list exists.
+  const sectionRows = buildSectionRows(sections, trailActs ?? [], sectionVisits);
+
+  // Split into done (visited) and not-yet so a long container's progress lives
+  // in one place. Done most-recent first; not-yet alphabetical. This is the
+  // Sections shape Erica already likes, and it now applies to every container —
+  // trails, trips, cities and regions alike, not just trails.
+  const doneRows = sectionRows
+    .filter((r) => sectionDone(r.place, visitCounts))
+    .sort((a, b) => (b.place.last_visit ?? '').localeCompare(a.place.last_visit ?? ''));
+  const todoRows = sectionRows
+    .filter((r) => !sectionDone(r.place, visitCounts))
+    .sort((a, b) => a.place.name.localeCompare(b.place.name));
 
   // SPOTS AND REVIEWS — ONE dropdown per category, holding BOTH member places
   // ("part of" this one) and entry-spots of that category. So "dining" shows a
@@ -422,13 +449,15 @@ export default function PlacePanel({
   // the Appalachian-Trail grouping, now used for EVERY card (trips included) so a
   // hotel reads as "Hotel Reviews", not under the trip's city name.
   //
-  // A TRAIL is the exception: its member places are its SECTIONS and are listed
-  // once, in the Sections list below. They used to appear there AND here, split
-  // across "Hiking", "Trail" and "Places" by whatever tag happened to be first —
-  // so one Appalachian Trail segment showed up twice under two different headings.
+  // A CONTAINER is the exception: the places it holds are its SECTIONS and are
+  // listed once, in the Sections list below. They used to appear there AND here,
+  // split across "Hiking", "Trail" and "Places" by whatever tag happened to be
+  // first — so one Appalachian Trail segment showed up twice under two different
+  // headings. This applied to trails only; a city listed its places twice for
+  // exactly the same reason, so it now applies to every container.
   const reviewGroups: { key: string; label: string; places: Place[]; entries: Entry[] }[] = [];
   {
-    const groupedMembers = place.is_trail ? [] : memberPlaces;
+    const groupedMembers = isContainer ? [] : memberPlaces;
     const placeByKind = new Map<string, Place[]>();
     for (const m of groupedMembers) {
       const k = (m.categories && m.categories[0]) || 'place';
@@ -793,20 +822,144 @@ export default function PlacePanel({
   const dirHref = `https://maps.apple.com/?daddr=${encodeURIComponent(dirDest)}&sll=${place.lat},${place.lng}&dirflg=d`;
   const regionText = [place.admin1, place.country].filter(Boolean).join(', ') || 'Unknown region';
 
-  // One visit count, shared by the header line AND the "Visits (N)" dropdown so
-  // they always agree. A visit = each activity row + any photo/entry-only visit
-  // day an activity doesn't already cover. Notes are entries, NOT visits, so they
-  // never count here. (Mirrors the row build inside the Visits section below.)
-  const _isTrailCard = place.is_trail;
-  const _isRollupCard = !!place.holds_children && !_isTrailCard;
-  const _actsForCount = trailActs ?? [];
-  const _actDaysForCount = new Set(_actsForCount.map(activityDay));
-  const visitCount = _isTrailCard
-    ? _actsForCount.length
-    : (_isRollupCard ? 0 : _actsForCount.length) +
-      (visits ?? []).filter(
-        (v) => _isRollupCard || v.is_trip || !_actDaysForCount.has(v.start_date),
-      ).length;
+  // THIS PLACE'S OWN DATES — built once, so the header line and the "Visits (N)"
+  // dropdown cannot disagree. A visit = each activity row + any photo/entry-only
+  // visit day an activity doesn't already cover. Notes are entries, NOT visits,
+  // so they never count here.
+  //
+  // fetchActivitiesForPlaceTree returns the whole tree, and this list used to
+  // take all of it: the Appalachian Trail listed nine separate "Maryland
+  // Heights" rows. A section's dates belong to the SECTION, listed once below.
+  const ownActs = (trailActs ?? []).filter((a) => a.place_id === place.id);
+  // A trip/city/region rollup shows its FUSED visit(s) — one trip is ONE visit
+  // (e.g. "San Diego · Jul 11–16 · Trip"), never a row per activity. It is a
+  // rollup when it actually holds places; the `holds_children` flag is set on
+  // five places that hold nothing, and it was hiding their own outings.
+  const isRollup = isContainer && !place.is_trail;
+
+  // A visit is the occasion; the ride and the run are what we DID during it, so
+  // they hang off it (docs/SCHEMA.md) rather than sitting beside it. Brewster is
+  // one fused 2-day stay containing a ride and a run — it read as three visits
+  // because all three were siblings. Only stays that span more than a day, or
+  // that were marked as a trip, adopt their activities; a single-day run is
+  // already one flat row and gains nothing from nesting.
+  const nestedActs = new Map<string, Activity[]>();
+  const nestedIds = new Set<string>();
+  if (!isRollup) {
+    for (const v of visits ?? []) {
+      const end = v.end_date || v.start_date;
+      if (!v.is_trip && end <= v.start_date) continue;
+      const mine = ownActs.filter((a) => {
+        const d = activityDay(a);
+        return d !== '' && d >= v.start_date && d <= end;
+      });
+      if (mine.length === 0) continue;
+      nestedActs.set(v.id, mine);
+      for (const a of mine) nestedIds.add(a.id);
+    }
+  }
+
+  const actRows = isRollup
+    ? []
+    : ownActs
+        .filter((a) => !nestedIds.has(a.id))
+        .map((a) => ({
+          key: a.id,
+          date: fmtRunDate(a.start_date),
+          sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+          to: `/place/${place.id}/day/${activityDay(a)}`,
+          del: null as string | null,
+          start: '' as string,
+          end: '' as string,
+          sort: activityDay(a),
+          solo: a.solo_profile as string | null,
+          trip: false,
+          target: { type: 'activity' as const, id: a.id },
+        }));
+  const actDays = new Set(ownActs.map(activityDay));
+  // Visit rows an activity doesn't already cover: multi-day trips, and single
+  // days with photos/entries but no run. A TRAIL used to be excluded here, which
+  // hid the 32 days Erica logged on the Appalachian Trail itself — a trail is a
+  // place you went, and the days you went are its dates.
+  const visitRows = (visits ?? [])
+    .filter((v) => isRollup || v.is_trip || nestedActs.has(v.id) || !actDays.has(v.start_date))
+    .map((v) => ({
+      key: v.id,
+      trip: v.is_trip,
+      date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
+      sub:
+        [
+          v.note ?? '',
+          visitStats[v.id]?.photos ? `${visitStats[v.id].photos} photos` : '',
+          visitStats[v.id]?.videos ? `${visitStats[v.id].videos} videos` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ') || null,
+      to: `/place/${place.id}/day/${v.start_date}`,
+      del: v.id as string | null,
+      start: v.start_date as string,
+      end: v.end_date as string,
+      sort: v.start_date,
+      solo: v.solo_profile as string | null,
+      target: { type: 'visit' as const, id: v.id },
+    }));
+  const visitListRows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
+  const visitCount = visitListRows.length;
+
+  // ONE SECTION: its name, its dates, and nothing repeated. The name opens the
+  // section's own card; the dates open the day. Text disclosure, never a
+  // chevron — the control says how many dates are inside it.
+  function sectionRow(r: (typeof sectionRows)[number]) {
+    const open = openSection === r.place.id;
+    const n = r.dates.length;
+    return (
+      <div key={r.place.id} className="section-row">
+        <div className="spot-row">
+          <Link className="spot-item" to={`/place/${r.place.id}`}>
+            <span className="spot-title">{r.place.name}</span>
+            <span className="muted">
+              {n > 0 ? fmtRunDate(r.dates[0].date) : 'Not yet'}
+              {r.place.rating ? ` · ${'★'.repeat(r.place.rating)}` : ''}
+            </span>
+          </Link>
+          {n > 0 && (
+            <button
+              type="button"
+              className="section-dates-btn"
+              aria-expanded={open}
+              onClick={() => setOpenSection(open ? null : r.place.id)}
+            >
+              {open ? 'Hide' : `${n} ${n === 1 ? 'date' : 'dates'}`}
+            </button>
+          )}
+        </div>
+        {open && (
+          <ul className="trip-contents section-dates">
+            {r.dates.map((d) => (
+              <li key={d.key}>
+                <Link to={`/place/${r.place.id}/day/${d.date}`}>
+                  {d.date === d.end
+                    ? fmtRunDate(d.date)
+                    : `${fmtRunDate(d.date)} – ${fmtRunDate(d.end)}`}
+                  {d.isTrip ? ' · Trip' : ''}
+                </Link>
+                <span className="muted">
+                  {[
+                    d.note ?? '',
+                    ...d.activities.map((a) =>
+                      [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
+                    ),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
 
   // "Edit address" → a search pill that sets the address/pin (not the title).
   const addressSearch = (
@@ -1114,89 +1267,11 @@ export default function PlacePanel({
           save space; click "Visits (N)" → the dates. Trails list their logged
           activity days here in the same style as places. */}
       {(() => {
+        // The rows are built once, above, so this list and the header count can
+        // never disagree. Visits = actual times we went to THIS place.
+        const rows = visitListRows;
         const isTrail = place.is_trail;
-        // A trip/city/region rollup shows its FUSED visit(s) — one trip is ONE
-        // visit (e.g. "San Diego · Jul 11–16 · Trip"), never a row per activity.
-        // Only LEAF places break out each activity as its own dated row.
-        const isRollup = place.holds_children && !isTrail;
-        // Visits = actual times we went to THIS place. On a leaf, every Strava/
-        // Garmin activity gets its own row (date · name · type · miles); photo/
-        // entry-only days and multi-day trips show as dated visit rows.
-        const acts = trailActs ?? [];
-
-        // A visit is the occasion; the ride and the run are what we DID during it,
-        // so they hang off it (docs/SCHEMA.md) rather than sitting beside it.
-        // Brewster is one fused 2-day stay containing a ride and a run — it read as
-        // three visits because all three were siblings. Only stays that span more
-        // than a day, or that were marked as a trip, adopt their activities; a
-        // single-day run is already one flat row and gains nothing from nesting.
-        const nestedActs = new Map<string, Activity[]>();
-        const nestedIds = new Set<string>();
-        if (!isTrail && !isRollup) {
-          for (const v of visits ?? []) {
-            const end = v.end_date || v.start_date;
-            if (!v.is_trip && end <= v.start_date) continue;
-            const mine = acts.filter((a) => {
-              const d = activityDay(a);
-              return d !== '' && d >= v.start_date && d <= end;
-            });
-            if (mine.length === 0) continue;
-            nestedActs.set(v.id, mine);
-            for (const a of mine) nestedIds.add(a.id);
-          }
-        }
-
-        const actRows = isRollup
-          ? []
-          : acts
-              .filter((a) => !nestedIds.has(a.id))
-              .map((a) => ({
-                key: a.id,
-                date: fmtRunDate(a.start_date),
-                sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-                to: `/place/${place.id}/day/${activityDay(a)}`,
-                del: null as string | null,
-                start: '' as string,
-                end: '' as string,
-                sort: activityDay(a),
-                solo: a.solo_profile as string | null,
-                trip: false,
-                target: { type: 'activity' as const, id: a.id },
-              }));
-        const actDays = new Set(acts.map(activityDay));
-        // Non-trail places also surface visit rows an activity doesn't already
-        // cover: multi-day trips, and single days with photos/entries but no run.
-        const visitRows = isTrail
-          ? []
-          : (visits ?? [])
-              // Rollups show all their (fused) visits; leaves show trips, any stay
-              // that adopted activities, and any photo/entry day an activity row
-              // doesn't already cover.
-              .filter(
-                (v) => isRollup || v.is_trip || nestedActs.has(v.id) || !actDays.has(v.start_date),
-              )
-              .map((v) => ({
-                key: v.id,
-                trip: v.is_trip,
-                date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
-                sub:
-                  [
-                    v.note ?? '',
-                    visitStats[v.id]?.photos ? `${visitStats[v.id].photos} photos` : '',
-                    visitStats[v.id]?.videos ? `${visitStats[v.id].videos} videos` : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || null,
-                to: `/place/${place.id}/day/${v.start_date}`,
-                del: v.id as string | null,
-                start: v.start_date as string,
-                end: v.end_date as string,
-                sort: v.start_date,
-                solo: v.solo_profile as string | null,
-                target: { type: 'visit' as const, id: v.id },
-              }));
-        const rows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
-        const loading = isTrail ? trailActs === null : visits === null || trailActs === null;
+        const loading = visits === null || trailActs === null;
         return (
           <>
             <details className="visits-details">
@@ -1445,75 +1520,63 @@ export default function PlacePanel({
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} visits={visits ?? undefined} onUploaded={refreshPlace} />
 
-      {/* SECTIONS — a trail's member places are its sections. Shows the ones
-          you've done (with dates) up top, then any not-yet-done, all in one place. */}
-      {trailSections && (trailSections.done.length > 0 || trailSections.todo.length > 0) && (
+      {/* SECTIONS — the places this one HOLDS, each listed ONCE, opening to its
+          own dates; a date opens the card. Erica: "the appalachian trail no
+          longer exists in Places… why do segments of it appear?" This is the
+          shape she already likes, and it now applies to every container —
+          trails, trips, cities and regions alike. (docs/STATE.md §2.) */}
+      {isContainer && (
         <>
           <h3 style={{ marginTop: 22 }}>
-            SECTIONS{' '}
+            {place.is_trail ? 'SECTIONS' : 'PLACES HERE'}{' '}
             <span className="label">
-              ({trailSections.done.length}/{trailSections.done.length + trailSections.todo.length}{' '}
-              done)
+              ({doneRows.length}/{sectionRows.length} visited)
             </span>
           </h3>
-          {/* Rollup: sections done · total miles · total visit-days across sections. */}
+          {/* Rollup: sections done · total miles · total dates across sections. */}
           {(() => {
-            const done = trailSections.done;
             const totalMiles = Object.values(trailMiles).reduce((s, m) => s + m, 0) / 1609.344;
-            const totalVisits = done.reduce((s, m) => s + (m.visit_count || 0), 0);
+            const totalDates = doneRows.reduce((s, r) => s + r.dates.length, 0);
             return (
               <div className="our-stats" style={{ marginBottom: 12 }}>
                 <span className="stat">
-                  <b>{done.length}</b> <span className="label">sections done</span>
+                  <b>{doneRows.length}</b>{' '}
+                  <span className="label">
+                    {place.is_trail ? 'sections done' : 'places visited'}
+                  </span>
                 </span>
                 {totalMiles > 0 && (
                   <span className="stat">
                     <b>{totalMiles.toFixed(1)}</b> <span className="label">miles</span>
                   </span>
                 )}
-                {totalVisits > 0 && (
+                {totalDates > 0 && (
                   <span className="stat">
-                    <b>{totalVisits}</b> <span className="label">visits</span>
+                    <b>{totalDates}</b> <span className="label">dates</span>
                   </span>
                 )}
               </div>
             );
           })()}
           {/* One fitted map of every done section along this trail. */}
-          {trailSections.done.length > 0 && (
-            <TrailSectionsMap trail={place} sections={trailSections.done} />
+          {place.is_trail && doneRows.length > 0 && (
+            <TrailSectionsMap trail={place} sections={doneRows.map((r) => r.place)} />
           )}
           <div className="spot-groups">
-            {trailSections.done.length > 0 && (
+            {doneRows.length > 0 && (
               <details className="spot-cat" open>
                 <summary className="spot-cat-head">
-                  Done <span className="label">({trailSections.done.length})</span>
+                  Done <span className="label">({doneRows.length})</span>
                 </summary>
-                {trailSections.done.map((m) => (
-                  <div key={m.id} className="spot-row">
-                    <Link className="spot-item" to={`/place/${m.id}`}>
-                      <span className="spot-title">{m.name}</span>
-                      <span className="muted">
-                        {m.first_visit ? fmtRunDate(m.first_visit) : ''}
-                        {m.visit_count > 1 ? ` · ${m.visit_count}×` : ''}
-                      </span>
-                    </Link>
-                  </div>
-                ))}
+                {doneRows.map((r) => sectionRow(r))}
               </details>
             )}
-            {trailSections.todo.length > 0 && (
+            {todoRows.length > 0 && (
               <details className="spot-cat">
                 <summary className="spot-cat-head">
-                  Not yet <span className="label">({trailSections.todo.length})</span>
+                  Not yet <span className="label">({todoRows.length})</span>
                 </summary>
-                {trailSections.todo.map((m) => (
-                  <div key={m.id} className="spot-row">
-                    <Link className="spot-item" to={`/place/${m.id}`}>
-                      <span className="spot-title">{m.name}</span>
-                    </Link>
-                  </div>
-                ))}
+                {todoRows.map((r) => sectionRow(r))}
               </details>
             )}
           </div>
@@ -1524,13 +1587,17 @@ export default function PlacePanel({
           Each logged category is a dropdown that opens to its spots. */}
       <div className="visits-head">
         <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
+        {/* These read as the same button twice — "Add a place here" / "Add
+            existing places" — and only one of them adds a place. The first
+            writes a note or a review under this place; the second puts a place
+            you already have INSIDE this one. Say which. */}
         {canEdit && !addingSpot && (
           <span style={{ display: 'flex', gap: 12 }}>
             <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
-              + Add a place here
+              + Write a note or review
             </button>
             <button className="add-spot-link" onClick={() => setAddingMembers((v) => !v)}>
-              + Add existing places
+              + Put a place inside this one
             </button>
           </span>
         )}

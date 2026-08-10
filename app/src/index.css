@@ -1729,6 +1729,30 @@ a {
   text-align: right;
   overflow: hidden;
 }
+/* A container's sections, indented under it. Text disclosure, no chevron. */
+.place-row-open {
+  flex: none;
+  width: auto;
+  background: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.place-row-open:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.place-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 4px 18px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-soft);
+}
 
 /* ---------- Bulk Places editor (/places/edit) ---------- */
 .places-editor {
@@ -6313,6 +6337,34 @@ button.mi-row:hover {
 .trip-contents .muted {
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* ---------- Sections: each one once, opening to its dates ---------- */
+.section-row {
+  margin-bottom: 4px;
+}
+.section-dates-btn {
+  flex: none;
+  width: auto;
+  background: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.section-dates-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+/* The dates a section opens to. Each one opens the day. */
+.section-dates {
+  margin-top: 2px;
+}
+.section-dates .muted {
+  white-space: normal;
+  text-align: right;
 }
 
 /* Reaction marks — the "sticker" direction Erica picked (2026-08-08): an outline
