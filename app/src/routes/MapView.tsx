@@ -939,20 +939,38 @@ export default function MapView() {
 
   // Idle auto-rotate: after 60s with no interaction and no open place, the globe
   // spins slowly; any pointer/touch/wheel cancels it and restarts the idle clock.
+  //
+  // IT MUST STOP BY ITSELF. As written this had no end condition: it panned the map
+  // ~7 degrees a second, for as long as the tab stayed open, and every new viewport
+  // makes MapLibre fetch more tiles. The map is the HOME page, so a tab left open
+  // overnight streamed tiles for hours — which is the most plausible way a two-person
+  // private map exhausted a MapTiler quota and got the account suspended
+  // (2026-08-10). It now spins for a bounded while and stops, and it never spins at
+  // all while the tab is hidden.
   selectedIdRef.current = selectedId;
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
 
+    // One rotation is a flourish; twenty is a tile bill. Stop after this long and
+    // wait for her to actually do something before offering it again.
+    const SPIN_BUDGET_MS = 45_000;
+    let spinStartedAt = 0;
+
     const spinFrame = () => {
       if (!spinning.current) return;
+      if (document.hidden || Date.now() - spinStartedAt > SPIN_BUDGET_MS) {
+        stopSpin();
+        return;
+      }
       const c = map.getCenter();
       map.setCenter([c.lng - 0.12, c.lat]); // ~40s per rotation at 60fps
       spinRaf.current = requestAnimationFrame(spinFrame);
     };
     const startSpin = () => {
-      if (spinning.current || selectedIdRef.current) return;
+      if (spinning.current || selectedIdRef.current || document.hidden) return;
       spinning.current = true;
+      spinStartedAt = Date.now();
       spinFrame();
     };
     const stopSpin = () => {
@@ -970,10 +988,22 @@ export default function MapView() {
     stopSpinRef.current = stopSpin;
     scheduleIdleRef.current = scheduleIdle;
 
+    // A hidden tab must not spin: requestAnimationFrame is throttled in background
+    // tabs but not reliably stopped, and a phone left on this page is "visible".
+    const onVisibility = () => {
+      if (document.hidden) {
+        stopSpin();
+        if (idleTimer.current) clearTimeout(idleTimer.current);
+      } else {
+        scheduleIdle();
+      }
+    };
+
     const canvas = map.getCanvas();
     canvas.addEventListener('mousedown', onInteract);
     canvas.addEventListener('touchstart', onInteract, { passive: true });
     canvas.addEventListener('wheel', onInteract, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
     scheduleIdle();
 
     return () => {
@@ -982,6 +1012,7 @@ export default function MapView() {
       canvas.removeEventListener('mousedown', onInteract);
       canvas.removeEventListener('touchstart', onInteract);
       canvas.removeEventListener('wheel', onInteract);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [ready]);
 
