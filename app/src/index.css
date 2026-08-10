@@ -6588,3 +6588,20 @@ button.mi-row:hover {
   color: var(--muted);
   text-align: center;
 }
+
+/* "Always call routes here X?" — offered only after the same answer three times. */
+.inbox-rule-offer {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.inbox-rule-offer p {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+.inbox-rule-offer p.muted {
+  margin: 10px 0 0;
+  font-size: 12px;
+}

@@ -119,3 +119,30 @@ export function evidenceLine(o: SuggestionOption): string {
   if (e.kind === 'park') return `OpenStreetMap · contains ${hits} of ${n} route points`;
   return `OpenStreetMap · ${hits} of ${n} route points`;
 }
+
+// --- Learned rules (step 7) -------------------------------------------------
+// She does the same runs constantly. After she has approved the same name for the
+// same area three times, the Inbox offers to stop asking.
+
+export interface RuleOffer {
+  offer: boolean;
+  name?: string;
+  learned_from?: number;
+  radius_m?: number;
+}
+
+/** Should we offer to learn a rule from what she just approved? */
+export async function ruleOffer(activityId: string): Promise<RuleOffer> {
+  const { data, error } = await supabase.rpc('rule_offer', { p_activity: activityId });
+  if (error) throw error;
+  return (data ?? { offer: false }) as unknown as RuleOffer;
+}
+
+/** "Always call routes here X." Applying it later still leaves an audit trail. */
+export async function learnRule(activityId: string, name?: string): Promise<void> {
+  const { error } = await supabase.rpc('learn_rule', {
+    p_activity: activityId,
+    p_name: name ?? undefined,
+  });
+  if (error) throw error;
+}

@@ -721,6 +721,67 @@ export type Database = {
           },
         ]
       }
+      naming_rules: {
+        Row: {
+          activity_type: string | null
+          auto_apply: boolean
+          center: unknown
+          created_at: string
+          created_by: string
+          id: string
+          learned_from: number
+          name: string
+          place_id: string | null
+          radius_m: number | null
+        }
+        Insert: {
+          activity_type?: string | null
+          auto_apply?: boolean
+          center?: unknown
+          created_at?: string
+          created_by: string
+          id?: string
+          learned_from?: number
+          name: string
+          place_id?: string | null
+          radius_m?: number | null
+        }
+        Update: {
+          activity_type?: string | null
+          auto_apply?: boolean
+          center?: unknown
+          created_at?: string
+          created_by?: string
+          id?: string
+          learned_from?: number
+          name?: string
+          place_id?: string | null
+          radius_m?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "naming_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "naming_rules_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "naming_rules_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       oauth_states: {
         Row: {
           created_at: string
@@ -2119,6 +2180,7 @@ export type Database = {
         Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
         Returns: Json
       }
+      apply_naming_rule: { Args: { p_activity: string }; Returns: Json }
       approve_card: {
         Args: { p_choices: Json; p_group_key: string }
         Returns: Json
@@ -2241,6 +2303,7 @@ export type Database = {
         Returns: undefined
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      forget_rule: { Args: { p_id: string }; Returns: Json }
       geo_coverage: {
         Args: { p_profile?: string }
         Returns: {
@@ -2382,6 +2445,10 @@ export type Database = {
       is_member: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
       last_automated_upload: { Args: never; Returns: string }
+      learn_rule: {
+        Args: { p_activity: string; p_name?: string; p_radius_m?: number }
+        Returns: Json
+      }
       list_trash: {
         Args: never
         Returns: {
@@ -2442,6 +2509,7 @@ export type Database = {
           type: string
         }[]
       }
+      naming_rules_list: { Args: never; Returns: Json }
       occasion_count: { Args: { p_profile?: string }; Returns: number }
       on_this_day: {
         Args: never
@@ -2615,6 +2683,7 @@ export type Database = {
       restore_photo: { Args: { p_id: string }; Returns: undefined }
       restore_place: { Args: { p_id: string }; Returns: undefined }
       revealed_area_geojson: { Args: never; Returns: Json }
+      rule_offer: { Args: { p_activity: string }; Returns: Json }
       search_photos: {
         Args: { p_filter: Json }
         Returns: {

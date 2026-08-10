@@ -245,6 +245,32 @@ Deno.serve(async (req) => {
       }
       if (index > 0) await sleep(PAUSE_MS);
 
+      // A LEARNED RULE COMES FIRST, and short-circuits everything below.
+      //
+      // She does the same runs constantly — 76 activities called "Loudoun County
+      // Running". Once she has told us what routes here are called, asking again is
+      // the exact complaint this rebuild started from. It also saves an Overpass call,
+      // which matters given how often that endpoint is busy.
+      //
+      // Applying a rule still writes an audit row and an approval, so an automatic
+      // name is never silent. It refuses to touch anything already decided.
+      if (!dryRun) {
+        const { data: ruled } = await admin.rpc('apply_naming_rule', { p_activity: row.id });
+        const r = ruled as { applied?: boolean; changed?: boolean; name?: string } | null;
+        if (r?.applied) {
+          notes.rule_applied = (notes.rule_applied ?? 0) + 1;
+          results.push({
+            activity_id: row.id,
+            current: row.name,
+            source: 'rule',
+            applied: r.name,
+            changed: r.changed === true,
+          });
+          ok++;
+          continue;
+        }
+      }
+
       const pts = decodePolyline(row.summary_polyline);
       if (pts.length < 2) {
         notes.no_polyline = (notes.no_polyline ?? 0) + 1;

@@ -753,3 +753,31 @@ what step 7 will let her flip permanently for a given area.
 (4×429, 5×504, 10 network) across 24 activities even with three mirrors and retries.
 Failures cost nothing — nothing is written and the activity is simply re-offered later
 — but a full sweep belongs in a nightly job that retries, not a foreground request.
+
+## 2026-08-09 — Step 7: it learns what you call a place
+
+Migration `0151`: `naming_rules`, `rule_offer`, `learn_rule`, `forget_rule`,
+`apply_naming_rule`, `naming_rules_list`. The Inbox offers "Always call them that?"
+only after the SAME name has been approved for the SAME area **three** times — twice
+can be coincidence, three times is a habit.
+
+**The safeguard that makes automation acceptable here.** Applying a rule writes the
+name AND an `approved_fields` row (`via='rule'`) AND a `suggestions` row
+(`status='approved', source='rule'`) whose label reads "Called it X because you always
+do here", carrying the rule id, radius and how many approvals taught it. Silent
+automation caused everything this rebuild is fixing; this is automation that shows its
+working and can be undone by the ordinary `clear_approval`.
+
+**Her decision outranks her own rule.** `apply_naming_rule` calls `may_autowrite`
+first, so a name she chose is never replaced by a rule she made earlier. Tested.
+
+The suggester now checks for a rule BEFORE reaching for Overpass, which both stops the
+asking and saves a call on the endpoint that fails most often.
+
+Tests (`0151_...test.sql`, 7 blocks, all with controls): offers on a habit but not a
+coincidence; applies and leaves both the lock and the audit row; **does not reach past
+its radius**; **does not overwrite a name she chose**; stops offering once learned;
+`forget_rule` really forgets; non-members read no rules.
+
+Deliberately NOT done: no rule was created on her data, and no card was approved on her
+behalf. Those are her decisions, and the offer only appears once she makes three.

@@ -18,7 +18,10 @@ import {
   miles,
   rejectSuggestion,
   undoApproval,
+  ruleOffer,
+  learnRule,
   type Choice,
+  type RuleOffer,
   type InboxCard,
   type SuggestionOption,
 } from '../lib/inbox';
@@ -55,6 +58,8 @@ export default function Inbox() {
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  // "You've called routes here X three times — always call them that?"
+  const [offer, setOffer] = useState<(RuleOffer & { activityId: string }) | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -105,6 +110,15 @@ export default function Inbox() {
     try {
       const token = await approveCard(card.group_key, choices);
       setCards((cs) => (cs ?? []).filter((c) => c.group_key !== card.group_key));
+      // Has she now said the same thing about this area three times? If so, offer to
+      // stop asking. Never block the approval on it — this is a nicety.
+      if (card.subject_type === 'activity') {
+        void ruleOffer(card.subject_id)
+          .then((o) => {
+            if (o.offer && o.name) setOffer({ ...o, activityId: card.subject_id });
+          })
+          .catch(() => {});
+      }
       showSnack({
         message: 'Saved. It will not be changed again.',
         actionLabel: 'Undo',
@@ -146,6 +160,38 @@ export default function Inbox() {
           written when you say so, and once you do, nothing overwrites it.
         </p>
       </div>
+
+      {offer?.offer && offer.name && (
+        <div className="inbox-rule-offer">
+          <p>
+            You’ve called routes around here <strong>{offer.name}</strong> {offer.learned_from}{' '}
+            times. Always call them that?
+          </p>
+          <div className="ic-actions">
+            <button
+              className="btn btn-primary"
+              onClick={async () => {
+                try {
+                  await learnRule(offer.activityId, offer.name);
+                  setOffer(null);
+                  showSnack({ message: `Routes around there will be called ${offer.name}.` });
+                  await load();
+                } catch {
+                  showSnack({ message: 'Could not save that rule.' });
+                }
+              }}
+            >
+              Always call them that
+            </button>
+            <button className="btn" onClick={() => setOffer(null)}>
+              Keep asking
+            </button>
+          </div>
+          <p className="muted">
+            It still records every automatic name, and you can undo any of them.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="inbox-state">
