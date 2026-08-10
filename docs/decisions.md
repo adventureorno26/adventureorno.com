@@ -998,3 +998,60 @@ of hers was destroyed. Flagged for her to decide whether the place itself should
 Decision recorded: **the map goes straight to self-hosted** (Protomaps pmtiles in R2
 behind a Worker), not a proxy first. Nobody outside can suspend it, and it is the only
 version that scales commercially.
+
+## 2026-08-10 — Phase A at Places: a container is what it holds
+
+**Places lists each container once, holding its sections.** The list was 148 rows,
+flat and alphabetical, with the Appalachian Trail sitting between its own sections.
+Now a container is a row that opens to its sections, each listed once, and a section
+is not repeated at the top level. Nothing is hidden: every place is still in the list,
+and searching flattens it so a match can never hide inside a collapsed container.
+
+**A container is a place that HOLDS other places — not one carrying the
+`holds_children` flag.** The flag is wrong in both directions: it is set on 15 places
+that hold nothing (Reston, Seattle, Cape Cod, Rehoboth Beach…) and unset on Leesburg,
+which holds North Street Northeast. Reading the flag was also hiding data — a "rollup"
+shows fused visits and no activity rows, so the 8 outings logged on Reston, Seneca
+Rocks, Shockey's Knob, Claytor Lake and Virginia Beach were invisible on their own
+cards. They are back.
+
+**Sections are listed once and open to their dates.** The trail card poured every
+section's outings into one flat list — `fetchActivitiesForPlaceTree` returns the whole
+tree — so "Maryland Heights" appeared nine times instead of once with nine dates. A
+section now shows its name, its most recent date and a text control reading "9 dates";
+opening it gives the dates; a date opens the day card. That is Erica's shape —
+container → section → dates → the day — and it now applies to cities, regions and
+trips too, not only trails. The same decision retires the second listing: a city's
+places appeared under NOTES AND REVIEWS *and* would have appeared here.
+
+**The trail's own 32 days were not being shown at all.** `visitRows` was
+`isTrail ? [] : …`, so a trail card listed activities and nothing else — and 32 of the
+AT's days are photo days with no Strava activity. A trail is a place you went; the
+days you went are its dates.
+
+The rules that decide all of this now live in `app/src/lib/containers.ts` with 11
+tests built from the real Appalachian Trail: the container is listed once, sections
+nest under it and not beside it, nothing is dropped, a day with a visit and a hike is
+ONE date with the hike on it, and a section's list never contains the container's own
+outings.
+
+**"downtown Leesburg, VA" was still on the Appalachian Trail** — six days after she
+approved removing it. Only the `place_membership` row was deleted, and membership is
+not the record: `places.part_of` is, and `sync_membership_from_part_of` rebuilds the
+table from the array on the next update of that place. So the card still showed it and
+the row would have come back on its own. Migration `0155` removes it from `part_of`,
+which removes it from both. The AT now has 6 sections; the place keeps its 3 photos
+and 2 visits and is simply a place again.
+
+That is the fourth instance of one fact having two mechanisms and the UI reading the
+wrong one — after `part_of` vs the card, `counts_as_place` vs the Places filter, and
+the park name vs `places.park`. The pattern is worth naming: when a value is derived,
+write the source and read the source.
+
+**Card wording.** "+ Add a place here" and "+ Add existing places" read as the same
+button twice, and only one of them adds a place — the first opens the note/review
+editor. They now say "+ Write a note or review" and "+ Put a place inside this one".
+
+Also fixed on the way past: `fmtRunDate` was given date-only strings (`first_visit`),
+which parse as UTC midnight and render as the previous day west of Greenwich. It now
+parses `YYYY-MM-DD` with local components itself.
