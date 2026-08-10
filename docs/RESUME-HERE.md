@@ -118,8 +118,26 @@ joint-outing dedup was only ever delayed to overnight — no data was lost.
   Trail* (7 of 9), rank 1 the containing regional park (6 of 9), rank 2 the bridle
   trail — and the activity's name did not change. Red Rock and today's Seneca hike
   correctly produce nothing.
-- **4 real pending suggestions are sitting in the table right now**, left there on
-  purpose so `/inbox` (step 3) has genuine content to render.
+- **Step 3 — `/inbox` is BUILT and deployed to a PREVIEW** (migration `0149`).
+  One card, one button, evidence on its face, undo. **Step 8 folded in:**
+  `© OpenStreetMap contributors` is now shown, closing that compliance gap.
+  Verified by driving the deployed page: the card reads "Loudoun County Running",
+  offers the park (contains 6 of 9 route points) pre-selected with the trail at
+  rank 1, nav shows "Inbox 1", no console errors, no overflow at 320px.
+- **Erica's decision (2026-08-09): when both are true, the PARK wins.** It only
+  sets what is pre-selected; the trail is always rank 1. Consequence to watch: the
+  W&OD defaults to its official park name, not the trail she calls it — step 7
+  (`naming_rules`) is what will make her per-area preference stick.
+- **NOT on production.** The Pages deploy landed on the branch alias
+  `fix-strava-name-ownership.adventureorno.pages.dev`, not adventureorno.com,
+  because the work is on a branch. Promoting it is a deliberate step.
+- **4 real pending suggestions are in the table**, left on purpose so `/inbox` has
+  genuine content.
+
+**Next: step 4** — put the 31 write-functions behind the guard (group 4.1 approves,
+group 4.2 asks). That is the step that makes the rule real everywhere, and it needs
+the grep test that fails if any function writes an Inbox-owned field without
+`may_autowrite` in scope.
 
 Four departures from the written design, each because the design contradicted itself
 or reality — all recorded with reasoning in `docs/decisions.md`: a ranked list rather
