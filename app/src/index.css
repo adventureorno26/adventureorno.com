@@ -2352,20 +2352,36 @@ a {
 .pnav-tab:hover {
   color: var(--text);
 }
-/* The highlight means "this is where you are" — nothing else. Add used to carry a
-   filled accent permanently, which read as though it were always selected. */
+/* The highlight means "this is where you are" — nothing else. Add used to carry this
+   filled accent permanently, which read as though it were always selected; the fix
+   was to move the bright fill onto whichever tab you are actually on, not to dim it.
+   --accent-soft (a 16% wash) was too faint to read as a selection at a glance. */
 .pnav-tab.active {
-  color: var(--text);
-  background: var(--accent-soft);
+  color: #fff;
+  background: var(--accent);
 }
 .pnav-tab:focus-visible {
   outline: 2px solid var(--accent-hover);
   outline-offset: 2px;
 }
-@media (max-width: 400px) {
+/* SIX tabs have to fit once the Inbox one appears, or the last is clipped at the
+   pill's edge and reads as "half off the screen". The pill can scroll as a last
+   resort, but a nav you have to scroll is a nav with a hidden destination — so the
+   sizing below is tuned to actually fit at every width we target. */
+@media (max-width: 470px) {
+  .primary-nav {
+    gap: 1px;
+    padding: 3px;
+  }
   .pnav-tab {
-    padding: 8px 11px;
+    padding: 8px 10px;
     font-size: 12px;
+  }
+}
+@media (max-width: 380px) {
+  .pnav-tab {
+    padding: 8px 7px;
+    font-size: 11px;
   }
 }
 

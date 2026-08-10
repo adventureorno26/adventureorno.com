@@ -33,10 +33,11 @@ export default function PrimaryNav() {
   const { pathname, search } = useLocation();
   const [waiting, setWaiting] = useState(0);
 
-  // The Inbox tab appears only when something is actually waiting. Six permanent
-  // tabs do not fit a 320px phone — the pill is capped at calc(100vw - 20px) and
-  // never wraps — and a tab that is usually a dead end is worse than one that shows
-  // up when it has something to say. Settings keeps a permanent link either way.
+  // The Inbox tab is PERMANENT. It used to appear only when something was waiting,
+  // because six tabs did not fit a 320px phone — but that clipped the last tab at the
+  // pill's edge ("half off the screen"), and it meant /inbox highlighted no tab at all
+  // when the queue was empty. The tab sizing now fits six at every width we target
+  // (measured 320-430px), so the count is the only thing that comes and goes.
   useEffect(() => {
     if (!session || !profile) return;
     let live = true;
@@ -55,9 +56,10 @@ export default function PrimaryNav() {
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
 
-  const tabs = waiting
-    ? [...TABS, { to: '/inbox', label: `Inbox ${waiting}` } as (typeof TABS)[number]]
-    : TABS;
+  const tabs: typeof TABS = [
+    ...TABS,
+    { to: '/inbox', label: waiting ? `Inbox ${waiting}` : 'Inbox' },
+  ];
 
   return (
     <nav className="primary-nav" aria-label="Primary">

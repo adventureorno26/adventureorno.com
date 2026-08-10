@@ -781,3 +781,22 @@ its radius**; **does not overwrite a name she chose**; stops offering once learn
 
 Deliberately NOT done: no rule was created on her data, and no card was approved on her
 behalf. Those are her decisions, and the offer only appears once she makes three.
+
+## 2026-08-10 — The nav pill: fit six, and make the highlight mean something
+
+Erica: "the inbox pill is half off the screen and the highlight should be the brighter
+blue that was on the add choice previously."
+
+**The highlight.** `.pnav-tab.active` used `--accent-soft` — a 16% wash that was too
+faint to read as a selection. It is now the filled `--accent` (#3b82f6) with white
+text: the bright fill Add used to carry permanently, moved onto whichever tab you are
+actually on.
+
+**The clipping.** Six tabs did not fit, and `overflow-x: auto` on the pill turned that
+into a tab cut off at the pill's edge — which is what "half off the screen" was. Tab
+padding/font now step down at 470px and 380px so six fit at every width we target;
+measured 320-430px with the worst-case label ("Inbox 12"): nothing clipped, no page
+overflow.
+
+**The Inbox tab is now permanent.** Hiding it when the queue was empty had a second
+bug: `/inbox` then highlighted no tab at all. Only the count comes and goes.
