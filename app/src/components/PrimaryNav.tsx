@@ -23,7 +23,7 @@ const TABS: { to: string; label: string; match?: (path: string, search: string) 
   { to: '/', label: 'Map', match: (p, s) => (p === '/' || p.startsWith('/place/')) && !addOpen(s) },
   { to: '/places', label: 'Places', match: (p) => p === '/places' || p === '/places/edit' },
   // Add is a sheet, not a page, so it highlights on its query flag rather than a path.
-  { to: '/?add=1', label: 'Add', match: (_p, s) => addOpen(s) },
+  { to: '/add', label: 'Add', match: (p, s) => p === '/add' || p === '/photos/sort' || addOpen(s) },
   { to: '/timeline', label: 'Timeline' },
   {
     to: '/settings',

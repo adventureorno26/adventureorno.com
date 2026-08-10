@@ -69,7 +69,7 @@ function photoWhy(ph: PhotoCandidate): string {
   return `Taken that day, ${(ph.distance_m / 1000).toFixed(1)} km away`;
 }
 
-export default function Inbox() {
+export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   const { profile } = useAuth();
   const canDecide = profile?.role === 'owner' || profile?.role === 'editor';
 
@@ -188,14 +188,16 @@ export default function Inbox() {
   }
 
   return (
-    <div className="page inbox-page">
-      <div className="page-head">
-        <h1>Inbox</h1>
-        <p className="muted">
-          Suggestions from the map data. Nothing here has changed anything yet — a name is only
-          written when you say so, and once you do, nothing overwrites it.
-        </p>
-      </div>
+    <div className={embedded ? 'inbox-embedded' : 'page inbox-page'}>
+      {!embedded && (
+        <div className="page-head">
+          <h1>Inbox</h1>
+          <p className="muted">
+            Suggestions from the map data. Nothing here has changed anything yet — a name is only
+            written when you say so, and once you do, nothing overwrites it.
+          </p>
+        </div>
+      )}
 
       {offer?.offer && offer.name && (
         <div className="inbox-rule-offer">

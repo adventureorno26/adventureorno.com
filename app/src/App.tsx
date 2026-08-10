@@ -52,7 +52,8 @@ const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
 // The review queue, and the recent-activities page — they are the same screen.
-const Inbox = lazyWithReload(() => import('./routes/Inbox'));
+// ONE door for getting things in: add, import, sort, and the review queue.
+const AddPage = lazyWithReload(() => import('./routes/AddPage'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
@@ -279,15 +280,8 @@ export default function App() {
                 </RequireAuth>
               }
             />
-            {/* A machine may only propose; this is where a person decides. */}
-            <Route
-              path="/inbox"
-              element={
-                <RequireAuth>
-                  <Inbox />
-                </RequireAuth>
-              }
-            />
+            {/* The review queue lives inside /add now; keep the old path working. */}
+            <Route path="/inbox" element={<Navigate to="/add" replace />} />
             {/* A visit is a thing you can open: what you did, its photos, a note,
                 and the corrections for when something landed in the wrong place. */}
             <Route
@@ -305,7 +299,14 @@ export default function App() {
                 Google Photos import. It is one sheet over the map now; the old
                 path still works so bookmarks and the import-return flow don't
                 dead-end. */}
-            <Route path="/add" element={<Navigate to="/?add=1" replace />} />
+            <Route
+              path="/add"
+              element={
+                <RequireAuth>
+                  <AddPage />
+                </RequireAuth>
+              }
+            />
             <Route
               path="/photos/import/complete"
               element={
