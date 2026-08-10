@@ -145,10 +145,23 @@ joint-outing dedup was only ever delayed to overnight — no data was lost.
   rule-breaking function to prove the scan can fail.
 - **Production is up to date:** adventureorno.com verified serving `/inbox`.
 
-**Next: step 5** (photo suggestions — needs Erica to test the Google Photos picker
-once, it is still unproven end to end), then **step 6** (sweep all 445 activities
-through the scorer as suggestions) and **step 7** (`naming_rules`, which is what makes
-her park-vs-trail preference stick per area).
+- **Step 6 — proven on a bounded sample** (24 of 80 weak-named activities). 7 cards
+  pending; 0 suggestions on locked places; nothing written. The remaining ~56 are
+  deliberately unswept: see below.
+- **Step 7 — DONE** (migration `0151`). `naming_rules` + `rule_offer` / `learn_rule` /
+  `forget_rule` / `apply_naming_rule`. The Inbox offers "Always call them that?" after
+  the same name is approved for the same area 3 times. Applying a rule still writes an
+  audit suggestion AND the lock, and `may_autowrite` means her decision outranks her
+  own rule. The suggester consults rules BEFORE Overpass.
+
+**Only steps 5 and the rest of 6 remain, and both need Erica:**
+- **Step 5 (photos)** — blocked: the Google Photos picker is unproven end to end and
+  needs her to run it once.
+- **The rest of step 6** — 56 more weak-named activities (mostly "Loudoun County
+  Running"). Sweep them AFTER she has approved a few and learned a rule for the W&OD
+  area, or the Inbox fills with the same question dozens of times. A retrying nightly
+  cron is the right home for the sweep; not added, because a job that quietly fills
+  her Inbox overnight is her call.
 
 Four departures from the written design, each because the design contradicted itself
 or reality — all recorded with reasoning in `docs/decisions.md`: a ranked list rather
