@@ -977,6 +977,11 @@ export default function Settings() {
                   review what needs attention, merge duplicates, and check the health of your data.
                 </p>
                 <div className="settings-tools">
+                  {/* The nav tab only appears when something is waiting, so an empty
+                      inbox needs a permanent way in. */}
+                  <Link to="/inbox">
+                    <button>Review inbox</button>
+                  </Link>
                   <Link to="/places/edit">
                     <button className="primary">Edit all places</button>
                   </Link>

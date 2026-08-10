@@ -725,3 +725,31 @@ one asserts every allowlisted person-initiated function really does call
 
 Verified on prod in a rolled-back transaction: 6 blocks pass, `approved_fields` back to
 73, 445 activities, 0 clock-reading names, no fixtures or planted functions left behind.
+
+## 2026-08-09 — Step 6, run bounded on purpose
+
+Swept 24 of the 80 weak-named activities ("Loudoun County Running" ×76, plus a few
+county/township names) through the scorer. **Bounded deliberately:** sweeping all 80
+would have put ~76 cards in Erica's Inbox unannounced, and step 7 (`naming_rules`,
+"stop asking after the 3rd identical approval") is the thing that exists to prevent
+exactly that. Better to prove the gate on a sample and let her choose.
+
+**Gate met.** 7 cards / 20 options pending. `suggestions` on locked places: **0**.
+Suggestions proposing the name the activity already has: **0**. Activities still 445,
+0 clock-reading names, `approved_fields` still 73 — nothing was written.
+
+Real improvements found: `Loudoun County Running` → *Washington & Old Dominion Trail* /
+*W&OD Railroad Regional Park* (9 of 9 on one route), and one → *Battlefield Parkway
+Trail*. 17 produced NOTHING, correctly: suburban neighbourhood runs with no named OSM
+trail or park, where the geocoder is deliberately not consulted because the name is not
+generic and there is a real name to lose.
+
+**The park-first rule, visible in her own data.** On activity `1f175094` the trail
+scores 7 of 9 and the park 5 of 9, and the PARK is still pre-selected with the
+higher-scoring trail at rank 1. That is her decision working as specified, and it is
+what step 7 will let her flip permanently for a given area.
+
+**Overpass from Supabase egress is genuinely unreliable:** 19 transport failures
+(4×429, 5×504, 10 network) across 24 activities even with three mirrors and retries.
+Failures cost nothing — nothing is written and the activity is simply re-offered later
+— but a full sweep belongs in a nightly job that retries, not a foreground request.
