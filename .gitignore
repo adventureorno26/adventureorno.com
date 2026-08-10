@@ -11,6 +11,12 @@ dist/
 .env
 .env.local
 .env.*.local
+# ...and ANY copy of them. A `cp .env.local .env.local.bak-<ts>` backup was committed
+# by the auto-save hook on 2026-08-10 and leaked 17 secrets: the exact-match rules
+# above did not cover it.
+.env.local.*
+.env*.bak*
+*.bak-[0-9]*
 .dev.vars
 
 # supabase local
