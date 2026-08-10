@@ -134,10 +134,20 @@ joint-outing dedup was only ever delayed to overnight — no data was lost.
 - **4 real pending suggestions are in the table**, left on purpose so `/inbox` has
   genuine content.
 
-**Next: step 4** — put the 31 write-functions behind the guard (group 4.1 approves,
-group 4.2 asks). That is the step that makes the rule real everywhere, and it needs
-the grep test that fails if any function writes an Inbox-owned field without
-`may_autowrite` in scope.
+- **Step 4 — DONE** (migration `0150`). The six person-initiated RPCs now record the
+  decision as they write it; `rename_activities_for_place` — the one function that
+  could genuinely undo an approval — now asks `may_autowrite` first. The inventory
+  came from the LIVE function bodies and changed the answer: ONE function needed the
+  guard, not thirteen (the rest either place things never placed, or repoint rows off
+  a place being merged away). `supabase/tests/0150_machines_behind_the_guard.test.sql`
+  scans every function body and fails on any unguarded writer; it also plants a
+  rule-breaking function to prove the scan can fail.
+- **Production is up to date:** adventureorno.com verified serving `/inbox`.
+
+**Next: step 5** (photo suggestions — needs Erica to test the Google Photos picker
+once, it is still unproven end to end), then **step 6** (sweep all 445 activities
+through the scorer as suggestions) and **step 7** (`naming_rules`, which is what makes
+her park-vs-trail preference stick per area).
 
 Four departures from the written design, each because the design contradicted itself
 or reality — all recorded with reasoning in `docs/decisions.md`: a ranked list rather
