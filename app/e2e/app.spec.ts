@@ -10,34 +10,54 @@ test.describe('authenticated app (non-destructive)', () => {
     await page.goto('/');
     const nav = page.locator('nav.primary-nav');
     await expect(nav).toBeVisible();
-    for (const label of ['Map', 'Places', 'Add', 'Timeline', 'More']) {
-      await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible();
+    // Add carries the pending count when there is one ("Add 3"), so it is matched
+    // by prefix; the rest are exact.
+    for (const label of [/^Map$/, /^Places$/, /^Add( \d+)?$/, /^Timeline$/, /^Settings$/]) {
+      await expect(nav.getByRole('link', { name: label })).toBeVisible();
     }
   });
 
-  // The Add tab opens ONE sheet over the map. It replaced a five-step wizard at
-  // /add that could add neither photos nor a Google Photos import, which is how
-  // the app ended up with two different answers to "add something".
-  test('Add tab opens the one add sheet, asking what you are adding', async ({ page }) => {
+  // ADD IS ONE DOOR. It used to be a tab that redirected to a sheet over the map,
+  // with sorting buried at /photos/sort and the review queue a sixth nav
+  // destination at /inbox. /add is now a real page holding all of it.
+  test('the Add tab goes to the one Add page, holding everything that gets things in', async ({
+    page,
+  }) => {
     await page.goto('/');
-    const addTab = page.locator('nav.primary-nav').getByRole('link', { name: 'Add', exact: true });
-    await expect(addTab).toHaveAttribute('href', '/?add=1');
+    const addTab = page.locator('nav.primary-nav').getByRole('link', { name: /^Add/ });
+    await expect(addTab).toHaveAttribute('href', '/add');
     await addTab.click();
+
+    await expect(page).toHaveURL(/\/add$/);
+    await expect(page.getByRole('heading', { name: 'Add', exact: true })).toBeVisible();
+    // Add by hand, sort photos, import a file — and the review queue below them.
+    await expect(page.getByRole('button', { name: /Add a place, visit or activity/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Sort photos/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Import an activity file/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
+  });
+
+  test('the add sheet still opens over the map, because picking a spot needs the map', async ({
+    page,
+  }) => {
+    await page.goto('/add');
+    await page.getByRole('button', { name: /Add a place, visit or activity/ }).click();
 
     const sheet = page.getByRole('dialog', { name: 'Add' });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByText('What are you adding?')).toBeVisible();
-    for (const choice of ['Photos', 'A place I’ve been', 'Somewhere to go later']) {
+    for (const choice of ['Photos', 'A place I\u2019ve been', 'Somewhere to go later']) {
       await expect(sheet.getByRole('button', { name: choice, exact: true })).toBeVisible();
     }
     // Three choices and a close button — nothing else to wade through.
     await expect(sheet.locator('.add-choices button')).toHaveCount(3);
   });
 
-  test('the retired /add wizard redirects to the sheet', async ({ page }) => {
-    await page.goto('/add');
-    await expect(page).toHaveURL(/\/($|\?)/);
-    await expect(page.getByRole('dialog', { name: 'Add' })).toBeVisible();
+  // Nothing is orphaned: the retired Inbox tab's URL still works.
+  test('the retired /inbox lands on Add', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(page).toHaveURL(/\/add$/);
+    await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
   });
 
   test('Photos is the one home for both device and Google Photos imports', async ({ page }) => {

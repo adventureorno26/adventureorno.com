@@ -24,5 +24,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "//optionalDependencies": "npm records only the HOST platform's optional binary in the lockfile, so a lock generated on a Mac contains @rollup/rollup-darwin-arm64 and nothing else — and every `npm ci` on Linux CI installs no rollup native at all. The Vite 8 upgrade made that fatal: the photo-gateway worker still runs vitest 2, which loads rollup, so `Worker — test` failed on Linux while passing locally, and the release gate has been red since. Declaring the Linux binary directly puts BOTH platforms in the lock. Pinned exactly to rollup's own optional-dependency version so it dedupes instead of resolving a second copy; bump it with rollup.",
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.62.2"
   }
 }

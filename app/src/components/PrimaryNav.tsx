@@ -7,13 +7,12 @@ import { fetchInboxCounts } from '../lib/inbox';
 // Erica's standing preference), styled as a bottom-center glass pill to match
 // the existing back-bar / stats-bar language. Rendered globally in App.tsx.
 //
-// Five destinations: Map (home), Places (the list — previously unreachable),
-// Add, Timeline, and More (settings + Manage-data tools).
+// Five destinations: Map (home), Places (the list), Add, Timeline and Settings.
 //
-// Add is not a page. It opens the ONE add sheet over the map (?add=1), the same
-// sheet the map's "+ Add" button opens — it used to be a separate five-step
-// wizard at /add that could not add photos or import from Google Photos, which
-// is how the app ended up with two different answers to "add something".
+// Two doors, each obvious: ADD gets things in — by hand, from photos, from a
+// file — and holds the review queue; PLACES fixes what is already there. The
+// add SHEET still opens over the map (?add=1), because picking a spot needs the
+// map, but /add is the page that offers it.
 
 /** The Add sheet opens OVER the map, so while it is open the map is not the
  *  current tab — Add is. */
@@ -37,11 +36,9 @@ export default function PrimaryNav() {
   const { pathname, search } = useLocation();
   const [waiting, setWaiting] = useState(0);
 
-  // The Inbox tab is PERMANENT. It used to appear only when something was waiting,
-  // because six tabs did not fit a 320px phone — but that clipped the last tab at the
-  // pill's edge ("half off the screen"), and it meant /inbox highlighted no tab at all
-  // when the queue was empty. The tab sizing now fits six at every width we target
-  // (measured 320-430px), so the count is the only thing that comes and goes.
+  // The count that rides on Add. There is no Inbox tab any more: a sixth tab
+  // clipped at the pill's edge on a 320px phone, and the review queue is not a
+  // separate destination — it is part of getting things in.
   useEffect(() => {
     if (!session || !profile) return;
     let live = true;
