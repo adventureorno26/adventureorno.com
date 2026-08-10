@@ -9,7 +9,7 @@ Written so a brand-new chat can pick this up cold. **Read this file, then
 
 > Read `docs/RESUME-HERE.md` and `docs/INGEST-REBUILD.md` in
 > `adventureorno-claude-code`, then tell me what you're about to do before you do it.
-> We are building step 1 of the ingest rebuild.
+> Steps 1-4 and 8 of the ingest rebuild are done; we are on step 5.
 
 That's it. Everything below is context that file points at.
 
@@ -22,8 +22,8 @@ of saying where Erica actually was. **That is fixed and live: all 328 now carry 
 place names, and none of her own descriptive names were touched.** While fixing it we
 found the deeper problem — machines were writing guesses straight into records as
 facts, and other machines were overwriting them. So the next piece of work is a
-**rebuild of ingest around suggest-then-approve**, which is fully designed in
-`docs/INGEST-REBUILD.md` and **not yet built**.
+**rebuild of ingest around suggest-then-approve**, designed in
+`docs/INGEST-REBUILD.md`. Steps 1-4 and 8 of it are now built and live; see §2b.
 
 ---
 
@@ -104,7 +104,7 @@ joint-outing dedup was only ever delayed to overnight — no data was lost.
 
 ---
 
-## 2b. Steps 1 and 2 of the rebuild are BUILT (2026-08-09, 20:40 ET)
+## 2b. Steps 1–4 and 8 of the rebuild are BUILT AND LIVE (2026-08-09, 21:10 ET)
 
 - **Step 1 — migration `0148`** applied: `suggestions`, `approved_fields`,
   `ingest_runs`, `may_autowrite()`, RLS, and the backfill (61 locked place names +
@@ -128,9 +128,10 @@ joint-outing dedup was only ever delayed to overnight — no data was lost.
   sets what is pre-selected; the trail is always rank 1. Consequence to watch: the
   W&OD defaults to its official park name, not the trail she calls it — step 7
   (`naming_rules`) is what will make her per-area preference stick.
-- **NOT on production.** The Pages deploy landed on the branch alias
-  `fix-strava-name-ownership.adventureorno.pages.dev`, not adventureorno.com,
-  because the work is on a branch. Promoting it is a deliberate step.
+- **Now ON PRODUCTION** (promoted with `--branch main`, verified on
+  adventureorno.com). Note for next time: a plain `wrangler pages deploy` from a
+  feature branch goes to a PREVIEW alias, and that alias serves a stale `index.html`
+  for a while — verify against the exact deploy-hash URL, not the alias.
 - **4 real pending suggestions are in the table**, left on purpose so `/inbox` has
   genuine content.
 
