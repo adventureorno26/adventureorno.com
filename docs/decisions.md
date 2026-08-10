@@ -1055,3 +1055,34 @@ editor. They now say "+ Write a note or review" and "+ Put a place inside this o
 Also fixed on the way past: `fmtRunDate` was given date-only strings (`first_visit`),
 which parse as UTC midnight and render as the previous day west of Greenwich. It now
 parses `YYYY-MM-DD` with local components itself.
+
+## 2026-08-10 — Shipped, and two things that block shipping
+
+Phase A at Places is live on adventureorno.com (deployment `c1d74e34`). Verified on
+production: Places lists 129 top-level rows with 9 containers, the Appalachian Trail
+reads "6 sections", its card reads SECTIONS (6/6 visited) with Maryland Heights as ONE
+row of "13 dates", and the two add buttons say what they do.
+
+**GitHub Actions is out of budget, and that is what stopped the automated deploy.**
+Every required job passed on the merge candidate — build, e2e, db-tests, security,
+semgrep, osv-scan, deploy-preview — and then `release-gate` failed with ZERO steps and
+no log. The annotation, which is only visible through the check-runs API, says:
+
+> The job was not started because recent account payments have failed or your spending
+> limit needs to be increased.
+
+`release-gate` is the last job in the run, so it is the one that runs out. Because
+`deploy-production` depends on it, **production cannot deploy from CI until the billing
+is fixed** — and the failure looks like a code failure unless you fetch the annotation.
+This deploy was therefore done by hand, against a commit CI had already gone green on.
+That is the exception, not the rule; the moment billing is restored, deploys go back
+through CI.
+
+**A deploy leaves a ~2 minute window that poisons browser caches.** Between the custom
+domain serving the new `index.html` and the new assets propagating to it,
+`/assets/index-<hash>.js` returns the SPA fallback — HTML, with a 200. `_headers` marks
+assets immutable, so a browser that loads the site in that window caches a text/html
+response for an immutable URL and keeps showing an unstyled, broken page until a hard
+refresh. Observed live, and it is exactly the "white dots" Erica has reported before.
+Verify against the deploy-hash URL (`https://<id>.adventureorno.pages.dev`), which is
+never in that window, and always tell her to hard-refresh.
