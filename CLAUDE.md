@@ -7,6 +7,25 @@ places, auto-built from photo EXIF, passive GPS, and Strava. Invite-only. Domain
 adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventureorno.com
 (GitHub account: adventureorno26).
 
+## The verification rule (non-negotiable)
+
+**Every change is verified in the UI, on production, after it deploys.** Not "the build
+is green", not "the migration applied", not "the row is in the table" — opened in a
+browser, on the real site, doing the thing it claims to do.
+
+This exists because it was broken repeatedly:
+- A membership row was deleted and the card still showed the section, because the UI
+  reads a denormalised `part_of` column and the delete never touched it.
+- 28 visits were reported as empty because a query counted activities on the container
+  instead of the sections.
+- A config value went missing and the Google Photos button silently disappeared —
+  nothing failed, nothing logged.
+
+So: **done means seen on the screen.** If it has not been opened in the app after
+reaching production, it is not done, and it must not be reported as done. When the
+database and the screen disagree, the screen is right.
+
+
 ## Stack (do not substitute without asking)
 - Frontend: React 18 + Vite + TypeScript. MapLibre GL JS v5 for all maps. Deployed to Cloudflare Pages.
 - Basemap: MapTiler (key in env `VITE_MAPTILER_KEY`). Geocoding: MapTiler Geocoding API.

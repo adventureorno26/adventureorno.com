@@ -127,6 +127,10 @@ Each phase ends the same way: **it works when Erica drives it**, a test that fai
 regresses, an entry in `decisions.md`, and this file updated. Not "deployed and probably
 fine."
 
+**The verification rule (see CLAUDE.md):** every change is opened in the app, on
+production, after it deploys. Done means seen on the screen. When the database and the
+screen disagree, the screen is right.
+
 ### Phase 0 — One source of truth ✅ (2026-08-10)
 This file. Every other planning document moved to `docs/archive/`. The "removed on
 purpose" register in §7 exists so nothing is silently lost again.
