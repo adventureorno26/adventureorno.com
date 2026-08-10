@@ -107,7 +107,14 @@ Deno.serve(async (req) => {
     if (!res.ok) return json({ ok: false, error: `fetch activity ${res.status}` });
     const activity = (await res.json()) as StravaActivity;
     const outcome = await ingestActivity(admin, activity, event.owner_id);
-    if (outcome === 'stored') await admin.rpc('dedupe_shared_outings').catch(() => undefined);
+    // rpc() returns a thenable that REPORTS failure in `error` — it has no .catch(),
+    // and calling one threw a TypeError that failed the whole request after the
+    // activity had already been ingested. Linking shared outings is a nicety; never
+    // let it fail the ingest.
+    if (outcome === 'stored') {
+      const { error } = await admin.rpc('dedupe_shared_outings');
+      if (error) console.error('dedupe_shared_outings failed', error.message);
+    }
     return json({ ok: true, outcome });
   } catch (e) {
     console.error('strava-webhook error', String(e));

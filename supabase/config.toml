@@ -44,6 +44,11 @@ verify_jwt = true
 [functions.google-photos-token]
 verify_jwt = true
 
+# The suggester. Owner/editor from the Inbox, or a service_role token for the
+# nightly sweep. It writes only to `suggestions` — it can change nothing.
+[functions.suggest]
+verify_jwt = true
+
 # --- Public callbacks / webhooks / device + cron paths (self-authenticating) ---
 # These authenticate in the function body: OAuth code exchange, the Strava push
 # signature, the device ingest token, or a shared cron secret (modern Supabase

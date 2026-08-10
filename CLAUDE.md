@@ -1,5 +1,7 @@
 # CLAUDE.md — adventureorno.com
 
+> **Read [`docs/STATE.md`](docs/STATE.md) first.** It is the only planning document.
+
 Private travel-map web app for Erica (owner) and her partner (editor). World map of visited
 places, auto-built from photo EXIF, passive GPS, and Strava. Invite-only. Domain:
 adventureorno.com on Cloudflare Pages. Repo: github.com/adventureorno26/adventureorno.com
@@ -98,8 +100,8 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
 The checklist below is the July 25 architecture-review ledger. It is retained as
 historical evidence and contains a mixture of shipped, partial, superseded, and
 optional ideas. **Do not use it to choose the next task or infer completion.** Use
-[`docs/COMPLETION-PLAN.md`](docs/COMPLETION-PLAN.md) for the current ordered work,
-acceptance criteria, and commands.
+[`docs/STATE.md`](docs/STATE.md) — the ONLY planning document — for what the app is,
+what is left to build, and the rules that keep it from being erased.
 
 Captured 2026-07-25 from an architecture review. Ordered by priority tier. Check items off
 (or delete) as they ship. Tier 0 is correctness/security and should come first.

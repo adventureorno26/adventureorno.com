@@ -9,7 +9,7 @@ Written so a brand-new chat can pick this up cold. **Read this file, then
 
 > Read `docs/RESUME-HERE.md` and `docs/INGEST-REBUILD.md` in
 > `adventureorno-claude-code`, then tell me what you're about to do before you do it.
-> We are building step 1 of the ingest rebuild.
+> Steps 1-4 and 8 of the ingest rebuild are done; we are on step 5.
 
 That's it. Everything below is context that file points at.
 
@@ -22,8 +22,8 @@ of saying where Erica actually was. **That is fixed and live: all 328 now carry 
 place names, and none of her own descriptive names were touched.** While fixing it we
 found the deeper problem — machines were writing guesses straight into records as
 facts, and other machines were overwriting them. So the next piece of work is a
-**rebuild of ingest around suggest-then-approve**, which is fully designed in
-`docs/INGEST-REBUILD.md` and **not yet built**.
+**rebuild of ingest around suggest-then-approve**, designed in
+`docs/INGEST-REBUILD.md`. Steps 1-4 and 8 of it are now built and live; see §2b.
 
 ---
 
@@ -71,21 +71,106 @@ The snapshot holds every prior name. Restore with an
   ⚠️ Regenerating needs the env: `set -a && . ./.env.local && set +a && npm run gen:types`.
   Forgetting this is what broke CI runs 63–67.
 
-### ⚠️ NOT DONE
+### ✅ Step 0 DONE — the Strava fix is deployed (2026-08-09, 20:10 ET)
 
-- **`supabase/functions/_shared/strava.ts` is edited but NOT deployed.** The live
-  `strava-webhook` (v18) and `strava-backfill` (v20) still contain the old code, so
-  **a Strava re-sync today could still overwrite a renamed activity.** Deploy with:
-  ```bash
-  cd adventureorno-claude-code && set -a && . ./.env.local && set +a
-  supabase functions deploy strava-webhook  --project-ref aanfyhsjbtnqzphuoiem
-  supabase functions deploy strava-backfill --project-ref aanfyhsjbtnqzphuoiem
-  ```
-  **This is the single most urgent loose end.**
+`strava-webhook` is now **v20** and `strava-backfill` **v22**, both carrying
+`usablePlaceName` / `isGenericActivityName` and the "name is not a Strava-owned
+field" rule. **Verified by re-syncing a real activity, not by reading the code:**
+
+- Activity `d3f471f3` is called **"Lake of the Red Rocks"**; Strava still calls it
+  **"Evening Walk"** (confirmed in the pre-rename snapshot).
+- Fired a genuine `aspect_type:'update'` webhook event for it → `{ok:true,
+  outcome:'stored'}`, and the name is **still "Lake of the Red Rocks"** while
+  `distance` synced to 2321.3 — so the update really ran and did not no-op.
+- Dataset unchanged: 445 activities, 130 distinct names, **0** clock-reading names,
+  **0** activities sitting on a place called "New place".
+
+**A latent bug this flushed out, now fixed and deployed.** Both functions called
+`admin.rpc('dedupe_shared_outings').catch(() => undefined)`. A Supabase `rpc()`
+returns a *thenable*, not a Promise — it has no `.catch()`, and it reports failure in
+`error` rather than by throwing. So that line threw a `TypeError` every single time:
+
+- every `strava-webhook` call returned `ok:false` *after* the activity had already
+  been ingested, and
+- the **last page of every backfill returned a 500**.
+
+The nightly `dedupe-joint-outings` cron (04:20, active) had been covering for it, so
+joint-outing dedup was only ever delayed to overnight — no data was lost.
+
+### ⚠️ Still not done
+
 - Work is on `main` via the repo's auto-save hook, not a feature branch, and no PR
   was opened. House style wants a branch + PR.
 
 ---
+
+## 2b. Steps 1–4 and 8 of the rebuild are BUILT AND LIVE (2026-08-09, 21:10 ET)
+
+- **Step 1 — migration `0148`** applied: `suggestions`, `approved_fields`,
+  `ingest_runs`, `may_autowrite()`, RLS, and the backfill (61 locked place names +
+  12 manual visits = 73 rows; no photo or activity backfill, both deliberate).
+  Test `supabase/tests/0148_a_machine_may_only_propose.test.sql`, 7 assertions,
+  verified on prod in a rolled-back transaction that left nothing behind.
+- **Step 2 — the `suggest` edge function** deployed. Writes ONLY to `suggestions`.
+  Pure logic in `_shared/polyline.ts` + `_shared/routescore.ts`, covered by 24
+  vitest tests asserting the prototype's recorded output on 13 real routes.
+- **Proven live:** "Loudoun County Running" → rank 0 *Washington & Old Dominion
+  Trail* (7 of 9), rank 1 the containing regional park (6 of 9), rank 2 the bridle
+  trail — and the activity's name did not change. Red Rock and today's Seneca hike
+  correctly produce nothing.
+- **Step 3 — `/inbox` is BUILT and deployed to a PREVIEW** (migration `0149`).
+  One card, one button, evidence on its face, undo. **Step 8 folded in:**
+  `© OpenStreetMap contributors` is now shown, closing that compliance gap.
+  Verified by driving the deployed page: the card reads "Loudoun County Running",
+  offers the park (contains 6 of 9 route points) pre-selected with the trail at
+  rank 1, nav shows "Inbox 1", no console errors, no overflow at 320px.
+- **Erica's decision (2026-08-09): when both are true, the PARK wins.** It only
+  sets what is pre-selected; the trail is always rank 1. Consequence to watch: the
+  W&OD defaults to its official park name, not the trail she calls it — step 7
+  (`naming_rules`) is what will make her per-area preference stick.
+- **Now ON PRODUCTION** (promoted with `--branch main`, verified on
+  adventureorno.com). Note for next time: a plain `wrangler pages deploy` from a
+  feature branch goes to a PREVIEW alias, and that alias serves a stale `index.html`
+  for a while — verify against the exact deploy-hash URL, not the alias.
+- **4 real pending suggestions are in the table**, left on purpose so `/inbox` has
+  genuine content.
+
+- **Step 4 — DONE** (migration `0150`). The six person-initiated RPCs now record the
+  decision as they write it; `rename_activities_for_place` — the one function that
+  could genuinely undo an approval — now asks `may_autowrite` first. The inventory
+  came from the LIVE function bodies and changed the answer: ONE function needed the
+  guard, not thirteen (the rest either place things never placed, or repoint rows off
+  a place being merged away). `supabase/tests/0150_machines_behind_the_guard.test.sql`
+  scans every function body and fails on any unguarded writer; it also plants a
+  rule-breaking function to prove the scan can fail.
+- **Production is up to date:** adventureorno.com verified serving `/inbox`.
+
+- **Step 6 — proven on a bounded sample** (24 of 80 weak-named activities). 7 cards
+  pending; 0 suggestions on locked places; nothing written. The remaining ~56 are
+  deliberately unswept: see below.
+- **Step 7 — DONE** (migration `0151`). `naming_rules` + `rule_offer` / `learn_rule` /
+  `forget_rule` / `apply_naming_rule`. The Inbox offers "Always call them that?" after
+  the same name is approved for the same area 3 times. Applying a rule still writes an
+  audit suggestion AND the lock, and `may_autowrite` means her decision outranks her
+  own rule. The suggester consults rules BEFORE Overpass.
+
+**Only steps 5 and the rest of 6 remain, and both need Erica:**
+- **Step 5 (photos)** — blocked: the Google Photos picker is unproven end to end and
+  needs her to run it once.
+- **The rest of step 6** — 56 more weak-named activities (mostly "Loudoun County
+  Running"). Sweep them AFTER she has approved a few and learned a rule for the W&OD
+  area, or the Inbox fills with the same question dozens of times. A retrying nightly
+  cron is the right home for the sweep; not added, because a job that quietly fills
+  her Inbox overnight is her call.
+
+Four departures from the written design, each because the design contradicted itself
+or reality — all recorded with reasoning in `docs/decisions.md`: a ranked list rather
+than a single winner; total tie-breaking; the geocoder fallback only fills a void
+(so Red Rock is safe); and "already on one of the right answers = say nothing".
+
+Overpass rate-limits 2 slots PER IP and edge functions share egress, so the suggester
+rotates mirrors, hard-aborts at 25s, and stops at a 110s deadline returning a
+`remaining` count. Batches are small by design: `limit` defaults to 3, max 8.
 
 ## 3. The design that is written but not built
 

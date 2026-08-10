@@ -11,6 +11,11 @@ dist/
 .env
 .env.local
 .env.*.local
+# ...and ANY copy of them. The exact-match rules above do not cover backups or
+# variants, and this directory has an auto-commit hook.
+.env.local.*
+.env*.bak*
+*.bak-[0-9]*
 .dev.vars
 
 # supabase local

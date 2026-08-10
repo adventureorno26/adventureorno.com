@@ -176,6 +176,79 @@ export type Database = {
           },
         ]
       }
+      approval_undo: {
+        Row: {
+          created_at: string
+          created_by: string
+          group_key: string
+          id: string
+          payload: Json
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          group_key: string
+          id?: string
+          payload: Json
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          group_key?: string
+          id?: string
+          payload?: Json
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_undo_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      approved_fields: {
+        Row: {
+          approved_at: string
+          approved_by: string
+          field: string
+          subject_id: string
+          subject_type: string
+          value: Json
+          via: string
+        }
+        Insert: {
+          approved_at?: string
+          approved_by: string
+          field: string
+          subject_id: string
+          subject_type: string
+          value: Json
+          via?: string
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string
+          field?: string
+          subject_id?: string
+          subject_type?: string
+          value?: Json
+          via?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approved_fields_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       board_items: {
         Row: {
           board: string
@@ -424,6 +497,36 @@ export type Database = {
           },
         ]
       }
+      ingest_runs: {
+        Row: {
+          failed: number
+          finished_at: string | null
+          id: string
+          notes: Json | null
+          ok: number
+          source: string
+          started_at: string
+        }
+        Insert: {
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          notes?: Json | null
+          ok?: number
+          source: string
+          started_at?: string
+        }
+        Update: {
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          notes?: Json | null
+          ok?: number
+          source?: string
+          started_at?: string
+        }
+        Relationships: []
+      }
       ingest_tokens: {
         Row: {
           created_at: string
@@ -614,6 +717,67 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      naming_rules: {
+        Row: {
+          activity_type: string | null
+          auto_apply: boolean
+          center: unknown
+          created_at: string
+          created_by: string
+          id: string
+          learned_from: number
+          name: string
+          place_id: string | null
+          radius_m: number | null
+        }
+        Insert: {
+          activity_type?: string | null
+          auto_apply?: boolean
+          center?: unknown
+          created_at?: string
+          created_by: string
+          id?: string
+          learned_from?: number
+          name: string
+          place_id?: string | null
+          radius_m?: number | null
+        }
+        Update: {
+          activity_type?: string | null
+          auto_apply?: boolean
+          center?: unknown
+          created_at?: string
+          created_by?: string
+          id?: string
+          learned_from?: number
+          name?: string
+          place_id?: string | null
+          radius_m?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "naming_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "naming_rules_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "naming_rules_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
             referencedColumns: ["id"]
           },
         ]
@@ -1482,6 +1646,71 @@ export type Database = {
           },
         ]
       }
+      suggestions: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          current_value: Json | null
+          decided_at: string | null
+          decided_by: string | null
+          evidence: Json | null
+          field: string
+          group_key: string
+          id: string
+          label: string
+          proposed_value: Json
+          rank: number
+          source: string
+          status: string
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          current_value?: Json | null
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: Json | null
+          field: string
+          group_key: string
+          id?: string
+          label: string
+          proposed_value: Json
+          rank?: number
+          source: string
+          status?: string
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          current_value?: Json | null
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: Json | null
+          field?: string
+          group_key?: string
+          id?: string
+          label?: string
+          proposed_value?: Json
+          rank?: number
+          source?: string
+          status?: string
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_migration_exceptions: {
         Row: {
           detected_at: string
@@ -1947,6 +2176,18 @@ export type Database = {
             }
             Returns: string
           }
+      apply_inbox_field: {
+        Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
+        Returns: Json
+      }
+      apply_naming_rule: {
+        Args: { p_activity: string; p_candidates: string[] }
+        Returns: Json
+      }
+      approve_card: {
+        Args: { p_choices: Json; p_group_key: string }
+        Returns: Json
+      }
       approve_join_request: {
         Args: { p_id: string; p_role: string }
         Returns: undefined
@@ -1978,6 +2219,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      clear_approval: {
+        Args: { p_field: string; p_id: string; p_type: string }
+        Returns: Json
       }
       clear_city: { Args: { p_place: string }; Returns: undefined }
       climbing_stats: {
@@ -2061,6 +2306,7 @@ export type Database = {
         Returns: undefined
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      forget_rule: { Args: { p_id: string }; Returns: Json }
       geo_coverage: {
         Args: { p_profile?: string }
         Returns: {
@@ -2195,11 +2441,17 @@ export type Database = {
         }
         Returns: string
       }
+      inbox: { Args: { p_cursor?: string; p_limit?: number }; Returns: Json }
+      inbox_counts: { Args: never; Returns: Json }
       is_editor_or_owner: { Args: never; Returns: boolean }
       is_generic_activity_name: { Args: { p_name: string }; Returns: boolean }
       is_member: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
       last_automated_upload: { Args: never; Returns: string }
+      learn_rule: {
+        Args: { p_activity: string; p_name?: string; p_radius_m?: number }
+        Returns: Json
+      }
       list_trash: {
         Args: never
         Returns: {
@@ -2238,6 +2490,10 @@ export type Database = {
           score: number
         }[]
       }
+      may_autowrite: {
+        Args: { p_field: string; p_id: string; p_type: string }
+        Returns: boolean
+      }
       merge_nearby_dupes: { Args: never; Returns: number }
       merge_places: {
         Args: { p_loser: string; p_winner: string }
@@ -2256,6 +2512,7 @@ export type Database = {
           type: string
         }[]
       }
+      naming_rules_list: { Args: never; Returns: Json }
       occasion_count: { Args: { p_profile?: string }; Returns: number }
       on_this_day: {
         Args: never
@@ -2385,6 +2642,7 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      propose_photos: { Args: { p_limit?: number }; Returns: Json }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
       race_stats: {
@@ -2413,6 +2671,11 @@ export type Database = {
       rebuild_place_visits: { Args: { p_place: string }; Returns: undefined }
       rebuild_revealed_area: { Args: never; Returns: undefined }
       recompute_place_stats: { Args: { p_place: string }; Returns: undefined }
+      record_approval: {
+        Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
+        Returns: undefined
+      }
+      reject_suggestion: { Args: { p_id: string }; Returns: Json }
       remove_from_container: {
         Args: { p_child: string; p_parent: string }
         Returns: undefined
@@ -2424,6 +2687,7 @@ export type Database = {
       restore_photo: { Args: { p_id: string }; Returns: undefined }
       restore_place: { Args: { p_id: string }; Returns: undefined }
       revealed_area_geojson: { Args: never; Returns: Json }
+      rule_offer: { Args: { p_activity: string }; Returns: Json }
       search_photos: {
         Args: { p_filter: Json }
         Returns: {
@@ -3208,6 +3472,7 @@ export type Database = {
           visit_id: string
         }[]
       }
+      undo_approval: { Args: { p_token: string }; Returns: Json }
       unlockrows: { Args: { "": string }; Returns: number }
       update_activity: {
         Args: { p_id: string; p_name: string; p_type?: string }

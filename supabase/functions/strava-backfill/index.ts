@@ -128,7 +128,10 @@ Deno.serve(async (req) => {
     // Once we've reached the end (and nothing failed), link any outings both of you
     // recorded so stats count them once.
     if (!hasMore && failed.length === 0) {
-      await admin.rpc('dedupe_shared_outings').catch(() => undefined);
+      // rpc() has no .catch() — it reports failure in `error`. Calling .catch() threw
+      // a TypeError that turned the LAST page of every backfill into a 500.
+      const { error } = await admin.rpc('dedupe_shared_outings');
+      if (error) console.error('dedupe_shared_outings failed', error.message);
     }
 
     // Report failed athletes so the caller can surface them and re-run — never a
