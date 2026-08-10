@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import maplibregl from 'maplibre-gl';
+// MapLibre 6 dropped the default export; the namespace import keeps every
+// maplibregl.X call site below working unchanged.
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import polyline from '@mapbox/polyline';
 import { MAPTILER_STYLE_URL, reverseGeocode } from '../lib/maptiler';

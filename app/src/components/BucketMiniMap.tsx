@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+// MapLibre 6 dropped the default export; the namespace import keeps every
+// maplibregl.X call site below working unchanged.
+import * as maplibregl from 'maplibre-gl';
 import { MAPTILER_STYLE_URL } from '../lib/maptiler';
 import type { Place } from '../lib/types';
 
