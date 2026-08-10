@@ -21,6 +21,18 @@ insert into auth.users (id, email) values
 insert into public.profiles (id, role, display_name) values
   ('aaaa7777-0000-0000-0000-00000000a154','owner','V154 Member') on conflict do nothing;
 
+-- Fixtures of our OWN, so the checks below hold in CI's empty disposable database as
+-- well as against production. Asserting "a member sees more than 0 places" only worked
+-- where production data happened to exist; a test that passes on one database and
+-- fails on another is measuring the database, not the code.
+insert into public.places (id, name, lat, lng, saved)
+values ('cccc7777-0000-0000-0000-00000000a154','V154 Somewhere', 39.05, -77.31, true)
+  on conflict do nothing;
+insert into public.approved_fields (subject_type, subject_id, field, value, approved_by, via)
+values ('place','cccc7777-0000-0000-0000-00000000a154','name',
+        to_jsonb('V154 Somewhere'::text),'aaaa7777-0000-0000-0000-00000000a154','inbox')
+  on conflict do nothing;
+
 -- 1) EVERY TABLE HAS RLS. A new table without it is the whole ballgame.
 do $$
 declare bad text := '';
@@ -152,13 +164,16 @@ declare n bigint;
 begin
   set local role authenticated;
   set local request.jwt.claims = '{"sub":"aaaa7777-0000-0000-0000-00000000a154"}';
-  select count(*) into n from public.places;
+  -- The fixtures inserted at the top are enough on their own, so this holds anywhere.
+  select count(*) into n from public.places
+   where id = 'cccc7777-0000-0000-0000-00000000a154';
   if n = 0 then
-    raise exception 'FAIL: a member sees 0 places — test 6 proved only that it is empty';
+    raise exception 'FAIL: a member cannot see a saved place — test 6 proved nothing';
   end if;
-  select count(*) into n from public.approved_fields;
+  select count(*) into n from public.approved_fields
+   where subject_id = 'cccc7777-0000-0000-0000-00000000a154';
   if n = 0 then
-    raise exception 'FAIL: a member sees 0 approvals — the ledger read is not proven';
+    raise exception 'FAIL: a member cannot read the ledger — test 6 proved nothing';
   end if;
   raise notice 'PASS 7: a member reads through the same policies';
 end $$;

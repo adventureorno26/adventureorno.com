@@ -1,5 +1,10 @@
 -- DB test for 0151 — it learns what you call a place, and stops asking.
 --
+-- Updated for 0152: apply_naming_rule now takes the names the ROUTE SCORER actually
+-- found and applies only when its own name is among them. The single-argument form,
+-- which fired on the geofence alone, is gone — so every call here passes candidates,
+-- and a new block asserts the case that change exists for.
+--
 -- The danger of this feature is obvious: a rule is automation, and silent automation
 -- is what produced every bug this rebuild exists to fix. So the tests care as much
 -- about what a rule must NOT do — reach past its radius, or overwrite a decision —
@@ -68,7 +73,7 @@ begin
     values ('Run','Loudoun County Running', 5000, '2033-07-11T12:00:00Z', 31.001, -41.001, 'file')
     returning id into a_new;
 
-  res := public.apply_naming_rule(a_new);
+  res := public.apply_naming_rule(a_new, array['V151 The Usual Loop']);
   if (res ->> 'applied')::boolean is not true or (res ->> 'changed')::boolean is not true then
     raise exception 'FAIL: the rule did not apply, got %', res;
   end if;
@@ -102,9 +107,9 @@ begin
   insert into public.activities (type, name, distance, start_date, lat, lng, source)
     values ('Run','Something Far Away', 5000, '2033-07-12T12:00:00Z', 31.4, -41.4, 'file')
     returning id into a;
-  res := public.apply_naming_rule(a);
+  res := public.apply_naming_rule(a, array['V151 The Usual Loop']);
   if (res ->> 'applied')::boolean then
-    raise exception 'FAIL: the rule reached %s outside its radius', res;
+    raise exception 'FAIL: the rule reached outside its radius: %', res;
   end if;
   select name into nm from public.activities where id = a;
   if nm <> 'Something Far Away' then
@@ -122,7 +127,7 @@ begin
     returning id into a;
   perform public.update_activity(a, 'Race day with Josh', null);   -- she decided
 
-  res := public.apply_naming_rule(a);
+  res := public.apply_naming_rule(a, array['V151 The Usual Loop']);
   if (res ->> 'applied')::boolean then
     raise exception 'FAIL: a rule overrode a name she chose, got %', res;
   end if;
@@ -145,6 +150,35 @@ begin
   raise notice 'PASS 5: once learned, it stops asking';
 end $$;
 
+-- 5b) THE ROUTE MUST AGREE (0152). A geofence says where you STARTED, which is a weak
+--     proxy for where you WENT — on the start point alone this rule would have renamed
+--     76 activities, most of them neighbourhood street runs.
+do $$
+declare a uuid; res jsonb; nm text;
+begin
+  insert into public.activities (type, name, distance, start_date, lat, lng, source)
+    values ('Run','A Street Loop', 5000, '2033-07-15T12:00:00Z', 31.0003, -41.0003, 'file')
+    returning id into a;
+
+  -- Inside the fence, but the scorer found something else entirely.
+  res := public.apply_naming_rule(a, array['Some Other Trail','A Park Nobody Means']);
+  if (res ->> 'applied')::boolean then
+    raise exception 'FAIL: the rule applied to a route that never touched it: %', res;
+  end if;
+  select name into nm from public.activities where id = a;
+  if nm <> 'A Street Loop' then
+    raise exception 'FAIL: a non-matching route was renamed, got %', nm;
+  end if;
+
+  -- And with NO evidence at all — Overpass failed — it must stay silent rather than
+  -- fill the gap from the geofence.
+  res := public.apply_naming_rule(a, null);
+  if (res ->> 'applied')::boolean then
+    raise exception 'FAIL: the rule applied with no route evidence: %', res;
+  end if;
+  raise notice 'PASS 5b: a rule needs the route to agree, and silence is not agreement';
+end $$;
+
 -- 6) SHE CAN CHANGE HER MIND.
 do $$
 declare rid uuid; a uuid; res jsonb;
@@ -158,7 +192,7 @@ begin
   insert into public.activities (type, name, distance, start_date, lat, lng, source)
     values ('Run','Still Badly Named', 5000, '2033-07-14T12:00:00Z', 31.0002, -41.0002, 'file')
     returning id into a;
-  res := public.apply_naming_rule(a);
+  res := public.apply_naming_rule(a, array['V151 The Usual Loop']);
   if (res ->> 'applied')::boolean then
     raise exception 'FAIL: a forgotten rule still applied';
   end if;

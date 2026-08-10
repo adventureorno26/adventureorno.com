@@ -6476,6 +6476,20 @@ button.mi-row:hover {
   background: var(--accent-soft);
 }
 
+/* The map's own controls sit bottom-right by MapLibre's default, and the nav pill is
+   fixed bottom-centre. Adding the sixth (Inbox) tab widened the pill until it covered
+   the zoom buttons on a phone — e2e/nav-obstruction.spec.ts caught it, hit-testing
+   rather than trusting toBeVisible().
+   Geometry: the pill is centred and at most 348px, so its right edge passes the
+   controls only below roughly 450px of viewport. Lift them above the nav there, and
+   leave the desktop layout exactly as it is. */
+@media (max-width: 460px) {
+  .maplibregl-ctrl-bottom-right,
+  .maplibregl-ctrl-bottom-left {
+    bottom: var(--pnav-clearance);
+  }
+}
+
 /* ---------------------------------------------------------------------------
    The Inbox (/inbox) — one card, one button. No icons: text controls only.
    --------------------------------------------------------------------------- */

@@ -928,3 +928,38 @@ is now empty, and the comment says an entry may come back only for a decision.
 controls per card — radio groups, a free-text alternative, per-option "Never", and photo
 checkboxes. **17/17 pass** (8 routes × 2 viewports, plus the place-row checkbox naming
 test) with nothing accepted.
+
+## 2026-08-10 — CI caught four things production testing structurally could not
+
+Runs 75–82 failed on the feature branches. **None of them deploy** — they are
+`pull_request` events, and the production job only runs on push to `main` — but the
+failures were all real, and one of them was already live because I had been deploying
+by hand with `wrangler pages deploy --branch main`, which bypasses CI entirely.
+
+**1. A live UI regression: the nav covered the map's zoom buttons.** Adding the sixth
+(Inbox) tab widened the pill until, on a phone, it sat on top of `Zoom in` / `Zoom out`.
+`e2e/nav-obstruction.spec.ts` hit-tests rather than trusting `toBeVisible()`, which is
+the only reason it was caught — the buttons were visible, just untappable. The pill is
+centred and at most 348px, so it can only reach the controls below ~450px of viewport;
+`.maplibregl-ctrl-bottom-*` now lifts by `--pnav-clearance` there and desktop is
+untouched. 10/10 that spec now passes.
+
+**2–4. Three of my own SQL tests asserted PRODUCTION numbers.** CI applies the
+migration chain to an empty disposable database, where "61 locked place names" and
+"a member sees more than 0 places" are both wrong — so they passed against prod and
+failed in CI, which is the opposite of useful. A test that only holds against one
+database is measuring the database, not the code. 0148 now asserts an invariant (every
+locked place has a recorded name decision) instead of a count; 0154 creates its own
+fixtures for the negative control. 0151 was simply stale: 0152 replaced
+`apply_naming_rule(uuid)` with the two-argument form, and the test still called the old
+signature — so it also gained a block for the behaviour 0152 exists for (a rule must not
+apply when the route disagrees, and silence is not agreement).
+
+Fixing 0148 surfaced one more thing worth writing down: inserting a named place trips a
+trigger that sets `name_locked`, so the test's own fixtures were locked-without-approval
+by construction. The invariant is about data that predates the transaction, and now
+says so.
+
+**The lesson, plainly:** running SQL tests only against production in a rolled-back
+transaction is not equivalent to running them against a fresh database, and deploying
+by hand is not equivalent to shipping through CI. Both gaps hid real defects.

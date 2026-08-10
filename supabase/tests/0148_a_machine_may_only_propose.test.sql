@@ -150,10 +150,15 @@ end $$;
 reset role;
 set local request.jwt.claims = '{"sub":"aaaa7777-0000-0000-0000-00000000a148"}';
 
--- 5) THE BACKFILL LANDED EXACTLY. Counts are asserted against the live rows the
---    migration converted: 61 locked place names, 12 manual visits, no photos.
+-- 5) THE BACKFILL CONVERTED THE RIGHT THINGS — asserted as invariants, not counts.
+--
+--    This block used to assert "exactly 61 place names and 12 manual visits", which
+--    were the live production numbers. CI applies the migration chain to an EMPTY
+--    disposable database, where the correct answer is 0, so the test failed there and
+--    passed on prod — the exact opposite of useful. A test that only holds against one
+--    database is not a test. These invariants hold in both.
 do $$
-declare n_place int; n_visit int; n_other int; n_photo int; n_activity int;
+declare n_place int; n_visit int; n_other int; n_photo int; n_activity int; n_missing int;
 begin
   select count(*) into n_place from public.approved_fields
    where via = 'backfill' and subject_type = 'place' and field = 'name';
@@ -168,12 +173,36 @@ begin
      and not (subject_type = 'place' and field = 'name')
      and not (subject_type = 'visit' and field = 'place_id');
 
-  if n_place <> 61 then
-    raise exception 'FAIL: expected 61 locked place names backfilled, got %', n_place;
+  -- Every place that was locked has a decision recorded for its name — whether the
+  -- backfill wrote it or a later edit did. Vacuously true on an empty database,
+  -- meaningful on a populated one, correct on both.
+  -- Excluding this test's OWN fixtures: inserting a named place trips a trigger that
+  -- sets name_locked, so the V148 rows above are locked-without-an-approval by
+  -- construction. The invariant is about data that existed before this transaction.
+  select count(*) into n_missing
+    from public.places p
+   where p.name_locked and nullif(btrim(p.name), '') is not null
+     and p.name not like 'V148%'
+     and not exists (select 1 from public.approved_fields af
+                      where af.subject_type = 'place' and af.subject_id = p.id
+                        and af.field = 'name');
+  if n_missing <> 0 then
+    raise exception 'FAIL: % locked places have no recorded name decision', n_missing;
   end if;
-  if n_visit <> 12 then
-    raise exception 'FAIL: expected 12 manual visits backfilled, got %', n_visit;
+
+  -- Same for the manual visits the backfill was supposed to convert.
+  select count(*) into n_missing
+    from public.visits v
+    join public.places pl on pl.id = v.place_id
+   where v.manual and pl.name not like 'V148%'
+     and not exists (select 1 from public.approved_fields af
+                      where af.subject_type = 'visit' and af.subject_id = v.id
+                        and af.field = 'place_id');
+  if n_missing <> 0 then
+    raise exception 'FAIL: % manual visits have no recorded place decision', n_missing;
   end if;
+  -- Keep the shape visible in the log so a surprising environment is obvious.
+  raise notice '  (backfilled: % place names, % manual visits)', n_place, n_visit;
   -- There were 0 of 168 photos on a visit, so a photo row here means the backfill
   -- invented one. And the 328 renamed activities stay UNLOCKED on purpose — locking
   -- them would freeze in the machine-written names the route scorer should improve.
@@ -186,7 +215,7 @@ begin
   if n_other <> 0 then
     raise exception 'FAIL: the backfill wrote % rows it was not asked to write', n_other;
   end if;
-  raise notice 'PASS 5: backfill landed exactly 61 place names + 12 manual visits, nothing else';
+  raise notice 'PASS 5: every lock is recorded, and nothing else was backfilled';
 end $$;
 
 -- 6) EVERY BACKFILLED LOCK MATCHES THE RECORD IT CAME FROM. A ledger that disagrees
