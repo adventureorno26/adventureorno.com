@@ -71,17 +71,34 @@ The snapshot holds every prior name. Restore with an
   ⚠️ Regenerating needs the env: `set -a && . ./.env.local && set +a && npm run gen:types`.
   Forgetting this is what broke CI runs 63–67.
 
-### ⚠️ NOT DONE
+### ✅ Step 0 DONE — the Strava fix is deployed (2026-08-09, 20:10 ET)
 
-- **`supabase/functions/_shared/strava.ts` is edited but NOT deployed.** The live
-  `strava-webhook` (v18) and `strava-backfill` (v20) still contain the old code, so
-  **a Strava re-sync today could still overwrite a renamed activity.** Deploy with:
-  ```bash
-  cd adventureorno-claude-code && set -a && . ./.env.local && set +a
-  supabase functions deploy strava-webhook  --project-ref aanfyhsjbtnqzphuoiem
-  supabase functions deploy strava-backfill --project-ref aanfyhsjbtnqzphuoiem
-  ```
-  **This is the single most urgent loose end.**
+`strava-webhook` is now **v20** and `strava-backfill` **v22**, both carrying
+`usablePlaceName` / `isGenericActivityName` and the "name is not a Strava-owned
+field" rule. **Verified by re-syncing a real activity, not by reading the code:**
+
+- Activity `d3f471f3` is called **"Lake of the Red Rocks"**; Strava still calls it
+  **"Evening Walk"** (confirmed in the pre-rename snapshot).
+- Fired a genuine `aspect_type:'update'` webhook event for it → `{ok:true,
+  outcome:'stored'}`, and the name is **still "Lake of the Red Rocks"** while
+  `distance` synced to 2321.3 — so the update really ran and did not no-op.
+- Dataset unchanged: 445 activities, 130 distinct names, **0** clock-reading names,
+  **0** activities sitting on a place called "New place".
+
+**A latent bug this flushed out, now fixed and deployed.** Both functions called
+`admin.rpc('dedupe_shared_outings').catch(() => undefined)`. A Supabase `rpc()`
+returns a *thenable*, not a Promise — it has no `.catch()`, and it reports failure in
+`error` rather than by throwing. So that line threw a `TypeError` every single time:
+
+- every `strava-webhook` call returned `ok:false` *after* the activity had already
+  been ingested, and
+- the **last page of every backfill returned a 500**.
+
+The nightly `dedupe-joint-outings` cron (04:20, active) had been covering for it, so
+joint-outing dedup was only ever delayed to overnight — no data was lost.
+
+### ⚠️ Still not done
+
 - Work is on `main` via the repo's auto-save hook, not a feature branch, and no PR
   was opened. House style wants a branch + PR.
 

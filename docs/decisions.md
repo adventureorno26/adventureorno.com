@@ -556,3 +556,29 @@ So nothing named them. Erica's hike this morning proved it live.
 and only while that place is still called "New place" and unlocked — so it can
 never touch a name a person chose. strava-webhook v18 and strava-backfill v20
 deployed. This morning's hike is "Camp Fraser".
+
+## 2026-08-09 — Step 0 of the ingest rebuild: a Strava re-sync can no longer rename an activity
+
+`supabase/functions/_shared/strava.ts` had stopped treating `name` as a Strava-owned
+field, but the *deployed* functions still did. Until this shipped, a routine sync could
+put "Morning Hike" back over a name Erica had approved — and an approval system built on
+top of that is built on sand. Deployed `strava-webhook` v20 and `strava-backfill` v22.
+
+Verified by re-syncing a real activity rather than by reading the deployed code: activity
+`d3f471f3` reads "Lake of the Red Rocks" while Strava still calls it "Evening Walk"; a
+genuine `update` webhook event returned `{ok:true, outcome:'stored'}` and left the name
+alone, while `distance` synced to 2321.3 — proving the update ran instead of no-opping.
+Dataset after: 445 activities, 130 distinct names, 0 clock-reading names.
+
+**Bug found while proving it.** Both functions called
+`admin.rpc('dedupe_shared_outings').catch(() => undefined)`. A Supabase `rpc()` returns a
+thenable, not a Promise: there is no `.catch()`, and failures arrive in `error` rather
+than as a throw. That line raised a `TypeError` on every call — so every webhook returned
+`ok:false` after the ingest had already succeeded, and the final page of every backfill
+returned a 500. Replaced with the `{ error }` form and a `console.error`. The nightly
+`dedupe-joint-outings` cron had been masking it, so dedup was only ever delayed to
+overnight and no data was lost.
+
+Lesson worth keeping: the failure was invisible because it happened *after* the useful
+work, and the caller's own error handling swallowed the symptom into a generic
+`ok:false`. Deploy-then-exercise-the-real-path caught what reading the diff did not.
