@@ -2180,7 +2180,10 @@ export type Database = {
         Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
         Returns: Json
       }
-      apply_naming_rule: { Args: { p_activity: string }; Returns: Json }
+      apply_naming_rule: {
+        Args: { p_activity: string; p_candidates: string[] }
+        Returns: Json
+      }
       approve_card: {
         Args: { p_choices: Json; p_group_key: string }
         Returns: Json
@@ -2639,6 +2642,7 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      propose_photos: { Args: { p_limit?: number }; Returns: Json }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
       race_stats: {

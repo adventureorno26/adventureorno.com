@@ -26,6 +26,16 @@ export interface SuggestionOption {
   } | null;
 }
 
+/** One photo the map data thinks belongs to this visit. */
+export interface PhotoCandidate {
+  id: string; // the suggestion id — what approve_card is given
+  photo_id: string;
+  confidence: number | null;
+  distance_m: number | null;
+  local_date: string | null;
+  taken_at: string | null;
+}
+
 export interface InboxCard {
   group_key: string;
   subject_type: 'activity' | 'place' | 'visit' | 'photo';
@@ -38,7 +48,10 @@ export interface InboxCard {
     start_date: string | null;
     place: string | null;
   } | null;
+  /** Present on a photo card: the visit the photos would be pinned to. */
+  visit: { place: string | null; start_date: string | null; end_date: string | null } | null;
   fields: SuggestionOption[];
+  photos: PhotoCandidate[];
 }
 
 export interface InboxCounts {
@@ -61,13 +74,20 @@ export async function fetchInboxCounts(): Promise<InboxCounts> {
 /** What was chosen for one field: an offered option, or her own words. */
 export type Choice = { suggestion_id: string } | { value: string };
 
+/** Ask for photo suggestions to be generated (same local date, within ~5 km). */
+export async function proposePhotos(limit = 20): Promise<number> {
+  const { data, error } = await supabase.rpc('propose_photos', { p_limit: limit });
+  if (error) throw error;
+  return (data as unknown as { proposed: number }).proposed ?? 0;
+}
+
 /**
  * Approve a card. One transaction: every chosen value written, every one locked.
  * Returns an undo token — the caller is expected to offer Undo immediately.
  */
 export async function approveCard(
   groupKey: string,
-  choices: Record<string, Choice>,
+  choices: Record<string, Choice | string[]>,
 ): Promise<string> {
   const { data, error } = await supabase.rpc('approve_card', {
     p_group_key: groupKey,

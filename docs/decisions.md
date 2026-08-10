@@ -800,3 +800,33 @@ overflow.
 
 **The Inbox tab is now permanent.** Hiding it when the queue was empty had a second
 bug: `/inbox` then highlighted no tab at all. Only the count comes and goes.
+
+## 2026-08-10 — Step 5: photos from that day
+
+Migration `0153`. All 167 live photos were unpinned. A photo suggestion is just a
+suggestion with `subject_type='photo', field='visit_id'`, so it inherits approval,
+locking and undo for free — the payoff for building the ledger generically in 0148.
+
+`propose_photos()` matches an unpinned photo to the NEAREST visit whose date range
+contains the photo's **local_date**, within 5 km. `local_date`, not `taken_at`: a 9pm
+photo must not land on the next day. One proposal per photo — offering the same photo
+to three visits is a question with no good answer.
+
+**Photo cards are their own cards** (`group_key = 'visit:<id>'`) rather than being
+bolted onto activity cards: a visit is what a photo attaches to, one card can offer a
+whole day at once, and activity naming stays untouched. `inbox()` now returns both
+shapes, reading the subject from the group_key prefix because a photo card has many
+subjects. `approve_card` gained an optional `"photos": [...]` — still one transaction,
+one undo token. Unticked photos are **superseded, not rejected**: she passed this time,
+she did not say the photo never belongs there.
+
+First run proposed 20 across 12 visits, and the groupings are obviously right:
+San Diego 4 (0 m), Cape Cod 3, Paynes Bay 3, Sunset Cliffs 2. Nothing was written —
+0 photos pinned, 0 approvals.
+
+**A date bug caught by reading the screen against the database.** The card said
+"Monday, July 13" for a visit the database records as **2026-07-14**. A date-only
+string parses as UTC midnight, which renders as the previous day west of Greenwich —
+the same class of bug migrations 0143/0144 fixed server-side, reintroduced in the
+client. `dayLabel` now parses `YYYY-MM-DD` as a local date. Verified against the DB:
+Fort Rosecrans 07-14, Cape Cod 08-02, San Diego 07-11 all now read correctly.

@@ -6621,3 +6621,47 @@ button.mi-row:hover {
   margin: 10px 0 0;
   font-size: 12px;
 }
+
+/* Photo candidates on an Inbox card. Real thumbnails, never placeholder boxes. */
+.ic-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.ic-photo {
+  position: relative;
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: var(--panel);
+}
+.ic-photo.on {
+  border-color: var(--accent);
+}
+.ic-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+/* The tick sits ON the photo; sized explicitly because the global input rule is
+   display:block/width:100%, which would blow a checkbox up to full width. */
+.ic-photo input[type='checkbox'] {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.ic-photo-why {
+  display: block;
+  padding: 5px 7px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}

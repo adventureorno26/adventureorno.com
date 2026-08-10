@@ -22,17 +22,25 @@ import {
   learnRule,
   type Choice,
   type RuleOffer,
+  type PhotoCandidate,
   type InboxCard,
   type SuggestionOption,
 } from '../lib/inbox';
 import { showSnack } from '../lib/snackbar';
+import AuthedImg from '../components/AuthedImg';
 import { useAuth } from '../auth/AuthProvider';
 
 const CUSTOM = '__custom__';
 
 function dayLabel(iso: string | null): string {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString(undefined, {
+  // A DATE-ONLY string ("2026-07-14") parses as UTC midnight, which renders as the
+  // PREVIOUS day anywhere west of Greenwich — a visit on the 14th showed as the 13th.
+  // Visits carry dates; activities carry timestamps, which are correct as-is. This is
+  // the same class of bug migrations 0143/0144 fixed on the server side.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const when = ymd ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) : new Date(iso);
+  return when.toLocaleDateString(undefined, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -42,9 +50,23 @@ function dayLabel(iso: string | null): string {
 
 /** The line under the title: when, what, how far. */
 function subtitle(card: InboxCard): string {
+  if (card.visit) {
+    const n = card.photos?.length ?? 0;
+    return [dayLabel(card.visit.start_date), `${n} photo${n === 1 ? '' : 's'} from that day`]
+      .filter(Boolean)
+      .join(' · ');
+  }
   const a = card.activity;
   if (!a) return '';
   return [dayLabel(a.start_date), a.type, miles(a.distance)].filter(Boolean).join(' · ');
+}
+
+/** Why this photo is on this card, in words. */
+function photoWhy(ph: PhotoCandidate): string {
+  if (ph.distance_m == null) return 'Taken that day';
+  if (ph.distance_m < 100) return 'Taken that day, right there';
+  if (ph.distance_m < 1000) return `Taken that day, ${ph.distance_m} m away`;
+  return `Taken that day, ${(ph.distance_m / 1000).toFixed(1)} km away`;
 }
 
 export default function Inbox() {
@@ -60,6 +82,10 @@ export default function Inbox() {
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   // "You've called routes here X three times — always call them that?"
   const [offer, setOffer] = useState<(RuleOffer & { activityId: string }) | null>(null);
+  // Ticked photo candidates, by suggestion id. Photos default to ON: the card only
+  // exists because they were taken that day in that place, and un-ticking the odd
+  // wrong one is less work than ticking eight right ones.
+  const [pickedPhotos, setPickedPhotos] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setError(null);
@@ -75,6 +101,9 @@ export default function Inbox() {
         }
       }
       setPicked((p) => ({ ...initial, ...p }));
+      const photos: Record<string, boolean> = {};
+      for (const c of rows) for (const ph of c.photos ?? []) photos[ph.id] = true;
+      setPickedPhotos((p) => ({ ...photos, ...p }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the inbox');
     }
@@ -88,7 +117,14 @@ export default function Inbox() {
 
   async function onApprove(card: InboxCard) {
     const fields = [...new Set(card.fields.map((f) => f.field))];
-    const choices: Record<string, Choice> = {};
+    const choices: Record<string, Choice | string[]> = {};
+
+    const ticked = (card.photos ?? []).filter((ph) => pickedPhotos[ph.id]).map((ph) => ph.id);
+    if (ticked.length) choices.photos = ticked;
+    else if ((card.photos ?? []).length && !card.fields.length) {
+      showSnack({ message: 'Tick at least one photo, or skip the card.' });
+      return;
+    }
     for (const field of fields) {
       const key = `${card.group_key}:${field}`;
       const sel = picked[key];
@@ -219,7 +255,11 @@ export default function Inbox() {
         return (
           <article className="inbox-card" key={card.group_key}>
             <header className="ic-head">
-              <h2>{card.activity?.name ?? 'Something to name'}</h2>
+              <h2>
+                {card.visit
+                  ? (card.visit.place ?? 'That visit')
+                  : (card.activity?.name ?? 'Something to name')}
+              </h2>
               <p className="muted">{subtitle(card)}</p>
             </header>
 
@@ -283,6 +323,38 @@ export default function Inbox() {
                 </section>
               );
             })}
+
+            {(card.photos?.length ?? 0) > 0 && (
+              <section className="ic-field">
+                <h3>Photos from that day</h3>
+                <div className="ic-photos">
+                  {card.photos.map((ph) => {
+                    const on = pickedPhotos[ph.id] !== false;
+                    return (
+                      <label
+                        key={ph.id}
+                        className={`ic-photo${on ? ' on' : ''}`}
+                        title={photoWhy(ph)}
+                      >
+                        <AuthedImg photoId={ph.photo_id} size="thumb" alt="" />
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          aria-label={`Include this photo — ${photoWhy(ph)}`}
+                          onChange={(e) =>
+                            setPickedPhotos((s2) => ({ ...s2, [ph.id]: e.target.checked }))
+                          }
+                        />
+                        <span className="ic-photo-why">{photoWhy(ph)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="ic-current muted">
+                  Their dates stay exactly as they are — pinning only says where they belong.
+                </p>
+              </section>
+            )}
 
             <footer className="ic-actions">
               <button
