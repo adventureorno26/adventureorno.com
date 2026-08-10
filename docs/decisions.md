@@ -679,3 +679,49 @@ Verified on the deployed build: the card reads "Loudoun County Running", offers 
 (contains 6 of 9 route points) pre-selected with the trail at rank 1, evidence in words
 on every option, "Looks right" / "Skip", nav shows "Inbox 1", no console errors, and no
 horizontal overflow at 320px.
+
+## 2026-08-09 — Step 4: the machines go behind the guard
+
+Migration `0150`. Steps 1–3 built the ledger, the suggester and the Inbox; until this,
+the rule only bound code that opted in.
+
+**Group 4.1 — person-initiated (write AND lock).** `set_place_name`, `update_activity`,
+`reassign_activity`, `set_visit_place`, `set_visit_is_trip`, `set_photo_visit` now call
+`record_approval(...)` with `via='edit'`. Her edit in the app IS the approval, so the
+Inbox never asks about something she has already decided. One deliberate subtlety:
+`update_activity` records an approval only when a NAME was supplied — a type-only fix
+("this was a Ride, not a Run") must not silently end all future naming of that activity.
+
+**Group 4.2 — the one that could actually undo an approval.**
+`rename_activities_for_place` rewrites every generic name at a place whenever that place
+is renamed. Its only protection was `is_generic_activity_name()`, which cannot tell a
+name Erica chose from a previous guess. It now also requires
+`may_autowrite('activity', a.id, 'name')`.
+
+**The inventory was taken from the LIVE function bodies, not the design's list**, and it
+changes the conclusion. The design named ~13 machine functions to guard; on inspection
+most cannot overwrite a decision at all:
+
+- `import_file_activity`, `cluster_unassigned`, `ensure_visit` place things that were
+  never placed — there is no prior decision to overwrite, and guarding an INSERT is
+  meaningless.
+- `merge_places` / `merge_places_auto` repoint rows off a place being merged away.
+  Refusing per-activity would strand them on a place that no longer exists, which is
+  worse than what the guard protects against.
+
+So one function needed the guard, not thirteen. Saying that plainly is better than
+mechanically wrapping twelve functions to make a checklist look complete.
+
+**The test is the deliverable.** `supabase/tests/0150_machines_behind_the_guard.test.sql`
+reads EVERY function body, splits statements, examines only the part of an `UPDATE`
+between `set` and `where` (so a field named in a WHERE clause is not mistaken for a
+write), and fails if anything outside a reasoned allowlist writes an Inbox-owned field
+with neither an approval nor `may_autowrite`. Every allowlist entry carries its reason.
+
+Two blocks exist to stop the test lying: one plants a deliberately rule-breaking
+function and requires the scan to catch it (a test that cannot fail proves nothing), and
+one asserts every allowlisted person-initiated function really does call
+`record_approval` — otherwise allowlisting them would be an unchecked assumption.
+
+Verified on prod in a rolled-back transaction: 6 blocks pass, `approved_fields` back to
+73, 445 activities, 0 clock-reading names, no fixtures or planted functions left behind.

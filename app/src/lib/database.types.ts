@@ -2599,6 +2599,10 @@ export type Database = {
       rebuild_place_visits: { Args: { p_place: string }; Returns: undefined }
       rebuild_revealed_area: { Args: never; Returns: undefined }
       recompute_place_stats: { Args: { p_place: string }; Returns: undefined }
+      record_approval: {
+        Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
+        Returns: undefined
+      }
       reject_suggestion: { Args: { p_id: string }; Returns: Json }
       remove_from_container: {
         Args: { p_child: string; p_parent: string }
