@@ -1,0 +1,20 @@
+# basemap — copies the Protomaps planet into R2, then serves tiles out of it.
+#
+# Deploy: cd workers/basemap && npx wrangler deploy
+#
+# The copy never touches Erica's machine: the source is served from Cloudflare
+# and R2 is Cloudflare, so the bytes stay on their network. See docs/STATE.md
+# Phase 4 for why we own this at all.
+name = "adventureorno-basemap"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[r2_buckets]]
+binding = "BASEMAP"
+bucket_name = "aon-basemap"
+
+[vars]
+# The daily planet build being copied. 137.3 GB, zoom 0-15, PMTiles spec 3.
+SOURCE_URL = "https://build.protomaps.com/20260810.pmtiles"
+# The object it lands on inside the bucket.
+OBJECT_KEY = "planet.pmtiles"

@@ -247,10 +247,21 @@ parts), driven until it completes. No 137 GB download, no 137 GB upload, no over
 saturation of her connection.
 
 **Steps**
-1. **Erica: create an API token with R2 read+write.** The only blocking human step — none
-   of the tokens in `.env.local` can touch R2 today (the photo Worker reaches R2 through a
-   binding, not the API). Cloudflare dashboard → My Profile → API Tokens.
-2. Bucket `aon-basemap`; copier Worker; run the copy.
+1. ✅ **R2 access** — done 2026-08-11: Erica ran `npx wrangler login` and added
+   `CLOUDFLARE_API_TOKEN_MASTER` to `.env.local`, which is verified against both R2 and
+   Pages. (`CLOUDFLARE_ACCESS_TOKEN` in that file is NOT a valid API token, and the old
+   `CLOUDFLARE_API_TOKEN` name is gone — the deploy docs and skill now say so.)
+2. ✅ Bucket `aon-basemap` created, copier Worker deployed
+   (`workers/basemap`, `adventureorno-basemap.adventureorno26.workers.dev`), **copy
+   running** (started 2026-08-11 13:02 UTC). Measured on the real thing:
+   - one 100 MB part takes ~37 s from the source (~2.7 MB/s), so sequential would be
+     ~13.5 hours;
+   - **8 parts in parallel is the ceiling** — 16 trips Cloudflare's outbound connection
+     limit ("Response closed due to connection limit") — and gives ~10 MB/s, so the
+     137.3 GB lands in **about 3.7 hours**, once;
+   - it is resumable: the Worker keeps its state in the bucket, a failed batch records
+     nothing and is simply retried, so `scripts/copy-planet.sh` can be stopped and
+     restarted at any point.
 3. A tiles Worker serving `/basemap/{z}/{x}/{y}` out of the pmtiles, with edge caching so
    repeat views cost nothing, plus the same budget meter.
 4. Self-host the **glyphs** (fonts) and any sprite in the same bucket, or the map still
