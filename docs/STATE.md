@@ -714,6 +714,30 @@ that exists), the card preview second, the "Did you go?" conversion last — bec
 is the only part that can write history, and it should be built when everything around it
 is settled.
 
+### ⚠️ ONE OUTING, RECORDED TWICE — needs Erica's decision (found 2026-08-11)
+
+Rolling a trail's sections into its Visits list (so the Appalachian Trail shows all 62
+records rather than the 32 on the trail row) exposed a real duplication in the data:
+
+- **27 days on the Appalachian Trail exist as TWO visits** — one on the trail, one on the
+  section walked that day. Dec 25 2026 is both "Appalachian Trail" and "Maryland Heights".
+- **78 such container/member same-day pairs exist app-wide.**
+
+**The card now draws ONE row per day** — the section's, because it says everything the
+trail's row said plus which section it was. So the AT reads **35 outings**, not 62 with
+twins. Nothing is deleted: both records still exist and both still open. This is a
+display decision, reversible in one line.
+
+**The question for Erica:** should the trail-level visit for a day a section already
+covers be REMOVED from the data, or kept as a second record?
+
+- Keeping it means the Visits statistic counts that outing twice.
+- Removing it is a mass delete of 78 rows, which is not something to do without you —
+  and some of them are marked `manual` (a human set them), which the permanence rule in
+  `0157` says an automation must never undo.
+
+Nothing will be deleted until you say so.
+
 ### C — broken now, quietly (status 2026-08-11)
 
 |    | What                                                                                                                                                                        | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |

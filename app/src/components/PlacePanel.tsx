@@ -935,7 +935,20 @@ export default function PlacePanel({
       solo: v.solo_profile as string | null,
       target: { type: 'visit' as const, id: v.id },
     }));
-  const visitListRows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
+  // ONE ROW PER OUTING. Rolling a trail's sections in showed that 27 of the
+  // Appalachian Trail's days exist TWICE — once on the trail and once on the section
+  // walked that day (78 such pairs app-wide). They are one outing recorded in two
+  // places, so the card would otherwise print "December 25" twice, one of them
+  // blank. Where a day is covered by a SECTION row, the trail's own row for that day
+  // is not drawn: the section row says everything the trail row said, plus which
+  // section it was.
+  //
+  // NOTHING IS DELETED. Both records still exist and both still open; this only
+  // decides what the card draws. The underlying double-recording is real and is
+  // written up in STATE.md for Erica to decide on.
+  const allRows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
+  const daysNamedBySection = new Set(allRows.filter((r) => r.seg).map((r) => r.sort));
+  const visitListRows = allRows.filter((r) => r.seg || !daysNamedBySection.has(r.sort));
   const visitCount = visitListRows.length;
 
   // The sub-line under the address, in the words the locked card uses:
