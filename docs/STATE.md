@@ -781,6 +781,7 @@ lost work and can be restored in minutes.
 | Service-worker registration                                    | earlier    | A cached shell served stale code                                                                            | restored 2026-08-10 with HTML network-first                                                                                       |
 | `apply_naming_rule(uuid)` (geofence-only)                    | 2026-08-10 | It could rename 76 activities on start-point alone                                                          | migration`0152`                                                                                                                 |
 | "downtown Leesburg, VA" as an Appalachian Trail section        | 2026-08-10 | Not on the AT.**The place itself was kept** — it holds 3 photos and 2 visits                         | migration`0155` (the earlier membership-row delete did not take: `part_of` is the record and its trigger rebuilds membership) |
+| The generic **"Places"** section on a card (uncategorised members) | 2026-08-11 | It IS the PLACES HERE section she asked to be rid of. The locked card has category sections and nothing else | commit `a8e60124` + follow-up. **Three places app-wide are affected — Fort Rosencrans (San Diego) and two others. They need a category, not a bucket.** |
 
 ---
 

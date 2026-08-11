@@ -473,7 +473,11 @@ export default function PlacePanel({
   // THE LOCKED CARD puts each category in its OWN section — "Restaurants" is a
   // section, not a fold inside Notes and Reviews, which is where they had ended up.
   // Notes and reviews holds notes and reviews, and nothing else.
-  const categorySections = reviewGroups.filter((g) => g.key !== 'note');
+  // 'place' is the bucket for a member with NO category, and a section headed
+  // "Places" is the PLACES HERE section Erica has asked to be rid of many times.
+  // The locked card has category sections and nothing else, so it does not render.
+  // Three places app-wide land here; the fix is to tag them, not to bucket them.
+  const categorySections = reviewGroups.filter((g) => g.key !== 'note' && g.key !== 'place');
   const noteGroups = reviewGroups.filter((g) => g.key === 'note');
 
   // The rows inside a category section (and inside Notes). Lifted out of the old
