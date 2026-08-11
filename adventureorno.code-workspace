@@ -1,0 +1,129 @@
+{
+  // THE WORKSPACE. Open THIS file, not the folder.
+  //
+  // Erica, 2026-08-11: "Use a VS Code workspace with format-on-save, ESLint,
+  // TypeScript, test tasks, and an explicit terminal working directory."
+  //
+  // The explicit working directory matters more than it sounds: the repo is the
+  // SUBFOLDER `adventureorno-claude-code`, not the parent that OneDrive syncs, and
+  // commands run from the wrong level have cost this project real time.
+  "folders": [
+    { "name": "adventureorno", "path": "." },
+    { "name": "app", "path": "app" },
+    { "name": "workers", "path": "workers" },
+    { "name": "supabase", "path": "supabase" }
+  ],
+  "settings": {
+    // ---- format on save, one formatter, no arguments about it ----
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
+    "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[sql]": { "editor.formatOnSave": false },
+
+    // ---- ESLint sees the app workspace, where the config lives ----
+    "eslint.workingDirectories": [{ "directory": "app", "changeProcessCWD": true }],
+    "eslint.validate": ["typescript", "typescriptreact", "javascript"],
+
+    // ---- TypeScript: the repo's version, not VS Code's ----
+    "typescript.tsdk": "app/node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+    "typescript.preferences.importModuleSpecifier": "relative",
+    "typescript.updateImportsOnFileMove.enabled": "always",
+
+    // ---- the terminal opens in the REPO, never the OneDrive parent ----
+    "terminal.integrated.cwd": "${workspaceFolder:adventureorno}",
+    "terminal.integrated.env.osx": { "AON_REPO": "${workspaceFolder:adventureorno}" },
+
+    // ---- keep the noise down: these are big and never edited by hand ----
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.wrangler": true,
+      "app/src/lib/database.types.ts": true,
+      "**/test-results": true,
+      "**/playwright-report": true
+    },
+    "files.watcherExclude": {
+      "**/node_modules/**": true,
+      "**/dist/**": true,
+      "**/.wrangler/**": true
+    },
+    "files.exclude": { "**/.DS_Store": true },
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true
+  },
+  "extensions": {
+    "recommendations": [
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "ms-playwright.playwright",
+      "vitest.explorer",
+      "supabase.postgrestools"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "options": { "cwd": "${workspaceFolder:adventureorno}" },
+    "presentation": { "clear": true, "panel": "dedicated" },
+    "tasks": [
+      {
+        "label": "dev",
+        "type": "shell",
+        "command": "npm run dev",
+        "problemMatcher": [],
+        "isBackground": true,
+        "detail": "Vite dev server. Can take ~45s to bind — OneDrive syncs node_modules."
+      },
+      {
+        "label": "typecheck",
+        "type": "shell",
+        "command": "npx tsc -b",
+        "options": { "cwd": "${workspaceFolder:app}" },
+        "problemMatcher": ["$tsc"],
+        "group": "build"
+      },
+      {
+        "label": "lint",
+        "type": "shell",
+        "command": "npm run lint --workspace app",
+        "problemMatcher": ["$eslint-stylish"]
+      },
+      {
+        "label": "test (unit)",
+        "type": "shell",
+        "command": "npm run test --workspace app",
+        "problemMatcher": [],
+        "group": { "kind": "test", "isDefault": true },
+        "detail": "vitest — includes lockedCard.test.ts, the guard on what Erica locked."
+      },
+      {
+        "label": "test (SQL, needs supabase start)",
+        "type": "shell",
+        "command": "bash scripts/db-test.sh",
+        "problemMatcher": [],
+        "detail": "Every supabase/tests/*.test.sql against a disposable local stack."
+      },
+      {
+        "label": "verify:live",
+        "type": "shell",
+        "command": "npm run verify:live",
+        "problemMatcher": [],
+        "detail": "Checks what Erica asked for against adventureorno.com itself."
+      },
+      {
+        "label": "check everything (pre-PR)",
+        "dependsOrder": "sequence",
+        "dependsOn": ["typecheck", "lint", "test (unit)"],
+        "problemMatcher": [],
+        "group": { "kind": "build", "isDefault": true }
+      }
+    ]
+  }
+}

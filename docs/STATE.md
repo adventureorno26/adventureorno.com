@@ -905,6 +905,56 @@ auto-pushed on every session start/stop (`~/.claude/hooks/auto-push.sh`,
 is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resurrected
 `README.md` after it was deleted (§8).
 
+### HOW CLAUDE WORKS ON THIS REPO (her rules, 2026-08-11)
+
+> "Make Claude work only on named branches."
+> "Allow commits only after tests pass; never commit automatically on session exit."
+
+1. **Named branches only.** `fix/…`, `chore/…`, `feat/…`. Never commit on `main`.
+   `.githooks/pre-commit` refuses, and GitHub refuses the push regardless:
+   *"Changes must be made through a pull request. 10 of 10 required status checks
+   are expected."*
+2. **A commit has to earn it.** When app code is staged the hook runs `tsc` and the
+   unit tests — including `lockedCard.test.ts` — and refuses on failure. Docs and
+   SQL changes do not have to boot vitest. Enable per clone with
+   `git config core.hooksPath .githooks`.
+3. **Nothing commits itself.** The global Claude hooks that committed and pushed on
+   every session start and stop are gone (backup:
+   `~/.claude/settings.json.bak-2026-08-11`). That Stop hook is what resurrected
+   `README.md` 90 minutes after it was deleted (§8).
+4. **`bypassPermissions` is off** in her Claude settings.
+
+### THE ONLY ROUTE TO THE LIVE SITE (2026-08-11)
+
+    named branch → pull request → 10 required checks → merge to main
+        → release-gate → production environment approval (Erica)
+        → wrangler pages deploy --project-name adventureorno-com
+
+- **Direct pushes to `main` are rejected**, admins included (`enforce_admins: true`),
+  verified by attempting one.
+- **Cloudflare no longer builds production from git** —
+  `production_deployments_enabled: false`. Previews still build.
+- **The `production` environment requires Erica's approval** and accepts deployments
+  only from protected branches.
+- **Merged branches delete themselves.**
+- Linear history required; force-pushes and branch deletion on `main` are refused.
+
+### THE PINNED TOOLCHAIN (2026-08-11)
+
+| Thing | Pinned to | Where |
+| --- | --- | --- |
+| Node | **22** | `.nvmrc`, `engines` (`>=22 <23`), CI `setup-node`, Cloudflare `NODE_VERSION` (production AND preview) |
+| Wrangler | **4.113.0, exact** | `app`, `workers/photo-gateway`, `workers/basemap` |
+
+The Mac was on **Node 26** while CI ran 22 — the two only agreed by luck. Wrangler was
+worse: `app` had `^4.113.0`, `photo-gateway` had `^3.80.0`, and `workers/basemap` never
+declared it at all despite its deploy script calling it, so it silently used whichever
+version happened to be hoisted (3.114.17). Three versions, one repo.
+
+`adventureorno.code-workspace` is the VS Code entry point — format-on-save, ESLint
+pointed at `app/`, the repo's own TypeScript, test tasks, and a terminal that opens in
+the REPO rather than the OneDrive parent.
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
