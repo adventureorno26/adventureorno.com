@@ -408,6 +408,66 @@ make it VISIBLE — she has been told twice that her work is safe and twice it w
 card that says *"Saved — automation will not change this"* with the date is the honest
 version of the promise, and a way to hand a field back to automation if she ever wants it.
 
+### FLOK — what the research settled (2026-08-11, two rounds: research then refutation)
+
+**1. STRAVA CANNOT BE PART OF A PAID FLOK.** The risk recorded as UNVERIFIED is now
+VERIFIED against the live policy (https://www.strava.com/legal/api_policy, effective
+1 June 2026) and survived an adversarial re-check. Four clauses each independently kill it:
+
+| Clause | What it says | What it kills |
+|---|---|---|
+| §5.7 | may not "aggregate, cache, or store geographic location information" | the whole map |
+| §6.2 | may not retain Strava data "longer than seven (7) days" | every history we hold |
+| §2.3 | data "may be displayed or disclosed … only to that user" | showing Josh's outing to Erica |
+| §5.8 | "**may not charge end users, in any manner**" | charging for Flok at all |
+
+Also: §5.10 forbids it *even with the user's consent*; §5.4 forbids aggregation/analytics;
+§5.5 forbids persistent indexes; §5.3 forbids AI/ML. Access is 1 athlete by default, 10
+self-serve, more only at Strava's discretion. Aggregators (Terra, Spike, Rook) were shut
+out on 1 June 2026, so there is no back door.
+
+**The escape hatch is the one already in use:** a user's own Strava EXPORT is not "data
+accessible via the API", and 265 of 445 activities arrived that way. It conflicts with
+Erica's "no importing files, that is a last resort" — and that tension IS the decision.
+
+**2. The provider reality for a paid product**, after the refutation corrected the first
+pass:
+
+| Provider | Verdict |
+|---|---|
+| **Google Health API** (ex-Fitbit) | **The one clean win.** TCX with real GPS trackpoints. Needs OAuth verification + CASA review past 100 users; exercise pages cap at 25 items, so a decade of backfill is real engineering. Legacy Fitbit API dies Sept 2026 |
+| **Garmin** | **OPEN — apply today.** ~2 business days. The first research pass said the programme was paused; that was WRONG. Business use only, and "commercial use requires a license fee payment" for some metrics |
+| **Polar** | **CUT IT.** Forward-only from the moment of consent — a new user gets an empty map until their next workout. Not "90 days of history" |
+| **Wahoo** | Narrow — returns only workouts recorded through Wahoo's own systems |
+| **Suunto / Coros** | Approval-gated / unverifiable. Small populations |
+| **Google Timeline** | No public API. Not now, not ever |
+| **Apple Health** | No web API. Native app or nothing |
+
+**3. "Within 10 feet" would break the feature.** 3.05 m is below the noise floor of consumer
+GPS. Measured against real accuracy distributions it discards **~80% of genuinely-together
+moments in the open, ~91% under tree cover, ~99% in a city** — worst exactly where Erica
+hikes. Two more floors sit under it: polyline precision-5 quantises to ~1.1 m, and
+`summary_polyline` is decimated for display, deviating tens of metres.
+
+**The fix is to stop deciding on distance and decide on DURATION of closeness:**
+
+| Parameter | Erica asked | Use | Why |
+|---|---|---|---|
+| Distance | 3 m | **60 m** | recovers ~100% open-sky and canopy. Strava's own tiles are 80 m |
+| Start window | 10 min | **±30 min** | a fine filter, a terrible decision — 12 min apart then two hours together IS together |
+| Overlap | — | **≥10 min AND ≥25% of the shorter activity** | below that it is a flyby, not a shared outing |
+| Coverage | — | **≥60% propose, ≥80% auto** | a stranger would have to hold pace within 0.10 km/h for 90 minutes to fake 80% |
+| Samples | — | **≥40 aligned** | one lucky point pair is not evidence |
+
+Strava's shipped social grouping uses 80 m tiles and a **50%** threshold; 80% is stricter
+than production. And the repo has the counterexample already: the 2026-03-07
+Purcellville→Arlington run, which migration `0079`'s 800 m START-proximity rule never
+caught, because the two records of the same run start in different places.
+
+**4. One STATE.md line needs amending:** "Google Photos can no longer answer photos from
+that day" is half wrong. You cannot SEARCH by date, but `createTime` comes back on every
+picked item. Still no GPS.
+
 ### C — broken now, quietly (status 2026-08-11)
 
 | | What | Status |
