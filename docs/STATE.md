@@ -577,20 +577,37 @@ picked item. Still no GPS.
 
 ### Erica's directions, 2026-08-11 — to build
 
-1. **Remove the redundant "+ Add" button at the top of the map.** Asked for before and
-   missed. The nav already has Add; §3 says one door per action.
+1. ✅ **VERIFIED LIVE** (`7797d885`) — **the redundant "+ Add" button at the top of the
+   map is gone.** Asked for before and missed. The nav already has Add; §3 says one door
+   per action. The hidden file input that sat beside it stays: it is what the photo-drop
+   flow uses.
+   Also live in the same deploy: **Import & sort photos** and **Import an activity file**
+   now live in Settings → Manage data, and both are gone from the Add page ("Move Import
+   and Sort Photos into Settings. Move import activities to settings."). Add is down to
+   one action plus the review queue — the shape it needs for the approved card, where Add
+   opens a fillable card.
 2. **Settings becomes the gear wheel, not a nav pill.** Account, Connections, Privacy,
    Data and Advanced all extracted onto ONE nicely styled page that opens from the gear
    (bottom-left). **No section labels** — not "Account", not "People" — it should read as
    one seamless page, not five tabs stacked.
    ⚠️ **CONFLICT, resolved with her:** §3 and the nav say FIVE tabs including Settings.
    This makes it four (Map / Places / Add / Timeline) with Settings behind the gear.
-3. **Join Requests moves into the People section.**
+3. ⚠️ **BUILT, NOT YET SEEN LIVE** (`0913f05d`) — **Join Requests is now part of the
+   People section**, rendered above the member list under the one People heading instead
+   of as its own labelled section. Not verifiable from the test account: that whole block
+   renders only for `role === 'owner'`, so **Erica has to confirm it**.
 4. **Photos must appear on the VISIT card.** Today they only do when a photo's date lines
    up, and **156 of 176 photos are not pinned to any visit**.
-5. **The place card gets ONE carousel**, with the date, and the heart / fire reactions
-   available there. It is currently one carousel PER VISIT, and the reactions only exist
-   inside the full-screen lightbox — which is why it reads as "where did it go".
+5. ✅ **VERIFIED LIVE** (`0913f05d`) — **the place card has ONE carousel** with the date,
+   and **the heart and flame are on it**. Confirmed on San Diego: 22 photos, 1 carousel,
+   44 marks, and a react round-trip that wrote and cleared again. The marks used to exist
+   only inside the full-screen lightbox, which is why they read as "where did it go".
+   A mark nobody has used is invisible until hover and always visible on a phone (no
+   hover there); once someone reacts it stays up, because the count is the point.
+   Migration **0158** adds `photo_reactions_for_many(uuid[])` — the single-photo RPC would
+   have fired ~40 requests on opening San Diego. One round trip for the strip; reacting
+   re-reads only the photo you touched. **Applied to production**, verified by the network
+   log showing exactly one `photo_reactions_for_many` call.
 
 ### Smaller things the 2026-08-10/11 work turned up
 

@@ -17,11 +17,17 @@ import {
   type MapPerson,
 } from '../lib/data';
 import { reassignActivity } from '../lib/strava';
-import { uploadPhoto } from '../lib/photos';
+import {
+  fetchReactionsForPhotos,
+  togglePhotoReaction,
+  uploadPhoto,
+  type PhotoReaction,
+} from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { useAuth } from '../auth/AuthProvider';
 import type { Place } from '../lib/types';
 import AuthedImg from '../components/AuthedImg';
+import ThumbMarks from '../components/ThumbMarks';
 
 /** "Aug 2 – 7, 2026", or a single day. */
 function fmtSpan(start: string, end: string): string {
@@ -62,6 +68,9 @@ export default function VisitPage() {
   const [moving, setMoving] = useState(false);
   const [movingAct, setMovingAct] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // The same marks the place card's carousel carries — this section has to look
+  // exactly like that one, so it uses the same component and the same one-call read.
+  const [marks, setMarks] = useState<Map<string, PhotoReaction[]>>(new Map());
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -73,6 +82,9 @@ export default function VisitPage() {
       }
       setD(v);
       setNote(v.visit.note ?? '');
+      void fetchReactionsForPhotos(v.photos.map((ph) => ph.id))
+        .then(setMarks)
+        .catch(() => undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this visit.');
     }
@@ -90,6 +102,14 @@ export default function VisitPage() {
       .then(setPeople)
       .catch(() => undefined);
   }, []);
+
+  async function toggleMark(photoId: string, emoji: string) {
+    await togglePhotoReaction(photoId, emoji).catch(() => undefined);
+    const fresh = await fetchReactionsForPhotos([photoId]).catch(
+      () => new Map<string, PhotoReaction[]>(),
+    );
+    setMarks((prev) => new Map(prev).set(photoId, fresh.get(photoId) ?? []));
+  }
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(label);
@@ -290,6 +310,10 @@ export default function VisitPage() {
           {d.photos.map((ph) => (
             <div className="thumb" key={ph.id}>
               <AuthedImg photoId={ph.id} size="thumb" />
+              <ThumbMarks
+                reactions={marks.get(ph.id) ?? []}
+                onToggle={(emoji) => void toggleMark(ph.id, emoji)}
+              />
               {ph.pinned && canEdit && (
                 <button
                   className="thumb-date"

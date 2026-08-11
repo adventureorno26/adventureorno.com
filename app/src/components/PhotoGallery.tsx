@@ -23,8 +23,7 @@ import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
 import { photoDay, type Photo, type Place, type Video, type Visit } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import PhotoReactions from './PhotoReactions';
-import ReactionMark from './ReactionMarks';
-import { MARKS } from '../lib/reactions';
+import ThumbMarks from './ThumbMarks';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
 import PhotoMatchReview from './PhotoMatchReview';
@@ -550,27 +549,11 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                     )}
                     {/* The heart and the flame, ON the carousel — they used to
                         exist only inside the lightbox, which is why they read as
-                        missing. Anyone signed in can mark a photo; only counts
-                        show, so it stays quiet until someone reacts. */}
-                    <div className="thumb-marks">
-                      {MARKS.map((m) => {
-                        const r = (marks.get(p.id) ?? []).find((x) => x.emoji === m.emoji);
-                        const n = r?.n ?? 0;
-                        return (
-                          <button
-                            key={m.emoji}
-                            className={`thumb-mark ${r?.mine ? 'mine' : ''} ${n ? 'has' : ''}`}
-                            title={n ? r!.who.join(', ') : m.label}
-                            aria-label={m.label}
-                            aria-pressed={!!r?.mine}
-                            onClick={() => void toggleMark(p.id, m.emoji)}
-                          >
-                            <ReactionMark emoji={m.emoji} on={n > 0} size={15} />
-                            {n > 1 && <span className="reaction-n">{n}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
+                        missing. Same component the visit card uses. */}
+                    <ThumbMarks
+                      reactions={marks.get(p.id) ?? []}
+                      onToggle={(emoji) => void toggleMark(p.id, emoji)}
+                    />
 
                     {/* Undated photo → tap to add a date. */}
                     {canUpload &&
