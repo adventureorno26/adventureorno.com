@@ -14,11 +14,15 @@ name: CI
 #   npm ci && npm run lint && npm run test && npm run build
 # and refuses to publish if any of it fails. This workflow is the wider net (security
 # scanning, drift checks, e2e), not the only one.
+# TESTED AGAIN on 2026-08-11 after Erica restored credits (run 31522867375): STILL
+# blocked, same annotation. This repo is PRIVATE, so Actions minutes are metered — past
+# the free 2,000/month it needs a working payment method AND an Actions spending limit
+# above $0, at github.com/settings/billing. Both are account settings; nothing in this
+# repo can change them.
+#
+# So: MANUAL ONLY. Nothing is deleted — every job is intact, and the moment billing is
+# sorted this can go back to `push:`/`pull_request:` or be run from the Actions tab.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 # Least privilege: jobs only need to read the repo. Any job that needs more must
