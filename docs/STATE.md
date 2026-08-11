@@ -298,6 +298,29 @@ established and not negotiable by wishing:
   a commercial product. The route through it is bulk export as user-owned records — 265
   of 445 activities already arrived that way.
 
+### Open, awaiting Erica's decision (found 2026-08-11)
+
+**A. "Together" is claiming things you did apart.** Same disease as 4b: absence of
+information rendered as a positive claim. `visits.solo_profile IS NULL` means *nobody
+said*, and the UI reads it as *both of us were there*.
+- **100 visits** are NULL → shown as Together. Only **5** were set by a person.
+- **56 activities** are NULL → shown as Together. **46 of them already carry an
+  `athlete_id`**, so we KNOW whose outing it was and simply never used it.
+- Genuinely-together evidence does exist: **16 shared outings** (27 activities linked by
+  `shared_group_id`, where both athletes recorded the same outing).
+⚠️ **CONFLICT:** `docs/SCHEMA.md` states `null = Both`. Fixing this changes that rule to
+`null = unknown`, with Together becoming something the data has to EARN.
+
+**B. Attaching the 156 unpinned photos.** Bucketed against the visits that already exist:
+| Bucket | Count | Safe? |
+|---|---|---|
+| Exactly one visit at that place on that day | **122** | yes — same place, same day, no ambiguity |
+| Fabricated `12:00:00` timestamp | **32** | NO — the date is not real, so it must be proposed |
+| No date at all | 2 | no |
+| Ambiguous (several candidate visits) | 0 | — |
+Nothing is ambiguous, which is why this is worth doing: 122 can be attached with
+certainty, and 0157 now makes that attachment permanent.
+
 ### Erica's directions, 2026-08-11 — to build
 1. **Remove the redundant "+ Add" button at the top of the map.** Asked for before and
    missed. The nav already has Add; §3 says one door per action.
