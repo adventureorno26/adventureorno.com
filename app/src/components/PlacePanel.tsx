@@ -860,6 +860,9 @@ export default function PlacePanel({
     if (!v.is_trip && end <= v.start_date) continue;
     const mine = ownActs.filter((a) => {
       const d = activityDay(a);
+      // Same place as the visit — a hike on one section does not belong under a
+      // visit logged on another.
+      if ((a.place_id ?? place.id) !== v.place_id) return false;
       return d !== '' && d >= v.start_date && d <= end;
     });
     if (mine.length === 0) continue;
@@ -875,23 +878,36 @@ export default function PlacePanel({
       // LOCAL day — start_date is UTC, so an evening outing rolls to tomorrow.
       date: visitDates(activityDay(a)),
       sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-      to: `/place/${place.id}/day/${activityDay(a)}`,
+      to: `/place/${a.place_id ?? place.id}/day/${activityDay(a)}`,
       del: null as string | null,
       start: '' as string,
       end: '' as string,
       sort: activityDay(a),
       solo: a.solo_profile as string | null,
-      seg: null as string | null,
+      // An outing logged on a SECTION of a trail names that section, exactly as a
+      // visit does — the segment rides on the row, not on a Sections list.
+      seg:
+        a.place_id && a.place_id !== place.id
+          ? (allPlaces.find((p) => p.id === a.place_id)?.name ?? null)
+          : null,
       trip: false,
       target: { type: 'activity' as const, id: a.id },
     }));
-  const actDays = new Set(ownActs.map(activityDay));
+  // KEYED ON PLACE + DAY. This used to be the day alone, which was right when every
+  // row belonged to one place. Rolling a trail's sections in broke that both ways: a
+  // section visit vanished because the trail had an activity that day (59 rows instead
+  // of 62), and the same day appeared twice from two different places.
+  const dayKey = (placeId: string | null | undefined, day: string) =>
+    `${placeId ?? place.id}|${day}`;
+  const actDays = new Set(ownActs.map((a) => dayKey(a.place_id, activityDay(a))));
   // Visit rows an activity doesn't already cover: multi-day trips, and single
   // days with photos/entries but no run. A TRAIL used to be excluded here, which
   // hid the 32 days Erica logged on the Appalachian Trail itself — a trail is a
   // place you went, and the days you went are its dates.
   const visitRows = (visits ?? [])
-    .filter((v) => v.is_trip || nestedActs.has(v.id) || !actDays.has(v.start_date))
+    .filter(
+      (v) => v.is_trip || nestedActs.has(v.id) || !actDays.has(dayKey(v.place_id, v.start_date)),
+    )
     .map((v) => ({
       key: v.id,
       trip: v.is_trip,
