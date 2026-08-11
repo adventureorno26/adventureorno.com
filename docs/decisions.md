@@ -1170,3 +1170,49 @@ build command — so it never builds and the missing vars are harmless there. Th
 finding is a SECOND project, `adventureorno-com`, connected to GitHub with an empty build
 command, serving only its own pages.dev. It is a leftover, and the "Cloudflare Pages"
 check on every PR points at IT rather than at the project serving the site.
+
+## 2026-08-11 — CI moved to Cloudflare, because the GitHub bill is not being paid
+
+Erica: "I am not upgrading my gh plan so find a way to deploy CI another way."
+
+**Cloudflare Pages builds from git on its free tier, and the build command is the gate:**
+`npm ci && npm run lint && npm run test && npm run build`. A failing test or a lint error
+fails the build, and a failed build does not deploy — which is the same guarantee
+`release-gate` was giving, without GitHub Actions minutes. Verified on a real build:
+eslint + prettier, 88 app tests, 20 worker tests, then Vite. The bundle it produced is
+**byte-identical** to the one deployed by hand (`index-BiduceMY.js`), which is the
+strongest evidence the pipeline is honest.
+
+Cloudflare now also holds every `VITE_*` plus `NODE_VERSION=22`, on both projects and
+both environments — without them a Cloudflare build would have produced a bundle with no
+Supabase keys and no map token. The Vite assertion added this morning would now catch
+that anyway, and it did: it ran inside the Cloudflare build and passed.
+
+One thing left, and it is outward-facing so it waits for her word: the custom domain still
+points at the OLD direct-upload project, so this pipeline publishes to
+`adventureorno-com.pages.dev` only. Moving the domain makes it the real deploy path.
+
+## 2026-08-11 — The planet, and what it actually costs
+
+Erica wants the whole planet self-hosted. The numbers, all verified rather than
+estimated:
+
+- The Protomaps daily planet build for 2026-08-10 is **137,281,886,877 bytes = 137.3 GB**,
+  zoom 0–15, and it answers HTTP range requests (206, `PMTiles` spec v3).
+- In R2 that is **≈ $1.91/month** of storage after the 10 GB free tier, and **$0 egress** —
+  R2 does not charge for it. Reads are Class B ops at 10M/month free; two people cannot
+  approach that. **≈ $2/month, flat.**
+- Against that: Mapbox through MapLibre bills PER TILE REQUEST, which is the exact shape
+  of the blowout that lost us MapTiler.
+
+**And 137 GB never touches Erica's machine.** The source is served from Cloudflare and R2
+is in Cloudflare, so a Worker copies it range-by-range as a multipart upload and the bytes
+stay on their network.
+
+**Snapchat, for the record, does NOT self-host.** Snap Map is Mapbox — a partnership since
+2017, Mapbox Outdoors plus Mapbox Satellite, OpenStreetMap underneath. The look she likes
+is Mapbox+OSM; Snap pays for it at enterprise scale. Self-hosting is the opposite trade,
+and it is only open to us because Protomaps publishes the same OSM planet as one file.
+
+The blocking step is hers: **an API token with R2 read+write.** Nothing in `.env.local`
+can touch R2 — the photo Worker gets there through a binding, not the API.

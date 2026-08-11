@@ -157,10 +157,20 @@ purpose" register in §7 exists so nothing is silently lost again.
   empty build command.** It serves only `adventureorno-com.pages.dev`. It is a leftover,
   and it already causes confusion: the "Cloudflare Pages" check on every PR points at it,
   not at the project that actually serves the site. Decide whether to delete it.
-- **Deploys go through CI on green.** The pipeline exists and is thorough, but
-  `release-gate` cannot start — **GitHub Actions is over its spending limit** — so
-  `deploy-production` is skipped and deploys are by hand. Needs Erica: GitHub →
-  Settings → Billing & plans.
+- ✅ **Deploys go through CI on green — on CLOUDFLARE, not GitHub Actions** (2026-08-11).
+  Erica is not upgrading the GitHub plan, so the gate moved to Cloudflare Pages, which
+  builds from git on its free tier. The build command is
+  `npm ci && npm run lint && npm run test && npm run build`, so **a failing test or a
+  lint error fails the deployment**. Verified on a real build: eslint + prettier, 88 app
+  tests, 20 worker tests, then the Vite build — and the bundle it produced is
+  byte-identical to the hand-deployed one.
+  Cloudflare now holds every `VITE_*` (set 2026-08-11, production and preview) plus
+  `NODE_VERSION=22`, so its builds are not blank.
+  **Remaining:** the custom domain still points at the OLD direct-upload project
+  (`adventureorno`), so this pipeline currently publishes only to
+  `adventureorno-com.pages.dev`. Moving the domain makes it the real deploy path —
+  it is outward-facing, so it needs Erica's word first.
+  GitHub Actions stays for the heavy suite when minutes allow; it is no longer the gate.
 - An acceptance list for the things she cares about, as tests that fail loudly.
 
 ### Phase 2 — Make the model show through ✅ (2026-08-10)
@@ -176,27 +186,64 @@ and the Settings → Data grid. Plus:
 - **Transient UI that disappears** when it is done (the upload box, the "finish importing
   your Google Photos" banner).
 
-### Phase 4 — A map we own  *(the goal; Mapbox is a stopgap, not the destination)*
-The point is **not to be limited by somebody else's charges or switch**. MapTiler proved
-it by suspending the account and taking every map in the app with it.
+### Phase 4 — A map we own  *(THE GOAL. Mapbox is a stopgap, not the destination)*
+The point is **not to be limited by somebody else's charges, and not to be switchable-off
+by somebody else**. MapTiler proved the second half by suspending the account and taking
+every map in the app with it.
 
-- **Basemap:** Protomaps `.pmtiles` in **R2**, served by our own Worker over HTTP range
-  requests. No API key in the client, no per-request quota, nobody outside can suspend
-  it. R2 has **no egress fee**, so the bill is storage only — a region extract is single-
-  digit GB, i.e. **cents per month**, flat.
-  A whole-planet download is NOT required: `pmtiles extract` pulls only the tiles for a
-  bounding box straight from the public build over range requests.
-- **Our own style, in the app's own colours.** This is the other half of why we own it:
-  the Mapbox dark basemap is neutral grey and does not match the cards. The style is
-  authored against the app's tokens — `--bg #060a14`, `--panel #0e1728`,
-  `--panel-2 #131f36`, `--border #1f2d4d`, `--text #eaf1ff`, `--muted #93a6cc`,
-  `--accent #3b82f6` — so the map reads as part of the app rather than a window onto
-  someone else's.
-- **Glyphs and sprites self-hosted** in R2 too, or the map still calls out to a third
-  party for its fonts.
-- Mapbox stays as **failover only**, and the tile meter stays.
-- Still third-party after this, and worth naming: **search/geocoding** (Mapbox Search
-  Box) and **weather** (Open-Meteo). Self-hosting search is a separate decision.
+**Worth knowing: Snapchat does not do this.** Snap Map runs on **Mapbox** (partnership
+since 2017 — Mapbox Outdoors vector data plus Mapbox Satellite, OpenStreetMap
+underneath). The look Erica likes IS Mapbox+OSM; Snap simply pays Mapbox at enterprise
+scale. Self-hosting is the opposite trade, and it is available to us because Protomaps
+publishes the same OpenStreetMap planet as a single file.
+
+**Decided 2026-08-11: the WHOLE PLANET, full detail.**
+
+| | |
+|---|---|
+| File | `build.protomaps.com/<date>.pmtiles` — daily OSM planet build, zoom 0–15 |
+| Size | **137.3 GB** (2026-08-10 build), verified by content-length |
+| Verified | HTTP 206 range requests, `PMTiles` spec v3, `accept-ranges: bytes`, served from Cloudflare |
+
+**Cost, in R2 — flat, and the whole reason for doing it:**
+
+| Line | Amount |
+|---|---|
+| Storage 137.3 GB × $0.015/GB-month, minus the 10 GB free tier | **≈ $1.91 / month** |
+| Class A (writes): ~1,400 multipart parts, one-time | free (1M/month included) |
+| Class B (reads): 1 per tile served; two people browsing | free (10M/month included) |
+| **Egress** | **$0 — R2 never charges for it** |
+| **Total** | **≈ $2 / month, flat, no matter how much we look at it** |
+
+Against that, Mapbox through MapLibre bills **per tile request**, which is precisely the
+shape of the blowout that cost us MapTiler.
+
+**Getting 137 GB in without touching Erica's Mac.** The planet file is served *from
+Cloudflare*, and R2 is *in* Cloudflare, so the copy never leaves their network: a Worker
+reads ranges from the source and writes them to R2 as a multipart upload (~1,400 × 100 MB
+parts), driven until it completes. No 137 GB download, no 137 GB upload, no overnight
+saturation of her connection.
+
+**Steps**
+1. **Erica: create an API token with R2 read+write.** The only blocking human step — none
+   of the tokens in `.env.local` can touch R2 today (the photo Worker reaches R2 through a
+   binding, not the API). Cloudflare dashboard → My Profile → API Tokens.
+2. Bucket `aon-basemap`; copier Worker; run the copy.
+3. A tiles Worker serving `/basemap/{z}/{x}/{y}` out of the pmtiles, with edge caching so
+   repeat views cost nothing, plus the same budget meter.
+4. Self-host the **glyphs** (fonts) and any sprite in the same bucket, or the map still
+   calls a third party for its lettering.
+5. **The style, authored in the app's own colours** — this is the other half of the point,
+   and it is what fixes Erica's "I don't like the colour": the Mapbox basemap is neutral
+   grey and does not match the cards. Built against the real tokens:
+   `--bg #060a14`, `--bg-2 #0a1122`, `--panel #0e1728`, `--panel-2 #131f36`,
+   `--border #1f2d4d`, `--text #eaf1ff`, `--muted #93a6cc`, `--accent #3b82f6`.
+6. Cut MapLibre over; Mapbox drops to **failover only**; the meter stays.
+7. Verify live, per the rule.
+
+**Still third-party afterwards, and worth naming:** search/geocoding (Mapbox Search Box)
+and weather (Open-Meteo). Self-hosting search is a separate decision — Nominatim/Photon
+are the options.
 
 ### Phase 5 — Commercial readiness  *(not started; deliberately last)*
 Multi-tenant Spaces, per-tenant quotas, branding, install flows. Two constraints already
