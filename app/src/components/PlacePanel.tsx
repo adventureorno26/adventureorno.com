@@ -1290,6 +1290,9 @@ export default function PlacePanel({
                     }}
                   >
                     <span className="visit-date">{r.date}</span>
+                    {/* THE SEGMENT NAME, when this row was logged on a section of the
+                        trail. It is what replaced the Sections list. */}
+                    {r.seg && <span className="visit-seg">{r.seg}</span>}
                     {/* One muted summary, not a stack of chips. */}
                     {(() => {
                       const meta = [
@@ -1306,6 +1309,7 @@ export default function PlacePanel({
                 ) : (
                   <Link className="visit-main" to={r.to}>
                     <span className="visit-date">{r.date}</span>
+                    {r.seg && <span className="visit-seg">{r.seg}</span>}
                     {r.sub && <span className="muted">{r.sub}</span>}
                   </Link>
                 )}

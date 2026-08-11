@@ -52,7 +52,28 @@ function requireClientEnv(): Plugin {
 
 // Vite loads .env.local from the app dir; the repo keeps a single .env.local at
 // the workspace root, so point envDir up one level.
+// The SHA this bundle was built from, baked in so the running app can compare
+// itself to /version.json and notice that a deploy has happened. prebuild stamps
+// that file before vite runs, so it is always there and always current.
+function builtSha(): string {
+  try {
+    // This file is type-checked WITHOUT @types/node, so node's globals are reached
+    // through a narrow declared shape rather than an import. The config only ever
+    // runs in Node, where both exist.
+    const req = (globalThis as unknown as { require?: (m: string) => unknown }).require;
+    const fs = req?.('fs') as { readFileSync: (p: string, e: string) => string } | undefined;
+    if (!fs) return 'unknown';
+    return (
+      (JSON.parse(fs.readFileSync('public/version.json', 'utf8')) as { sha?: string }).sha ??
+      'unknown'
+    );
+  } catch {
+    return 'unknown';
+  }
+}
+
 export default defineConfig({
+  define: { __BUILD_SHA__: JSON.stringify(builtSha()) },
   plugins: [react(), requireClientEnv()],
   envDir: '..',
   server: { port: 5173 },

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { registerServiceWorker } from './lib/pwa';
+import { registerServiceWorker, watchForNewBuild } from './lib/pwa';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import App from './App';
@@ -26,3 +26,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // assets permanently, so a deploy is always picked up while the app still opens on a
 // bad connection. `?sw=off` unregisters it and clears every cache — see lib/pwa.ts.
 registerServiceWorker();
+// And notice when a deploy lands while this tab is open — /version.json was being
+// stamped on every build and read by nobody.
+watchForNewBuild();
