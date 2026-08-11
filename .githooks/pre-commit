@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# NO COMMIT ON A BROKEN TREE, AND NEVER ON main.
+#
+# Erica, 2026-08-11: "Make Claude work only on named branches. Allow commits only
+# after tests pass; never commit automatically on session exit."
+#
+# The auto-commit-on-exit hooks are gone (~/.claude/settings.json, backed up as
+# settings.json.bak-2026-08-11). This is the other half: even a deliberate commit
+# has to earn it.
+#
+# Install (once per clone):   git config core.hooksPath .githooks
+#
+# Escape hatch for a genuine emergency, used out loud and never by an agent:
+#   AON_SKIP_HOOK=1 git commit ...
+set -euo pipefail
+
+if [ "${AON_SKIP_HOOK:-}" = "1" ]; then
+  echo "pre-commit: SKIPPED via AON_SKIP_HOOK=1" >&2
+  exit 0
+fi
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+# 1. NAMED BRANCHES ONLY. main is protected on GitHub too ("Changes must be made
+#    through a pull request"), so committing here only creates work to undo.
+if [ "$branch" = "main" ] || [ "$branch" = "HEAD" ]; then
+  cat >&2 <<'MSG'
+
+  ✋ Refusing to commit on main.
+
+  Work happens on a named branch and reaches main through a pull request:
+
+      git switch -c fix/what-this-is
+      ...commit...
+      gh pr create
+
+  main is protected on GitHub as well, so a commit here cannot be pushed anyway.
+
+MSG
+  exit 1
+fi
+
+# 2. THE TESTS MUST PASS. Only when app code is actually part of the commit —
+#    a docs-only or SQL-only change should not have to boot vitest.
+staged="$(git diff --cached --name-only)"
+if printf '%s\n' "$staged" | grep -qE '^app/(src|e2e)/.*\.(ts|tsx|css)$'; then
+  echo "pre-commit: app code is staged — typechecking and running the unit tests…" >&2
+  ( cd app && npx tsc -b ) || {
+    echo >&2
+    echo "  ✋ tsc failed. Fix it, then commit." >&2
+    exit 1
+  }
+  ( cd app && npm run test --silent ) >/dev/null 2>&1 || {
+    echo >&2
+    echo "  ✋ The unit tests failed. Run 'npm run test --workspace app' to see it." >&2
+    echo "     That includes lockedCard.test.ts — the words and structure Erica locked." >&2
+    exit 1
+  }
+  echo "pre-commit: green." >&2
+fi
