@@ -50,6 +50,8 @@ import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
+import { pluralLabel } from '../lib/plural';
+import { visitDates } from '../lib/visitDates';
 import TrailSectionsMap from './TrailSectionsMap';
 import StarRating from './StarRating';
 
@@ -467,6 +469,71 @@ export default function PlacePanel({
         });
       }
     }
+  }
+  // THE LOCKED CARD puts each category in its OWN section — "Restaurants" is a
+  // section, not a fold inside Notes and Reviews, which is where they had ended up.
+  // Notes and reviews holds notes and reviews, and nothing else.
+  const categorySections = reviewGroups.filter((g) => g.key !== 'note');
+  const noteGroups = reviewGroups.filter((g) => g.key === 'note');
+
+  // The rows inside a category section (and inside Notes). Lifted out of the old
+  // single "reviewGroups" fold so the SAME markup serves every section — the locked
+  // card says every section looks the same, and two copies is how they stop looking
+  // the same.
+  function renderGroupRows(g: { key: string; places: Place[]; entries: Entry[] }) {
+    return (
+      <>
+        {/* Linked member places of this category */}
+        {g.places.map((m) => {
+          const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
+          return (
+            <div key={m.id} className="spot-row">
+              <Link className="spot-item" to={`/place/${m.id}`}>
+                <span className="spot-title">{m.name}</span>
+                {m.rating ? <span className="spot-rating">{'★'.repeat(m.rating)}</span> : null}
+              </Link>
+              {dest && (
+                <a
+                  className="directions-btn sm spot-dir"
+                  href={`https://maps.apple.com/?daddr=${encodeURIComponent(dest)}&dirflg=d`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Directions to ${m.name}`}
+                >
+                  Directions
+                </a>
+              )}
+            </div>
+          );
+        })}
+        {/* Inline entry-spots of this category */}
+        {g.entries.map((e) => {
+          const dir = spotDirHref(e);
+          return (
+            <div key={e.id} className="spot-row">
+              <Link
+                className="spot-item"
+                to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
+              >
+                <span className="spot-title">{e.title}</span>
+                {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
+              </Link>
+              {dir && (
+                <a
+                  className="directions-btn sm spot-dir"
+                  href={dir}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Directions to ${e.address ?? e.title}`}
+                >
+                  Directions
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
   }
 
   async function submitVisit() {
@@ -1501,6 +1568,35 @@ export default function PlacePanel({
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
       <PhotoGallery place={place} visits={visits ?? undefined} onUploaded={refreshPlace} />
 
+      {/* ROUTES — third, per the locked card. The map shows EVERY route from every
+          visit; the list under it is every one of them by name. Hikes, biking,
+          walking and running all live here — there is no Activities section and
+          there are no activity pills. */}
+      {(trailActs ?? []).length > 0 && (
+        <>
+          <h3 style={{ marginTop: 22 }}>
+            Routes <span className="label">({(trailActs ?? []).length})</span>
+          </h3>
+          <RouteMiniMap place={place} />
+          <div className="route-rows">
+            {(trailActs ?? []).map((a) => (
+              <Link
+                key={a.id}
+                className="route-row"
+                to={a.local_date ? `/place/${place.id}/day/${a.local_date}` : `/place/${place.id}`}
+              >
+                <span className="route-row-name">{a.name || a.type}</span>
+                <span className="label">
+                  {a.type}
+                  {a.distance ? ` · ${(a.distance / 1609.344).toFixed(1)} mi` : ''}
+                  {a.local_date ? ` · ${visitDates(a.local_date)}` : ''}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* SECTIONS — the places this one HOLDS, each listed ONCE, opening to its
           own dates; a date opens the card. Erica: "the appalachian trail no
           longer exists in Places… why do segments of it appear?" This is the
@@ -1564,9 +1660,22 @@ export default function PlacePanel({
         </>
       )}
 
-      {/* NOTES AND REVIEWS. No blue "+" link in the heading — Erica asked for it
-          gone. The fillable box sits at the BOTTOM of this section, where the
-          notes are, rather than being something you first have to reveal. */}
+      {/* THE CATEGORY SECTIONS — Restaurants, Beaches, Wineries. Each is its own
+          section with its own heading, plural, exactly like the locked card. They
+          used to be folds INSIDE Notes and Reviews, which is why Wonderland read as
+          a note rather than a restaurant. */}
+      {categorySections.map((g) => (
+        <div key={g.key}>
+          <h3 style={{ marginTop: 22 }}>
+            {pluralLabel(g.label)}{' '}
+            <span className="label">({g.places.length + g.entries.length})</span>
+          </h3>
+          <div className="spot-groups">{renderGroupRows(g)}</div>
+        </div>
+      ))}
+
+      {/* NOTES AND REVIEWS — last, and holding only notes and reviews. No blue "+"
+          link in the heading; the fillable box sits at the BOTTOM of the section. */}
       <div className="visits-head">
         <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
       </div>
@@ -1639,67 +1748,10 @@ export default function PlacePanel({
         </div>
       )}
 
-      {reviewGroups.length > 0 ? (
+      {noteGroups.length > 0 ? (
         <div className="spot-groups">
-          {reviewGroups.map((g) => (
-            <details className="spot-cat" key={g.key}>
-              <summary className="spot-cat-head">
-                {g.label} <span className="label">({g.places.length + g.entries.length})</span>
-              </summary>
-              {/* Linked member places of this category */}
-              {g.places.map((m) => {
-                const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
-                return (
-                  <div key={m.id} className="spot-row">
-                    <Link className="spot-item" to={`/place/${m.id}`}>
-                      <span className="spot-title">{m.name}</span>
-                      {m.rating ? (
-                        <span className="spot-rating">{'★'.repeat(m.rating)}</span>
-                      ) : null}
-                    </Link>
-                    {dest && (
-                      <a
-                        className="directions-btn sm spot-dir"
-                        href={`https://maps.apple.com/?daddr=${encodeURIComponent(dest)}&dirflg=d`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Directions to ${m.name}`}
-                      >
-                        Directions
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
-              {/* Inline entry-spots of this category */}
-              {g.entries.map((e) => {
-                const dir = spotDirHref(e);
-                return (
-                  <div key={e.id} className="spot-row">
-                    <Link
-                      className="spot-item"
-                      to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
-                    >
-                      <span className="spot-title">{e.title}</span>
-                      {e.rating ? (
-                        <span className="spot-rating">{'★'.repeat(e.rating)}</span>
-                      ) : null}
-                    </Link>
-                    {dir && (
-                      <a
-                        className="directions-btn sm spot-dir"
-                        href={dir}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Directions to ${e.address ?? e.title}`}
-                      >
-                        Directions
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
-            </details>
+          {noteGroups.map((g) => (
+            <div key={g.key}>{renderGroupRows(g)}</div>
           ))}
         </div>
       ) : (
@@ -1715,8 +1767,6 @@ export default function PlacePanel({
           onCancel={() => undefined}
         />
       )}
-
-      <RouteMiniMap place={place} />
 
       {/* Attribution ("who was here") is NOT a place-level property — a place can
           be visited solo one time and together another. It lives ONLY on each

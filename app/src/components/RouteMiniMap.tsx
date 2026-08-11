@@ -112,11 +112,13 @@ export default function RouteMiniMap({ place }: { place: Place }) {
     };
   }, [place.id, place.lat, place.lng]);
 
+  // The heading lives on the CARD now, not here: §2's locked template puts Routes
+  // third with its list underneath, and the list must show even when no route has a
+  // track to draw. This component is only the map.
   if (hasData === false) return null;
 
   return (
     <div className="route-mini">
-      <h3 style={{ marginTop: 22 }}>Routes here</h3>
       <button
         className="route-mini-map"
         onClick={() => navigate(`/place/${place.id}/routes`)}
