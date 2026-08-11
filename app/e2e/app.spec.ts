@@ -6,15 +6,17 @@ import AxeBuilder from '@axe-core/playwright';
 // acceptance flows (create place, log two visits, duplicate handling, upload
 // retry) require a dedicated test tenant — tracked as a follow-up.
 test.describe('authenticated app (non-destructive)', () => {
-  test('primary navigation is present with all five tabs', async ({ page }) => {
+  test('primary navigation is present with all four tabs', async ({ page }) => {
     await page.goto('/');
     const nav = page.locator('nav.primary-nav');
     await expect(nav).toBeVisible();
-    // Add carries the pending count when there is one ("Add 3"), so it is matched
-    // by prefix; the rest are exact.
-    for (const label of [/^Map$/, /^Places$/, /^Add( \d+)?$/, /^Timeline$/, /^Settings$/]) {
+    // FOUR tabs since 2026-08-11: Settings moved to the gear, because a pill and a
+    // gear were two doors to the same page. Add carries the pending count when there
+    // is one ("Add 3"), so it is matched by prefix; the rest are exact.
+    for (const label of [/^Map$/, /^Places$/, /^Add( \d+)?$/, /^Timeline$/]) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible();
     }
+    await expect(nav.getByRole('link', { name: /^Settings$/ })).toHaveCount(0);
   });
 
   // ADD IS ONE DOOR. It used to be a tab that redirected to a sheet over the map,
@@ -31,7 +33,9 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(page).toHaveURL(/\/add$/);
     await expect(page.getByRole('heading', { name: 'Add', exact: true })).toBeVisible();
     // Add by hand, sort photos, import a file — and the review queue below them.
-    await expect(page.getByRole('button', { name: /Add a place, visit or activity/ })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Add a place, visit or activity/ }),
+    ).toBeVisible();
     await expect(page.getByRole('link', { name: /Sort photos/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /Import an activity file/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
@@ -78,10 +82,15 @@ test.describe('authenticated app (non-destructive)', () => {
     expect(results.violations.filter((v) => v.impact === 'critical').map((v) => v.id)).toEqual([]);
   });
 
-  test('Settings groups maintenance tools under "Manage data"', async ({ page }) => {
+  // Settings is ONE continuous page since 2026-08-11 — no tabs to click through.
+  // Erica: "everything from account, connections, privacy, data, and advanced
+  // should [be] extracted and added to one page... make it look like a seamless page."
+  test('Settings is one page, with no tab bar to click through', async ({ page }) => {
     await page.goto('/settings');
-    await page.getByRole('button', { name: 'Data', exact: true }).click();
+    await expect(page.locator('.settings-tabs')).toHaveCount(0);
+    // Things that used to live under four different tabs are all on the one page.
     await expect(page.getByRole('heading', { name: 'Manage data' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Data health' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
 });

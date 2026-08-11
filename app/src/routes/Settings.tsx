@@ -945,8 +945,6 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
-type SettingsTab = 'account' | 'connections' | 'privacy' | 'data' | 'advanced';
-
 export default function Settings() {
   const { profile, signOut } = useAuth();
   const [members, setMembers] = useState<MapPerson[]>([]);
@@ -960,16 +958,13 @@ export default function Settings() {
     .filter(Boolean)
     .join(' & ');
 
-  // Settings is divided into manageable destinations (Prompt 7, rec 41). Every card
-  // is retained — just grouped under a tab so the page isn't one endless scroll.
-  const [tab, setTab] = useState<SettingsTab>('account');
-  const TABS: { key: SettingsTab; label: string }[] = [
-    { key: 'account', label: 'Account' },
-    { key: 'connections', label: 'Connections' },
-    { key: 'privacy', label: 'Privacy' },
-    { key: 'data', label: 'Data' },
-    { key: 'advanced', label: 'Advanced' },
-  ];
+  // ONE PAGE, not five tabs. Erica, 2026-08-11: "everything from account,
+  // connections, privacy, data, and advanced should [be] extracted and added to one
+  // page, nicely styled... I don't need the labels like Account etc make it look
+  // like a seamless page."
+  //
+  // Every card that was behind a tab is still here, in the same order, just
+  // continuous — and the group labels the tabs implied are gone with them.
 
   return (
     <div
@@ -984,22 +979,8 @@ export default function Settings() {
         Signed in as <b>{profile?.display_name ?? 'you'}</b> · role <b>{profile?.role}</b>
       </p>
 
-      <nav className="settings-tabs" aria-label="Settings sections">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={tab === t.key ? 'on' : ''}
-            onClick={() => setTab(t.key)}
-            type="button"
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
-
-      {tab === 'account' && (
+      {
         <>
-          <h2 style={{ marginTop: 20 }}>Account</h2>
           <button onClick={() => void signOut()}>Sign out</button>
 
           {profile?.role === 'owner' && (
@@ -1012,9 +993,9 @@ export default function Settings() {
             </>
           )}
         </>
-      )}
+      }
 
-      {tab === 'connections' && profile && (
+      {profile && (
         <>
           <h2 style={{ marginTop: 20 }}>Strava &amp; Garmin</h2>
           <StravaCard isOwner={profile.role === 'owner'} />
@@ -1022,7 +1003,7 @@ export default function Settings() {
         </>
       )}
 
-      {tab === 'privacy' && (
+      {
         <>
           <h2 style={{ marginTop: 20 }}>{memberNames ? `Shared — ${memberNames}` : 'Shared'}</h2>
           <SharedHub />
@@ -1034,9 +1015,9 @@ export default function Settings() {
             </>
           )}
         </>
-      )}
+      }
 
-      {tab === 'data' && (
+      {
         <>
           <h2 style={{ marginTop: 20 }}>Stats</h2>
           <StatsSection />
@@ -1090,9 +1071,9 @@ export default function Settings() {
           <h2 style={{ marginTop: 28 }}>Export our data</h2>
           <ExportCard />
         </>
-      )}
+      }
 
-      {tab === 'advanced' && profile?.role === 'owner' && (
+      {profile?.role === 'owner' && (
         <>
           <h2 style={{ marginTop: 20 }}>Map</h2>
           <ProjectionCard />

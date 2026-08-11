@@ -7,7 +7,7 @@ import { fetchInboxCounts } from '../lib/inbox';
 // Erica's standing preference), styled as a bottom-center glass pill to match
 // the existing back-bar / stats-bar language. Rendered globally in App.tsx.
 //
-// Five destinations: Map (home), Places (the list), Add, Timeline and Settings.
+// FOUR destinations: Map (home), Places (the list), Add and Timeline.
 //
 // ⚠️ REVISED 2026-08-11 (docs/STATE.md). ADD opens a FILLABLE CARD — not a
 // chooser, not a sheet asking what you are adding. Import photos, Sort photos
@@ -24,11 +24,6 @@ const TABS: { to: string; label: string; match?: (path: string, search: string) 
   // Add is a sheet, not a page, so it highlights on its query flag rather than a path.
   { to: '/add', label: 'Add', match: (p, s) => p === '/add' || p === '/photos/sort' || addOpen(s) },
   { to: '/timeline', label: 'Timeline' },
-  {
-    to: '/settings',
-    label: 'Settings',
-    match: (p) => p === '/settings' || p.startsWith('/settings/'),
-  },
 ];
 
 export default function PrimaryNav() {
