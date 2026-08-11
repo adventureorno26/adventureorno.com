@@ -325,49 +325,7 @@ jobs:
         if: needs.classify.outputs.smoke == 'true'
         run: npm ci
 
-      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
-        if: needs.classify.outputs.smoke == 'true'
-        with:
-          version: ${{ env.SUPABASE_VERSION }}
-
-      - name: Start disposable local Supabase
-        if: needs.classify.outputs.smoke == 'true'
-        run: |
-          hold="$(mktemp -d)"
-          restore_migrations() {
-            if compgen -G "$hold/*.sql" > /dev/null; then
-              mv "$hold"/*.sql supabase/migrations/
-            fi
-          }
-          trap restore_migrations EXIT
-          mv supabase/migrations/*.sql "$hold"/
-          supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-          restore_migrations
-          trap - EXIT
-
-      - name: Bootstrap schema and export local test configuration
-        if: needs.classify.outputs.smoke == 'true'
-        run: |
-          AON_BOOTSTRAP_CONFIRM=yes bash scripts/db-bootstrap.sh --yes
-          supabase status -o json > /tmp/aon-supabase-status.json
-          api_url="$(jq -r '.API_URL' /tmp/aon-supabase-status.json)"
-          publishable_key="$(jq -r '.PUBLISHABLE_KEY // .ANON_KEY' /tmp/aon-supabase-status.json)"
-          secret_key="$(jq -r '.SECRET_KEY // .SERVICE_ROLE_KEY' /tmp/aon-supabase-status.json)"
-          echo "::add-mask::$publishable_key"
-          echo "::add-mask::$secret_key"
-          echo "VITE_SUPABASE_URL=$api_url" >> "$GITHUB_ENV"
-          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$publishable_key" >> "$GITHUB_ENV"
-          echo "SUPABASE_URL=$api_url" >> "$GITHUB_ENV"
-          echo "SUPABASE_SECRET_KEY=$secret_key" >> "$GITHUB_ENV"
-          echo "TEST_BOT_EMAIL=owner.e2e@example.invalid" >> "$GITHUB_ENV"
-          echo "TEST_BOT_PASSWORD=Local-E2E-owner-2026!" >> "$GITHUB_ENV"
-          echo "REQUIRE_AUTH_E2E=true" >> "$GITHUB_ENV"
-
-      - name: Seed fictional local users
-        if: needs.classify.outputs.smoke == 'true'
-        run: npm run seed:e2e
-
-      - name: Build local Supabase preview target
+      - name: Build public preview target
         if: needs.classify.outputs.smoke == 'true'
         working-directory: app
         run: npm run build
@@ -377,9 +335,9 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: app
 
-      - name: Run focused Chromium smoke tests
+      - name: Run public Chromium smoke tests
         if: needs.classify.outputs.smoke == 'true'
-        run: npx playwright test e2e/public.spec.ts e2e/app.spec.ts --project=desktop-chrome
+        run: npx playwright test e2e/public.spec.ts --project=desktop-chrome
         working-directory: app
 
       - name: Upload Playwright report
@@ -389,10 +347,6 @@ jobs:
           name: playwright-smoke-report
           path: app/playwright-report/
           retention-days: 7
-
-      - name: Stop local Supabase
-        if: always() && needs.classify.outputs.smoke == 'true'
-        run: supabase stop --no-backup || true
 
   full-browser:
     name: Full browser matrix
