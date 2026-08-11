@@ -1251,3 +1251,41 @@ differently from what she wants:
 - The place card groups photos into one carousel PER VISIT, so she sees several strips
   rather than the single carousel she asked for.
 Nothing was deleted; the arrangement is wrong. Recorded as direction 5.
+
+## 2026-08-11 — A decision is permanent, by construction
+
+Erica: "all manual work I do should overwrite machine work, and should not be undone by
+anything. We set this rule yesterday and then it was ignored... Figure this out since it
+keeps happening."
+
+**Why it kept happening.** The rule was enforced by REMEMBERING to set `visits.manual`,
+and three writers did not: `set_visit_solo` (who was here), `set_photo_visit` (pinning a
+photo) and `ensure_visit`. Meanwhile ELEVEN functions call `rebuild_place_visits`,
+including `visits_sync_photo` — a trigger on the photos table. So the loop was:
+
+  add a photo → trigger → rebuild → delete every visit not marked `manual`
+    → photos.visit_id is ON DELETE SET NULL → her pins silently vanish
+      → the freed photo's date seeds a new visit
+
+That is 156 of 176 photos unpinned, and Virginia Beach showing three visits for one race.
+
+**The fix is structural, so it cannot be forgotten again** (migration 0157):
+1. A trigger marks a visit decided whenever a SIGNED-IN PERSON changes its dates, note,
+   attribution, trip flag or status. `auth.uid()` is non-null only for a real user's
+   request — cron and edge functions run as service_role with no uid — so the machine
+   path is untouched and no future setter has to remember anything.
+2. Pinning a photo marks that photo's visit decided, for the same reason.
+3. The rebuild will not delete a visit that holds pinned photos, even an undecided one.
+4. A pinned photo no longer seeds a day of its own: it belongs to its visit whatever its
+   date says. That is Erica's rule verbatim — "if I add a photo to a visit, it should
+   remain with that visit regardless of the date".
+5. Backfill recognised the decisions already visible in the data (pinned photos,
+   overridden attribution): protected visits went 12 → 31.
+
+**Proven, not assumed.** Replayed the destructive case inside a rolled-back transaction:
+an unprotected visit holding a pinned photo survived `rebuild_place_visits` with its photo
+still attached. Before 0157 the visit would have been deleted and the pin nulled.
+
+One process note: an early version of that test left a transaction open without a
+rollback and did insert a row; the Management API discarded it when the statement failed
+(verified: 488 visits, none on the test date). Explicit `begin/rollback` from now on.

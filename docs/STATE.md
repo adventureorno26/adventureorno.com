@@ -134,7 +134,16 @@ CONTRADICTS something written here. Otherwise keep working (see
 3. ~~**Sections repeat.**~~ — fixed 2026-08-10. Each section is listed once and opens to
    its dates.
 4. **Data work is scattered** across six screens with different words for the same thing.
-4b. **THE BIGGEST CONFLICT IN THE REPO: the machine writes visits.**
+4b. ~~**THE BIGGEST CONFLICT IN THE REPO: the machine writes visits.**~~ **FIXED
+   2026-08-11, migration `0157`.** A person's decision is now permanent by
+   CONSTRUCTION, not by remembering a flag: a trigger marks a visit decided whenever a
+   signed-in person changes it (`auth.uid()` is null for every machine job, so the
+   discriminator is free), pinning a photo marks its visit decided, the rebuild will not
+   delete a visit that holds pinned photos, and a pinned photo no longer seeds a day of
+   its own. Proven by replaying the destructive case in a rolled-back transaction: an
+   unprotected visit holding a pinned photo survived with its photo attached. The
+   original diagnosis is kept below because the SHAPE of it will recur.
+   ORIGINAL: the machine writes visits.
    `rebuild_place_visits()` DERIVES visits from photo dates, ping dates, activity dates
    and entry dates, and **writes them as fact** — and deletes and recreates them on the
    next run unless `manual = true`. **476 of 488 visits are machine-derived; only 12 are
