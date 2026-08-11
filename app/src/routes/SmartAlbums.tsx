@@ -17,7 +17,7 @@ const ALBUMS: Album[] = [
   {
     key: 'parks',
     title: 'National parks & public lands',
-    hint: 'Places inside a park boundary',
+    hint: 'Places within a park boundary',
     match: (p) => !!p.park,
   },
   {

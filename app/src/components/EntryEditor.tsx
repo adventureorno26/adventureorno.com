@@ -6,7 +6,7 @@ import StarRating from './StarRating';
 interface Props {
   placeId: string;
   existing?: Entry;
-  defaultDate?: string; // pre-fill the date for a new spot (e.g. from the main card)
+  defaultDate?: string; // pre-fill the date for a new note (e.g. from the main card)
   onSave: (draft: NewEntry) => Promise<void>;
   onCancel: () => void;
 }
@@ -91,7 +91,7 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
           target="_blank"
           rel="noreferrer"
         >
-          Directions to this spot
+          Directions to this place
         </a>
       )}
 
@@ -121,7 +121,7 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
 
       <div className="btn-row">
         <button className="primary" disabled={busy}>
-          {busy ? 'Saving…' : existing ? 'Save changes' : 'Add spot'}
+          {busy ? 'Saving…' : existing ? 'Save changes' : 'Save'}
         </button>
         <button type="button" onClick={onCancel} disabled={busy}>
           Cancel

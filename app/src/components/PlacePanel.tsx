@@ -72,9 +72,9 @@ function normalizeUrl(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
-/** Apple Maps directions link for a spot's OWN address/coords, or null if it has
+/** Apple Maps directions link for a newPlace's OWN address/coords, or null if it has
  *  neither (then it just shows as a plain entry with no Directions button). */
-function spotDirHref(e: Entry): string | null {
+function noteDirHref(e: Entry): string | null {
   const hasCoords = e.lat != null && e.lng != null;
   const dest = e.address?.trim() || (hasCoords ? `${e.lat},${e.lng}` : '');
   if (!dest) return null;
@@ -147,7 +147,7 @@ export default function PlacePanel({
   );
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
-  const [spots, setSpots] = useState<Entry[] | null>(null);
+  const [notes, setNotes] = useState<Entry[] | null>(null);
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
@@ -254,22 +254,22 @@ export default function PlacePanel({
     }
   }
 
-  async function reloadSpots() {
-    setSpots(await fetchEntries(place.id).catch(() => []));
+  async function reloadNotes() {
+    setNotes(await fetchEntries(place.id).catch(() => []));
   }
-  // Add a spot/review straight from the main card; its category tags the place
+  // Add a newPlace/review straight from the main card; its category tags the place
   // and it shows under that category's review section here + on its day.
-  // Unified model: a spot is a CHILD PLACE (its own marker, card, count) rather
+  // Unified model: a newPlace is a CHILD PLACE (its own marker, card, count) rather
   // than a separate entry. Plain "notes" stay as entries (they aren't places).
-  async function addSpot(draft: NewEntry) {
+  async function addNote(draft: NewEntry) {
     if (draft.kind === 'note') {
       await createEntry({ ...draft, place_id: place.id });
     } else {
       // ONE atomic write (migration 0122). This used to be three separate
       // requests — createPlace, then updatePlace for rating/review, then
-      // addVisit — so a failure after the first left a half-built spot with no
+      // addVisit — so a failure after the first left a half-built newPlace with no
       // review and no visit, and a retry created a second place.
-      const spot = await createPlaceAtomic(
+      const newPlace = await createPlaceAtomic(
         {
           name: draft.title,
           country: place.country,
@@ -288,9 +288,9 @@ export default function PlacePanel({
           rating: draft.rating ?? null,
         },
       );
-      onPlaceChanged(spot); // add the new place to the map
+      onPlaceChanged(newPlace); // add the new place to the map
     }
-    await reloadSpots();
+    await reloadNotes();
     await refreshPlace();
   }
   // His/her star ratings for this place.
@@ -326,7 +326,7 @@ export default function PlacePanel({
   useEffect(() => {
     let active = true;
     setVisits(null);
-    setSpots(null);
+    setNotes(null);
     loadVisits()
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
@@ -334,8 +334,8 @@ export default function PlacePanel({
       .then((s) => active && setVisitStats(s))
       .catch(() => active && setVisitStats({}));
     fetchEntries(place.id)
-      .then((rows) => active && setSpots(rows))
-      .catch(() => active && setSpots([]));
+      .then((rows) => active && setNotes(rows))
+      .catch(() => active && setNotes([]));
     return () => {
       active = false;
     };
@@ -369,7 +369,7 @@ export default function PlacePanel({
   }, [place.id, place.is_trail, allPlaces]);
 
   // A trip groups its member places by CITY (with a separate Activities group);
-  // everything else groups them by category alongside its entry-spots.
+  // everything else groups them by category alongside its entry-notes.
   const memberPlaces = allPlaces
     .filter((p) => (p.part_of ?? []).includes(place.id))
     .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
@@ -379,9 +379,9 @@ export default function PlacePanel({
   // trail AND its sections in one request, so this second fetch went with it.
 
   // SPOTS AND REVIEWS — ONE dropdown per category, holding BOTH member places
-  // ("part of" this one) and entry-spots of that category. So "dining" shows a
+  // ("part of" this one) and entry-notes of that category. So "dining" shows a
   // single "Restaurant Reviews" section listing every reviewed restaurant,
-  // whether it's a linked place or an inline spot. In CATEGORIES order. This is
+  // whether it's a linked place or an inline newPlace. In CATEGORIES order. This is
   // the Appalachian-Trail grouping, now used for EVERY card (trips included) so a
   // hotel reads as "Hotel Reviews", not under the trip's city name.
   //
@@ -404,7 +404,7 @@ export default function PlacePanel({
       placeByKind.get(k)!.push(m);
     }
     const entryByKind = new Map<string, Entry[]>();
-    for (const e of spots ?? []) {
+    for (const e of notes ?? []) {
       const k = e.kind || 'note';
       if (!entryByKind.has(k)) entryByKind.set(k, []);
       entryByKind.get(k)!.push(e);
@@ -444,14 +444,14 @@ export default function PlacePanel({
         {g.places.map((m) => {
           const dest = m.address || (m.lat || m.lng ? `${m.lat},${m.lng}` : '');
           return (
-            <div key={m.id} className="spot-row">
-              <Link className="spot-item" to={`/place/${m.id}`}>
-                <span className="spot-title">{m.name}</span>
-                {m.rating ? <span className="spot-rating">{'★'.repeat(m.rating)}</span> : null}
+            <div key={m.id} className="newPlace-row">
+              <Link className="newPlace-item" to={`/place/${m.id}`}>
+                <span className="newPlace-title">{m.name}</span>
+                {m.rating ? <span className="newPlace-rating">{'★'.repeat(m.rating)}</span> : null}
               </Link>
               {dest && (
                 <a
-                  className="directions-btn sm spot-dir"
+                  className="directions-btn sm newPlace-dir"
                   href={`https://maps.apple.com/?daddr=${encodeURIComponent(dest)}&dirflg=d`}
                   target="_blank"
                   rel="noreferrer"
@@ -463,21 +463,21 @@ export default function PlacePanel({
             </div>
           );
         })}
-        {/* Inline entry-spots of this category */}
+        {/* Inline entry-notes of this category */}
         {g.entries.map((e) => {
-          const dir = spotDirHref(e);
+          const dir = noteDirHref(e);
           return (
-            <div key={e.id} className="spot-row">
+            <div key={e.id} className="newPlace-row">
               <Link
-                className="spot-item"
+                className="newPlace-item"
                 to={e.date ? `/place/${place.id}/day/${e.date}` : `/place/${place.id}`}
               >
-                <span className="spot-title">{e.title}</span>
-                {e.rating ? <span className="spot-rating">{'★'.repeat(e.rating)}</span> : null}
+                <span className="newPlace-title">{e.title}</span>
+                {e.rating ? <span className="newPlace-rating">{'★'.repeat(e.rating)}</span> : null}
               </Link>
               {dir && (
                 <a
-                  className="directions-btn sm spot-dir"
+                  className="directions-btn sm newPlace-dir"
                   href={dir}
                   target="_blank"
                   rel="noreferrer"
@@ -743,7 +743,7 @@ export default function PlacePanel({
     if (cats.includes('dining')) return 'Name of Restaurant';
     if (cats.includes('brewery')) return 'Brewery Name';
     if (cats.some((c) => ['hiking', 'walking', 'running', 'biking'].includes(c)))
-      return 'Trail or spot name';
+      return 'Trail name';
     return 'Add a title';
   })();
 
@@ -1261,7 +1261,7 @@ export default function PlacePanel({
                 </button>
               </div>
             ) : (
-              <button className="add-spot-link" onClick={() => setFavOpen(true)}>
+              <button className="add-newPlace-link" onClick={() => setFavOpen(true)}>
                 + {items.length ? `Add another ${one}` : `Add your favorite ${noun}`}
               </button>
             )}
@@ -1336,7 +1336,12 @@ export default function PlacePanel({
                     Open
                   </Link>
                 )}
-                {canEdit && people.length >= 2 && (
+                {/* AN ACTIVITY IS EDITED INSIDE ITS VISIT, not here. Erica: "once
+                    there was more than one visit to a place the activities should
+                    only be editable in each visit which is the dates." So a visit
+                    row keeps its control and an activity row does not — you open
+                    the visit, which is where that outing lives. */}
+                {canEdit && people.length >= 2 && r.target.type === 'visit' && (
                   <select
                     className="attribution-select visit-who"
                     value={r.solo ?? ''}
@@ -1360,7 +1365,7 @@ export default function PlacePanel({
 
               {/* The places we visited during this visit to the bigger
                             place. They are places in their own right — not stops,
-                            not spots — and they belong inside this visit. */}
+                            not notes — and they belong inside this visit. */}
               {contents.length > 0 && (
                 <ul className="trip-contents">
                   {contents.map((c) => (
@@ -1593,7 +1598,7 @@ export default function PlacePanel({
             {pluralLabel(g.label)}{' '}
             <span className="label">({g.places.length + g.entries.length})</span>
           </h3>
-          <div className="spot-groups">{renderGroupRows(g)}</div>
+          <div className="newPlace-groups">{renderGroupRows(g)}</div>
         </div>
       ))}
 
@@ -1605,9 +1610,7 @@ export default function PlacePanel({
 
       {canEdit && addingMembers && (
         <div className="entry">
-          <label>
-            Add places you've already saved to this one (a trip's stops, a trail's spots)
-          </label>
+          <label>Add places you've already saved to this one</label>
           <input
             className="member-search"
             placeholder="Search your places…"
@@ -1672,7 +1675,7 @@ export default function PlacePanel({
       )}
 
       {noteGroups.length > 0 ? (
-        <div className="spot-groups">
+        <div className="newPlace-groups">
           {noteGroups.map((g) => (
             <div key={g.key}>{renderGroupRows(g)}</div>
           ))}
@@ -1686,7 +1689,7 @@ export default function PlacePanel({
         <EntryEditor
           placeId={place.id}
           defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
-          onSave={addSpot}
+          onSave={addNote}
           onCancel={() => undefined}
         />
       )}

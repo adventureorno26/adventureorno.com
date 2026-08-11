@@ -104,20 +104,20 @@ export default function StatsBar({
   };
 
   // Trails + Spots + Places all count. Trails/places are already in `visited`;
-  // spots (entries) add to the total AND the drill-down list. Visits are NOT
+  // notes (entries) add to the total AND the drill-down list. Visits are NOT
   // counted (they're repeat trips to a place already counted).
-  const [spots, setSpots] = useState<{ id: string; place_id: string; title: string }[]>([]);
+  const [notes, setNotes] = useState<{ id: string; place_id: string; title: string }[]>([]);
   useEffect(() => {
     fetchAllEntries()
       .then((rows) =>
-        setSpots(rows.map((r) => ({ id: r.id, place_id: r.place_id, title: r.title }))),
+        setNotes(rows.map((r) => ({ id: r.id, place_id: r.place_id, title: r.title }))),
       )
-      .catch(() => setSpots([]));
+      .catch(() => setNotes([]));
   }, [places.length]);
   // A spot belongs to its place, so it follows the same view filter.
   const visitedIds = new Set(visited.map((p) => p.id));
-  const viewSpots = spots.filter((s) => visitedIds.has(s.place_id));
-  const placesTotal = visited.length + viewSpots.length;
+  const viewNotes = notes.filter((s) => visitedIds.has(s.place_id));
+  const placesTotal = visited.length + viewNotes.length;
 
   // Combined drill-down: every place AND every spot, alphabetical.
   const placeName = (id: string) => places.find((p) => p.id === id)?.name ?? '';
@@ -128,7 +128,7 @@ export default function StatsBar({
       sub: p.admin1 ?? '',
       to: `/place/${p.id}`,
     })),
-    ...viewSpots.map((s) => ({
+    ...viewNotes.map((s) => ({
       id: s.id,
       label: s.title,
       sub: placeName(s.place_id),

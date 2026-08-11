@@ -1,0 +1,112 @@
+// THE GUARD. This test exists because Erica has had to ask for the same removals
+// over and over — "Ive told you to remove spots 500 fucking times", "I DO NOT WANT
+// THE PLACES HERE SECTION. I HAVE ASKED SO MANY FUCKING TIMES" — and every time,
+// something put them back. Reviews and good intentions have not held.
+//
+// So the rules are executable now. Every word she has banned is listed here, and the
+// build FAILS if one reappears anywhere in the app's own source. A future change that
+// reintroduces "spot" or "PLACES HERE" cannot reach the site: CI runs this before
+// Cloudflare will deploy.
+//
+// If a rule here is ever wrong, it is changed HERE, on purpose, with her say-so —
+// which is the point. It cannot drift back by accident.
+//
+// Adding to this list is cheap. Do it every time she says "never again".
+import { describe, expect, it } from 'vitest';
+
+// The sources are read through Vite rather than node:fs — the app is type-checked
+// without @types/node, and this also survives the space in the repo's path.
+const RAW = import.meta.glob('../**/*.{ts,tsx}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+const SOURCES = Object.entries(RAW).filter(([path]) => !/\.test\.tsx?$/.test(path));
+
+/** The text a person can actually READ: string and JSX literals, not identifiers,
+ *  class names, comments or imports. A CSS class called `spot-row` is invisible to
+ *  her; a button that says "Add spot" is not. */
+function visibleText(source: string): string {
+  return (
+    source
+      // comments — they explain the rules, so they must not trip them
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+      // className="..." / className={`...`}
+      .replace(/className=\{?[`"'][^`"']*[`"']\}?/g, '')
+      .replace(/import[^;]+;/g, '')
+      // remaining quoted strings and JSX text are what she reads
+      .replace(/\bdata-[a-z-]+="[^"]*"/g, '')
+  );
+}
+
+const BANNED: { word: RegExp; why: string }[] = [
+  { word: /\bspots?\b/i, why: 'Erica, many times: the word "spot" is not in this app.' },
+  { word: /places here/i, why: 'The PLACES HERE section. Asked for its removal repeatedly.' },
+  { word: /places inside/i, why: '"N places inside" — gone from every card.' },
+  { word: /put a place inside/i, why: '"+ Put a place inside this one" — gone.' },
+  { word: /tap a date/i, why: 'Out of the Visits section entirely.' },
+  { word: /this is a trail\b/i, why: 'Not on a destination or visit card.' },
+];
+
+const CARD = SOURCES.find(([p]) => p.endsWith('components/PlacePanel.tsx'))?.[1] ?? '';
+
+// Words that are fine in general but must never appear in the CARD's visit list.
+const BANNED_IN_VISITS = [
+  { word: '· Trip', why: 'A multi-day visit counts as a trip; it is never labelled.' },
+  { word: '>Together<', why: '"Together" now means tagging someone in a flok.' },
+];
+
+describe('the locked card — words that must never come back', () => {
+  it('scans the whole app, not a corner of it', () => {
+    expect(SOURCES.length).toBeGreaterThan(40);
+  });
+
+  for (const { word, why } of BANNED) {
+    it(`never says ${word} — ${why}`, () => {
+      const offenders: string[] = [];
+      for (const [path, source] of SOURCES) {
+        for (const line of visibleText(source).split('\n')) {
+          // Spotify is a different word that happens to contain one of ours, and
+          // `kind: 'spot'` is a value a DATABASE function returns (migration 0081) —
+          // never rendered, and not ours to rename from here.
+          if (/spotify/i.test(line) || /kind[?]?: '/.test(line)) continue;
+          if (word.test(line)) offenders.push(`${path}: ${line.trim()}`);
+        }
+      }
+      expect(offenders, `\n${why}\n${offenders.join('\n')}\n`).toEqual([]);
+    });
+  }
+
+  for (const { word, why } of BANNED_IN_VISITS) {
+    it(`the card never renders "${word}" — ${why}`, () => {
+      expect(visibleText(CARD).includes(word)).toBe(false);
+    });
+  }
+});
+
+describe('the locked card — the sections, in the locked order', () => {
+  const card = CARD;
+
+  it('is Visits, Photos, Routes, the categories, then Notes and reviews', () => {
+    const order = ['Visits{', 'Photos and Videos', '>\n            Routes ', 'NOTES AND REVIEWS'];
+    let at = -1;
+    for (const marker of order) {
+      const next = card.indexOf(marker, at + 1);
+      expect(next, `"${marker}" is missing or out of order in the card`).toBeGreaterThan(at);
+      at = next;
+    }
+  });
+
+  it('has no Sections list on a trail — the segment rides on the visit', () => {
+    expect(card).not.toMatch(/SECTIONS\{/);
+  });
+
+  it('puts the rating UNDER the name, not above it', () => {
+    const hero = card.indexOf('className="hero-title"');
+    expect(hero).toBeGreaterThan(-1);
+    const title = card.indexOf('title-with-rating', hero);
+    const rating = card.indexOf('hero-rating', hero);
+    expect(title, 'the name must come before the rating').toBeLessThan(rating);
+  });
+});

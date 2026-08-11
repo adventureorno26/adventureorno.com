@@ -334,7 +334,7 @@ export default function NewPlaceDraft({
               {poi.category && <div className="label">Type: {poi.category}</div>}
             </div>
           ) : poiChecked ? (
-            <div className="label">No extra details found for this spot.</div>
+            <div className="label">No extra details found for this place.</div>
           ) : null}
           {website && <div className="npd-current label">Website: {website}</div>}
         </div>

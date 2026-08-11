@@ -540,7 +540,7 @@ function TrackingCard({ myId }: { myId: string }) {
       <div style={{ marginTop: 14, borderTop: '1px solid var(--border-soft)', paddingTop: 12 }}>
         <b>Where we are</b>
         <p className="label" style={{ margin: '6px 0 10px' }}>
-          Puts your last known spot on the map for the other person, with how long ago it was.
+          Puts your last known location on the map for the other person, with how long ago it was.
           Because a phone only pings while the app is open, it is usually hours old — it says so,
           and never pretends to be live.
         </p>
@@ -552,7 +552,7 @@ function TrackingCard({ myId }: { myId: string }) {
             disabled={sharingBusy}
             onClick={() => void toggleSharing()}
           >
-            {sharing ? 'Sharing my spot — tap to hide it' : 'Hidden — tap to share my spot'}
+            {sharing ? 'Sharing my location — tap to hide it' : 'Hidden — tap to share my location'}
           </button>
         )}
       </div>

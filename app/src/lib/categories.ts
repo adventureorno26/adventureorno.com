@@ -63,9 +63,9 @@ const BUILT_IN: Category[] = [
     label: 'Sunrise',
     icon: '🌅',
     color: '#fbbf24',
-    review: 'Sunrise Spot Reviews',
+    review: 'Sunrise Reviews',
   },
-  { slug: 'sunset', label: 'Sunset', icon: '🌇', color: '#fb7185', review: 'Sunset Spot Reviews' },
+  { slug: 'sunset', label: 'Sunset', icon: '🌇', color: '#fb7185', review: 'Sunset Reviews' },
   {
     slug: 'dining',
     label: 'Restaurant',

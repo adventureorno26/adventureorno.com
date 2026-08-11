@@ -194,7 +194,7 @@ export default function SearchPalette({ places }: { places: Place[] }) {
               ref={inputRef}
               className="search-palette-input"
               value={q}
-              placeholder="Search your places, spots, reviews, tags…"
+              placeholder="Search your places, notes, reviews, tags…"
               onChange={(e) => {
                 setQ(e.target.value);
                 setActive(0);

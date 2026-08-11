@@ -215,12 +215,12 @@ export default function DayView() {
 
   // The spot's Kind is a category slug; a DB trigger tags the place from it, so
   // after saving we refetch the place to reflect any newly-added tag.
-  async function addSpot(draft: NewEntry) {
+  async function addNote(draft: NewEntry) {
     await createEntry({ ...draft, place_id: id!, date: draft.date || date! });
     setAdding(false);
     await Promise.all([loadEntries(), fetchPlace(id!).then(setPlace)]);
   }
-  async function saveSpot(entryId: string, draft: NewEntry) {
+  async function saveNote(entryId: string, draft: NewEntry) {
     await updateEntry(entryId, draft);
     setEditingId(null);
     await Promise.all([loadEntries(), fetchPlace(id!).then(setPlace)]);
@@ -420,9 +420,9 @@ export default function DayView() {
         )}
 
         {/* Spots this day — restaurants, hotels, notes */}
-        <h3 style={{ marginTop: 18 }}>Places &amp; spots</h3>
+        <h3 style={{ marginTop: 18 }}>Places</h3>
         {entries.length === 0 && !adding && (
-          <p className="muted">No spots logged for this day yet.</p>
+          <p className="muted">Nothing logged for this day yet.</p>
         )}
         {entries.map((e) =>
           editingId === e.id ? (
@@ -430,7 +430,7 @@ export default function DayView() {
               key={e.id}
               placeId={id!}
               existing={e}
-              onSave={(d) => saveSpot(e.id, d)}
+              onSave={(d) => saveNote(e.id, d)}
               onCancel={() => setEditingId(null)}
             />
           ) : (
@@ -478,10 +478,10 @@ export default function DayView() {
 
         {canEdit &&
           (adding ? (
-            <EntryEditor placeId={id!} onSave={addSpot} onCancel={() => setAdding(false)} />
+            <EntryEditor placeId={id!} onSave={addNote} onCancel={() => setAdding(false)} />
           ) : (
             <button className="primary" style={{ marginTop: 12 }} onClick={() => setAdding(true)}>
-              + Add a spot
+              + Add a place
             </button>
           ))}
       </aside>
