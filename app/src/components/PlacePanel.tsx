@@ -909,7 +909,9 @@ export default function PlacePanel({
     .filter((a) => !nestedIds.has(a.id))
     .map((a) => ({
       key: a.id,
-      date: fmtRunDate(a.start_date),
+      // Same locked format as every other row in this list ("May 2"), and off the
+      // LOCAL day — start_date is UTC, so an evening outing rolls to tomorrow.
+      date: visitDates(activityDay(a)),
       sub: [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
       to: `/place/${place.id}/day/${activityDay(a)}`,
       del: null as string | null,
