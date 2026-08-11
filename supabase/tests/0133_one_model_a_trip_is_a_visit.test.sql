@@ -55,18 +55,28 @@ begin
   insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
     values (p, '2026-09-01', '2026-09-05', true, null) returning id into v2;
 
-  -- not a trip until a person says so
+  -- ⚠️ THIS RULE CHANGED, 2026-08-11 (migration 0159). It used to assert the
+  -- opposite — that duration means NOTHING and only a person marking a visit makes
+  -- it a trip. STATE.md §2, which Erica locked, says:
+  --   "A VISIT for more than one day counts as a TRIP in the stats bar, but nothing
+  --    needs to be labelled as a trip."
+  -- So a multi-day visit counts on its own now. `is_trip` still counts too, because
+  -- unmarking three visits she had marked BY HAND on a single day would be an
+  -- automation undoing a human decision (0157). The rule is: more than one day, OR
+  -- marked. Both of these span several days, so both count immediately.
   select trips_count into after_one from public.wander_stats(null);
-  -- NEGATIVE CONTROL for the 0047 generated column: both these visits span several
-  -- days, which used to make them trips automatically. Duration must mean nothing now.
-  if after_one <> base then raise exception 'FAIL: a multi-day visit counted as a trip on its own'; end if;
+  if after_one <> base + 2 then
+    raise exception 'FAIL: two multi-day visits should count as two trips (% -> %)', base, after_one;
+  end if;
 
+  -- Marking them adds NOTHING — they already count. A visit is one occasion however
+  -- it came to be a trip, and must never be counted twice.
   perform public.set_visit_is_trip(v1, true);
   perform public.set_visit_is_trip(v2, true);
   select trips_count, places_count into after_two, places_after from public.wander_stats(null);
 
   if after_two <> base + 2 then
-    raise exception 'FAIL: two stays should be two trips (% -> %)', base, after_two; end if;
+    raise exception 'FAIL: marking an already-counted trip double-counted it (% -> %)', base, after_two; end if;
   if places_after <> places_base + 1 then
     raise exception 'FAIL: two trips to one city must add ONE place (% -> %)', places_base, places_after; end if;
   raise notice 'PASS 3: one place, two trips — counted once and every time';

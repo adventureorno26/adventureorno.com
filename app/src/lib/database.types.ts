@@ -1498,18 +1498,21 @@ export type Database = {
           display_name: string | null
           id: string
           role: string
+          share_location: boolean
         }
         Insert: {
           created_at?: string
           display_name?: string | null
           id: string
           role: string
+          share_location?: boolean
         }
         Update: {
           created_at?: string
           display_name?: string | null
           id?: string
           role?: string
+          share_location?: boolean
         }
         Relationships: []
       }
@@ -1879,6 +1882,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          decided_at: string | null
           end_date: string
           id: string
           is_trip: boolean
@@ -1893,6 +1897,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          decided_at?: string | null
           end_date: string
           id?: string
           is_trip?: boolean
@@ -1907,6 +1912,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          decided_at?: string | null
           end_date?: string
           id?: string
           is_trip?: boolean
@@ -2212,6 +2218,7 @@ export type Database = {
           display_name: string | null
           id: string
           role: string
+          share_location: boolean
         }
         SetofOptions: {
           from: "*"
@@ -2448,6 +2455,19 @@ export type Database = {
       is_member: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
       last_automated_upload: { Args: never; Returns: string }
+      last_seen: {
+        Args: never
+        Returns: {
+          age_seconds: number
+          display_name: string
+          is_me: boolean
+          lat: number
+          lng: number
+          photo_id: string
+          profile_id: string
+          recorded_at: string
+        }[]
+      }
       learn_rule: {
         Args: { p_activity: string; p_name?: string; p_radius_m?: number }
         Returns: Json
@@ -2538,6 +2558,16 @@ export type Database = {
           emoji: string
           mine: boolean
           n: number
+          who: string[]
+        }[]
+      }
+      photo_reactions_for_many: {
+        Args: { p_photos: string[] }
+        Returns: {
+          emoji: string
+          mine: boolean
+          n: number
+          photo_id: string
           who: string[]
         }[]
       }
@@ -2780,11 +2810,13 @@ export type Database = {
         Args: { p_place: string; p_profile: string }
         Returns: undefined
       }
+      set_share_location: { Args: { p_share: boolean }; Returns: boolean }
       set_visit_dates: {
         Args: { p_end: string; p_start: string; p_visit: string }
         Returns: {
           created_at: string
           created_by: string | null
+          decided_at: string | null
           end_date: string
           id: string
           is_trip: boolean
@@ -2808,6 +2840,7 @@ export type Database = {
         Returns: {
           created_at: string
           created_by: string | null
+          decided_at: string | null
           end_date: string
           id: string
           is_trip: boolean
@@ -3468,6 +3501,17 @@ export type Database = {
           end_date: string
           place_id: string
           place_name: string
+          start_date: string
+          visit_id: string
+        }[]
+      }
+      trips_list: {
+        Args: { p_profile?: string }
+        Returns: {
+          end_date: string
+          name: string
+          nights: number
+          place_id: string
           start_date: string
           visit_id: string
         }[]
