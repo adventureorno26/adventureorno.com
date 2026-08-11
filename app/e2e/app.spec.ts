@@ -19,12 +19,15 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(nav.getByRole('link', { name: /^Settings$/ })).toHaveCount(0);
   });
 
-  // ADD IS ONE DOOR. It used to be a tab that redirected to a sheet over the map,
-  // with sorting buried at /photos/sort and the review queue a sixth nav
-  // destination at /inbox. /add is now a real page holding all of it.
-  test('the Add tab goes to the one Add page, holding everything that gets things in', async ({
-    page,
-  }) => {
+  // A SMOKE TEST, DELIBERATELY THIN. The old test here required "Sort photos" and
+  // "Import an activity file" to be ON this page; both moved to Settings today, so
+  // it was asserting the opposite of the app and failing CI.
+  //
+  // It is not replaced with inverted assertions. Erica is reworking Add — it is due
+  // to open a fillable card — and a test that pins down which buttons exist would
+  // fight her on every change. This checks only that the page LOADS and the review
+  // queue renders, so a genuinely broken Add is caught and a redesign is not.
+  test('the Add tab opens the Add page and it renders', async ({ page }) => {
     await page.goto('/');
     const addTab = page.locator('nav.primary-nav').getByRole('link', { name: /^Add/ });
     await expect(addTab).toHaveAttribute('href', '/add');
@@ -32,12 +35,6 @@ test.describe('authenticated app (non-destructive)', () => {
 
     await expect(page).toHaveURL(/\/add$/);
     await expect(page.getByRole('heading', { name: 'Add', exact: true })).toBeVisible();
-    // Add by hand, sort photos, import a file — and the review queue below them.
-    await expect(
-      page.getByRole('button', { name: /Add a place, visit or activity/ }),
-    ).toBeVisible();
-    await expect(page.getByRole('link', { name: /Sort photos/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Import an activity file/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
   });
 
