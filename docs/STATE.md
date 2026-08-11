@@ -105,6 +105,66 @@ Erica: if you want those three to stop counting, unmark them and the number foll
 - Everything on a **visit** card is scoped to that visit. The **destination** rolls up every
   visit.
 
+### THE CARD — LOCKED, approved 2026-08-11
+
+> Erica: **"never redesign the card or add or delete anything from its template without
+> my EXPRESS permission and approval of a preview."**
+
+Approved preview (v5): https://claude.ai/code/artifact/8dafa822-fca5-460b-a58f-c914e89cdb97
+
+**This section is the record of what she approved.** It was missing from STATE.md until
+2026-08-11 — the one thing she locked was not written down anywhere, which is exactly how
+a card gets rebuilt wrong. It is transcribed from the approved preview, not reinvented.
+
+**ONE card. Five things use it and nothing about the template changes between them:**
+a destination, a visit, an activity, a trail, and a blank new one.
+
+**Top to bottom, always in this order:**
+
+1. **Cover photo**, with × to close. No photo and it is an activity → **the letter of the
+   activity** (H hike, R run, B biking, W walking). Never an icon.
+2. **The name**, over the cover.
+3. **Ratings, directly under the name** — one row per rater, `Name ★★★★★`, laid out in
+   **two columns so two raters read as one line across**. A third wraps to the next line.
+   Dim stars mean not rated yet. Anyone added to the card gets their own row.
+   *(Her last note on the preview: reduce the space between the name and the stars.)*
+4. **The address**, then a **sub-line** saying what this is in plain words:
+   "Visited twice · 12 photos" · "Visited 62 times · 44.8 miles · 27 photos". On a VISIT
+   card the sub-line is that visit's dates. Never a raw flag or a count with no noun.
+5. **Category tags** as pills — Dining, Beach, Winery. **Never city or region pills.**
+6. **The sections**, each headed by a **blue rule with an UPPERCASE WHITE heading**, and a
+   quiet count or scope on the right ("12 · every visit"):
+
+   | Section | Holds | On a VISIT card |
+   |---|---|---|
+   | **Visits** | Years as **dropdowns** (Show / Hide), newest first, only years that have visits. Inside, one line per visit: the date, and the segment name if it is a trail. | the one visit |
+   | **Photos and videos** | ONE carousel, in date order, each with its date and the ♥ / 🔥 marks | scoped to the visit |
+   | **Routes** | A map showing **every route from every visit**, then the list: name · type · miles · date. **Hikes, biking, walking and running all live here.** | only that visit's routes |
+   | **Restaurants** | name + stars. Not on a trail card. | scoped to the visit |
+   | **Notes and reviews** | note + date, and "Write a note or review" at the bottom | scoped to the visit |
+
+7. **The footer**: "Add another visit" · "Delete". On the blank card: **Save · Cancel**.
+
+**The blank (new) card** is the same card with the fields empty: "Add a cover photo",
+"Name this place", the address **prefilled from where you tapped and editable**, and one
+extra question asked **once, here only** — *"Is this a trail with sections?"* Its Visits
+section says **"this is visit one"**, because **saving a new place IS its first visit**.
+Routes and Restaurants say "Added once this first visit is saved".
+
+**Gone from every card, and it stays gone:**
+
+- the **Activities** section — hikes, rides, walks and runs are **routes**, and live in Routes
+- **activity pills**
+- the words **"Tap a date"**, **"Trip"** and **"Together"**, out of the Visits section entirely
+- the **Sections** list on a trail — a segment name rides on the visit, so a trail's Visits
+  section reads exactly like every other card's
+- **"This is a Trail"** on a destination/visit card
+- **city and region pills**, **"N places inside"**, **"+ Put a place inside this one"**,
+  the blue **"+ Write a note"** link, and the **PLACES HERE** section
+
+**Dates, everywhere on the card** (implemented once in `app/src/lib/visitDates.ts`, tested):
+a single date is **"May 2"**, a range is **"5/4 - 5/7"**, and dates are **grouped by year**.
+
 ### Remove anything that rewrites or confuses this
 
 Nothing may re-derive, relabel or overwrite the above. Specifically retired and not to return:
