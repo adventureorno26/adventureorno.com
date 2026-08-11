@@ -121,19 +121,6 @@ function trailMilesSummary(miles: Record<string, number>): string {
     .join(' · ');
 }
 
-/** ISO timestamp OR a plain date → "Mar 7, 2026". */
-function fmtRunDate(iso: string | null): string {
-  if (!iso) return 'Undated';
-  // A date-only string parses as UTC midnight and renders as the PREVIOUS day
-  // west of Greenwich (docs/STATE.md §8). Parse YYYY-MM-DD with local components.
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00`) : new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 /** A visit as one line: single day, or a compact date range. */
 
 export default function PlacePanel({
@@ -983,7 +970,7 @@ export default function PlacePanel({
           <Link className="spot-item" to={`/place/${r.place.id}`}>
             <span className="spot-title">{r.place.name}</span>
             <span className="muted">
-              {n > 0 ? fmtRunDate(r.dates[0].date) : 'Not yet'}
+              {n > 0 ? visitDates(r.dates[0].date) : 'Not yet'}
               {r.place.rating ? ` · ${'★'.repeat(r.place.rating)}` : ''}
             </span>
           </Link>
@@ -1002,11 +989,7 @@ export default function PlacePanel({
           <ul className="trip-contents section-dates">
             {r.dates.map((d) => (
               <li key={d.key}>
-                <Link to={`/place/${r.place.id}/day/${d.date}`}>
-                  {d.date === d.end
-                    ? fmtRunDate(d.date)
-                    : `${fmtRunDate(d.date)} – ${fmtRunDate(d.end)}`}
-                </Link>
+                <Link to={`/place/${r.place.id}/day/${d.date}`}>{visitDates(d.date, d.end)}</Link>
                 <span className="muted">
                   {[
                     d.note ?? '',
@@ -1434,9 +1417,7 @@ export default function PlacePanel({
                               <li key={c.visit_id}>
                                 <Link to={`/place/${c.place_id}`}>{c.place_name}</Link>
                                 <span className="muted">
-                                  {c.start_date === c.end_date
-                                    ? fmtRunDate(c.start_date)
-                                    : `${fmtRunDate(c.start_date)} – ${fmtRunDate(c.end_date)}`}
+                                  {visitDates(c.start_date, c.end_date)}
                                 </span>
                               </li>
                             ))}
@@ -1454,7 +1435,7 @@ export default function PlacePanel({
                                   {a.name || a.type}
                                 </Link>
                                 <span className="muted">
-                                  {[a.type, miStr(a.distance), fmtRunDate(a.start_date)]
+                                  {[a.type, miStr(a.distance), visitDates(activityDay(a))]
                                     .filter(Boolean)
                                     .join(' · ')}
                                 </span>
