@@ -1,3 +1,10 @@
+// ⚠️ SUPERSEDED 2026-08-11 — see docs/STATE.md "THE CARD — LOCKED" and
+// "ADDING THINGS — fillable cards, not a menu".
+//
+// Erica: "Instead of add leading to 'What are you adding?' it should lead to a
+// fillable card where all information can be edited and photos can be uploaded."
+// Import photos, Sort photos and Import activities move to SETTINGS. This
+// chooser is on its way out; do not build on it.
 import { useRef, useState } from 'react';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { useDialog } from '../lib/useDialog';

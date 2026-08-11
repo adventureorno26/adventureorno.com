@@ -14,7 +14,6 @@ import {
   fetchPlace,
   fetchPlaceRatings,
   fetchPlaceVisitStats,
-  fetchSpatialMembers,
   fetchVisits,
   fetchVisitsForPlaces,
   newExperienceKey,
@@ -208,7 +207,6 @@ export default function PlacePanel({
   const [adjustCover, setAdjustCover] = useState(false);
   const [cityBusy, setCityBusy] = useState(false);
   const [cityMsg, setCityMsg] = useState<string | null>(null);
-  const [spatialCount, setSpatialCount] = useState<number | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -337,20 +335,6 @@ export default function PlacePanel({
     }
   }
 
-  // How many leaf places fall inside this container's boundary (city/region).
-  useEffect(() => {
-    let active = true;
-    setSpatialCount(null);
-    if (place.category === 'city' || place.category === 'region') {
-      fetchSpatialMembers(place.id)
-        .then((ids) => active && setSpatialCount(ids.length))
-        .catch(() => active && setSpatialCount(null));
-    }
-    return () => {
-      active = false;
-    };
-  }, [place.id, place.category]);
-
   useEffect(() => {
     let active = true;
     setVisits(null);
@@ -406,7 +390,6 @@ export default function PlacePanel({
   // places — what it holds, not the `holds_children` flag, which is set on 14
   // places that hold nothing and unset on one that does. Listed once each.
   const sections = sectionsOf(allPlaces, place.id);
-  const isContainer = sections.length > 0;
 
   // The sections' visits, for the dates each section opens to.
   useEffect(() => {
@@ -457,7 +440,10 @@ export default function PlacePanel({
   // exactly the same reason, so it now applies to every container.
   const reviewGroups: { key: string; label: string; places: Place[]; entries: Entry[] }[] = [];
   {
-    const groupedMembers = isContainer ? [] : memberPlaces;
+    // Only a TRAIL pulls its members out into Sections. Everywhere else they
+    // group by category — Wonderland Ocean Pub reads under Restaurant, not
+    // under a generic 'places here' list. (Erica, repeatedly.)
+    const groupedMembers = place.is_trail ? [] : memberPlaces;
     const placeByKind = new Map<string, Place[]>();
     for (const m of groupedMembers) {
       const k = (m.categories && m.categories[0]) || 'place';
@@ -1068,7 +1054,11 @@ export default function PlacePanel({
       {canEdit && (
         <div className="cat-edit">
           <div className="cat-picker">
-            {CATEGORIES.filter((c) => c.slug !== 'trip').map((c) => {
+            {/* No City or Region pills — Erica does not want them on any card.
+                A trip is a visit you marked, so 'trip' was never offered either. */}
+            {CATEGORIES.filter(
+              (c) => c.slug !== 'trip' && c.slug !== 'city' && c.slug !== 'region',
+            ).map((c) => {
               const on =
                 c.slug === 'trail'
                   ? place.is_trail
@@ -1089,11 +1079,6 @@ export default function PlacePanel({
           </div>
           {cityBusy && <div className="label">Fetching the boundary…</div>}
           {cityMsg && <div className="city-region-msg">{cityMsg}</div>}
-          {spatialCount != null && (place.category === 'city' || place.category === 'region') && (
-            <div className="label">
-              {spatialCount} place{spatialCount === 1 ? '' : 's'} inside
-            </div>
-          )}
         </div>
       )}
 
@@ -1523,10 +1508,10 @@ export default function PlacePanel({
           longer exists in Places… why do segments of it appear?" This is the
           shape she already likes, and it now applies to every container —
           trails, trips, cities and regions alike. (docs/STATE.md §2.) */}
-      {isContainer && (
+      {place.is_trail && sections.length > 0 && (
         <>
           <h3 style={{ marginTop: 22 }}>
-            {place.is_trail ? 'SECTIONS' : 'PLACES HERE'}{' '}
+            SECTIONS{' '}
             <span className="label">
               ({doneRows.length}/{sectionRows.length} visited)
             </span>
@@ -1593,9 +1578,6 @@ export default function PlacePanel({
           <span style={{ display: 'flex', gap: 12 }}>
             <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
               + Write a note or review
-            </button>
-            <button className="add-spot-link" onClick={() => setAddingMembers((v) => !v)}>
-              + Put a place inside this one
             </button>
           </span>
         )}

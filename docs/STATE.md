@@ -72,11 +72,11 @@ work:
 | **Delete** | with undo |
 | **Fix** | duplicates, unnamed, unplaced — anything needing attention |
 
-`/photos/sort`, `/attention` and the Settings → Data grid **fold into Edit and stop
-existing separately**. `/places/edit` survives **only** as the bulk spreadsheet, because
-editing 149 rows at once is a genuinely different job.
-
-Nothing gets added *beside* this page. Things get removed *into* it.
+⚠️ **CORRECTED 2026-08-11.** The design above (one Edit page absorbing import and sort) is
+**superseded**. Erica's instruction: **Add opens a fillable card**, and **Import photos,
+Sort photos and Import activities all move to SETTINGS**. `/attention` and the Settings →
+Data grid still stop existing separately. `/places/edit` survives **only** as the bulk
+spreadsheet, because editing 149 rows at once is a genuinely different job.
 
 ### Marking something done (her rule, 2026-08-11)
 
@@ -215,11 +215,10 @@ purpose" register in §7 exists so nothing is silently lost again.
 ### Phase 2 — Make the model show through ✅ (2026-08-10)
 (see above)
 
-### Phase 3 — The one page  *(not started)*
-Inbox → **Edit**, absorbing add / import / ingest / sort / edit / organize / delete / fix
-per §3. `/add` is the door; these still exist as separate surfaces and must fold into it
-and then be REMOVED: `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash`,
-and the Settings → Data grid. Plus:
+### Phase 3 — The one page  *(REVISED 2026-08-11, not started)*
+**Add opens a fillable card.** Import photos, Sort photos and Import activities move into
+**Settings**. `/attention`, `/duplicates`, `/health` and `/trash` still fold in and are then
+REMOVED as separate surfaces. Plus:
 - **Inline location editing while sorting photos** — restore `PlaceQuickEdit` (§7,
   commit `5bb5b6e`). She asked for it back.
 - **Transient UI that disappears** when it is done (the upload box, the "finish importing
@@ -467,6 +466,57 @@ caught, because the two records of the same run start in different places.
 **4. One STATE.md line needs amending:** "Google Photos can no longer answer photos from
 that day" is half wrong. You cannot SEARCH by date, but `createTime` comes back on every
 picked item. Still no GPS.
+
+### THE CARD — LOCKED, 2026-08-11
+
+> Erica: *"Let's get the card structure set the way I want it and then make sure you stop
+> fucking changing it."* This section is the specification. **Do not redesign the card.**
+> If a change seems needed, ask first — this has been redone too many times, most recently
+> by me on the morning of 2026-08-11, which is what prompted this.
+
+**There is ONE card.** A visit card, an activity card and a place card are **the same
+card**. It looks like the San Diego card. The only exception is a **TRAIL**, which
+additionally has Sections.
+
+**What is ON the card**
+- The photo, title, star rating, address (the address line is the Directions link).
+- **ONE carousel, ordered by date**, with the date shown, and the **heart / fire reactions
+  on the carousel itself** — not hidden inside the full-screen viewer.
+- **Photos and videos uploaded by ANY user on a card you are tagged in appear in that
+  carousel.** It is the shared record of the day, not one person's upload.
+- **Activities are labelled and sorted as activities** on every card.
+- **Routes.** A VISIT card shows the routes from that visit. A PLACE card shows every
+  route from that place — including a trip's or a trail's.
+- Visits list, notes and reviews, and the bottom actions.
+
+**What is NOT on the card, ever**
+| Removed | Why |
+|---|---|
+| **"PLACES HERE" section** | Asked for its removal repeatedly. The places a card holds belong in the CATEGORY groups — Wonderland Ocean Pub reads under **Restaurant** |
+| **City / Region pills** | Not wanted on any card |
+| **"N places inside" / "0 Places Inside"** | Not wanted on any card |
+| **"+ Add a place inside this one"** | Removed from all cards |
+| **The blue "+ Write a note" link** | Removed. The fillable **add-a-review box moves DOWN into the Notes and Reviews section**, where it belongs |
+
+**TRAILS are the one exception:** they keep **Sections**, each listed once, opening to its
+dates, a date opening the day. Everything else on a trail card follows the spec above.
+
+### ADDING THINGS — fillable cards, not a menu
+
+> Erica: *"Instead of add leading to 'What are you adding?' it should lead to a fillable
+> card where all information can be edited and photos can be uploaded."*
+
+- **Add** opens **a fillable card**: every field editable, photos uploadable, right there.
+  The "What are you adding?" chooser is gone.
+- **"Add another visit"** opens a fillable card.
+- **Clicking a location on the map** opens a fillable card with **the address you clicked
+  already in the address field, and editable**.
+- **Import photos and Sort photos move to SETTINGS.**
+- **Import activities moves to SETTINGS.**
+
+⚠️ **This supersedes "Add is one door"** (commit `51ca7b0`, 2026-08-10) and the §3 design
+in which the Edit page absorbed import/sort/ingest. Add is now a fillable card; import and
+sort live in Settings. §3 and Phase 3 below are corrected accordingly.
 
 ### C — broken now, quietly (status 2026-08-11)
 

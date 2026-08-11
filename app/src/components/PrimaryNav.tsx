@@ -9,10 +9,10 @@ import { fetchInboxCounts } from '../lib/inbox';
 //
 // Five destinations: Map (home), Places (the list), Add, Timeline and Settings.
 //
-// Two doors, each obvious: ADD gets things in — by hand, from photos, from a
-// file — and holds the review queue; PLACES fixes what is already there. The
-// add SHEET still opens over the map (?add=1), because picking a spot needs the
-// map, but /add is the page that offers it.
+// ⚠️ REVISED 2026-08-11 (docs/STATE.md). ADD opens a FILLABLE CARD — not a
+// chooser, not a sheet asking what you are adding. Import photos, Sort photos
+// and Import activities live in SETTINGS now. Settings itself is moving out of
+// the nav to the gear wheel, leaving four tabs: Map / Places / Add / Timeline.
 
 /** The Add sheet opens OVER the map, so while it is open the map is not the
  *  current tab — Add is. */
