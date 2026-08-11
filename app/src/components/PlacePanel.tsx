@@ -135,15 +135,6 @@ function fmtRunDate(iso: string | null): string {
 }
 
 /** A visit as one line: single day, or a compact date range. */
-function fmtVisit(v: Visit): string {
-  const s = new Date(v.start_date + 'T00:00:00');
-  const e = new Date(v.end_date + 'T00:00:00');
-  const full: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-  if (v.start_date === v.end_date) return s.toLocaleDateString(undefined, full);
-  const sameYear = s.getFullYear() === e.getFullYear();
-  const startOpt: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : full;
-  return `${s.toLocaleDateString(undefined, startOpt)} – ${e.toLocaleDateString(undefined, full)}`;
-}
 
 export default function PlacePanel({
   place,
@@ -939,7 +930,10 @@ export default function PlacePanel({
     .map((v) => ({
       key: v.id,
       trip: v.is_trip,
-      date: v.is_trip ? `${fmtVisit(v)} · Trip` : fmtVisit(v),
+      // No "· Trip": Erica asked for the word out of the Visits section entirely.
+      // A multi-day visit still COUNTS as a trip in the stats bar (§2); it is just
+      // never labelled. Dates in the locked format: "May 2", or "5/4 - 5/7".
+      date: visitDates(v.start_date, v.end_date),
       sub:
         [
           v.note ?? '',
@@ -958,6 +952,22 @@ export default function PlacePanel({
     }));
   const visitListRows = [...actRows, ...visitRows].sort((a, b) => b.sort.localeCompare(a.sort));
   const visitCount = visitListRows.length;
+
+  // The sub-line under the address, in the words the locked card uses:
+  // "Visited twice · 12 photos". A count with no noun ("· 1 visit") was the old
+  // shape; Erica: "When a SECOND Visit is added to the same destination, the visit
+  // becomes a Place you've visited twice."
+  const photoTotal = Object.values(visitStats).reduce((n, v) => n + (v.photos ?? 0), 0);
+  const visitedLine = [
+    visitCount === 1
+      ? 'Visited once'
+      : visitCount === 2
+        ? 'Visited twice'
+        : `Visited ${visitCount} times`,
+    photoTotal > 0 ? `${photoTotal} photo${photoTotal === 1 ? '' : 's'}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   // ONE SECTION: its name, its dates, and nothing repeated. The name opens the
   // section's own card; the dates open the day. Text disclosure, never a
@@ -994,7 +1004,6 @@ export default function PlacePanel({
                   {d.date === d.end
                     ? fmtRunDate(d.date)
                     : `${fmtRunDate(d.date)} – ${fmtRunDate(d.end)}`}
-                  {d.isTrip ? ' · Trip' : ''}
                 </Link>
                 <span className="muted">
                   {[
@@ -1034,10 +1043,11 @@ export default function PlacePanel({
           <button className="close hero-close" onClick={onClose} aria-label="Close">
             ×
           </button>
-          {/* Stars above the title, bottom-left of the photo. */}
+          {/* THE NAME, THEN THE RATING UNDER IT — the locked card, bottom-left of
+              the photo. The stars used to sit above the name. */}
           <div className="hero-title">
-            <div className="hero-rating">{ratingEl}</div>
             <h2 className="title-with-rating">{titleEl}</h2>
+            <div className="hero-rating">{ratingEl}</div>
           </div>
           {/* Framing slider overlaid on the bottom of the photo when you tap it. */}
           {canEdit && adjustCover && (
@@ -1056,8 +1066,8 @@ export default function PlacePanel({
       ) : (
         <div className="panel-head">
           <div>
-            <div className="rating-above">{ratingEl}</div>
             <h2 className="title-with-rating">{titleEl}</h2>
+            <div className="rating-above">{ratingEl}</div>
           </div>
           <div className="head-actions">
             <button className="close" onClick={onClose} aria-label="Close">
@@ -1088,7 +1098,7 @@ export default function PlacePanel({
                 edit
               </button>
             )}
-            {visits && visitCount > 0 && ` · ${visitCount} visit${visitCount > 1 ? 's' : ''}`}
+            {visits && visitCount > 0 && ` · ${visitedLine}`}
             {place.bucket && <span className="bucket-flag"> · Bucket List</span>}
           </span>
         )}
@@ -1399,7 +1409,11 @@ export default function PlacePanel({
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
                             >
-                              <option value="">Together</option>
+                              {/* Not "Together" — Erica asked for that word out of the
+                                  Visits section entirely; it now means tagging someone
+                                  in a flok. This control only says who was here, and
+                                  "Both" is the word the app already uses for it. */}
+                              <option value="">{people.length > 2 ? 'Everyone' : 'Both'}</option>
                               {people.map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
