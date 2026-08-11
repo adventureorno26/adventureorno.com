@@ -840,6 +840,35 @@ Five mechanisms, all evidenced:
 
 ---
 
+### The repository is PUBLIC, and that is a decision, not an oversight (2026-08-11)
+
+`github.com/adventureorno26/adventureorno.com` is public. Erica made it public for free
+Actions minutes, was shown exactly what that exposes, and chose to leave it public.
+**Do not re-raise this every session, and do not "fix" it.**
+
+What is in the history, verified by fetching it anonymously from raw.githubusercontent.com:
+
+| File (added in commit `3d9f1bd`, untracked later in `90ee6fb`) | What |
+| --- | --- |
+| `supabase/snapshots/2026-07-22/location_pings_slim.json` | **16,952 location pings** |
+| `…/activities.json` | 256 activities with coordinates and route geometry |
+| `…/places.json` | 129 places **with street addresses** |
+| `…/photos.json` | 148 photos with lat/lng |
+| `…/visits.json` | 416 visits |
+
+Untracking a file does NOT remove it from history — that is why this survived the
+2026-07 privacy cleanup. `supabase/snapshots/` is gitignored today, so nothing NEW is
+being added.
+
+**Credentials are clean.** The only secret ever committed is the old `service_role` JWT
+in migrations `0057`/`0071`, and it is confirmed dead — the API answers
+*"Legacy API keys are disabled."* It was already rotated; **never ask her to rotate it
+again.**
+
+**What this means going forward:** anything committed here is public the moment it is
+pushed. No data dumps, no `.env` anything, no tokens, no photo coordinates in fixtures
+or test data — ever.
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
