@@ -67,13 +67,23 @@ What is being asked for now is **not that**:
 
 So: **the stats bar counts visits whose end date is after their start date. No column, no
 label, no behaviour.** That satisfies both her instruction and the reason 0047 was reverted.
-`is_trip` stays as a thing a person may set — it just stops being required for the count.
+**✅ DONE AND VERIFIED LIVE, 2026-08-11** (`a4f10ed1`, migrations `0159` + `0160`). The bar
+now reads **16 trips** in the shared view, and tapping it opens all 16 in her format:
+"Cape Cod · 8/2 - 8/7 · 5 nights".
 
-**What this changes on screen, measured against the live data (2026-08-11):**
-132 places · 488 visits · **9 visits carry a stored `is_trip` today, but 52 span more than one
-day**. So the stats bar's Trips number goes **9 → 52** the moment this rule lands. That is the
-intended effect — most multi-day stays were never marked — but it is a visible jump, and it is
-recorded here so nobody later "fixes" it back.
+The jump, measured after the fact rather than estimated: **Erica's view 9 → 42**, **Both
+8 → 16**, **Josh 8 → 29**. (The earlier note here said 9 → 52; that counted every visit
+row, including ones the stats bar excludes — it only counts `status='taken'` and the
+current person scope. 52 is the *places* number.) Most multi-day stays were never marked;
+the jump is the intended effect and is recorded here so nobody later "fixes" it back.
+
+**TWO RULES COLLIDED, and both are honoured.** Deriving Trips purely from the dates would
+have silently uncounted **three visits marked as trips BY HAND on a single day** — an
+automation erasing a human decision, which is what `0157` exists to prevent. So the rule
+is: **more than one day, OR marked by hand.** Nothing is erased and nothing needs a label.
+Erica: if you want those three to stop counting, unmark them and the number follows.
+
+`is_trip` stays as a thing a person may set — it just stopped being *required* for the count.
 
 ### How statistics are gathered
 
