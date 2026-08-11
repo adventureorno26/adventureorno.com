@@ -1039,8 +1039,15 @@ export default function Settings() {
                   <Link to="/places/edit">
                     <button className="primary">Edit all places</button>
                   </Link>
+                  {/* Importing and sorting photos, and importing activity files, live
+                      HERE now — Erica: "Move Import and Sort Photos into Settings. Move
+                      import activities to settings." The sorter is both: it pulls from
+                      the device and Google Photos, then sorts what arrives. */}
                   <Link to="/photos/sort">
-                    <button>Sort photos into places</button>
+                    <button>Import &amp; sort photos</button>
+                  </Link>
+                  <Link to="/import/timeline">
+                    <button>Import an activity file</button>
                   </Link>
                   <Link to="/attention">
                     <button>Needs attention</button>

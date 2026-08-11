@@ -1652,14 +1652,9 @@ export default function MapView() {
       <div className="map-top-row">
         {canEdit && (
           <div className="add-wrap">
-            {/* ONE opener. This used to be a menu of Activity (every tag) / Trip /
-                Trail / Bucket List / Photo → Files|Google — five surfaces asking
-                one question, plus a "Trip" entry that created the retired
-                trip-category place. AddSheet asks the three questions that matter
-                and carries the photo + Google Photos import that only lived here. */}
-            <button className="add-btn" onClick={() => navigate('/?add=1')}>
-              + Add
-            </button>
+            {/* The "+ Add" button that sat here is GONE (Erica, asked twice). The
+                nav already has Add, and §3 allows one door per action. The hidden
+                file input below stays — it is what the photo-drop flow uses. */}
             <input
               ref={addFileRef}
               type="file"

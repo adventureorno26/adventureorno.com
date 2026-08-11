@@ -10,24 +10,19 @@
 // Places is the other door: this one is for getting things IN, Places is for fixing
 // what is already there.
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Inbox from './Inbox';
 import { fetchInboxCounts } from '../lib/inbox';
-import { fetchUnassignedPhotos } from '../lib/photos';
 
 export default function AddPage() {
   const navigate = useNavigate();
   const [waiting, setWaiting] = useState<number | null>(null);
-  const [unsorted, setUnsorted] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
     fetchInboxCounts()
       .then((c) => live && setWaiting(c.cards ?? 0))
       .catch(() => live && setWaiting(0));
-    fetchUnassignedPhotos()
-      .then((p) => live && setUnsorted(p.length))
-      .catch(() => live && setUnsorted(0));
     return () => {
       live = false;
     };
@@ -50,17 +45,8 @@ export default function AddPage() {
           <span className="muted">Drop a pin, search an address, or log an outing.</span>
         </button>
 
-        <Link className="add-action" to="/photos/sort">
-          <b>Sort photos{unsorted ? ` · ${unsorted} waiting` : ''}</b>
-          <span className="muted">
-            From your device or Google Photos — grouped by the day and place they belong to.
-          </span>
-        </Link>
-
-        <Link className="add-action" to="/import/timeline">
-          <b>Import an activity file</b>
-          <span className="muted">A GPX or FIT file from a watch or another app.</span>
-        </Link>
+        {/* Importing/sorting photos and importing activity files moved to SETTINGS
+            (Erica, 2026-08-11). They are not adding — they are bulk data work. */}
       </div>
 
       <h2 className="add-section-head">
