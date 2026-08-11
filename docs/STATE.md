@@ -78,6 +78,14 @@ editing 149 rows at once is a genuinely different job.
 
 Nothing gets added *beside* this page. Things get removed *into* it.
 
+### Marking something done (her rule, 2026-08-11)
+
+> **This file is updated ONLY after the change is verified live on the app.** Not when the
+> code is written, not when it is committed, not when it is deployed — when it has been
+> opened on the real site and seen working.
+
+Plans may be written here in advance. **Status** may not: ✅ means seen on the screen.
+
 ### How a new direction gets handled (her rule, 2026-08-11)
 
 > **If a new direction conflicts with this file, say so before acting.** Name the change
@@ -333,6 +341,72 @@ said*, and the UI reads it as *both of us were there*.
 | Ambiguous (several candidate visits) | 0 | — |
 Nothing is ambiguous, which is why this is worth doing: 122 can be attached with
 certainty, and 0157 now makes that attachment permanent.
+
+### PLAN: keeping the map current once we own it
+*(Erica, 2026-08-11: "Create a plan to keep the map updated if things are changed.")*
+
+Owning the basemap means owning its freshness. OpenStreetMap changes daily; the copy in R2
+is a snapshot of one build. Without a refresh plan, our map silently ages while the world
+moves — a new trail she walks might not exist on it.
+
+**How it works:** Protomaps publishes a dated planet build every day
+(`build.protomaps.com/YYYYMMDD.pmtiles`). A refresh is the same copy job pointed at a newer
+date, into a NEW key, with a swap at the end.
+
+1. **Never overwrite the live file.** Copy to `planet-YYYYMMDD.pmtiles`, verify it, then
+   point the tile Worker at the new key and delete the old one. A half-copied basemap must
+   never be able to become the live basemap.
+2. **Cadence: quarterly, plus on demand.** Daily is pointless for a travel map and costs a
+   137 GB copy each time. Erica asks for a refresh when somewhere she has been is wrong.
+3. **Cost of a refresh:** the copy itself is free (inside Cloudflare); storage doubles for
+   the hour or so both files exist — pennies. Class A writes ~1,400, well inside the free
+   tier.
+4. **What triggers one:** a quarterly reminder, or her saying a place is missing/wrong.
+5. **Verification before the swap** (never skip): file size within ~5% of the source's
+   content-length, PMTiles v3 header reads, and a handful of known tiles render — the
+   Appalachian Trail, Leesburg, San Diego, Barbados.
+6. **Rollback is instant** because the old file is still there until the new one is proven.
+
+**Corrections to OSM itself** (a missing trail) are a different thing: those go upstream to
+OpenStreetMap and arrive in a later build. Nothing we can patch locally without forking the
+data, which we will not do.
+
+### PLAN: a user's change can never be auto-deleted
+*(Erica, 2026-08-11: "Create a plan to make sure that user changes are never auto-deleted."
+Said three times now — this is the one that keeps coming back.)*
+
+Migration `0157` fixed this for VISITS. The rule has to hold for everything she can edit.
+
+**The principle:** a machine may write only where a person has not decided. The moment a
+person decides, that field is theirs, permanently, and automation routes around it.
+
+**Why it kept breaking:** protection depended on each writer REMEMBERING to set a flag, and
+three of them did not. Nothing structural stopped a new writer from forgetting. So the fix
+is never "set the flag in one more place" — it is "make it impossible to forget".
+
+**The mechanism that works** (proven in 0157): a database trigger marks the row decided
+whenever a SIGNED-IN PERSON changes it. `auth.uid()` is non-null only for a real user's
+request; cron jobs and edge functions run as service_role with no uid. The discriminator is
+free and cannot be forgotten, because no writer has to do anything.
+
+**Still to extend, each needing the same treatment:**
+| What she edits | Protected? | Notes |
+|---|---|---|
+| Visit dates, note, attribution, trip flag | ✅ 0157 | trigger + rebuild refuses to delete |
+| A photo pinned to a visit | ✅ 0157 | pin marks the visit decided |
+| **Place NAME** | ❌ | `name_locked` exists but the naming rules still write; verify |
+| **Place dates** (first/last visit) | ❌ | derived from evidence |
+| **Trail / segment membership** | ❌ | `part_of` is rewritten by merges and rules |
+| **Race names and assignment** | ❌ | `assign_activity_to_race` rebuilds |
+| **Activity name, type, attribution** | ❌ | learned naming rules rewrite these |
+| **Categories and tags** | ❌ | `sync_place_category` trigger |
+| **Cover photo, rating, review** | ❌ | probably safe; verify |
+
+**And the Save button she asked for:** the trigger makes every save permanent
+automatically, so the button is not strictly required to make it TRUE. It is required to
+make it VISIBLE — she has been told twice that her work is safe and twice it was not. A
+card that says *"Saved — automation will not change this"* with the date is the honest
+version of the promise, and a way to hand a field back to automation if she ever wants it.
 
 ### Erica's directions, 2026-08-11 — to build
 1. **Remove the redundant "+ Add" button at the top of the map.** Asked for before and
