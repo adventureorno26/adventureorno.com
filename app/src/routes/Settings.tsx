@@ -985,10 +985,11 @@ export default function Settings() {
 
           {profile?.role === 'owner' && (
             <>
-              <h2 style={{ marginTop: 28 }}>Join requests</h2>
-              <JoinRequestsCard />
-
+              {/* Join requests are PART OF People, not a section of their own
+                  (Erica, 2026-08-11) — someone asking to join is a person, and
+                  the page reads as one thing instead of two stacked lists. */}
               <h2 style={{ marginTop: 28 }}>People</h2>
+              <JoinRequestsCard />
               <PeopleCard meId={profile.id} />
             </>
           )}

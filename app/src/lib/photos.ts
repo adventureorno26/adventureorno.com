@@ -192,6 +192,24 @@ export async function fetchPhotoReactions(photoId: string): Promise<PhotoReactio
   return (data ?? []) as PhotoReaction[];
 }
 
+/** The same, for a whole carousel at once, keyed by photo id (0158).
+ *  One request for the strip instead of one per thumbnail. */
+export async function fetchReactionsForPhotos(
+  photoIds: string[],
+): Promise<Map<string, PhotoReaction[]>> {
+  const byPhoto = new Map<string, PhotoReaction[]>();
+  if (photoIds.length === 0) return byPhoto;
+  const { data, error } = await supabase.rpc('photo_reactions_for_many', { p_photos: photoIds });
+  if (error) return byPhoto;
+  for (const row of (data ?? []) as (PhotoReaction & { photo_id: string })[]) {
+    const list = byPhoto.get(row.photo_id);
+    const one = { emoji: row.emoji, n: row.n, who: row.who, mine: row.mine };
+    if (list) list.push(one);
+    else byPhoto.set(row.photo_id, [one]);
+  }
+  return byPhoto;
+}
+
 export async function fetchPhotosForEntry(entryId: string): Promise<Photo[]> {
   const { data, error } = await supabase
     .from('photos')

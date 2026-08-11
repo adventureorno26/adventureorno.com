@@ -12,6 +12,9 @@ import {
   photosEnabled,
   setPhotoDate,
   uploadPhoto,
+  fetchReactionsForPhotos,
+  togglePhotoReaction,
+  type PhotoReaction,
 } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { updatePlace } from '../lib/data';
@@ -20,6 +23,8 @@ import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
 import { photoDay, type Photo, type Place, type Video, type Visit } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import PhotoReactions from './PhotoReactions';
+import ReactionMark from './ReactionMarks';
+import { MARKS } from '../lib/reactions';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
 import PhotoMatchReview from './PhotoMatchReview';
@@ -60,6 +65,8 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   const [lightIdx, setLightIdx] = useState<number | null>(null); // carousel position
   const [capEditing, setCapEditing] = useState(false); // caption editor (opened by tapping the photo)
   const [datingId, setDatingId] = useState<string | null>(null); // undated photo getting a date
+  // Reactions for every photo on the strip, fetched in ONE call (0158).
+  const [marks, setMarks] = useState<Map<string, PhotoReaction[]>>(new Map());
   const [dragOver, setDragOver] = useState(false);
   const [pickMenu, setPickMenu] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -84,7 +91,14 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     let active = true;
     setPhotos(null);
     load()
-      .then((rows) => active && setPhotos(rows))
+      .then((rows) => {
+        if (!active) return;
+        setPhotos(rows);
+        // The marks belong ON the carousel, not only in the lightbox — Erica:
+        // "one carousel with the date and ability for others to like with a
+        // heart or the fire."
+        void fetchReactionsForPhotos(rows.map((r) => r.id)).then((m) => active && setMarks(m));
+      })
       .catch(() => active && setPhotos([]));
     void loadVideos();
     return () => {
@@ -92,6 +106,16 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place.id, day]);
+
+  // Reacting from the strip. Only the touched photo is re-read, so a heart on
+  // one picture doesn't re-fetch the whole carousel.
+  async function toggleMark(photoId: string, emoji: string) {
+    await togglePhotoReaction(photoId, emoji).catch(() => undefined);
+    const fresh = await fetchReactionsForPhotos([photoId]).catch(
+      () => new Map<string, PhotoReaction[]>(),
+    );
+    setMarks((prev) => new Map(prev).set(photoId, fresh.get(photoId) ?? []));
+  }
 
   const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
   // Google Photos import is a deliberate manual upload — editors (Josh) can use
@@ -524,6 +548,30 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                         🗑
                       </button>
                     )}
+                    {/* The heart and the flame, ON the carousel — they used to
+                        exist only inside the lightbox, which is why they read as
+                        missing. Anyone signed in can mark a photo; only counts
+                        show, so it stays quiet until someone reacts. */}
+                    <div className="thumb-marks">
+                      {MARKS.map((m) => {
+                        const r = (marks.get(p.id) ?? []).find((x) => x.emoji === m.emoji);
+                        const n = r?.n ?? 0;
+                        return (
+                          <button
+                            key={m.emoji}
+                            className={`thumb-mark ${r?.mine ? 'mine' : ''} ${n ? 'has' : ''}`}
+                            title={n ? r!.who.join(', ') : m.label}
+                            aria-label={m.label}
+                            aria-pressed={!!r?.mine}
+                            onClick={() => void toggleMark(p.id, m.emoji)}
+                          >
+                            <ReactionMark emoji={m.emoji} on={n > 0} size={15} />
+                            {n > 1 && <span className="reaction-n">{n}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+
                     {/* Undated photo → tap to add a date. */}
                     {canUpload &&
                       !p.taken_at &&
