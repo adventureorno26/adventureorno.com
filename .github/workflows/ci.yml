@@ -1,53 +1,31 @@
 name: CI
 
-# HISTORY, so this is not re-diagnosed a third time: every run from 2026-08-08 to
-# 2026-08-11 failed before a single job STARTED, with
-#   "The job was not started because recent account payments have failed or your
-#    spending limit needs to be increased."
-# That was GitHub billing, not this code — nothing here was broken. Erica restored
-# credits on 2026-08-11 and asked for it to be tried again, so the automatic triggers
-# are back. If the same annotation returns, it is billing again: switch this to
-# `on: workflow_dispatch:` rather than leaving a permanently red workflow, because a
-# workflow that is always red teaches everyone to ignore red.
-#
-# EITHER WAY THE DEPLOY IS ALREADY GATED: Cloudflare Pages builds with
-#   npm ci && npm run lint && npm run test && npm run build
-# and refuses to publish if any of it fails. This workflow is the wider net (security
-# scanning, drift checks, e2e), not the only one.
-# WHY THIS RUNS AGAIN (2026-08-11), so it is not diagnosed a fourth time:
-# every run from 08-08 to 08-11 failed before a job STARTED —
-#   "The job was not started because recent account payments have failed or your
-#    spending limit needs to be increased."
-# That was metering on a PRIVATE repo, not anything wrong here. Erica made the repo
-# PUBLIC, and public repos get unlimited free Actions, so the automatic triggers are
-# back on.
-#
-# The deploy does not depend on this either way: Cloudflare Pages builds with
-#   npm ci && npm run lint && npm run test && npm run build
-# and refuses to publish if any of it fails. This workflow is the wider net —
-# security scanning, drift checks, e2e.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Full validation runs outside the normal PR path.
+    - cron: "0 9 * * *"
   workflow_dispatch:
+    inputs:
+      full_validation:
+        description: Run the full cross-browser test matrix
+        required: false
+        default: false
+        type: boolean
 
-# Least privilege: jobs only need to read the repo. Any job that needs more must
-# opt in explicitly at the job level.
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref so a rapid push series doesn't pile up.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Client-safe fictional placeholders are needed anywhere Vite modules may be
-# imported (typecheck, Vitest, and the Playwright preview build), not only during
-# the production-build step. Real hosted values are never required for these
-# non-authenticated checks.
 env:
+  NODE_VERSION: "22"
+  SUPABASE_VERSION: "2.98.0"
   VITE_SUPABASE_URL: https://placeholder.supabase.co
   VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
   VITE_MAPTILER_KEY: placeholder
@@ -55,171 +33,171 @@ env:
   VITE_STRAVA_CLIENT_ID: "0"
 
 jobs:
-  build:
+  classify:
+    name: Classify changes
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      build: ${{ steps.paths.outputs.build }}
+      database: ${{ steps.paths.outputs.database }}
+      security_code: ${{ steps.paths.outputs.security_code }}
+      security_deps: ${{ steps.paths.outputs.security_deps }}
+      security_workflows: ${{ steps.paths.outputs.security_workflows }}
+      smoke: ${{ steps.paths.outputs.smoke }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+
+      - name: Determine affected gates
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          set_all() {
+            for gate in build database security_code security_deps security_workflows smoke; do
+              echo "$gate=true" >> "$GITHUB_OUTPUT"
+            done
+          }
+
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            set_all
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$BASE_SHA"
+          elif [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            base="$BEFORE_SHA"
+          else
+            base="$(git rev-parse HEAD^)"
+          fi
+
+          files="$(git diff --name-only "$base" "$HEAD_SHA")"
+          printf '%s\n' "$files"
+
+          matches() {
+            printf '%s\n' "$files" | grep -Eq "$1"
+          }
+
+          output() {
+            if matches "$2"; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          output build '^(app/(src|public)/|app/(vite\.config|package|tsconfig)|workers/|scripts/(check-bundle|check-env)|package(-lock)?\.json$|\.env\.example$|\.github/workflows/)'
+          output database '^(supabase/|app/src/lib/database\.types\.ts$|scripts/(gen-types|check-edge|db-|export-|restore-)|package(-lock)?\.json$|\.github/workflows/)'
+          output security_code '^(app/src/|workers/|supabase/functions/|scripts/check-semgrep|security/semgrep)'
+          output security_deps '^(package(-lock)?\.json$|app/package(-lock)?\.json$|scripts/(check-osv|check-production-audit)|security/(osv|npm-audit))'
+          output security_workflows '^\.github/workflows/'
+          output smoke '^(app/(src|e2e|public)/|app/(package|playwright|vite\.config)|package(-lock)?\.json$|scripts/(db-bootstrap|seed-e2e)|supabase/|\.github/workflows/)'
+
+  build:
+    name: build
+    needs: classify
+    runs-on: ubuntu-latest
+    steps:
+      - name: No build-relevant changes
+        if: needs.classify.outputs.build != 'true'
+        run: echo "Build skipped because this change cannot affect the compiled application."
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.classify.outputs.build == 'true'
         with:
-          node-version: 22
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.classify.outputs.build == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
+
+      - name: Install dependencies
+        if: needs.classify.outputs.build == 'true'
+        run: npm ci
 
       - name: App — typecheck
+        if: needs.classify.outputs.build == 'true'
         working-directory: app
         run: npx tsc -b
+
       - name: App — lint
+        if: needs.classify.outputs.build == 'true'
         working-directory: app
         run: npm run lint
-      - name: App — test
+
+      - name: App — unit tests
+        if: needs.classify.outputs.build == 'true'
         working-directory: app
         run: npm run test
+
       - name: App — production build
+        if: needs.classify.outputs.build == 'true'
         working-directory: app
         run: npm run build
-      # Regression guard for the LOGIN shell (Phase 4). MapLibre (~1.0 MB) and
-      # heic2any (~1.3 MB) must stay behind authenticated routes, and the shell
-      # must not creep. Verified by negative control: a simulated MapLibre leak,
-      # an oversized chunk, and a missing asset each fail this step.
+
       - name: App — login bundle budget
+        if: needs.classify.outputs.build == 'true'
         run: npm run check:bundle
-      # An undocumented VITE_* is baked in as `undefined` at build time and its
-      # feature silently disappears — it never fails loudly. This keeps
-      # .env.example an accurate inventory of what the app actually reads.
+
       - name: Env example covers every client variable
+        if: needs.classify.outputs.build == 'true'
         run: npm run check:env
 
       - name: Worker — typecheck
+        if: needs.classify.outputs.build == 'true'
         working-directory: workers/photo-gateway
         run: npm run typecheck
-      - name: Worker — test
+
+      - name: Worker — unit tests
+        if: needs.classify.outputs.build == 'true'
         working-directory: workers/photo-gateway
         run: npm run test
-      # Real build check of the worker (no deploy). A dry-run only bundles, so it
-      # must succeed — no more hiding failures behind `|| echo`.
+
       - name: Worker — wrangler dry-run
+        if: needs.classify.outputs.build == 'true'
         working-directory: workers/photo-gateway
         run: npx wrangler deploy --dry-run --outdir /tmp/wrangler-dry
 
-  security:
+  database:
+    name: database
+    needs: classify
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
+      - name: No database-relevant changes
+        if: needs.classify.outputs.database != 'true'
+        run: echo "Database validation skipped because no schema or database integration changed."
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.classify.outputs.database == 'true'
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.classify.outputs.database == 'true'
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      # Hard gate for shipped dependencies. The checker fails on network/parser
-      # errors, new advisories, malformed exceptions, or expired exceptions.
-      - name: npm audit (production gate)
-        run: npm run audit:production
 
-  secret-scan:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      # Current-tree secret scan (NOT git history — the history scrub is a separate,
-      # owner-gated phase). Fails the build if any secret is committed to the working
-      # tree. Pinned gitleaks binary; --redact so a match never prints the secret.
-      - name: Gitleaks (current tree)
-        run: |
-          VER=8.18.4
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
-            | tar -xz gitleaks
-          ./gitleaks detect --no-git --redact --exit-code 1 --verbose
+      - name: Install dependencies
+        if: needs.classify.outputs.database == 'true'
+        run: npm ci
 
-  # --- Additional zero-cost security scanners (Prompt 8, recs 52–62) -----------
-  # Each installs a PINNED tool and runs it, so a missing tool can't produce a false
-  # green. ALL THREE ARE NOW HARD GATES (Phase 1, blocker 3) — the previous `|| true`
-  # report-mode could not fail and therefore produced a false green. Findings that
-  # cannot be fixed today are recorded in security/*-exceptions.json with an owner,
-  # a reason and an expiry, and the gate fails when one expires.
-  osv-scan:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
+        if: needs.classify.outputs.database == 'true'
         with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: OSV-Scanner (dependency vulnerabilities — HARD GATE)
-        run: |
-          VER=2.4.0
-          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${VER}/osv-scanner_linux_amd64" -o osv-scanner
-          chmod +x osv-scanner
-          # No `|| true`. check-osv.mjs fails on any finding without an unexpired,
-          # owned exception in security/osv-exceptions.json, and fails harder when a
-          # finding is reachable from the PRODUCTION dependency tree.
-          node scripts/check-osv.mjs ./osv-scanner
+          version: ${{ env.SUPABASE_VERSION }}
 
-  semgrep:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-      - name: Semgrep (SAST over first-party source — HARD GATE)
-        run: |
-          pip install semgrep==1.172.0
-          # No `|| true`, and no phantom `src` path — that directory does not exist
-          # at the repo root, so the old invocation scanned less than it claimed
-          # while `|| true` hid the error. check-semgrep.mjs fails on a missing scan
-          # path, on any finding without an unexpired owned exception, and on any
-          # newly-unparseable file (a silent coverage hole).
-          node scripts/check-semgrep.mjs semgrep app/src workers/photo-gateway
-
-  zizmor:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - name: Zizmor (GitHub Actions workflow security — hard gate; we own these)
-        run: |
-          pip install zizmor==1.28.0
-          zizmor .github/workflows/
-
-  db-types-drift:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      # Regenerate app/src/lib/database.types.ts from the live schema and fail if
-      # it differs from what's committed. Canonical runs must have the token;
-      # untrusted forks are the only permitted explicit skip.
-      - name: Check DB types are in sync
+      - name: Check generated database types
+        if: needs.classify.outputs.database == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ALLOW_MISSING_TOKEN: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
@@ -238,46 +216,205 @@ jobs:
             exit 1
           fi
 
-  edge-config-drift:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-      # Compare each deployed Edge Function's verify_jwt to the declaration in
-      # supabase/config.toml. Catches an accidental auth-behavior change or a
-      # redeploy that flips a public callback to JWT-required (or vice-versa).
-      # Canonical runs fail when the token is missing; untrusted forks are the
-      # only permitted explicit skip.
-      - name: Check Edge Function config is in sync
+      - name: Check deployed Edge Function configuration
+        if: needs.classify.outputs.database == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           REQUIRE_SUPABASE_ACCESS_TOKEN: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) }}
         run: node scripts/check-edge-config.mjs
 
-  e2e:
+      - name: Start local Supabase with an empty migration directory
+        if: needs.classify.outputs.database == 'true'
+        run: |
+          mkdir -p /tmp/aon-mig-hold
+          mv supabase/migrations/*.sql /tmp/aon-mig-hold/
+          supabase start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          mv /tmp/aon-mig-hold/*.sql supabase/migrations/
+
+      - name: Run SQL regression tests
+        if: needs.classify.outputs.database == 'true'
+        run: bash scripts/db-test.sh
+
+      - name: Verify export and restore round trip
+        if: needs.classify.outputs.database == 'true'
+        run: bash scripts/export-restore-roundtrip.sh
+
+      - name: Stop local Supabase
+        if: always() && needs.classify.outputs.database == 'true'
+        run: supabase stop --no-backup || true
+
+  security:
+    name: security
+    needs: classify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Gitleaks (current tree)
+        run: |
+          VER=8.18.4
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" | tar -xz gitleaks
+          ./gitleaks detect --no-git --redact --exit-code 1 --verbose
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.classify.outputs.security_deps == 'true' || needs.classify.outputs.security_code == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies for dependency scans
+        if: needs.classify.outputs.security_deps == 'true'
+        run: npm ci
+
+      - name: Audit production dependencies
+        if: needs.classify.outputs.security_deps == 'true'
+        run: npm run audit:production
+
+      - name: OSV dependency scan
+        if: needs.classify.outputs.security_deps == 'true'
+        run: |
+          VER=2.4.0
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${VER}/osv-scanner_linux_amd64" -o osv-scanner
+          chmod +x osv-scanner
+          node scripts/check-osv.mjs ./osv-scanner
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: needs.classify.outputs.security_code == 'true' || needs.classify.outputs.security_workflows == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Semgrep first-party source scan
+        if: needs.classify.outputs.security_code == 'true'
+        run: |
+          pip install semgrep==1.172.0
+          node scripts/check-semgrep.mjs semgrep app/src workers/photo-gateway
+
+      - name: Install zizmor
+        if: needs.classify.outputs.security_workflows == 'true'
+        run: pip install zizmor==1.28.0
+
+      - name: Audit GitHub Actions workflows
+        if: needs.classify.outputs.security_workflows == 'true'
+        run: zizmor .github/workflows
+
+  smoke:
+    name: smoke
+    needs: classify
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    steps:
+      - name: No browser-relevant changes
+        if: needs.classify.outputs.smoke != 'true'
+        run: echo "Browser smoke test skipped because the user-facing application did not change."
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.classify.outputs.smoke == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.classify.outputs.smoke == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        if: needs.classify.outputs.smoke == 'true'
+        run: npm ci
+
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
+        if: needs.classify.outputs.smoke == 'true'
+        with:
+          version: ${{ env.SUPABASE_VERSION }}
+
+      - name: Start disposable local Supabase
+        if: needs.classify.outputs.smoke == 'true'
+        run: |
+          hold="$(mktemp -d)"
+          restore_migrations() {
+            if compgen -G "$hold/*.sql" > /dev/null; then
+              mv "$hold"/*.sql supabase/migrations/
+            fi
+          }
+          trap restore_migrations EXIT
+          mv supabase/migrations/*.sql "$hold"/
+          supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          restore_migrations
+          trap - EXIT
+
+      - name: Bootstrap schema and export local test configuration
+        if: needs.classify.outputs.smoke == 'true'
+        run: |
+          AON_BOOTSTRAP_CONFIRM=yes bash scripts/db-bootstrap.sh --yes
+          supabase status -o json > /tmp/aon-supabase-status.json
+          api_url="$(jq -r '.API_URL' /tmp/aon-supabase-status.json)"
+          publishable_key="$(jq -r '.PUBLISHABLE_KEY // .ANON_KEY' /tmp/aon-supabase-status.json)"
+          secret_key="$(jq -r '.SECRET_KEY // .SERVICE_ROLE_KEY' /tmp/aon-supabase-status.json)"
+          echo "::add-mask::$publishable_key"
+          echo "::add-mask::$secret_key"
+          echo "VITE_SUPABASE_URL=$api_url" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=$publishable_key" >> "$GITHUB_ENV"
+          echo "SUPABASE_URL=$api_url" >> "$GITHUB_ENV"
+          echo "SUPABASE_SECRET_KEY=$secret_key" >> "$GITHUB_ENV"
+          echo "TEST_BOT_EMAIL=owner.e2e@example.invalid" >> "$GITHUB_ENV"
+          echo "TEST_BOT_PASSWORD=Local-E2E-owner-2026!" >> "$GITHUB_ENV"
+          echo "REQUIRE_AUTH_E2E=true" >> "$GITHUB_ENV"
+
+      - name: Seed fictional local users
+        if: needs.classify.outputs.smoke == 'true'
+        run: npm run seed:e2e
+
+      - name: Build local Supabase preview target
+        if: needs.classify.outputs.smoke == 'true'
+        working-directory: app
+        run: npm run build
+
+      - name: Install Chromium
+        if: needs.classify.outputs.smoke == 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: app
+
+      - name: Run focused Chromium smoke tests
+        if: needs.classify.outputs.smoke == 'true'
+        run: npx playwright test e2e/public.spec.ts e2e/app.spec.ts --project=desktop-chrome
+        working-directory: app
+
+      - name: Upload Playwright report
+        if: always() && needs.classify.outputs.smoke == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-smoke-report
+          path: app/playwright-report/
+          retention-days: 7
+
+      - name: Stop local Supabase
+        if: always() && needs.classify.outputs.smoke == 'true'
+        run: supabase stop --no-backup || true
+
+  full-browser:
+    name: Full browser matrix
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_validation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - run: npm ci
+
       - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
         with:
-          # Pinned, not `latest`. 2.112.0 regressed: it rejects the Management API's
-          # `inserted_at` (`+00:00`) against a validator that demands a `Z` suffix,
-          # breaking `supabase link` with LegacyLinkApiKeysNetworkError. `latest`
-          # also makes CI non-reproducible. Bump deliberately.
-          version: 2.98.0
-      - run: npm ci
+          version: ${{ env.SUPABASE_VERSION }}
+
       - name: Start disposable local Supabase
         run: |
           hold="$(mktemp -d)"
@@ -291,6 +428,7 @@ jobs:
           supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
           restore_migrations
           trap - EXIT
+
       - name: Bootstrap schema and export local test configuration
         run: |
           AON_BOOTSTRAP_CONFIRM=yes bash scripts/db-bootstrap.sh --yes
@@ -307,267 +445,80 @@ jobs:
           echo "TEST_BOT_EMAIL=owner.e2e@example.invalid" >> "$GITHUB_ENV"
           echo "TEST_BOT_PASSWORD=Local-E2E-owner-2026!" >> "$GITHUB_ENV"
           echo "REQUIRE_AUTH_E2E=true" >> "$GITHUB_ENV"
+
       - name: Seed fictional local users
         run: npm run seed:e2e
-      - name: App — build (local Supabase preview target)
+
+      - name: Build local Supabase preview target
         working-directory: app
         run: npm run build
-      - name: Install Playwright browsers
-        working-directory: app
+
+      - name: Install full browser matrix
         run: npx playwright install --with-deps chromium webkit
-      - name: Playwright e2e (public + authenticated; no skips allowed)
+        working-directory: app
+
+      - name: Run the complete browser suite
         working-directory: app
         run: npm run e2e
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: ${{ !cancelled() }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: playwright-report
+          name: playwright-full-report
           path: app/playwright-report/
-          retention-days: 7
+          retention-days: 14
+
       - name: Stop local Supabase
-        if: ${{ !cancelled() }}
+        if: always()
         run: supabase stop --no-backup || true
 
-  db-tests:
+  release-gate:
+    name: Release gate
+    if: always()
+    needs: [build, database, security, smoke]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      deploy_enabled: ${{ steps.release.outputs.deploy_enabled }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1.7.1
-        with:
-          # Pinned, not `latest`. 2.112.0 regressed: it rejects the Management API's
-          # `inserted_at` (`+00:00`) against a validator that demands a `Z` suffix,
-          # breaking `supabase link` with LegacyLinkApiKeysNetworkError. `latest`
-          # also makes CI non-reproducible. Bump deliberately.
-          version: 2.98.0
-      # The migration chain does NOT fresh-apply the way the CLI does it (0001
-      # references public.profiles before it exists — see docs/decisions.md), so a
-      # normal `supabase start`, which auto-applies migrations, would fail. Instead we
-      # move the migrations aside so the CLI brings up a clean Postgres (+ auth / vault
-      # / roles via gotrue) with NOTHING applied, restore them, then let
-      # scripts/db-bootstrap.sh (invoked by db-test.sh) apply the real chain with
-      # check_function_bodies=off + the single tolerated 0044 error and
-      # production-faithful grants. db-test.sh then runs every supabase/tests/*.test.sql
-      # under ON_ERROR_STOP=1 — any FAIL assertion, broken grant, RLS leak, or
-      # migration error fails the job. No secrets (fully local + network-isolated).
-      - name: Start local Supabase (empty migrations; bootstrap applies the real chain)
+      - name: Require all PR gates
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          DATABASE_RESULT: ${{ needs.database.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
         run: |
-          mkdir -p /tmp/aon-mig-hold
-          mv supabase/migrations/*.sql /tmp/aon-mig-hold/
-          supabase start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-          mv /tmp/aon-mig-hold/*.sql supabase/migrations/
-      - name: Run SQL tests (migrations + RLS/trigger/RPC assertions)
-        run: bash scripts/db-test.sh
-      - name: Export/restore round-trip (byte-identity proof)
-        run: bash scripts/export-restore-roundtrip.sh
-      - name: Stop local Supabase
-        if: ${{ !cancelled() }}
-        run: supabase stop --no-backup || true
-
-  # Real preview deployment for a merge candidate (Phase 1, blocker 4). Deploys the
-  # PR build to a Cloudflare Pages PREVIEW (any branch that is not the production
-  # branch `main`), then runs the same smoke script used after production. This is
-  # what proves a merge candidate's actual served output rather than only its build
-  # artifact. Skipped for fork PRs, which cannot access secrets.
-  deploy-preview:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      VITE_MAPTILER_KEY: ${{ secrets.VITE_MAPTILER_KEY }}
-      VITE_PHOTO_GATEWAY_URL: ${{ secrets.VITE_PHOTO_GATEWAY_URL }}
-      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-      VITE_STRAVA_CLIENT_ID: ${{ secrets.VITE_STRAVA_CLIENT_ID }}
-      VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Require preview deployment configuration
-        run: |
-          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_MAPTILER_KEY; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is required for the preview deployment smoke test."
+          set -euo pipefail
+          for result in "$BUILD_RESULT" "$DATABASE_RESULT" "$SECURITY_RESULT" "$SMOKE_RESULT"; do
+            if [ "$result" != "success" ]; then
+              echo "A required release gate did not pass."
               exit 1
             fi
           done
-      - name: Build the merge candidate with provenance
-        env:
-          BUILD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          node scripts/write-build-version.mjs
-          npm run build --workspace app
-      - name: Deploy to a Pages PREVIEW (never the production branch)
-        id: preview
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          # `adventureorno-com` is THE project serving adventureorno.com — it holds the
-          # custom domain and is the git-connected one. (The old `adventureorno`
-          # project it used to name no longer exists; deploying there now fails
-          # outright.) A branch other than the production branch `main` yields a
-          # preview deployment, so this can never overwrite the live site.
-          branch="ci-preview-$(printf '%s' "$HEAD_REF" | tr -c 'a-zA-Z0-9-' '-' | cut -c1-24)"
-          if [ "$branch" = "ci-preview-main" ]; then
-            echo "::error::Refusing to deploy a preview from a branch that resolves to the production branch."
-            exit 1
-          fi
-          npx wrangler pages deploy app/dist \
-            --project-name adventureorno-com \
-            --branch "$branch" \
-            --commit-hash "$HEAD_SHA" \
-            --commit-dirty=false | tee deploy.log
-          # Wrangler prints TWO urls: the immutable per-deployment url ("Take a peek
-          # over at https://<hash>...") and the branch ALIAS ("Deployment alias URL"),
-          # which repoints asynchronously and can still serve the PREVIOUS deployment
-          # for a while. Smoking the alias produced a false SHA-mismatch failure, so
-          # take the per-deployment url — it addresses exactly this build.
-          url="$(sed -n 's/.*Take a peek over at \(https:\/\/[a-z0-9-]*\.adventureorno-com\.pages\.dev\).*/\1/p' deploy.log | tail -1)"
-          if [ -z "$url" ]; then
-            echo "::error::Could not determine the preview deployment URL from the wrangler output."
-            exit 1
-          fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Preview: $url"
-      - name: Smoke the preview (routes, fallback, assets, headers, exact SHA)
-        env:
-          SMOKE_BASE_URL: ${{ steps.preview.outputs.url }}
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/smoke-pages.mjs
-      - name: Record the preview URL in the job summary
-        if: ${{ always() }}
-        env:
-          URL: ${{ steps.preview.outputs.url }}
-        run: |
-          echo "Preview deployment: $URL" >> "$GITHUB_STEP_SUMMARY"
 
-  # One machine-readable release gate. GitHub branch protection is unavailable on
-  # the repository's current private/free plan, so the deployment itself must
-  # depend on every required result and reject cancellations/skips/failures.
-  release-gate:
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    # WHY THE FLAG LIVES HERE: deploy-production used to read
-    # `vars.PRODUCTION_DEPLOY_ENABLED` in its own job-level `if:` and skipped every
-    # time. The flag is resolved HERE, where it demonstrably reads correctly, and
-    # published as a job output.
-    #
-    # That was only half the story, and the other half cost several sessions. Even
-    # with the output reading "true", deploy-production still skipped on every green
-    # run. A probe job that ran unconditionally printed the answer:
-    #     BRACKET: true      GATE_RESULT: success
-    #     {"release-gate": {"result": "success", "outputs": {"deploy_enabled": "true"}}}
-    # The expression was right all along. `deploy-preview` only runs on
-    # pull_request, so on a push to main it is SKIPPED; this job survives that via
-    # `if: always()`, but a skip propagates transitively to anything downstream that
-    # does not opt out. deploy-production's `if` had no `always()`/`!cancelled()`, so
-    # GitHub skipped it before the condition ever mattered. Hence the `!cancelled()`
-    # on that job — remove it and production silently stops deploying again.
-    outputs:
-      deploy_enabled: ${{ steps.gateflag.outputs.enabled }}
-    needs:
-      - build
-      - security
-      - secret-scan
-      - osv-scan
-      - semgrep
-      - zizmor
-      - db-types-drift
-      - edge-config-drift
-      - e2e
-      - db-tests
-      - deploy-preview
-    steps:
-      - name: Resolve whether production deploys are enabled
-        id: gateflag
+      - name: Determine whether production deployment is enabled
+        id: release
         env:
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
           FLAG: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
         run: |
-          # Trimmed and lower-cased: a stray space in the repository variable would
-          # make this false while the diagnostic line below still printed "true",
-          # which is indistinguishable from the expression itself failing.
-          FLAG_NORM="$(printf '%s' "$FLAG" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
-          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ] && [ "$FLAG_NORM" = true ]; then
-            ENABLED=true
-          else
-            ENABLED=false
+          flag_norm="$(printf '%s' "$FLAG" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          enabled=false
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" = "refs/heads/main" ] && [ "$flag_norm" = "true" ]; then
+            enabled=true
           fi
-          echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
-          # State the DECISION, not just the inputs — the old line proved the
-          # inputs were right and never showed what this step published, which is
-          # what made the skipping deploy so hard to pin down.
-          echo "event=$EVENT ref=$REF flag=[$FLAG] flag_norm=[$FLAG_NORM] -> enabled=$ENABLED"
-          echo "release gate: enabled=$ENABLED (event=$EVENT ref=$REF)" >> "$GITHUB_STEP_SUMMARY"
+          echo "deploy_enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "release gate: enabled=$enabled (event=$EVENT_NAME ref=$REF_NAME)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Require every Phase 1 CI job to succeed
-        env:
-          RESULTS: ${{ toJson(needs) }}
-        run: |
-          # `deploy-preview` only runs on same-repo pull requests; treat its skip as
-          # acceptable, but never treat a failure or cancellation as acceptable.
-          failures="$(jq -r 'to_entries[] | select(.value.result != "success") | select(.key != "deploy-preview" or .value.result != "skipped") | "\(.key)=\(.value.result)"' <<< "$RESULTS")"
-          if [ -n "$failures" ]; then
-            echo "::error::Release gate rejected one or more jobs:"
-            echo "$failures"
-            exit 1
-          fi
-          echo "All required Phase 1 jobs succeeded."
-      # Why deploy-production runs or does not. It skipped silently on runs #39
-      # and #40 with steps=0, meaning its `if` evaluated false, while every input
-      # looked correct. Print the actual values so the next run answers it.
-      - name: Report what the production deploy gate sees
-        env:
-          # Via env, never interpolated into the script body (zizmor: injection).
-          FLAG: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
-          EVENT: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-        run: |
-          echo "event_name = '$EVENT'  (needs 'push')"
-          echo "ref        = '$REF'    (needs 'refs/heads/main')"
-          echo "flag       = '$FLAG'   (needs exactly 'true')"
-          if [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ] && [ "$FLAG" = "true" ]; then
-            echo "=> deploy-production SHOULD run"
-          else
-            echo "=> deploy-production will be skipped"
-          fi
-
-  # Disabled by default. Enable only after Cloudflare automatic production-branch
-  # deployments are off and the production environment secrets are configured.
-  # DIAGNOSTIC (temporary). deploy-production has skipped on every single push to
-  # main under two different `if:` conditions, while a step inside release-gate on
-  # the SAME run printed event=push, ref=refs/heads/main, flag=true. Two suspects
-  # remain and this probe separates them in one run:
-  #   * it uses the bracket form needs['release-gate'], since a hyphen in a context
-  #     property can be parsed as a minus operator
-  #   * it declares NO `environment:`, which is the only other thing the deploy job
-  #     has that no other job has
-  # probe runs + deploy-production skips  -> the `environment: production` binding
-  # both skip                             -> the needs/output expression
   deploy-production:
-    # `!cancelled()` opts out of the transitive skip from deploy-preview (see the
-    # note on release-gate). The explicit result check keeps a red build from
-    # deploying — the implicit "only on success" gating is what we just gave up.
+    name: Deploy production
     if: >-
       ${{ !cancelled()
           && needs['release-gate'].result == 'success'
           && needs['release-gate'].outputs.deploy_enabled == 'true' }}
     needs: release-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     environment: production
     permissions:
       contents: read
@@ -586,12 +537,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - name: Validate required production configuration
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate deployment target and secrets
         run: |
           for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_MAPTILER_KEY; do
             if [ -z "${!name}" ]; then
@@ -599,35 +554,20 @@ jobs:
               exit 1
             fi
           done
+
       - name: Build exact gated SHA with provenance
         env:
           BUILD_SHA: ${{ github.sha }}
         run: |
           node scripts/write-build-version.mjs
           npm run build --workspace app
+
       - name: Deploy gated build to Cloudflare Pages
         working-directory: app
-        # `adventureorno-com` is THE project that serves adventureorno.com: it holds
-        # the custom domain and the GitHub connection. This comment used to say the
-        # opposite and name a project that no longer exists — corrected 2026-08-11.
-        #
-        # THIS IS NOW THE ONLY WAY PRODUCTION IS DEPLOYED. Cloudflare's own
-        # build-on-push was turned off (production_deployments_enabled: false), so a
-        # push to main no longer publishes anything by itself; it lands here, after
-        # every check above has passed. Previews still build on Cloudflare.
         run: npx wrangler pages deploy dist --project-name adventureorno-com --branch main --commit-hash "${{ github.sha }}" --commit-dirty=false
+
       - name: Smoke production routes, headers, assets, and exact SHA
         env:
           SMOKE_BASE_URL: https://adventureorno.com
           EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/smoke-pages.mjs
-
-  # ---------------------------------------------------------------------------
-  # TODO (Phase 1; see docs/COMPLETION-PLAN.md):
-  #   * MUTATING acceptance flows (create place, log two visits, duplicate handling,
-  #     upload retry) — seed fictional profiles in this job's disposable local
-  #     Supabase stack. This private app does not need or permit multi-tenancy.
-  #   * preview-deploy smoke test: curl the Pages preview URL for 200 + key routes.
-  #   * real-device iPhone/Android install-flow checks (acceptance #10) — manual.
-  # Branch protection cannot be enabled for this private repository on the current
-  # GitHub plan. Keep Pages promotion dependent on release-gate instead.
