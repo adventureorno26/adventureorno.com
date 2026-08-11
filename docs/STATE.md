@@ -408,6 +408,17 @@ make it VISIBLE — she has been told twice that her work is safe and twice it w
 card that says *"Saved — automation will not change this"* with the date is the honest
 version of the promise, and a way to hand a field back to automation if she ever wants it.
 
+### C — broken now, quietly (status 2026-08-11)
+
+| | What | Status |
+|---|---|---|
+| C1 | The photo-gateway deploy block piped EMPTY strings over two working Worker secrets (`$SUPABASE_SERVICE_ROLE_KEY` / `$SUPABASE_ANON_KEY` do not exist in `.env.local`) | ✅ fixed in §12c — right names, and it now REFUSES to write a blank |
+| C2 | `CLOUDFLARE_API_TOKEN` renamed to `…_MASTER`, but wrangler reads the un-suffixed name | ✅ fixed in §12b — mapped across, and `wrangler login` noted as the alternative |
+| C4 | The tile meter counted only tiles. Mapbox **Search Box and Directions** are plain fetches billed per request and were invisible to it | ✅ **VERIFIED LIVE** on deploy `f38cc846`: typing in search moved `aon_api_budget` from nothing to 1. Four call sites metered (suggest, retrieve, forward, directions) with their own 2,000/day budget; refusing a search degrades honestly, unlike refusing a tile |
+| C3 | Server-side geocoding dead since the MapTiler suspension — verified 403 on geocoding, not just tiles | ◐ **client half deployed**: `reverseGeocode` now calls Mapbox first (endpoint verified returning "27 South Street Southeast, Leesburg, Virginia"), MapTiler kept as fallback. **The four EDGE FUNCTIONS still call MapTiler and are still dead** — `geocode-new-places`, `suggest`, `detect-trips`, `_shared/strava.ts` |
+| C5 | The device ingest token travels as `?token=` and is therefore in Supabase's request logs in plaintext | ❌ not started. Needs header support + a change to her iPhone Shortcut |
+| C6 | `ANTHROPIC_API_KEY` is set nowhere, so `ai-suggest` silently answers "not configured" | ❌ not started — needs a key, or the UI should say it is off rather than look unbuilt |
+
 ### Erica's directions, 2026-08-11 — to build
 1. **Remove the redundant "+ Add" button at the top of the map.** Asked for before and
    missed. The nav already has Add; §3 says one door per action.
@@ -1004,17 +1015,36 @@ create/delete command during an ordinary deployment.
 ### dash.cloudflare.com → My Profile → API Tokens → "Edit Cloudflare Workers"
 ### template, and add R2 Storage: Edit). Then:
 export CLOUDFLARE_ACCOUNT_ID=<account-id>
-export CLOUDFLARE_API_TOKEN=<the R2+Workers token>
+### RENAMED 2026-08-11: .env.local now carries CLOUDFLARE_API_TOKEN_MASTER (verified
+### against R2 and Pages). wrangler reads the UN-SUFFIXED name, so map it across.
+### `npx wrangler login` also works and covers R2 without any token at all.
+export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN_MASTER"
 cd workers/photo-gateway
 npx wrangler r2 bucket list
 ```
 
 #### 2. Set Worker secrets
+> ⚠️ **This block used to be a live footgun** (found 2026-08-11). It read
+> `printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | wrangler secret put …`, and NEITHER of those
+> variable names exists in `.env.local` — the real ones are `SUPABASE_SECRET_KEY` and
+> `VITE_SUPABASE_PUBLISHABLE_KEY`. Run verbatim, it piped EMPTY STRINGS over two working
+> Worker secrets and took the photo gateway down. The version below reads the right names
+> and refuses to write an empty value.
+
 ```bash
-### service_role + anon keys the Worker uses for PostgREST / session checks.
-### Values are in .env.local; SUPABASE_ANON_KEY is the current publishable/anon value.
-printf '%s' "$SUPABASE_SERVICE_ROLE_KEY" | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-printf '%s' "$SUPABASE_ANON_KEY" | npx wrangler secret put SUPABASE_ANON_KEY
+### The Worker's PostgREST + session-check keys. Names as they are in .env.local:
+###   SUPABASE_SECRET_KEY            -> the Worker's SUPABASE_SERVICE_ROLE_KEY
+###   VITE_SUPABASE_PUBLISHABLE_KEY  -> the Worker's SUPABASE_ANON_KEY
+### An empty pipe here silently breaks photo serving, so check first and stop if blank.
+set -euo pipefail
+cd workers/photo-gateway
+
+put_secret() {                       # put_secret <worker-name> <value>
+  [ -n "${2:-}" ] || { echo "REFUSING: $1 is empty — nothing written." >&2; return 1; }
+  printf '%s' "$2" | npx wrangler secret put "$1"
+}
+put_secret SUPABASE_SERVICE_ROLE_KEY "$SUPABASE_SECRET_KEY"
+put_secret SUPABASE_ANON_KEY         "$VITE_SUPABASE_PUBLISHABLE_KEY"
 ```
 
 #### 3. Deploy

@@ -2,6 +2,8 @@
 // Geocoding search prefers Mapbox (much better business/POI + trailhead coverage)
 // when a token is present, falling back to MapTiler.
 
+import { spendApiCall } from './basemap';
+
 const KEY = import.meta.env.VITE_MAPTILER_KEY;
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
@@ -52,6 +54,7 @@ async function mapboxSuggest(query: string, proximity?: [number, number]): Promi
     types: MB_TYPES,
   });
   if (proximity) p.set('proximity', `${proximity[0]},${proximity[1]}`);
+  if (!spendApiCall('mapbox suggest')) return [];
   const res = await fetch(`https://api.mapbox.com/search/searchbox/v1/suggest?${p.toString()}`);
   if (!res.ok) return [];
   const data = (await res.json()) as { suggestions?: MbSuggestion[] };
@@ -74,6 +77,7 @@ async function mapboxSuggest(query: string, proximity?: [number, number]): Promi
 /** Resolve a picked suggestion to full coordinates + address (Search Box retrieve). */
 export async function retrieveResult(r: SearchResult): Promise<SearchResult> {
   if (!MAPBOX_TOKEN || !r.mapbox_id || (r.lat !== 0 && r.lng !== 0)) return r;
+  if (!spendApiCall('mapbox retrieve')) return r;
   const p = new URLSearchParams({ access_token: MAPBOX_TOKEN, session_token: mbSessionToken() });
   const res = await fetch(
     `https://api.mapbox.com/search/searchbox/v1/retrieve/${r.mapbox_id}?${p.toString()}`,
@@ -104,6 +108,7 @@ async function mapboxForward(query: string, proximity?: [number, number]): Promi
     types: MB_TYPES,
   });
   if (proximity) p.set('proximity', `${proximity[0]},${proximity[1]}`);
+  if (!spendApiCall('mapbox forward')) return [];
   const res = await fetch(`https://api.mapbox.com/search/searchbox/v1/forward?${p.toString()}`);
   if (!res.ok) return [];
   const data = (await res.json()) as { features?: MbFeature[] };
@@ -176,10 +181,57 @@ function nameTier(pt?: string[]): number {
   return Math.max(...pt.map((t) => NAME_TIER[t] ?? 1));
 }
 
+/**
+ * MAPBOX FIRST, because MapTiler is dead.
+ *
+ * The MapTiler account was suspended on 2026-08-10 and its geocoding endpoint
+ * returns 403 exactly like its tiles do — verified. Every caller of this
+ * function (the new-place draft, the bucket map, the map itself, the day view,
+ * the photo sorter) has therefore been silently getting `null` and falling back
+ * to "New place" since then. MapTiler stays below as the fallback for the day
+ * the account is restored, but it is not tried first any more.
+ */
+async function reverseGeocodeMapbox(
+  lng: number,
+  lat: number,
+): Promise<ReverseGeocodeResult | null> {
+  if (!MAPBOX_TOKEN) return null;
+  if (!spendApiCall('mapbox reverse')) return null;
+  try {
+    const p = new URLSearchParams({
+      longitude: String(lng),
+      latitude: String(lat),
+      access_token: MAPBOX_TOKEN,
+      limit: '1',
+    });
+    const res = await fetch(`https://api.mapbox.com/search/geocode/v6/reverse?${p.toString()}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      features?: Array<{
+        properties?: {
+          name?: string;
+          context?: { region?: { name?: string }; country?: { name?: string } };
+        };
+      }>;
+    };
+    const f = data.features?.[0]?.properties;
+    if (!f) return null;
+    return {
+      name: f.name ?? '',
+      admin1: f.context?.region?.name ?? null,
+      country: f.context?.country?.name ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function reverseGeocode(
   lng: number,
   lat: number,
 ): Promise<ReverseGeocodeResult | null> {
+  const viaMapbox = await reverseGeocodeMapbox(lng, lat);
+  if (viaMapbox && viaMapbox.name) return viaMapbox;
   try {
     // Pull the whole hierarchy (address → POI → city → county → region), then
     // pick the best-named feature instead of blindly taking the most specific
@@ -353,6 +405,7 @@ export async function snapWalkingRoute(
     overview: 'full',
     access_token: MAPBOX_TOKEN,
   });
+  if (!spendApiCall('mapbox directions')) return null;
   try {
     const res = await fetch(
       `https://api.mapbox.com/directions/v5/mapbox/walking/${coords}?${params.toString()}`,

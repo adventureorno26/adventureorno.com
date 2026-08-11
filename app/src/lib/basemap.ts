@@ -195,6 +195,62 @@ function spendTile(): boolean {
 }
 
 /**
+ * THE OTHER BILLED ENDPOINTS. Mapbox charges for Search Box and Directions per
+ * request, and neither goes through MapLibre — they are plain `fetch()` calls in
+ * lib/maptiler.ts, so `transformRequest` never sees them.
+ *
+ * That gap was found on 2026-08-11, the day after the tile meter was written to
+ * stop a repeat of the MapTiler suspension. A meter that covers only tiles gives
+ * exactly the false confidence the meter exists to remove.
+ *
+ * Counted against their own daily budget, and REFUSED past it. Refusing a search
+ * degrades honestly — the typeahead returns nothing and the map still works —
+ * whereas refusing tiles would blank the map, which is why the tile budget is
+ * much larger.
+ */
+const DAILY_API_BUDGET = 2_000;
+const API_KEY = 'aon_api_budget';
+
+let apiBudget: Budget = (() => {
+  try {
+    const raw = localStorage.getItem(API_KEY);
+    if (raw) {
+      const b = JSON.parse(raw) as Budget;
+      if (b && b.day === today() && typeof b.tiles === 'number') return b;
+    }
+  } catch {
+    /* ignore */
+  }
+  return { day: today(), tiles: 0 };
+})();
+
+/** Count one billed API call (search, retrieve, directions, reverse geocode).
+ *  Returns false once the day's budget is gone. */
+export function spendApiCall(what: string): boolean {
+  if (apiBudget.day !== today()) apiBudget = { day: today(), tiles: 0 };
+  apiBudget.tiles += 1;
+  try {
+    localStorage.setItem(API_KEY, JSON.stringify(apiBudget));
+  } catch {
+    /* ignore */
+  }
+  if (apiBudget.tiles > DAILY_API_BUDGET) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[basemap] daily Mapbox API budget spent (${what}). Search is off for today; the map is unaffected.`,
+    );
+    return false;
+  }
+  return true;
+}
+
+/** What the API meter has counted today. */
+export function apiCallBudget(): { used: number; limit: number } {
+  if (apiBudget.day !== today()) apiBudget = { day: today(), tiles: 0 };
+  return { used: apiBudget.tiles, limit: DAILY_API_BUDGET };
+}
+
+/**
  * MapLibre's `transformRequest` — the meter. Pass to every map.
  *
  * ALWAYS returns a request, never `undefined`. The signature allows undefined
