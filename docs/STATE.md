@@ -165,6 +165,32 @@ Routes and Restaurants say "Added once this first visit is saved".
 **Dates, everywhere on the card** (implemented once in `app/src/lib/visitDates.ts`, tested):
 a single date is **"May 2"**, a range is **"5/4 - 5/7"**, and dates are **grouped by year**.
 
+#### Building it — status 2026-08-11 (destination card)
+
+Verified live on adventureorno.com, San Diego, deploy `cef831d0`:
+
+| Locked | Live |
+|---|---|
+| Section order: Visits · Photos and videos · Routes · Restaurants · Notes and reviews | ✅ (was Visits · Photos · Notes · "Routes here") |
+| Routes holds the map **and** the list (name · type · miles · date) | ✅ 6 routes listed under the map |
+| Restaurants is its own section, plural | ✅ "Restaurants (2)", "Beaches (1)" — they were folds inside Notes |
+| No "Places" section | ✅ removed; **3 places app-wide have no category and need one** (Fort Rosencrans + 2) |
+| The name, then the rating under it | ✅ (the stars were above it) |
+| Sub-line says what this is | ✅ "Visited once · 12 photos" (was "· 1 visit") |
+| A single date "May 2", a range "5/4 - 5/7" | ✅ everywhere on the card, via `lib/visitDates.ts` (tested) |
+| No "Trip", no "Together" in the Visits section | ✅ both gone; the who-was-here control says "Both" |
+| Photos: one carousel, the marks on it | ✅ (`0913f05d`) |
+
+**Still to build on the card:**
+
+- **Years as dropdowns** inside Visits (Show / Hide, newest first, only years that have visits)
+- **Ratings in two columns**, one line across for two raters — and anyone added to the card rates it
+- The **category pills** show the whole palette when you can edit; the locked card shows only this place's tags
+- The **VISIT card** must carry every section in the same order, narrowed to that visit
+- The **TRAIL card**: drop the Sections list, put the segment name on the visit
+- The **BLANK card** — Add opens this, with "Is this a trail with sections?" asked once
+- A **Save button that visibly freezes automation**
+
 ### Remove anything that rewrites or confuses this
 
 Nothing may re-derive, relabel or overwrite the above. Specifically retired and not to return:
