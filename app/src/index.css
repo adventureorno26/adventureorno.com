@@ -6911,3 +6911,10 @@ button.mi-row:hover {
 .visit-year[open] > .visit-year-head::after {
   content: 'Hide';
 }
+
+/* The SEGMENT NAME on a trail visit — what replaced the Sections list. It rides on
+   the visit, so a trail card's Visits section reads like every other card's. */
+.visit-seg {
+  font-weight: 600;
+  color: var(--accent-hover, #7dd3fc);
+}

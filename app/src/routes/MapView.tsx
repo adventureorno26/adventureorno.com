@@ -1763,7 +1763,6 @@ export default function MapView() {
           onPlaceDeleted={handlePlaceDeleted}
           onMerged={handleMerged}
           onAddRoute={startDrawForTrail}
-          visitCounts={visitCounts}
         />
       )}
     </div>

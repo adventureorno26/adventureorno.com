@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addExperience,
@@ -38,7 +38,6 @@ import {
   type Visit,
 } from '../lib/types';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
-import { buildSectionRows, sectionDone, sectionsOf } from '../lib/containers';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
 import { photosEnabled } from '../lib/photos';
@@ -52,7 +51,6 @@ import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
 import { pluralLabel } from '../lib/plural';
 import { byYear, visitDates } from '../lib/visitDates';
-import TrailSectionsMap from './TrailSectionsMap';
 import StarRating from './StarRating';
 
 interface Props {
@@ -67,7 +65,6 @@ interface Props {
   // Both view), already loaded by the map and passed down rather than re-fetched.
   // A trail's Sections count what YOU did, so "6 of 7 done" means something
   // different in each view.
-  visitCounts?: Map<string, number>;
 }
 
 /** Prepend https:// when the user typed a bare domain, so the link works. */
@@ -130,7 +127,6 @@ export default function PlacePanel({
   onPlaceChanged,
   onPlaceDeleted,
   onAddRoute,
-  visitCounts,
 }: Props) {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -151,10 +147,6 @@ export default function PlacePanel({
   );
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
-  // Visits belonging to this container's SECTIONS, so each section can open to
-  // its own dates without a request per section.
-  const [sectionVisits, setSectionVisits] = useState<Visit[]>([]);
-  const [openSection, setOpenSection] = useState<string | null>(null);
   const [spots, setSpots] = useState<Entry[] | null>(null);
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
@@ -200,8 +192,26 @@ export default function PlacePanel({
     setCoverPos(place.cover_pos_y ?? 50);
   }, [place]);
 
+  // A TRAIL'S VISITS INCLUDE ITS SECTIONS'. Erica: "the Appalachian trail card is
+  // already fucked because there should be WAY more visits" — the card showed the 32
+  // logged on the trail row and hid the 30 logged on its six sections. Walking a
+  // section IS walking the trail, so the card lists all 62, each carrying the segment
+  // name. This is also why the Sections list is gone: the segment rides on the visit.
+  const sectionIds = place.is_trail
+    ? allPlaces.filter((p) => (p.part_of ?? []).includes(place.id)).map((p) => p.id)
+    : [];
+  const sectionIdKey = sectionIds.join(',');
+  const loadVisits = useCallback(
+    () =>
+      sectionIds.length > 0
+        ? fetchVisitsForPlaces([place.id, ...sectionIds])
+        : fetchVisits(place.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [place.id, sectionIdKey],
+  );
+
   async function reloadVisits() {
-    const rows = await fetchVisits(place.id).catch(() => []);
+    const rows = await loadVisits().catch(() => []);
     setVisits(rows);
     setVisitStats(await fetchPlaceVisitStats(place.id).catch(() => ({})));
     const trips = rows.filter((v) => v.is_trip);
@@ -317,7 +327,7 @@ export default function PlacePanel({
     let active = true;
     setVisits(null);
     setSpots(null);
-    fetchVisits(place.id)
+    loadVisits()
       .then((rows) => active && setVisits(rows))
       .catch(() => active && setVisits([]));
     fetchPlaceVisitStats(place.id)
@@ -364,44 +374,9 @@ export default function PlacePanel({
     .filter((p) => (p.part_of ?? []).includes(place.id))
     .sort((a, b) => (a.first_visit ?? '').localeCompare(b.first_visit ?? ''));
 
-  // THE SECTIONS OF THIS CONTAINER. A container is a place that HOLDS other
-  // places — what it holds, not the `holds_children` flag, which is set on 14
-  // places that hold nothing and unset on one that does. Listed once each.
-  const sections = sectionsOf(allPlaces, place.id);
-
-  // The sections' visits, for the dates each section opens to.
-  useEffect(() => {
-    let active = true;
-    setSectionVisits([]);
-    setOpenSection(null);
-    const ids = allPlaces
-      .filter((p) => p.id !== place.id && (p.part_of ?? []).includes(place.id))
-      .map((p) => p.id);
-    if (ids.length === 0) return;
-    fetchVisitsForPlaces(ids)
-      .then((rows) => active && setSectionVisits(rows))
-      .catch(() => active && setSectionVisits([]));
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [place.id, allPlaces]);
-
-  // Each section ONCE, with its dates. The card used to render one row per
-  // outing, so Maryland Heights appeared nine times instead of once with nine
-  // dates — the whole reason this list exists.
-  const sectionRows = buildSectionRows(sections, trailActs ?? [], sectionVisits);
-
-  // Split into done (visited) and not-yet so a long container's progress lives
-  // in one place. Done most-recent first; not-yet alphabetical. This is the
-  // Sections shape Erica already likes, and it now applies to every container —
-  // trails, trips, cities and regions alike, not just trails.
-  const doneRows = sectionRows
-    .filter((r) => sectionDone(r.place, visitCounts))
-    .sort((a, b) => (b.place.last_visit ?? '').localeCompare(a.place.last_visit ?? ''));
-  const todoRows = sectionRows
-    .filter((r) => !sectionDone(r.place, visitCounts))
-    .sort((a, b) => a.place.name.localeCompare(b.place.name));
+  // The sections' visits used to be fetched separately, to give each row in the
+  // Sections list its own dates. That list is gone and loadVisits() now pulls the
+  // trail AND its sections in one request, so this second fetch went with it.
 
   // SPOTS AND REVIEWS — ONE dropdown per category, holding BOTH member places
   // ("part of" this one) and entry-spots of that category. So "dining" shows a
@@ -906,6 +881,7 @@ export default function PlacePanel({
       end: '' as string,
       sort: activityDay(a),
       solo: a.solo_profile as string | null,
+      seg: null as string | null,
       trip: false,
       target: { type: 'activity' as const, id: a.id },
     }));
@@ -923,6 +899,10 @@ export default function PlacePanel({
       // A multi-day visit still COUNTS as a trip in the stats bar (§2); it is just
       // never labelled. Dates in the locked format: "May 2", or "5/4 - 5/7".
       date: visitDates(v.start_date, v.end_date),
+      // The SEGMENT NAME, when this visit was logged on a section of the trail
+      // rather than the trail row. This is what replaced the Sections list.
+      seg:
+        v.place_id !== place.id ? (allPlaces.find((p) => p.id === v.place_id)?.name ?? null) : null,
       sub:
         [
           v.note ?? '',
@@ -931,7 +911,7 @@ export default function PlacePanel({
         ]
           .filter(Boolean)
           .join(' · ') || null,
-      to: `/place/${place.id}/day/${v.start_date}`,
+      to: `/place/${v.place_id}/day/${v.start_date}`,
       del: v.id as string | null,
       start: v.start_date as string,
       end: v.end_date as string,
@@ -957,56 +937,6 @@ export default function PlacePanel({
   ]
     .filter(Boolean)
     .join(' · ');
-
-  // ONE SECTION: its name, its dates, and nothing repeated. The name opens the
-  // section's own card; the dates open the day. Text disclosure, never a
-  // chevron — the control says how many dates are inside it.
-  function sectionRow(r: (typeof sectionRows)[number]) {
-    const open = openSection === r.place.id;
-    const n = r.dates.length;
-    return (
-      <div key={r.place.id} className="section-row">
-        <div className="spot-row">
-          <Link className="spot-item" to={`/place/${r.place.id}`}>
-            <span className="spot-title">{r.place.name}</span>
-            <span className="muted">
-              {n > 0 ? visitDates(r.dates[0].date) : 'Not yet'}
-              {r.place.rating ? ` · ${'★'.repeat(r.place.rating)}` : ''}
-            </span>
-          </Link>
-          {n > 0 && (
-            <button
-              type="button"
-              className="section-dates-btn"
-              aria-expanded={open}
-              onClick={() => setOpenSection(open ? null : r.place.id)}
-            >
-              {open ? 'Hide' : `${n} ${n === 1 ? 'date' : 'dates'}`}
-            </button>
-          )}
-        </div>
-        {open && (
-          <ul className="trip-contents section-dates">
-            {r.dates.map((d) => (
-              <li key={d.key}>
-                <Link to={`/place/${r.place.id}/day/${d.date}`}>{visitDates(d.date, d.end)}</Link>
-                <span className="muted">
-                  {[
-                    d.note ?? '',
-                    ...d.activities.map((a) =>
-                      [a.name, a.type, miStr(a.distance)].filter(Boolean).join(' · '),
-                    ),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  }
 
   // "Edit address" → a search pill that sets the address/pin (not the title).
   const addressSearch = (
@@ -1612,68 +1542,13 @@ export default function PlacePanel({
         </>
       )}
 
-      {/* SECTIONS — the places this one HOLDS, each listed ONCE, opening to its
-          own dates; a date opens the card. Erica: "the appalachian trail no
-          longer exists in Places… why do segments of it appear?" This is the
-          shape she already likes, and it now applies to every container —
-          trails, trips, cities and regions alike. (docs/STATE.md §2.) */}
-      {place.is_trail && sections.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 22 }}>
-            SECTIONS{' '}
-            <span className="label">
-              ({doneRows.length}/{sectionRows.length} visited)
-            </span>
-          </h3>
-          {/* Rollup: sections done · total miles · total dates across sections. */}
-          {(() => {
-            const totalMiles = Object.values(trailMiles).reduce((s, m) => s + m, 0) / 1609.344;
-            const totalDates = doneRows.reduce((s, r) => s + r.dates.length, 0);
-            return (
-              <div className="our-stats" style={{ marginBottom: 12 }}>
-                <span className="stat">
-                  <b>{doneRows.length}</b>{' '}
-                  <span className="label">
-                    {place.is_trail ? 'sections done' : 'places visited'}
-                  </span>
-                </span>
-                {totalMiles > 0 && (
-                  <span className="stat">
-                    <b>{totalMiles.toFixed(1)}</b> <span className="label">miles</span>
-                  </span>
-                )}
-                {totalDates > 0 && (
-                  <span className="stat">
-                    <b>{totalDates}</b> <span className="label">dates</span>
-                  </span>
-                )}
-              </div>
-            );
-          })()}
-          {/* One fitted map of every done section along this trail. */}
-          {place.is_trail && doneRows.length > 0 && (
-            <TrailSectionsMap trail={place} sections={doneRows.map((r) => r.place)} />
-          )}
-          <div className="spot-groups">
-            {doneRows.length > 0 && (
-              <details className="spot-cat" open>
-                <summary className="spot-cat-head">
-                  Done <span className="label">({doneRows.length})</span>
-                </summary>
-                {doneRows.map((r) => sectionRow(r))}
-              </details>
-            )}
-            {todoRows.length > 0 && (
-              <details className="spot-cat">
-                <summary className="spot-cat-head">
-                  Not yet <span className="label">({todoRows.length})</span>
-                </summary>
-                {todoRows.map((r) => sectionRow(r))}
-              </details>
-            )}
-          </div>
-        </>
-      )}
+      {/* THE SECTIONS LIST IS GONE (Erica, approved preview 2026-08-11): "Remove the
+          segments and have the visit dates like all the other cards… When a visit is
+          added, user can add the segment name." A section's visits now appear in the
+          Visits section above, each carrying its segment name, so a trail card reads
+          exactly like every other card — which is the whole point of one template.
+          The trail's map of its walked sections moved with it; the Routes section
+          above already draws every route on the trail. Restore: commit before this. */}
 
       {/* THE CATEGORY SECTIONS — Restaurants, Beaches, Wineries. Each is its own
           section with its own heading, plural, exactly like the locked card. They
