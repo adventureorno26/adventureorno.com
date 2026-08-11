@@ -5,17 +5,18 @@
 // Callers: the nightly cron (AON_SUPABASE_SECRET_KEY in apikey) or the owner
 // from /settings. Custom user-or-secret auth requires verify_jwt=false.
 //
-// Secret: MAPTILER_KEY (set via `supabase secrets set MAPTILER_KEY=...`).
+// Geocoding now goes through ../_shared/geocode.ts: MAPBOX_TOKEN first, MAPTILER_KEY
+// as a fallback. MapTiler's account is suspended and returns 403 for geocoding.
 // Deploy: supabase functions deploy geocode-new-places --no-verify-jwt
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { reverseGeocode as sharedReverseGeocode } from '../_shared/geocode.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY =
   Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY =
   Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
-const MAPTILER_KEY = Deno.env.get('MAPTILER_KEY')!;
 const FOURSQUARE_KEY = Deno.env.get('FOURSQUARE_KEY') ?? '';
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 const BATCH = 25;
@@ -160,39 +161,12 @@ interface Geo {
 }
 
 async function reverseGeocode(lng: number, lat: number): Promise<Geo | null> {
-  try {
-    type Feat = {
-      text?: string;
-      place_name?: string;
-      context?: Array<{ id: string; text: string }>;
-    };
-    const lookup = async (types?: string): Promise<Feat | null> => {
-      const url =
-        `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}&limit=1` +
-        (types ? `&types=${types}` : '');
-      const r = await fetch(url);
-      if (!r.ok) return null;
-      const d = (await r.json()) as { features?: Feat[] };
-      return d.features?.[0] ?? null;
-    };
-    // Prefer a locality-level name ("Asheville"); if the point is remote (a
-    // trailhead, coastline) and no locality matches, fall back to anything
-    // MapTiler can name (county/region/POI) rather than leaving "Unnamed place".
-    const f =
-      (await lookup('municipality,place,locality,municipal_district')) ??
-      (await lookup('county,region,subregion')) ??
-      (await lookup());
-    if (!f) return null;
-    const ctx = (prefix: string): string | null =>
-      f.context?.find((c) => c.id.startsWith(prefix))?.text ?? null;
-    return {
-      name: f.text ?? f.place_name ?? 'Unnamed place',
-      country: ctx('country'),
-      admin1: ctx('region') ?? ctx('subregion'),
-    };
-  } catch {
-    return null;
-  }
+  // Mapbox first — MapTiler's account is suspended and its geocoding endpoint
+  // returns 403, which is why new places stopped getting named on 2026-08-10.
+  // The shared helper keeps MapTiler underneath as a fallback.
+  const hit = await sharedReverseGeocode(lng, lat);
+  if (!hit.name) return null; // "no suggestion" means leave it alone (STATE.md §2)
+  return { name: hit.name, country: hit.country, admin1: hit.admin1 };
 }
 
 Deno.serve(async (req) => {

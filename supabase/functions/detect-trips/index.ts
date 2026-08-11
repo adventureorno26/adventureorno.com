@@ -20,13 +20,13 @@
 // Deploy: supabase functions deploy detect-trips --no-verify-jwt
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { reverseGeocode as sharedReverseGeocode } from '../_shared/geocode.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY =
   Deno.env.get('AON_SUPABASE_SECRET_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANON_KEY =
   Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
-const MAPTILER_KEY = Deno.env.get('MAPTILER_KEY')!;
 
 // Home center falls back to Leesburg; the real value comes from settings.home_zone.
 // NOTE: this 3-mi radius is used ONLY here (trip detection) — it filters out
@@ -74,22 +74,14 @@ async function reverseGeocode(
   lng: number,
   lat: number,
 ): Promise<{ name: string; admin1: string | null; country: string | null }> {
-  try {
-    const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}&limit=1&types=municipality,place,locality,county,region`;
-    const r = await fetch(url);
-    const d = (await r.json()) as {
-      features?: Array<{ text?: string; context?: Array<{ id: string; text: string }> }>;
-    };
-    const f = d.features?.[0];
-    const ctx = (p: string) => f?.context?.find((c) => c.id.startsWith(p))?.text ?? null;
-    return {
-      name: f?.text ?? 'Trip',
-      admin1: ctx('region') ?? ctx('subregion'),
-      country: ctx('country'),
-    };
-  } catch {
-    return { name: 'Trip', admin1: null, country: null };
-  }
+  // Mapbox first; MapTiler is suspended and 403s. "Trip" stays the fallback name
+  // when nothing can be resolved — a trip still needs SOMETHING to be called.
+  const hit = await sharedReverseGeocode(lng, lat);
+  return {
+    name: hit.name || 'Trip',
+    admin1: hit.admin1,
+    country: hit.country,
+  };
 }
 
 interface Ev {

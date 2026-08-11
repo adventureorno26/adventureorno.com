@@ -2,6 +2,7 @@
 // Secrets (Supabase project secrets): STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET.
 
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { reverseGeocode as sharedReverseGeocode } from './geocode.ts';
 
 export const STRAVA_CLIENT_ID = Deno.env.get('STRAVA_CLIENT_ID') ?? '';
 export const STRAVA_CLIENT_SECRET = Deno.env.get('STRAVA_CLIENT_SECRET') ?? '';
@@ -250,33 +251,20 @@ async function nameNewPlace(
     }
   }
 
-  for (const types of ['poi', 'address', 'municipality']) {
-    try {
-      const r = await fetch(
-        `https://api.maptiler.com/geocoding/${mlng},${mlat}.json` +
-          `?key=${key}&limit=1&types=${types}`,
-      );
-      if (!r.ok) continue;
-      const f = (await r.json())?.features?.[0];
-      const text: string | undefined = f?.text;
-      if (!usablePlaceName(text)) continue;
-      const ctx: { id?: string; text?: string }[] = f.context ?? [];
-      await admin
-        .from('places')
-        .update({
-          name: text,
-          address: f.place_name ?? null,
-          admin1: ctx.find((c) => c.id?.startsWith('region'))?.text ?? null,
-          country: ctx.find((c) => c.id?.startsWith('country'))?.text ?? null,
-          needs_geocode: false,
-        })
-        .eq('id', placeId)
-        .eq('name', 'New place');   // never clobber a name set meanwhile
-      return;
-    } catch {
-      /* try the next granularity */
-    }
-  }
+  // Mapbox first; MapTiler is suspended and 403s, so this naming path had been
+  // dead since 2026-08-10 and every new Strava place stayed "New place".
+  const hit = await sharedReverseGeocode(mlng, mlat);
+  if (!usablePlaceName(hit.name)) return; // no suggestion means leave it alone
+  await admin
+    .from('places')
+    .update({
+      name: hit.name,
+      admin1: hit.admin1,
+      country: hit.country,
+      needs_geocode: false,
+    })
+    .eq('id', placeId)
+    .eq('name', 'New place'); // never clobber a name set meanwhile
 }
 
 /** Upsert one Strava activity. Placed activities get a leaf place; coordinate-free

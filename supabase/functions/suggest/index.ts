@@ -17,6 +17,7 @@ import { decodePolyline } from '../_shared/polyline.ts';
 import { samplePoints, buildOverpassQuery, scoreRoute } from '../_shared/routescore.ts';
 import type { Candidate } from '../_shared/routescore.ts';
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { reverseGeocode as sharedReverseGeocode } from '../_shared/geocode.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY =
@@ -117,25 +118,14 @@ async function overpass(
   return null;
 }
 
-/** Last resort: the geocoder, at the route MIDPOINT, through the plausibility filter. */
-async function maptilerFallback(lat: number, lng: number): Promise<string | null> {
-  const key = Deno.env.get('MAPTILER_KEY');
-  if (!key) return null;
-  for (const types of ['poi', 'address', 'municipality']) {
-    try {
-      const r = await fetch(
-        `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${key}&limit=1&types=${types}`,
-      );
-      if (!r.ok) continue;
-      const text: string | undefined = (await r.json())?.features?.[0]?.text;
-      // usablePlaceName is what rejects "-", storage lots, odor-abatement plants and
-      // bare road names. Reused, not reimplemented.
-      if (usablePlaceName(text)) return text;
-    } catch {
-      /* try the next granularity */
-    }
-  }
-  return null;
+/** Last resort: the geocoder, at the route MIDPOINT, through the plausibility filter.
+ *  Mapbox first — MapTiler is suspended and returns 403, so this fallback has been
+ *  returning null since 2026-08-10 and every route that needed it stayed unnamed. */
+async function geocoderFallback(lat: number, lng: number): Promise<string | null> {
+  const hit = await sharedReverseGeocode(lng, lat);
+  // usablePlaceName is what rejects "-", storage lots, odor-abatement plants and
+  // bare road names. Reused, not reimplemented.
+  return usablePlaceName(hit.name) ? hit.name : null;
 }
 
 /** Which activities to look at: the explicit list, or the recent unsuggested ones. */
@@ -288,7 +278,7 @@ Deno.serve(async (req) => {
       // this replaces.
       if (!candidates.length && isGenericActivityName(row.name)) {
         const mid = samples[Math.floor(samples.length / 2)];
-        const name = await maptilerFallback(mid[0], mid[1]);
+        const name = await geocoderFallback(mid[0], mid[1]);
         if (name) {
           source = 'maptiler';
           candidates = [{ name, kind: 'park', count: 0, rank: 0, confidence: 0.3 }];
