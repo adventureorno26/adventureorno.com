@@ -353,6 +353,11 @@ lost work and can be restored in minutes.
 - **No local Deno, no psql.** Edge-function pure logic is tested by vitest; SQL tests run
   against production inside a rolled-back transaction — which is **not** equivalent to a
   fresh database, so tests must never assert production row counts.
+- **A deleted file can be RESURRECTED by OneDrive plus the auto-save commit.** `README.md`
+  was deleted on 2026-08-11 and reappeared 90 minutes later in
+  `auto: save from Claude Code (2026-08-11 08:58)` — OneDrive restored the file from its
+  own history and the periodic auto-commit added it back. After deleting anything, check
+  it is still gone an hour later.
 - **Never** reintroduce the home exclusion zone. **Never** force-push. The service_role
   key is already rotated — do not ask her to rotate it again.
 

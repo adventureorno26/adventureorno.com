@@ -1,5 +1,11 @@
 # Cloudflare Pages operations
 
+> **Token name changed 2026-08-11.** `.env.local` no longer has `CLOUDFLARE_API_TOKEN`.
+> The working token is **`CLOUDFLARE_API_TOKEN_MASTER`** (verified against R2 and Pages).
+> `CLOUDFLARE_ACCESS_TOKEN` in that file is NOT a valid API token. In CI the secret name
+> is unchanged.
+
+
 Current project: `adventureorno-com` (Git-integrated), custom domains
 `adventureorno.com` and `www.adventureorno.com`. This runbook operates the live
 project; do not create a replacement project.

@@ -1,5 +1,11 @@
 # Operate the photo-gateway Worker + R2
 
+> **Token name changed 2026-08-11.** `.env.local` no longer has `CLOUDFLARE_API_TOKEN`.
+> The working token is **`CLOUDFLARE_API_TOKEN_MASTER`** (verified against R2 and Pages).
+> `CLOUDFLARE_ACCESS_TOKEN` in that file is NOT a valid API token. In CI the secret name
+> is unchanged.
+
+
 The Worker and R2 bucket are live. These are maintenance and redeployment steps,
 not initial setup instructions. They require explicit production authority.
 
