@@ -1,7 +1,7 @@
 import { authedTest as test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
 
-// Axe across the AUTHENTICATED routes (COMPLETION-PLAN Phase 4). The pre-existing
+// Axe across the AUTHENTICATED routes. The pre-existing
 // coverage only scanned /login and /add, so the app's single largest accessibility
 // defect went unnoticed: every row checkbox on /places was unlabelled — 183 rows,
 // 366 nodes across viewports, all announced as a bare "checkbox" to a screen

@@ -2,7 +2,7 @@
 
 The project is already live. This file records owner-only provider/device
 operations; it is not an initial build checklist. Never paste real credential
-values into this file. Follow [`COMPLETION-PLAN.md`](COMPLETION-PLAN.md) for order.
+values into this file. [`STATE.md`](STATE.md) has the order of work.
 
 ## 1. Domain (5 min)
 `adventureorno.com` is registered and attached to the live Pages project. Manage

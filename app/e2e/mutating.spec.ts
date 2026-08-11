@@ -1,7 +1,7 @@
 import { test, expect, getRoleToken, supabaseEnv, isLocalSupabase, type Role } from './fixtures';
 import type { APIRequestContext } from '@playwright/test';
 
-// MUTATING owner/editor/viewer acceptance (COMPLETION-PLAN Phase 1, blocker 2).
+// MUTATING owner/editor/viewer acceptance.
 //
 // These WRITE, so the whole file is hard-gated to a local disposable stack —
 // `getRoleToken` throws on any non-local host. Prerequisites:

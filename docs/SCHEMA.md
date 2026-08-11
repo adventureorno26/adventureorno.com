@@ -13,8 +13,8 @@ every session picked one and undid the last:
 
 | Document | Claimed a trip is… |
 |---|---|
-| `docs/adr/0001-place-visit-entry-trip-model.md` | a first-class `trips` row, **not** a place |
-| `NewClaude.md` (private originals) | a **place** that is a non-counting rollup |
+| ADR 0001 (deleted 2026-08-11, in git history) | a first-class `trips` row, **not** a place |
+| `NewClaude.md` (deleted 2026-08-11) | a **place** that is a non-counting rollup |
 | What Erica actually wants | a **visit she marked** |
 
 Worse, two mechanisms silently *regenerated* the retired model, so data fixes could

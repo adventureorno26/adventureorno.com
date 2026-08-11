@@ -60,7 +60,7 @@ export async function fetchPlace(id: string): Promise<Place | null> {
  * transactional with the visit/rating/review that usually accompany it, nor
  * idempotent, so a retry after a dropped connection creates a duplicate place.
  *
- * COMPLETION-PLAN Phase 2 moved every application call site onto
+ * Every application call site moved onto
  * `createPlaceAtomic` (migration 0122 extended the RPC's place contract to cover
  * is_trail, bucket, needs_geocode, website, auto, part_of, review, and the
  * explicit unnamed-draft opt-in). This is retained only as a compatibility export
@@ -752,7 +752,7 @@ export async function fetchPlaceVisitStats(
  * twice, and it cannot be transactional with the place/attribution/rating that
  * normally accompany it.
  *
- * Zero callers as of COMPLETION-PLAN Phase 2 — `PlacePanel.addSpot` was the last
+ * Zero callers — `PlacePanel.addSpot` was the last
  * one and now uses the canonical path. Retained only as a compatibility export;
  * a lint rule keeps it unused.
  */
@@ -1009,7 +1009,7 @@ export async function addExperience(
  * Atomic + idempotent replacement for `createPlace`, returning the full Place the
  * way the old direct-insert path did so call sites can render immediately.
  *
- * Prefer this over `createPlace` everywhere (COMPLETION-PLAN Phase 2). The direct
+ * Prefer this over `createPlace` everywhere. The direct
  * insert is neither transactional with its visit nor idempotent, so a retry after
  * a dropped connection silently created a duplicate place.
  *

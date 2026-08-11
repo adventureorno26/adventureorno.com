@@ -1,8 +1,10 @@
 # AdventureOrNo — what this is, and what is left to build
 
-**This is the only planning document.** Everything else in `docs/archive/` is history.
-If a plan is not written here, it is not the plan. If this file and any other document
-disagree, this file wins.
+**This is the only planning document.** If a plan is not written here, it is not the plan.
+Every competing one was DELETED on 2026-08-11 — `README.md`, `docs/archive/`, `docs/adr/`,
+CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` — and they
+are recoverable from git history if a decision needs looking up. Do not recreate them:
+plans go HERE.
 
 Last updated: 2026-08-10.
 
@@ -138,46 +140,58 @@ production, after it deploys. Done means seen on the screen. When the database a
 screen disagree, the screen is right.
 
 ### Phase 0 — One source of truth ✅ (2026-08-10)
-This file. Every other planning document moved to `docs/archive/`. The "removed on
+This file. Every other planning document was archived, then DELETED (2026-08-11). The "removed on
 purpose" register in §7 exists so nothing is silently lost again.
-
-### Phase 1 — Make erasure impossible
-- Build **fails** when a required `VITE_*` is empty. (`VITE_GOOGLE_CLIENT_ID` went
-  missing and the Google Photos button silently disappeared — nothing errored.)
-- Deploys go through **CI on green**, not by hand. Hand-deploying shipped a live
-  regression that CI had already caught.
-- An acceptance list for the things she cares about, as tests that fail loudly if a
-  feature is removed.
+### Phase 1 — Make erasure impossible  *(audited 2026-08-11: NOT done)*
+- **The build must FAIL when a required `VITE_*` is empty.** `scripts/check-env-example.mjs`
+  only checks that each variable is DOCUMENTED, not that it has a value — so the hole that
+  lost `VITE_GOOGLE_CLIENT_ID` is still open. Today it would silently disable the map.
+- **Cloudflare Pages holds NO environment variables** (verified via the API, both
+  production and preview). Every deploy so far has been pre-built, which is the only
+  reason the site works: a build run by Cloudflare itself would ship a bundle with no
+  Supabase keys and no map token, and nothing would say so.
+- **Deploys go through CI on green.** The pipeline exists and is thorough, but
+  `release-gate` cannot start — **GitHub Actions is over its spending limit** — so
+  `deploy-production` is skipped and deploys are by hand. Needs Erica: GitHub →
+  Settings → Billing & plans.
+- An acceptance list for the things she cares about, as tests that fail loudly.
 
 ### Phase 2 — Make the model show through ✅ (2026-08-10)
-- ✅ Containers back in Places, as containers — each listed once, holding its sections.
-- ✅ **Sections listed once**, opening to their dates; dates opening to the card. Applies
-  to every container now, not only trails.
-- ✅ Card wording that says what it does ("Add a place here" → "Write a note or review";
-  "Add existing places" → "Put a place inside this one").
-- ✅ One Add.
+(see above)
 
-What a place *holds* is now the fact, and `holds_children` is only a copy of it
-(`app/src/lib/containers.ts`, 11 tests). The flag was wrong in both directions: set on 5
-places that hold nothing — which hid their own outings — and unset on Leesburg, which
-holds one.
+### Phase 3 — The one page  *(not started)*
+Inbox → **Edit**, absorbing add / import / ingest / sort / edit / organize / delete / fix
+per §3. `/add` is the door; these still exist as separate surfaces and must fold into it
+and then be REMOVED: `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash`,
+and the Settings → Data grid. Plus:
+- **Inline location editing while sorting photos** — restore `PlaceQuickEdit` (§7,
+  commit `5bb5b6e`). She asked for it back.
+- **Transient UI that disappears** when it is done (the upload box, the "finish importing
+  your Google Photos" banner).
 
-### Phase 3 — The one page
-Inbox → **Edit**, absorbing add / import / ingest / sort / edit / organize / delete /
-fix per §3. Inline location editing. Transient UI that disappears. The other surfaces are
-**removed**, not left beside it.
+### Phase 4 — A map we own  *(the goal; Mapbox is a stopgap, not the destination)*
+The point is **not to be limited by somebody else's charges or switch**. MapTiler proved
+it by suspending the account and taking every map in the app with it.
 
-### Phase 4 — A map that cannot be switched off
-Decision (2026-08-10): **go straight to self-hosted.**
-- Own basemap: Protomaps `.pmtiles` in R2, served through a Worker via HTTP range
-  requests. No API key in the client, no per-request quota, **nobody outside can suspend
-  it**. Cost is storage + egress, flat and predictable.
-- The Worker also gives edge caching, real usage numbers, and a budget guard.
-- MapTiler stays as failover only.
-- Accepted costs: we own basemap styling and refresh cadence, and OpenStreetMap
-  attribution remains required.
+- **Basemap:** Protomaps `.pmtiles` in **R2**, served by our own Worker over HTTP range
+  requests. No API key in the client, no per-request quota, nobody outside can suspend
+  it. R2 has **no egress fee**, so the bill is storage only — a region extract is single-
+  digit GB, i.e. **cents per month**, flat.
+  A whole-planet download is NOT required: `pmtiles extract` pulls only the tiles for a
+  bounding box straight from the public build over range requests.
+- **Our own style, in the app's own colours.** This is the other half of why we own it:
+  the Mapbox dark basemap is neutral grey and does not match the cards. The style is
+  authored against the app's tokens — `--bg #060a14`, `--panel #0e1728`,
+  `--panel-2 #131f36`, `--border #1f2d4d`, `--text #eaf1ff`, `--muted #93a6cc`,
+  `--accent #3b82f6` — so the map reads as part of the app rather than a window onto
+  someone else's.
+- **Glyphs and sprites self-hosted** in R2 too, or the map still calls out to a third
+  party for its fonts.
+- Mapbox stays as **failover only**, and the tile meter stays.
+- Still third-party after this, and worth naming: **search/geocoding** (Mapbox Search
+  Box) and **weather** (Open-Meteo). Self-hosting search is a separate decision.
 
-### Phase 5 — Commercial readiness
+### Phase 5 — Commercial readiness  *(not started; deliberately last)*
 Multi-tenant Spaces, per-tenant quotas, branding, install flows. Two constraints already
 established and not negotiable by wishing:
 - **Google Photos can no longer answer "photos from that day."** The library scopes were
@@ -188,7 +202,11 @@ established and not negotiable by wishing:
   a commercial product. The route through it is bulk export as user-owned records — 265
   of 445 activities already arrived that way.
 
----
+### Smaller things the 2026-08-10/11 work turned up
+- The people markers collide with a place cluster when someone is standing on one.
+- **Josh's last-seen is 30 hours old** because a web app gets no background location on
+  iOS. Giving him the same iOS Shortcut ingest Erica has would make "where we are" real.
+- **MapLibre 6 is blocked** (§8) until a GeoJSON layer is proven to draw on it.
 
 ## 6. Why work kept getting erased — and what now prevents it
 
@@ -255,7 +273,6 @@ lost work and can be restored in minutes.
 - **Agent instructions and business rules:** `CLAUDE.md`
 - **Operations:** `docs/MANUAL-SETUP.md`, `docs/backup-restore.md`,
   `docs/deploy-cloudflare.md`, `docs/deploy-photo-gateway.md`, `docs/ios-shortcut-*.md`
-- **History:** `docs/archive/`, `docs/adr/`
+- **History:** git. `git log --diff-filter=D --name-only` finds the deleted plans.
 
-Superseded and **not** to be worked from, even though they live outside this repo:
-`../CLAUDE-CODE-INSTRUCTIONS-2-70.md`, `../AdventureOrNo-private-originals/NewClaude.md`.
+Both of those lived outside the repo and are now deleted too.

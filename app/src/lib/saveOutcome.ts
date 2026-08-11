@@ -1,4 +1,4 @@
-// Truthful save messaging (COMPLETION-PLAN Phase 2).
+// Truthful save messaging.
 //
 // The core record (place + visit + attribution + rating + review) is written
 // atomically by create_experience. Media deliberately is NOT part of that
