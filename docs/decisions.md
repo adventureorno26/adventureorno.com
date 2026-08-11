@@ -1216,3 +1216,38 @@ and it is only open to us because Protomaps publishes the same OSM planet as one
 
 The blocking step is hers: **an API token with R2 read+write.** Nothing in `.env.local`
 can touch R2 — the photo Worker gets there through a binding, not the API.
+
+## 2026-08-11 — Virginia Beach reads as three visits, and why that is a rule problem
+
+Erica: "VA Beach now has 3 visits because the picture was not the same date as the visit,
+which was in march for the race."
+
+She is right, and the cause is structural rather than a one-off. `rebuild_place_visits()`
+derives visits from photo dates, ping dates, activity dates and entry dates and **writes
+them as visits**, deleting and recreating them on each run unless `manual = true`. At
+Virginia Beach the real event is the Yuengling Shamrock Marathon on **22 Mar 2026**;
+photos dated **3 Mar**, **4 Mar** and **20 Jul** each became a visit of its own.
+
+The July one is the tell: its `taken_at` is exactly `12:00:00` and it was created the day
+BEFORE that date — a placeholder, not EXIF. **34 of 176 photos carry a noon placeholder**,
+so photo dates were never a safe thing to derive a visit from.
+
+**This contradicts STATE.md §2 directly** — *a machine may only propose; a person's
+decision writes, and it is permanent* — and `docs/SCHEMA.md` documents the rebuild as
+intended, so the two documents disagree. **476 of 488 visits are machine-derived and
+rebuildable; 12 are protected.** Recorded in STATE.md §4 as the biggest open conflict in
+the repo. Not fixed yet: the fix changes how visits work everywhere and needs her
+decision.
+
+**And the photos are not lost, they are unpinned.** 156 of 176 photos have no `visit_id`,
+which is why they do not appear on a visit card — the card can only show what is attached
+or date-matched. The photo-suggestion machinery from migration 0153 exists to pin them and
+has never been run to completion.
+
+**"We built ALL of this already, where did it go?"** — it is all still there, just placed
+differently from what she wants:
+- The full-screen carousel exists, with the date and the heart / fire marks.
+- The reactions live ONLY inside that lightbox, not on the card.
+- The place card groups photos into one carousel PER VISIT, so she sees several strips
+  rather than the single carousel she asked for.
+Nothing was deleted; the arrangement is wrong. Recorded as direction 5.

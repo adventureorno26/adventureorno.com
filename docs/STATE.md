@@ -78,6 +78,17 @@ editing 149 rows at once is a genuinely different job.
 
 Nothing gets added *beside* this page. Things get removed *into* it.
 
+### How a new direction gets handled (her rule, 2026-08-11)
+
+> **If a new direction conflicts with this file, say so before acting.** Name the change
+> it would make, ask whether that is what she wants, and only then write the decision
+> here. Do not silently follow the newer instruction, and do not silently follow the
+> older document.
+
+This is not a licence to stop and ask about everything: it applies when a direction
+CONTRADICTS something written here. Otherwise keep working (see
+[[adventureorno-autonomy]] — she leaves for hours and expects progress).
+
 ### Interface rules (hers, non-negotiable)
 
 - **No icons.** Text controls only. Emoji reactions on photos are the one exception.
@@ -123,6 +134,17 @@ Nothing gets added *beside* this page. Things get removed *into* it.
 3. ~~**Sections repeat.**~~ — fixed 2026-08-10. Each section is listed once and opens to
    its dates.
 4. **Data work is scattered** across six screens with different words for the same thing.
+4b. **THE BIGGEST CONFLICT IN THE REPO: the machine writes visits.**
+   `rebuild_place_visits()` DERIVES visits from photo dates, ping dates, activity dates
+   and entry dates, and **writes them as fact** — and deletes and recreates them on the
+   next run unless `manual = true`. **476 of 488 visits are machine-derived; only 12 are
+   protected.** That is the exact opposite of §2's rule, *a machine may only propose*.
+   It is also the cause of the Virginia Beach complaint (2026-08-11): the race was
+   **22 Mar**, but photos dated 3 Mar, 4 Mar and 20 Jul each produced their own visit, so
+   the place reads as three. **34 of 176 photos carry a taken_at of exactly 12:00:00** — a
+   placeholder, not real EXIF — so those dates were never trustworthy in the first place.
+   `docs/SCHEMA.md` documents the rebuild as intended behaviour, which makes this a
+   conflict between the two documents, not just a bug.
 5. ~~**Three doors to Add**~~ — fixed 2026-08-10: `/add` is the one door.
 6. **Transient UI is not transient** (upload box, "finish importing").
 7. **Sorting photos cannot edit the location** — removed 2026-07-26, see §7.
@@ -255,6 +277,22 @@ established and not negotiable by wishing:
   personal approval, which settles it between them; it does not change Strava's terms for
   a commercial product. The route through it is bulk export as user-owned records — 265
   of 445 activities already arrived that way.
+
+### Erica's directions, 2026-08-11 — to build
+1. **Remove the redundant "+ Add" button at the top of the map.** Asked for before and
+   missed. The nav already has Add; §3 says one door per action.
+2. **Settings becomes the gear wheel, not a nav pill.** Account, Connections, Privacy,
+   Data and Advanced all extracted onto ONE nicely styled page that opens from the gear
+   (bottom-left). **No section labels** — not "Account", not "People" — it should read as
+   one seamless page, not five tabs stacked.
+   ⚠️ **CONFLICT, resolved with her:** §3 and the nav say FIVE tabs including Settings.
+   This makes it four (Map / Places / Add / Timeline) with Settings behind the gear.
+3. **Join Requests moves into the People section.**
+4. **Photos must appear on the VISIT card.** Today they only do when a photo's date lines
+   up, and **156 of 176 photos are not pinned to any visit**.
+5. **The place card gets ONE carousel**, with the date, and the heart / fire reactions
+   available there. It is currently one carousel PER VISIT, and the reactions only exist
+   inside the full-screen lightbox — which is why it reads as "where did it go".
 
 ### Smaller things the 2026-08-10/11 work turned up
 - The people markers collide with a place cluster when someone is standing on one.
