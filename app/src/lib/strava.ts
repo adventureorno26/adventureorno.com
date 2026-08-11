@@ -199,6 +199,24 @@ export async function fetchRacesList(personId?: string | null): Promise<RaceRow[
   return (data ?? []) as RaceRow[];
 }
 
+/** The trips behind the Trips number: more than one day, or marked by hand (0160).
+ *  Same rule as wander_stats — if these two ever disagree, the number and the list
+ *  disagree, which is how "where did it go" starts. */
+export interface TripRow {
+  visit_id: string;
+  place_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  nights: number;
+}
+
+export async function fetchTripsList(personId?: string | null): Promise<TripRow[]> {
+  const { data, error } = await supabase.rpc('trips_list', { p_profile: personId ?? null });
+  if (error) throw error;
+  return (data ?? []) as TripRow[];
+}
+
 export interface SearchActivity {
   id: string;
   name: string | null;

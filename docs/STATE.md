@@ -640,7 +640,9 @@ is settled.
    and Sort Photos into Settings. Move import activities to settings."). Add is down to
    one action plus the review queue — the shape it needs for the approved card, where Add
    opens a fillable card.
-2. **Settings becomes the gear wheel, not a nav pill.** Account, Connections, Privacy,
+2. ✅ **VERIFIED LIVE** — **Settings is the gear wheel, not a nav pill.** One continuous
+   page (`.settings-tabs` count 0), nav exactly `[Map, Places, Add, Timeline]`.
+   **Settings becomes the gear wheel, not a nav pill.** Account, Connections, Privacy,
    Data and Advanced all extracted onto ONE nicely styled page that opens from the gear
    (bottom-left). **No section labels** — not "Account", not "People" — it should read as
    one seamless page, not five tabs stacked.
