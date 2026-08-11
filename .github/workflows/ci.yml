@@ -414,16 +414,18 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # `adventureorno` is the project serving adventureorno.com; a branch other
-          # than the production branch `main` yields a preview deployment, so this
-          # can never overwrite the live site.
+          # `adventureorno-com` is THE project serving adventureorno.com — it holds the
+          # custom domain and is the git-connected one. (The old `adventureorno`
+          # project it used to name no longer exists; deploying there now fails
+          # outright.) A branch other than the production branch `main` yields a
+          # preview deployment, so this can never overwrite the live site.
           branch="ci-preview-$(printf '%s' "$HEAD_REF" | tr -c 'a-zA-Z0-9-' '-' | cut -c1-24)"
           if [ "$branch" = "ci-preview-main" ]; then
             echo "::error::Refusing to deploy a preview from a branch that resolves to the production branch."
             exit 1
           fi
           npx wrangler pages deploy app/dist \
-            --project-name adventureorno \
+            --project-name adventureorno-com \
             --branch "$branch" \
             --commit-hash "$HEAD_SHA" \
             --commit-dirty=false | tee deploy.log
@@ -432,7 +434,7 @@ jobs:
           # which repoints asynchronously and can still serve the PREVIOUS deployment
           # for a while. Smoking the alias produced a false SHA-mismatch failure, so
           # take the per-deployment url — it addresses exactly this build.
-          url="$(sed -n 's/.*Take a peek over at \(https:\/\/[a-z0-9-]*\.adventureorno\.pages\.dev\).*/\1/p' deploy.log | tail -1)"
+          url="$(sed -n 's/.*Take a peek over at \(https:\/\/[a-z0-9-]*\.adventureorno-com\.pages\.dev\).*/\1/p' deploy.log | tail -1)"
           if [ -z "$url" ]; then
             echo "::error::Could not determine the preview deployment URL from the wrangler output."
             exit 1
@@ -605,10 +607,15 @@ jobs:
           npm run build --workspace app
       - name: Deploy gated build to Cloudflare Pages
         working-directory: app
-        # `adventureorno` is the project that serves adventureorno.com. The
-        # similarly named `adventureorno-com` project is an unused orphan with no
-        # custom domain — deploying there succeeds but never updates the live site.
-        run: npx wrangler pages deploy dist --project-name adventureorno --branch main --commit-hash "${{ github.sha }}" --commit-dirty=false
+        # `adventureorno-com` is THE project that serves adventureorno.com: it holds
+        # the custom domain and the GitHub connection. This comment used to say the
+        # opposite and name a project that no longer exists — corrected 2026-08-11.
+        #
+        # THIS IS NOW THE ONLY WAY PRODUCTION IS DEPLOYED. Cloudflare's own
+        # build-on-push was turned off (production_deployments_enabled: false), so a
+        # push to main no longer publishes anything by itself; it lands here, after
+        # every check above has passed. Previews still build on Cloudflare.
+        run: npx wrangler pages deploy dist --project-name adventureorno-com --branch main --commit-hash "${{ github.sha }}" --commit-dirty=false
       - name: Smoke production routes, headers, assets, and exact SHA
         env:
           SMOKE_BASE_URL: https://adventureorno.com

@@ -869,6 +869,42 @@ again.**
 pushed. No data dumps, no `.env` anything, no tokens, no photo coordinates in fixtures
 or test data — ever.
 
+### HOW PRODUCTION DEPLOYS NOW (changed 2026-08-11, at Erica's instruction)
+
+> "disable cloudflare's auto production deployment from git pushes"
+> "deploy production only after gh checks succeed"
+
+**A push to `main` no longer publishes anything.** Cloudflare Pages'
+`production_deployments_enabled` is now **false** on project `adventureorno-com`, set
+through the API. Preview builds are untouched — a branch still builds so it can be
+looked at.
+
+**Production is deployed by GitHub Actions, and only after every check passes.** The
+chain was already built and is now the only path:
+
+    build · security · secret-scan · osv-scan · semgrep · zizmor ·
+    db-types-drift · edge-config-drift · e2e · db-tests · deploy-preview
+        ↓  (all must succeed)
+    release-gate      (also requires the repo variable PRODUCTION_DEPLOY_ENABLED=true)
+        ↓
+    deploy-production → wrangler pages deploy --project-name adventureorno-com
+
+**The project name was wrong in the workflow and is corrected.** It said
+`--project-name adventureorno`, with a comment claiming `adventureorno-com` was "an
+unused orphan with no custom domain". That is exactly backwards: `adventureorno-com`
+holds the domain and the GitHub connection, and the project it named no longer exists.
+Both deploy steps and the preview-URL parser now say `adventureorno-com`.
+
+**Consequence to remember:** nothing reaches adventureorno.com until CI is green. If CI
+is broken, the site does not update — that is the point, but it means a red CI is now a
+blocked release, not just a red badge.
+
+**Also disabled 2026-08-11:** the global Claude hooks that auto-committed and
+auto-pushed on every session start/stop (`~/.claude/hooks/auto-push.sh`,
+`auto-pull.sh`), and `permissions.defaultMode: bypassPermissions`. Her settings backup
+is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resurrected
+`README.md` after it was deleted (§8).
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
