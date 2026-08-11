@@ -143,13 +143,20 @@ screen disagree, the screen is right.
 This file. Every other planning document was archived, then DELETED (2026-08-11). The "removed on
 purpose" register in §7 exists so nothing is silently lost again.
 ### Phase 1 — Make erasure impossible  *(audited 2026-08-11: NOT done)*
-- **The build must FAIL when a required `VITE_*` is empty.** `scripts/check-env-example.mjs`
-  only checks that each variable is DOCUMENTED, not that it has a value — so the hole that
-  lost `VITE_GOOGLE_CLIENT_ID` is still open. Today it would silently disable the map.
-- **Cloudflare Pages holds NO environment variables** (verified via the API, both
-  production and preview). Every deploy so far has been pre-built, which is the only
-  reason the site works: a build run by Cloudflare itself would ship a bundle with no
-  Supabase keys and no map token, and nothing would say so.
+- ✅ **The build FAILS when a required `VITE_*` is empty** (2026-08-11). A Vite plugin,
+  `requireClientEnv` in `app/vite.config.ts`, refuses to build without the Supabase URL
+  and key, or without at least one map source. Proven by blanking each and watching the
+  build exit 1. `scripts/check-env-example.mjs` still only checks DOCUMENTATION — the two
+  together now cover both halves.
+- **Cloudflare Pages holds no environment variables** (verified via the API). Corrected
+  2026-08-11: this is NOT currently dangerous, because the live project
+  (`adventureorno`, which serves adventureorno.com) is **direct-upload only** — it has no
+  git source and no build command, so Cloudflare never builds it. Every deploy is a
+  bundle built here with `.env.local` supplying the values.
+- **There is a SECOND Pages project, `adventureorno-com`, connected to GitHub with an
+  empty build command.** It serves only `adventureorno-com.pages.dev`. It is a leftover,
+  and it already causes confusion: the "Cloudflare Pages" check on every PR points at it,
+  not at the project that actually serves the site. Decide whether to delete it.
 - **Deploys go through CI on green.** The pipeline exists and is thorough, but
   `release-gate` cannot start — **GitHub Actions is over its spending limit** — so
   `deploy-production` is skipped and deploys are by hand. Needs Erica: GitHub →

@@ -1,11 +1,59 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vitest/config';
+import { defineConfig, type Plugin } from 'vitest/config';
+import { loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+
+/**
+ * FAIL THE BUILD RATHER THAN SHIP A SILENTLY BROKEN ONE.
+ *
+ * `VITE_*` values are baked in at build time. An empty one becomes the string
+ * "undefined" in the bundle and its feature just... goes. Nothing errors,
+ * nothing logs. That is exactly how `VITE_GOOGLE_CLIENT_ID` went missing and
+ * the Google Photos button quietly disappeared, and it is why STATE.md Phase 1
+ * exists.
+ *
+ * REQUIRED means the app is broken without it, not merely reduced:
+ *   - Supabase URL + publishable key: no data at all, every page is empty.
+ *   - A map source: with neither, every map is blank — and a blank map hides
+ *     the places, the routes and the fog, because they are drawn on it.
+ *
+ * Everything else (photo gateway, Strava, Google) degrades honestly: the
+ * feature hides itself and says so. Those stay optional on purpose.
+ */
+function requireClientEnv(): Plugin {
+  const REQUIRED = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY'];
+  // At least one of these, or there is no basemap.
+  const REQUIRED_ONE_OF = ['VITE_MAPBOX_TOKEN', 'VITE_MAPTILER_KEY'];
+
+  return {
+    name: 'aon-require-client-env',
+    // Build only. `vite dev` stays usable with a partial .env.local.
+    apply: 'build',
+    config(_config, { mode }) {
+      // '..' is the workspace root — the same envDir Vite itself uses below.
+      const env = loadEnv(mode, '..', 'VITE_');
+      const blank = (k: string) => !env[k] || env[k].trim() === '';
+
+      const missing = REQUIRED.filter(blank);
+      if (REQUIRED_ONE_OF.every(blank)) missing.push(REQUIRED_ONE_OF.join(' or '));
+
+      if (missing.length > 0) {
+        throw new Error(
+          `\n\nRefusing to build: ${missing.length} required client variable(s) are empty.\n` +
+            missing.map((v) => `  - ${v}`).join('\n') +
+            '\n\nThese are baked into the bundle at build time, so an empty one does not fail at\n' +
+            'runtime — the feature silently disappears. Set them in .env.local (local builds) or\n' +
+            'in the CI environment, then build again.\n',
+        );
+      }
+    },
+  };
+}
 
 // Vite loads .env.local from the app dir; the repo keeps a single .env.local at
 // the workspace root, so point envDir up one level.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), requireClientEnv()],
   envDir: '..',
   server: { port: 5173 },
   build: {

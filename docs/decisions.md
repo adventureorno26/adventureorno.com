@@ -1142,3 +1142,31 @@ while you still see yourself, so the switch is legible. `last_seen()` is member-
 anon holds no EXECUTE, like every other SECDEF function here.
 
 Verified on production: "Erica · 3 hours ago" on the map, with her photo as the marker.
+
+## 2026-08-11 — One plan, and a build that refuses to lie
+
+**Every document that competed with STATE.md is deleted** — README.md, docs/archive/
+(18 files), docs/adr/, CLAUDE.md's backlog ledger and Spaces proposal, NewClaude.md,
+CLAUDE-CODE-INSTRUCTIONS-2-70.md, and the plan-shaped memories. ~380 KB of "what to do
+next", which is the mechanical reason the same work kept being re-requested: every
+session picked a different one. All recoverable from git history. The unshipped items
+were read out of them first and folded into STATE.md §5.
+
+**The build now refuses to produce a silently broken bundle.** `VITE_*` values are baked
+in at build time, so an empty one becomes "undefined" in the bundle and its feature just
+goes — no error, no log. That is how `VITE_GOOGLE_CLIENT_ID` disappeared. A Vite plugin
+now fails the build without the Supabase URL and key, or without at least one map source
+(with neither, every map is blank — and a blank map hides the places, routes and fog
+drawn on it). Optional integrations stay optional: the photo gateway, Strava and Google
+hide themselves honestly.
+
+Verified by blanking each variable and watching `npm run build` exit 1 with the name of
+what is missing, then restoring and building clean.
+
+**A correction to the audit.** I first recorded that Cloudflare Pages holding no env vars
+meant a Cloudflare-side build would ship a blank bundle. Checking the API rather than
+assuming: the live project `adventureorno` is **direct-upload only** — no git source, no
+build command — so it never builds and the missing vars are harmless there. The real
+finding is a SECOND project, `adventureorno-com`, connected to GitHub with an empty build
+command, serving only its own pages.dev. It is a leftover, and the "Cloudflare Pages"
+check on every PR points at IT rather than at the project serving the site.
