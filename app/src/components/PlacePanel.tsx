@@ -51,7 +51,7 @@ import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
 import { pluralLabel } from '../lib/plural';
-import { visitDates } from '../lib/visitDates';
+import { byYear, visitDates } from '../lib/visitDates';
 import TrailSectionsMap from './TrailSectionsMap';
 import StarRating from './StarRating';
 
@@ -1319,6 +1319,158 @@ export default function PlacePanel({
         const rows = visitListRows;
         const isTrail = place.is_trail;
         const loading = visits === null || trailActs === null;
+        // ONE visit row, so the year groups below cannot drift from each other.
+        const renderVisitRow = (r: (typeof rows)[number]) => {
+          // A visit row IS the control. Tapping it opens the one editor for
+          // that visit — dates, who, trip, delete, and the places visited
+          // inside it. There is no separate "Dates" pill: a pill that opens
+          // a second row for one field is the thing that made this confusing.
+          const open = editingVisit === r.key;
+          const contents = r.trip ? (tripContents[r.key] ?? []) : [];
+          const isVisit = !!r.del;
+          const inside = nestedActs.get(r.key) ?? [];
+          return (
+            <div key={r.key} className={open ? 'visit-item open' : 'visit-item'}>
+              <div className="visit-row">
+                {isVisit ? (
+                  <button
+                    type="button"
+                    className="visit-main visit-open"
+                    aria-expanded={open}
+                    onClick={() => {
+                      setEditingVisit(open ? null : r.key);
+                      setEvStart(r.start || '');
+                      setEvEnd(r.end || r.start || '');
+                    }}
+                  >
+                    <span className="visit-date">{r.date}</span>
+                    {/* One muted summary, not a stack of chips. */}
+                    {(() => {
+                      const meta = [
+                        r.sub,
+                        contents.length > 0
+                          ? `${contents.length} ${contents.length === 1 ? 'place' : 'places'}`
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' · ');
+                      return meta ? <span className="visit-meta">{meta}</span> : null;
+                    })()}
+                  </button>
+                ) : (
+                  <Link className="visit-main" to={r.to}>
+                    <span className="visit-date">{r.date}</span>
+                    {r.sub && <span className="muted">{r.sub}</span>}
+                  </Link>
+                )}
+                {isVisit && (
+                  <Link
+                    className="visit-open-link"
+                    to={`/visit/${r.key}`}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Open this visit"
+                  >
+                    Open
+                  </Link>
+                )}
+                {canEdit && people.length >= 2 && (
+                  <select
+                    className="attribution-select visit-who"
+                    value={r.solo ?? ''}
+                    title="Who was here"
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
+                  >
+                    {/* Not "Together" — Erica asked for that word out of the
+                                  Visits section entirely; it now means tagging someone
+                                  in a flok. This control only says who was here, and
+                                  "Both" is the word the app already uses for it. */}
+                    <option value="">{people.length > 2 ? 'Everyone' : 'Both'}</option>
+                    {people.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* The places we visited during this visit to the bigger
+                            place. They are places in their own right — not stops,
+                            not spots — and they belong inside this visit. */}
+              {contents.length > 0 && (
+                <ul className="trip-contents">
+                  {contents.map((c) => (
+                    <li key={c.visit_id}>
+                      <Link to={`/place/${c.place_id}`}>{c.place_name}</Link>
+                      <span className="muted">{visitDates(c.start_date, c.end_date)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* What we did during this stay. These are evidence, not
+                            separate visits — the ride and the run at Brewster
+                            happened on ONE 2-day visit. */}
+              {inside.length > 0 && (
+                <ul className="trip-contents visit-evidence">
+                  {inside.map((a) => (
+                    <li key={a.id}>
+                      <Link to={`/place/${place.id}/day/${activityDay(a)}`}>
+                        {a.name || a.type}
+                      </Link>
+                      <span className="muted">
+                        {[a.type, miStr(a.distance), visitDates(activityDay(a))]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {canEdit && open && isVisit && (
+                <div className="visit-editor">
+                  {/* Dates save on change — a Save button for two fields is
+                                one control too many. */}
+                  <div className="ve-dates">
+                    <input
+                      type="date"
+                      value={evStart}
+                      aria-label="Visit start date"
+                      onChange={(e) => {
+                        setEvStart(e.target.value);
+                        void saveVisitDates(r.del!, e.target.value, evEnd);
+                      }}
+                    />
+                    <span className="ve-to">to</span>
+                    <input
+                      type="date"
+                      value={evEnd}
+                      aria-label="Visit end date"
+                      onChange={(e) => {
+                        setEvEnd(e.target.value);
+                        void saveVisitDates(r.del!, evStart, e.target.value);
+                      }}
+                    />
+                  </div>
+                  <div className="ve-actions">
+                    <button
+                      className={r.trip ? 've-btn on' : 've-btn'}
+                      aria-pressed={r.trip}
+                      onClick={() => void toggleVisitIsTrip(r.del!, !r.trip)}
+                    >
+                      Trip
+                    </button>
+                    <button className="ve-btn ve-danger" onClick={() => void removeVisit(r.del!)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
         return (
           <>
             <details className="visits-details">
@@ -1333,162 +1485,24 @@ export default function PlacePanel({
                 </p>
               ) : (
                 <div className="visits">
-                  {rows.map((r) => {
-                    // A visit row IS the control. Tapping it opens the one editor for
-                    // that visit — dates, who, trip, delete, and the places visited
-                    // inside it. There is no separate "Dates" pill: a pill that opens
-                    // a second row for one field is the thing that made this confusing.
-                    const open = editingVisit === r.key;
-                    const contents = r.trip ? (tripContents[r.key] ?? []) : [];
-                    const isVisit = !!r.del;
-                    const inside = nestedActs.get(r.key) ?? [];
-                    return (
-                      <div key={r.key} className={open ? 'visit-item open' : 'visit-item'}>
-                        <div className="visit-row">
-                          {isVisit ? (
-                            <button
-                              type="button"
-                              className="visit-main visit-open"
-                              aria-expanded={open}
-                              onClick={() => {
-                                setEditingVisit(open ? null : r.key);
-                                setEvStart(r.start || '');
-                                setEvEnd(r.end || r.start || '');
-                              }}
-                            >
-                              <span className="visit-date">{r.date}</span>
-                              {/* One muted summary, not a stack of chips. */}
-                              {(() => {
-                                const meta = [
-                                  r.sub,
-                                  contents.length > 0
-                                    ? `${contents.length} ${contents.length === 1 ? 'place' : 'places'}`
-                                    : '',
-                                ]
-                                  .filter(Boolean)
-                                  .join(' · ');
-                                return meta ? <span className="visit-meta">{meta}</span> : null;
-                              })()}
-                            </button>
-                          ) : (
-                            <Link className="visit-main" to={r.to}>
-                              <span className="visit-date">{r.date}</span>
-                              {r.sub && <span className="muted">{r.sub}</span>}
-                            </Link>
-                          )}
-                          {isVisit && (
-                            <Link
-                              className="visit-open-link"
-                              to={`/visit/${r.key}`}
-                              onClick={(e) => e.stopPropagation()}
-                              title="Open this visit"
-                            >
-                              Open
-                            </Link>
-                          )}
-                          {canEdit && people.length >= 2 && (
-                            <select
-                              className="attribution-select visit-who"
-                              value={r.solo ?? ''}
-                              title="Who was here"
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
-                            >
-                              {/* Not "Together" — Erica asked for that word out of the
-                                  Visits section entirely; it now means tagging someone
-                                  in a flok. This control only says who was here, and
-                                  "Both" is the word the app already uses for it. */}
-                              <option value="">{people.length > 2 ? 'Everyone' : 'Both'}</option>
-                              {people.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-
-                        {/* The places we visited during this visit to the bigger
-                            place. They are places in their own right — not stops,
-                            not spots — and they belong inside this visit. */}
-                        {contents.length > 0 && (
-                          <ul className="trip-contents">
-                            {contents.map((c) => (
-                              <li key={c.visit_id}>
-                                <Link to={`/place/${c.place_id}`}>{c.place_name}</Link>
-                                <span className="muted">
-                                  {visitDates(c.start_date, c.end_date)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-
-                        {/* What we did during this stay. These are evidence, not
-                            separate visits — the ride and the run at Brewster
-                            happened on ONE 2-day visit. */}
-                        {inside.length > 0 && (
-                          <ul className="trip-contents visit-evidence">
-                            {inside.map((a) => (
-                              <li key={a.id}>
-                                <Link to={`/place/${place.id}/day/${activityDay(a)}`}>
-                                  {a.name || a.type}
-                                </Link>
-                                <span className="muted">
-                                  {[a.type, miStr(a.distance), visitDates(activityDay(a))]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-
-                        {canEdit && open && isVisit && (
-                          <div className="visit-editor">
-                            {/* Dates save on change — a Save button for two fields is
-                                one control too many. */}
-                            <div className="ve-dates">
-                              <input
-                                type="date"
-                                value={evStart}
-                                aria-label="Visit start date"
-                                onChange={(e) => {
-                                  setEvStart(e.target.value);
-                                  void saveVisitDates(r.del!, e.target.value, evEnd);
-                                }}
-                              />
-                              <span className="ve-to">to</span>
-                              <input
-                                type="date"
-                                value={evEnd}
-                                aria-label="Visit end date"
-                                onChange={(e) => {
-                                  setEvEnd(e.target.value);
-                                  void saveVisitDates(r.del!, evStart, e.target.value);
-                                }}
-                              />
-                            </div>
-                            <div className="ve-actions">
-                              <button
-                                className={r.trip ? 've-btn on' : 've-btn'}
-                                aria-pressed={r.trip}
-                                onClick={() => void toggleVisitIsTrip(r.del!, !r.trip)}
-                              >
-                                Trip
-                              </button>
-                              <button
-                                className="ve-btn ve-danger"
-                                onClick={() => void removeVisit(r.del!)}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {/* YEARS DROP DOWN TO LISTS (Erica, 2026-08-11) — newest first, only
+                      years that have visits, the newest one already open. Sixty-two
+                      visits on the Appalachian Trail is what makes this necessary. */}
+                  {(() => {
+                    const years = byYear(rows.map((r) => ({ ...r, start_date: r.sort })));
+                    const newest = years[0]?.year;
+                    return years.map(({ year, rows: yearRows }) => (
+                      <details key={year} className="visit-year" open={year === newest}>
+                        <summary className="visit-year-head">
+                          <span className="visit-year-n">{year}</span>
+                          <span className="label">
+                            {yearRows.length} {yearRows.length === 1 ? 'visit' : 'visits'}
+                          </span>
+                        </summary>
+                        {yearRows.map((r) => renderVisitRow(r))}
+                      </details>
+                    ));
+                  })()}
                 </div>
               )}
             </details>

@@ -1263,13 +1263,14 @@ a {
 .dual-rating-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  /* Erica on the approved preview: "reduce the space between user name and the
+     stars." The min-width that used to pad short names went with it. */
+  gap: 3px;
 }
 .dual-rating-who {
   font-size: 12px;
   font-weight: 700;
   color: var(--muted, #94a3b8);
-  min-width: 30px;
 }
 .dual-rating-agree {
   font-size: 11px;
@@ -6872,4 +6873,41 @@ button.mi-row:hover {
 .route-row .label {
   flex: 0 0 auto;
   font-size: 12px;
+}
+
+/* YEARS DROP DOWN TO LISTS — the Visits section on every card. The year is the
+   handle; the dates live under it. Only years that have visits appear at all, and
+   the newest one is already open (docs/STATE.md, THE CARD — LOCKED). */
+.visit-year {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.visit-year:first-of-type {
+  border-top: 0;
+}
+.visit-year-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 2px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.visit-year-head::-webkit-details-marker {
+  display: none;
+}
+.visit-year-n {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+/* "Show" / "Hide" on the right, the words the approved card uses — not a caret. */
+.visit-year-head::after {
+  content: 'Show';
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.visit-year[open] > .visit-year-head::after {
+  content: 'Hide';
 }
