@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import type { Entry, NewEntry } from '../lib/types';
 import { CATEGORIES } from '../lib/categories';
-import { retrieveResult, type SearchResult } from '../lib/maptiler';
-import MapSearch from './MapSearch';
 import StarRating from './StarRating';
 
 interface Props {
@@ -27,20 +25,6 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
   const [lng, setLng] = useState<number | null>(existing?.lng ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Search a place/address → add it as a spot under this city (no new pin). Fills
-  // the title with the place name and captures the spot's own address +
-  // coordinates so it gets its own Directions button.
-  async function pickPlace(r: SearchResult) {
-    const full = r.mapbox_id ? await retrieveResult(r).catch(() => r) : r;
-    if (full.name) setTitle(full.name);
-    const addr = full.address || [full.admin1, full.country].filter(Boolean).join(', ');
-    setAddress(addr);
-    if (full.lat || full.lng) {
-      setLat(full.lat);
-      setLng(full.lng);
-    }
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,11 +55,6 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
 
   return (
     <form className="entry" onSubmit={submit}>
-      <label>Search for a place or address to add (optional)</label>
-      <div className="spot-search bucket-search">
-        <MapSearch onPick={pickPlace} />
-      </div>
-
       <label>Kind (tags this place so it shows in the tag search)</label>
       <select className="kind-select" value={kind} onChange={(e) => setKind(e.target.value)}>
         {CATEGORIES.map((c) => (
@@ -89,8 +68,9 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
       <label>Title</label>
       <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
 
-      <label>Address (gives this spot its own Directions button)</label>
+      <label hidden>Address</label>
       <input
+        hidden
         value={address}
         placeholder="Street address"
         onChange={(e) => {
