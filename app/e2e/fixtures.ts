@@ -103,6 +103,60 @@ export const authedTest = base.extend({
   },
 });
 
+
+// ---------------------------------------------------------------------------
+// A session WITHOUT a password, for the live check.
+//
+// `verify:live` has to sign in as the test bot against production, and there is no
+// TEST_BOT_PASSWORD in .env.local — nor should the live check depend on one existing.
+// Supabase's admin API can mint a one-time link for an account, and that link's token
+// exchanges for a real session. The service key never leaves this Node process; only
+// the resulting session is put in the browser.
+//
+// It reads SUPABASE_SECRET_KEY (the current key — AON_SUPABASE_SECRET_KEY is the
+// disabled legacy JWT, see docs/STATE.md §8).
+const SECRET = process.env.SUPABASE_SECRET_KEY;
+const BOT_EMAIL = process.env.TEST_BOT_EMAIL ?? 'testbot@adventureorno.dev';
+
+export const canMintSession = Boolean(SUPABASE_URL && KEY && SECRET);
+
+async function mintSession(email: string): Promise<unknown> {
+  const gen = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: 'POST',
+    headers: {
+      apikey: SECRET!,
+      Authorization: `Bearer ${SECRET}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ type: 'magiclink', email }),
+  });
+  if (!gen.ok) throw new Error(`Could not mint a link for ${email} (${gen.status})`);
+  const link = (await gen.json()) as { hashed_token?: string };
+  if (!link.hashed_token) throw new Error('generate_link returned no token');
+
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/verify?type=magiclink`, {
+    method: 'POST',
+    headers: { apikey: KEY!, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'magiclink', token_hash: link.hashed_token }),
+  });
+  if (!res.ok) throw new Error(`Could not exchange the link for a session (${res.status})`);
+  return res.json();
+}
+
+/** A page signed in as the test bot, with no password needed. Read-only use. */
+export const liveTest = base.extend({
+  page: async ({ page, context }, use) => {
+    if (!canMintSession) {
+      throw new Error(
+        'verify:live needs VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY and ' +
+          'SUPABASE_SECRET_KEY. They are in .env.local; `npm run verify:live` loads it.',
+      );
+    }
+    await injectSession(context, await mintSession(BOT_EMAIL));
+    await use(page);
+  },
+});
+
 /**
  * A page signed in as a specific seeded role. MUTATING — refuses to run against a
  * non-local Supabase host so these can never write to household data.

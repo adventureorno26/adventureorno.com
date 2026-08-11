@@ -1,10 +1,25 @@
 name: CI
 
+# HISTORY, so this is not re-diagnosed a third time: every run from 2026-08-08 to
+# 2026-08-11 failed before a single job STARTED, with
+#   "The job was not started because recent account payments have failed or your
+#    spending limit needs to be increased."
+# That was GitHub billing, not this code — nothing here was broken. Erica restored
+# credits on 2026-08-11 and asked for it to be tried again, so the automatic triggers
+# are back. If the same annotation returns, it is billing again: switch this to
+# `on: workflow_dispatch:` rather than leaving a permanently red workflow, because a
+# workflow that is always red teaches everyone to ignore red.
+#
+# EITHER WAY THE DEPLOY IS ALREADY GATED: Cloudflare Pages builds with
+#   npm ci && npm run lint && npm run test && npm run build
+# and refuses to publish if any of it fails. This workflow is the wider net (security
+# scanning, drift checks, e2e), not the only one.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 # Least privilege: jobs only need to read the repo. Any job that needs more must
 # opt in explicitly at the job level.

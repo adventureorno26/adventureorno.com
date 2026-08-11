@@ -261,6 +261,28 @@ Nothing gets added *beside* this page. Things get removed *into* it.
 
 Plans may be written here in advance. **Status** may not: ✅ means seen on the screen.
 
+### EVERY UI CHANGE NEEDS A PREVIEW SHE APPROVES FIRST (her rule, 2026-08-11)
+
+> "From now on, I want a preview of every change to the UI BEFORE you change it, and I
+> MUST approve it."
+
+**This is absolute and it comes before shipping speed.** No change to anything a person
+can see goes to the site until Erica has seen a preview of it and said yes. Not a
+"small" one, not a "fix", not "while I was in there".
+
+What this means in practice:
+
+- Build the preview as a standalone page and send her the link. Wait.
+- Backend, migrations, tests, docs and guards do NOT need a preview — they are not UI.
+- **Undoing something she explicitly asked to be removed is not a new change**; her
+  instruction IS the approval. Do it, and say so.
+- If a preview is impractical for something, say so and ask, rather than guessing.
+
+Why: she has now had to give the same UI instructions repeatedly, and the reason each
+time was a change that reached the site without her seeing it first. The guard test
+(`app/src/lib/lockedCard.test.ts`) stops banned things coming BACK; this rule stops new
+ones going in.
+
 ### How a new direction gets handled (her rule, 2026-08-11)
 
 > **If a new direction conflicts with this file, say so before acting.** Name the change

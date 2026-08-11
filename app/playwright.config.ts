@@ -10,6 +10,10 @@ const PORT = 4173;
 
 export default defineConfig({
   testDir: './e2e',
+  // The live checks target PRODUCTION and have their own config
+  // (playwright.live.config.ts, `npm run verify:live`). Running them against the
+  // local preview would be meaningless and would fail on data that only exists live.
+  testIgnore: /erica-asked-for\.spec\.ts/,
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: true,
