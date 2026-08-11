@@ -176,7 +176,6 @@ export default function PlacePanel({
   const [sectionVisits, setSectionVisits] = useState<Visit[]>([]);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [spots, setSpots] = useState<Entry[] | null>(null);
-  const [addingSpot, setAddingSpot] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
@@ -301,7 +300,6 @@ export default function PlacePanel({
       );
       onPlaceChanged(spot); // add the new place to the map
     }
-    setAddingSpot(false);
     await reloadSpots();
     await refreshPlace();
   }
@@ -1566,21 +1564,11 @@ export default function PlacePanel({
         </>
       )}
 
-      {/* SPOTS AND REVIEWS — heading like Photos and Videos, with a blue add link.
-          Each logged category is a dropdown that opens to its spots. */}
+      {/* NOTES AND REVIEWS. No blue "+" link in the heading — Erica asked for it
+          gone. The fillable box sits at the BOTTOM of this section, where the
+          notes are, rather than being something you first have to reveal. */}
       <div className="visits-head">
         <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
-        {/* These read as the same button twice — "Add a place here" / "Add
-            existing places" — and only one of them adds a place. The first
-            writes a note or a review under this place; the second puts a place
-            you already have INSIDE this one. Say which. */}
-        {canEdit && !addingSpot && (
-          <span style={{ display: 'flex', gap: 12 }}>
-            <button className="add-spot-link" onClick={() => setAddingSpot(true)}>
-              + Write a note or review
-            </button>
-          </span>
-        )}
       </div>
 
       {canEdit && addingMembers && (
@@ -1651,14 +1639,6 @@ export default function PlacePanel({
         </div>
       )}
 
-      {canEdit && addingSpot && (
-        <EntryEditor
-          placeId={place.id}
-          defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
-          onSave={addSpot}
-          onCancel={() => setAddingSpot(false)}
-        />
-      )}
       {reviewGroups.length > 0 ? (
         <div className="spot-groups">
           {reviewGroups.map((g) => (
@@ -1723,9 +1703,17 @@ export default function PlacePanel({
           ))}
         </div>
       ) : (
-        !addingSpot && (
-          <p style={{ color: 'var(--muted)', fontSize: 13 }}>Nothing written here yet.</p>
-        )
+        <p style={{ color: 'var(--muted)', fontSize: 13 }}>Nothing written here yet.</p>
+      )}
+
+      {/* The fillable box, at the bottom of the section it belongs to. */}
+      {canEdit && (
+        <EntryEditor
+          placeId={place.id}
+          defaultDate={place.last_visit ?? new Date().toISOString().slice(0, 10)}
+          onSave={addSpot}
+          onCancel={() => undefined}
+        />
       )}
 
       <RouteMiniMap place={place} />

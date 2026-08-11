@@ -18,3 +18,18 @@ bucket_name = "aon-basemap"
 SOURCE_URL = "https://build.protomaps.com/20260810.pmtiles"
 # The object it lands on inside the bucket.
 OBJECT_KEY = "planet.pmtiles"
+
+# ON OUR OWN DOMAIN, not workers.dev.
+#
+# Three reasons, all of which have bitten this project already:
+#  1. The service worker cannot usefully cache a cross-origin response, and tiles
+#     and photos are the two heaviest things the app fetches.
+#  2. Every external host is a CSP entry, and a CSP entry is something that can be
+#     silently BLOCKED — which is exactly how the Mapbox search died unnoticed.
+#  3. No CORS preflight, and no third-party-looking hostname in front of private data.
+#
+# A Worker route takes precedence over Pages for matching paths, so /basemap/* comes
+# here and everything else still goes to the app.
+routes = [
+  { pattern = "adventureorno.com/basemap/*", zone_name = "adventureorno.com" }
+]

@@ -174,6 +174,18 @@ export default {
       return json({ aborted: true });
     }
 
+    // Proves the route is wired to our own domain before any tile depends on it.
+    if (url.pathname === '/basemap/health') {
+      const head = await env.BASEMAP.head(env.OBJECT_KEY);
+      const state = await readState(env);
+      return json({
+        ok: true,
+        servedFrom: url.host,
+        planet: head ? { bytes: head.size } : 'copy not finished',
+        copy: state ? summary(state) : 'not started',
+      });
+    }
+
     return json({ error: 'not found' }, 404);
   },
 };
