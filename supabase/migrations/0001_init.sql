@@ -10,6 +10,23 @@
 --    `deleted_hashes`, `invites` are owner-only. Ingest paths (pings, activities)
 --    are written by Edge Functions using the service_role key, which bypasses RLS.
 
+-- ⚠️ EDITED 2026-08-11, and the header above says never edit after merge. This is
+-- the one case where that rule cannot apply: the failure happens WHILE APPLYING
+-- 0001, so no later migration can repair it — the chain never reaches them.
+--
+-- The helper functions below are defined BEFORE public.profiles exists, and they
+-- read it. Postgres validates a function body at creation time, so a genuinely
+-- fresh database fails here with `column "role" does not exist`, and `supabase
+-- start` / `supabase db reset` never complete. It only ever worked because
+-- scripts/db-bootstrap.sh sets check_function_bodies=off for its apply session —
+-- so the chain was only appliable through that one script.
+--
+-- `set local` lasts for this migration's transaction and nothing else. It relaxes
+-- CREATION-TIME validation only; the functions themselves are byte-for-byte
+-- unchanged, and every object ends up identical. Reordering the file would also
+-- work but rewrites far more of a migration that has been applied everywhere.
+set local check_function_bodies = off;
+
 create extension if not exists postgis;
 
 -- ---------------------------------------------------------------------------

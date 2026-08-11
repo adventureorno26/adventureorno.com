@@ -21,7 +21,8 @@
     "audit:production": "node scripts/check-production-audit.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs app/dist",
     "check:env": "node scripts/check-env-example.mjs",
-    "verify:live": "set -a && . ./.env.local && set +a && npm run verify:live --workspace app"
+    "verify:live": "set -a && . ./.env.local && set +a && npm run verify:live --workspace app",
+    "check:ledger": "node scripts/check-migration-ledger.mjs"
   },
   "engines": {
     "node": ">=22 <23",
