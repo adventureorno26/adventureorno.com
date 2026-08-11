@@ -564,6 +564,60 @@ caught, because the two records of the same run start in different places.
 that day" is half wrong. You cannot SEARCH by date, but `createTime` comes back on every
 picked item. Still no GPS.
 
+### PLAN A TRIP TOGETHER — Erica's direction, 2026-08-11 *(new, not started)*
+
+> "I also want to create a feature that allows users to collaborate to plan a trip"
+
+⚠️ **THIS IS THE FIRST THING IN THE APP THAT IS ABOUT THE FUTURE.** Every noun in §2
+records something that ALREADY HAPPENED: a place is somewhere you have been, a visit is a
+date you were there, an activity is a route you covered. A plan is none of those, and the
+one way this feature can wreck the locked system is by leaking into it — a planned trip
+appearing in Places, or bumping the Trips count, or drawing a marker on the map as though
+you had been there.
+
+**THE RULE, and it is not negotiable: a plan counts for NOTHING until it happens.**
+Plans live in their own tables. They are never read by `rebuild_place_visits`, never
+counted by the stats bar, never drawn as a visited marker. §2's sentence "a place counts
+once in Places" means once you have BEEN there.
+
+**How it turns real.** A plan does not become a visit by the date passing — that would
+invent history for a trip you cancelled. When the end date is past, the plan asks once:
+*"Did you go?"* Yes creates the visit (one visit, one set of dates — §2) and the plan is
+kept, attached to it, as what you meant to do. No, or no answer, and it stays a plan.
+This is the only door between the two halves, and a human walks through it.
+
+**Who can edit it.** Planning is the reason the Flok graph exists — it is the same
+tagging-and-approval model, only pointed forward:
+
+- The planner invites people from their flok. An invite is **accepted, declined, or
+  maybe** — nobody is added to your trip without saying yes, exactly as with Together.
+- Everyone accepted can add ideas, dates and notes. Only the planner can set the trip's
+  final dates, and only the planner can answer "Did you go?" — one hand on the record.
+- An idea is a **place you have not been** — so it must NOT create a `places` row on the
+  spot. It holds a name, a coordinate and whatever the geocoder returned. If the trip
+  happens, the ideas you actually did become real places at that moment, through the same
+  path as any other new place.
+
+**Voting, deliberately small.** The heart and the flame — the same two marks, the same
+component, ALREADY BUILT for photos. No new vocabulary, no star ratings on things nobody
+has seen. Rating is for places you have been (§2's card), and an idea is not one yet.
+
+**The card.** A plan is shown with the LOCKED card structure — cover, name, the sections
+in the same order, the blue rule and white uppercase headings. Nothing about the card
+template changes; only what fills the sections. **Erica sees a preview and approves it
+before any of this is built**, per her standing rule.
+
+**Shape of the data** (written when built, not before):
+`trip_plans` (owner, name, cover, target dates, status) · `trip_plan_members` (profile,
+role planner/guest, invite status) · `trip_plan_ideas` (name, coords, who added it,
+optional link to a real `places` row once it exists) · reactions reuse the existing
+photo-reaction machinery pointed at an idea.
+
+**Order of work:** the data model and the invite/accept flow first (they touch nothing
+that exists), the card preview second, the "Did you go?" conversion last — because that
+is the only part that can write history, and it should be built when everything around it
+is settled.
+
 ### C — broken now, quietly (status 2026-08-11)
 
 |    | What                                                                                                                                                                        | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -596,8 +650,20 @@ picked item. Still no GPS.
    People section**, rendered above the member list under the one People heading instead
    of as its own labelled section. Not verifiable from the test account: that whole block
    renders only for `role === 'owner'`, so **Erica has to confirm it**.
-4. **Photos must appear on the VISIT card.** Today they only do when a photo's date lines
-   up, and **156 of 176 photos are not pinned to any visit**.
+4. ✅ **VERIFIED LIVE** (`6354cfb2`) — **photos appear on the VISIT card.** Confirmed on a
+   San Diego visit: 12 photos, 24 marks, under "Photos (12)".
+   The mechanism was never missing — a photo belongs to a visit when its local day falls
+   inside it, OR when it is pinned. What was missing was the pinning: **35 of 177 photos
+   were pinned to nothing**. 33 of them had a date AND a place AND fell inside exactly
+   ONE existing visit (checked for ambiguity first: zero photos matched two visits), so
+   they were pinned. **175 of 177 now.** The last two have no date at all — the "Add
+   date" pill on the thumbnail is how they get one, and no automation should guess it.
+   *Reversible:* the id → visit_id list is saved; `set_photo_visit(id, null)` puts any
+   photo back on its own date.
+   Also fixed here: the visit card's photo strip was a SECOND, hand-rolled copy of the
+   place card's carousel — which is exactly why the heart and flame landed on one and not
+   the other. Both now render one `<ThumbMarks>` component, so the marks cannot change on
+   one card and miss the other.
 5. ✅ **VERIFIED LIVE** (`0913f05d`) — **the place card has ONE carousel** with the date,
    and **the heart and flame are on it**. Confirmed on San Diego: 22 photos, 1 carousel,
    44 marks, and a react round-trip that wrote and cleared again. The marks used to exist
