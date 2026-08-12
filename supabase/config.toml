@@ -2,22 +2,26 @@
 project_id = "aanfyhsjbtnqzphuoiem"
 
 [db]
-# KNOWN FIDELITY GAP: production runs Postgres 17.6.1.147 (confirmed 2026-08-07 via
-# the Management API) while the local and CI stacks run 15, so `supabase start`
-# prints a version-mismatch warning and local DB tests execute on a different
-# engine than production.
+# Postgres 17, matching production (17.6). This was 15 until 2026-08-11.
 #
-# Moving this to 17 is the right fix but is NOT a one-line change: `supabase start`
-# then pulls a fresh ~3 GB Postgres 17 image, and CI's `db-tests` and `e2e` jobs
-# both run `supabase start` inside a 20-minute timeout. An attempt on 2026-08-07
-# stalled on the image pull and never created a container, so bumping it here
-# unverified would risk breaking two required CI jobs.
+# The gap was real and known: local and CI ran 15 while production ran 17, so
+# `supabase start` printed a version-mismatch warning and every SQL test proved
+# something about a different engine than the one serving the app.
 #
-# Do it as its own change, and verify `supabase start` completes in CI before
-# merging. Related: `supabase link` writes the linked project's service versions
-# into supabase/.temp/*-version, which makes `supabase start` pull those newer
-# images too — delete those files if a local start suddenly begins pulling.
-major_version = 15
+# It was left at 15 because an attempt on 2026-08-07 stalled: `supabase start` pulls
+# a ~3.5 GB Postgres 17 image, and CI's database job runs inside a timeout, so an
+# unverified bump risked breaking a required check. This change was made only after
+# pulling the image and running the FULL migration chain and every SQL test against
+# a fresh 17 container locally.
+#
+# If CI's database job ever times out on the image pull, cache the image rather than
+# going back to 15 — a test suite that runs on the wrong major version is not
+# evidence about production.
+#
+# Related: `supabase link` writes the linked project's service versions into
+# supabase/.temp/*-version, which makes `supabase start` pull those images too —
+# delete those files if a local start suddenly begins pulling.
+major_version = 17
 
 # Edge-function JWT behavior is declared here for EVERY function and checked
 # against the live deployment by scripts/check-edge-config.mjs (CI job

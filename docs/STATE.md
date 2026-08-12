@@ -955,6 +955,55 @@ version happened to be hoisted (3.114.17). Three versions, one repo.
 pointed at `app/`, the repo's own TypeScript, test tasks, and a terminal that opens in
 the REPO rather than the OneDrive parent.
 
+### THE DATABASE CHAIN IS CLEAN NOW (2026-08-11)
+
+**162 migrations apply to a fresh database with ZERO errors, on Postgres 17, and all
+31 SQL suites pass.** Four things were wrong; all four are fixed.
+
+**1. Postgres was 15 locally and in CI, 17.6 in production.** Every SQL test proved
+something about a different engine than the one serving the app. `config.toml` is now
+`major_version = 17`, done the way the old comment demanded: the ~3.5 GB image was
+pulled first, then the full chain and every test were run against a fresh 17 container
+before the change was committed. If CI's database job ever times out pulling that
+image, **cache the image — do not go back to 15.**
+
+**2. One migration error was "tolerated" and no longer is.** `0044` backfills
+`places.city` from `places.address`, a column no migration created until `0098` — it
+existed in production only because it drifted in outside the migrations. The backfill
+is now guarded on the column existing, so it is a no-op on a fresh database (which has
+no rows to backfill) and byte-identical anywhere the column exists.
+`scripts/db-bootstrap.sh` no longer has a special case: **any** error fails it now.
+*Do not add another. A tolerated error is a migration that does not work on a fresh
+database, which means the chain cannot rebuild anything — including a restore.*
+
+**3. `0001` could not apply to a genuinely fresh database.** Its `SECURITY DEFINER`
+helpers are defined before `public.profiles` exists and read it, and Postgres validates
+a function body at creation time. It only ever worked because `db-bootstrap.sh` sets
+`check_function_bodies=off` for its session — so the chain was appliable through **one
+script and no other path**. `0001` now sets that itself, `set local`, for its own
+transaction. The header says never edit 0001 after merge; this is the one case the rule
+cannot cover, because the failure happens *while applying 0001* and no later migration
+is ever reached.
+
+**4. EIGHT migrations were applied to production but absent from its ledger.** They
+were executed through the Management API's query endpoint, which runs SQL and records
+nothing. The schema was right and `supabase_migrations.schema_migrations` was lying —
+which matters exactly when you cannot afford it: a restore rebuilds from the ledger, so
+an unrecorded migration is silently missing from the restored database, and
+`supabase db push` re-runs anything unrecorded. Each of the eight was **verified present
+in production** before being recorded (recording an unapplied migration makes it skip
+forever, which is worse than the gap).
+
+`npm run check:ledger` (`scripts/check-migration-ledger.mjs`) now compares the repo
+against production's ledger so this is caught before a merge instead of weeks later. It
+warns rather than fails, because a branch that legitimately adds a migration is "ahead"
+until it deploys; `STRICT=1` makes it fail.
+
+**Checked while there:** `anon` reaches **zero** ordinary tables and can execute **zero**
+SECURITY DEFINER functions in production. (An earlier draft of this note claimed
+otherwise — that check wrongly counted PostGIS's own `geometry_columns`,
+`geography_columns` and `spatial_ref_sys`, which `0154` deliberately excludes.)
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for

@@ -9,15 +9,15 @@
 #     no migration-scheduled job (e.g. 0057/0071's net.http_post to the PRODUCTION
 #     url + service_role key) can ever fire from the disposable DB. Migrations only
 #     REGISTER cron jobs during apply; they don't POST during apply.
-#   * FAILS ON ANY UNEXPECTED ERROR. Exactly one historical error is tolerated —
-#     0044 backfills places.city from a drifted places.address column that no
-#     migration creates (see docs/decisions.md; harmless on an empty DB). Any other
-#     error aborts with a non-zero exit. `check_function_bodies=off` is set for the
-#     one apply session to accommodate 0001's sql helpers defined before profiles.
+#   * FAILS ON ANY ERROR AT ALL. There used to be one tolerated exception (0044's
+#     backfill from a places.address column that no migration created until 0098);
+#     0044 now guards it, so the chain applies cleanly to a fresh database and the
+#     exception is gone. `check_function_bodies=off` is still set for the one apply
+#     session, to accommodate 0001's sql helpers defined before profiles.
 #   * Keeps the error log for inspection; never reports success on a partial apply.
 #
-# The long-term fix (so a plain `supabase db reset` works with zero tolerated
-# errors) is a squashed re-baseline — tracked as remaining debt.
+# A squashed re-baseline is still worth doing eventually — 160+ migrations is a slow
+# apply — but it is no longer needed for correctness: the chain applies cleanly.
 #
 # Prereq: `supabase start`. Usage: scripts/db-bootstrap.sh --yes
 set -euo pipefail
@@ -74,12 +74,21 @@ UNSCHED=$(psql_db -tA -c "select coalesce(count(*),0) from cron.job;" 2>/dev/nul
 psql_db -q -c "select cron.unschedule(jobid) from cron.job;" >/dev/null 2>&1 || true
 echo "Unscheduled ${UNSCHED} pg_cron job(s) (network-isolated: no prod HTTP can fire)."
 
-# Fail on any UNEXPECTED error. The only tolerated one is the known 0044 backfill.
-UNEXPECTED=$(grep '^ERROR' "$ERRLOG" | grep -v 'column pl.address does not exist' || true)
+# FAIL ON ANY ERROR. There are no tolerated ones any more.
+#
+# Until 2026-08-11 exactly one was allowed through: `column pl.address does not
+# exist`, from 0044 backfilling places.city out of a column that no migration
+# created until 0098. 0044 now guards that backfill on the column existing, so a
+# fresh database applies the whole chain cleanly and this special case is gone.
+#
+# Do not add another. A tolerated error is a migration that does not work on a
+# fresh database, which means the chain cannot be trusted to rebuild anything —
+# including a restore from backup.
+ERRORS=$(grep '^ERROR' "$ERRLOG" || true)
 TOTAL=$(grep -c '^ERROR' "$ERRLOG" || true)
-if [ -n "$UNEXPECTED" ]; then
-  echo "FAILED: unexpected migration error(s). See $ERRLOG:" >&2
-  echo "$UNEXPECTED" >&2
+if [ -n "$ERRORS" ]; then
+  echo "FAILED: migration error(s). See $ERRLOG:" >&2
+  echo "$ERRORS" >&2
   exit 1
 fi
 
@@ -92,4 +101,4 @@ if [ "$CORE" != "10" ]; then
   exit 1
 fi
 
-echo "OK: applied $(ls "$MIGR"/*.sql | wc -l | tr -d ' ') migrations; ${TOTAL:-0} tolerated error(s) (0044 backfill only); ${CORE} core tables. Disposable DB ready."
+echo "OK: applied $(ls "$MIGR"/*.sql | wc -l | tr -d ' ') migrations with ZERO errors; ${CORE} core tables. Disposable DB ready."
