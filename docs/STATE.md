@@ -6,7 +6,455 @@ CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` �
 are recoverable from git history if a decision needs looking up. Do not recreate them:
 plans go HERE.
 
-Last updated: 2026-08-10.
+Last updated: 2026-08-12.
+
+---
+
+## 0. AUTHORITATIVE BUILD DIRECTIVE — PLACE, VISIT, TRIP, TRAIL AND THE CARD
+
+**Approved direction, 2026-08-12. Read this section before every older discussion of
+places, visits, trips, trails, cards, containment or statistics. When an older passage
+conflicts with this section, this section wins. Do not create another planning document.**
+
+This is an implementation brief, not permission to improvise another model. The work is
+complete only when the database, RPCs, frontend, generated types, tests, live data audit,
+and this document all describe the same rules.
+
+### 0.1 Non-negotiable outcome
+
+There is one model:
+
+```text
+PLACE = where something happened
+VISIT = one occurrence at one place
+TRIP = a qualifying visit, never a separate place or table
+CHILD VISIT = a visit explicitly grouped under a parent trip visit
+ACTIVITY = something done during a visit; its recorded route is evidence
+TRAIL = a non-counting place rollup whose sections are counting places
+```
+
+Do not restore `trips`, `trip_stops`, a `trip` place category, or trip-places. Do not infer
+trip contents from overlapping dates alone. Do not create a second visit at a trail when a
+section visit already represents the outing. A machine may propose; only an accepted write
+changes history.
+
+The new decision supersedes these older rules where they conflict:
+
+- date-only global trip containment;
+- `solo_profile IS NULL` as the permanent participant model;
+- `places.part_of` as a writable/canonical relationship;
+- direct frontend insert/update/delete operations on `visits`;
+- cached place dates/counts as an independent source of truth;
+- a drawn trail definition stored as an `activity`;
+- the blanket ban on the word “Trip” inside an edit control. Passive badges remain banned,
+  but the visit editor may say **“Count this as a trip”** so a person can make or undo that
+  decision intentionally.
+
+### 0.2 Before writing code
+
+Claude must do all of the following and record the results in this section:
+
+1. Read this entire file, the final definitions of migrations `0133` through `0162`, the
+   current `PlacePanel`, visit-detail route, stats RPCs, `detect-trips`, and trail rollup code.
+2. Open the authenticated card preview supplied by Erica:
+   `https://claude.ai/code/artifact/7d3ec882-b79c-4c7c-a889-69bcfaa618ed?via=auto_preview`.
+   Capture desktop and mobile screenshots for comparison. If it cannot be opened, stop the
+   visual portion and ask Erica for screenshots; do not claim it was reviewed.
+3. Compare that preview with the locked card rules in §2. Preserve its visual language:
+   cover, type, colors, spacing, ratings, blue section rules, section order and footer.
+   The redesign is a data/interaction correction, not a new visual concept.
+4. Run a read-only production preflight. Report row counts and exceptions; never print keys,
+   tokens, exact private coordinates, or private notes. At minimum measure:
+   planned/taken visits, exact duplicate visits, overlapping visits, deleted/draft places
+   still contributing to stats, legacy `trip` tags, orphan `trip_people`/`trip_notes`,
+   `part_of`/`place_membership` disagreement, and trail/member same-outing duplicates.
+5. Take and verify a recoverable database backup before any production migration.
+6. Create new sequential migrations. Never edit an already-applied migration.
+
+### 0.3 Target database model
+
+#### Places
+
+`places` remains the identity table for every real location. A city, restaurant, beach,
+trail, trail section and destination are places. Keep stable IDs and existing media links.
+
+- A normal place or trail section counts once after it has an accepted, taken visit.
+- A trail rollup does not count as another Place; its visited sections already count.
+- A deleted, suggested, rejected or otherwise unaccepted place never contributes to
+  historical statistics.
+- `counts_as_place` may remain a generated compatibility field, but statistics must use the
+  canonical accepted-place view rather than trusting miscellaneous cached flags.
+
+#### Visits
+
+Add the following fields additively to `visits` (use exact types and constraints appropriate
+for Postgres; names below are the contract):
+
+```text
+parent_visit_id  uuid null references visits(id) on delete set null
+trip_marked      boolean not null default false
+source           text not null  -- manual | evidence | import | approved_suggestion
+accepted_at      timestamptz null
+accepted_by      uuid null references profiles(id)
+updated_at       timestamptz not null
+```
+
+Migrate the meaning of the existing `is_trip` human decision into `trip_marked`. During the
+compatibility period, keep one synchronized interface or compatibility view; do not leave two
+writable trip flags. Remove the old column only after all code and production data are proven.
+
+Constraints and guarded RPC logic must enforce:
+
+- `end_date >= start_date`;
+- a visit cannot parent itself;
+- parent chains cannot cycle;
+- a child visit must fall inside its parent visit's date range;
+- a parent must be accepted and `status='taken'` before taken children can be attached;
+- participant compatibility must be checked when a child is attached;
+- automation cannot write `parent_visit_id`, `trip_marked`, participants, accepted fields, or
+  other human decisions directly. It creates a suggestion.
+
+One canonical SQL function/view defines trip qualification:
+
+```text
+counts_as_trip =
+  status = 'taken'
+  AND accepted_at IS NOT NULL
+  AND (end_date > start_date OR trip_marked)
+```
+
+Every trip number, list, card drill-down and containment reader must use that definition.
+No UI component may reimplement it.
+
+#### Participants
+
+Replace null-as-data attribution with explicit rows:
+
+```text
+visit_profiles(visit_id, profile_id, created_at, primary key(visit_id, profile_id))
+visit_people(visit_id, person_id, created_at, primary key(visit_id, person_id))
+```
+
+`visit_profiles` is for account holders such as Erica and Josh. `visit_people` remains for
+children, pets and companions without accounts. Backfill `visit_profiles` from
+`solo_profile`: a non-null value becomes that profile; null becomes the two currently active
+member profiles only when the legacy row truly meant Both. Put ambiguous rows into a review
+table; never guess additional participants.
+
+Keep `solo_profile` read-only during compatibility, compare old/new counts, then remove it and
+all null-special-case filters in a later migration.
+
+#### Visit evidence
+
+Create an auditable evidence relationship:
+
+```text
+visit_evidence(
+  visit_id,
+  evidence_type,   -- photo | activity | location_ping | entry
+  evidence_id,
+  evidence_date,
+  source_key,
+  created_at,
+  primary key (visit_id, evidence_type, evidence_id)
+)
+```
+
+Use database validation or typed link tables if needed to preserve referential integrity.
+Every derived visit must be explainable from its evidence. Moving or deleting evidence queues
+a reconciliation proposal; it must not silently rewrite an accepted visit. Imported evidence
+needs a stable, unique `source_key` so retries are idempotent.
+
+Add `activities.visit_id` and link an activity to the accepted visit it occurred during.
+Photos already have a visit link. Routes, photos, entries and notes displayed on a visit card
+must be selected by visit identity, not merely by an overlapping date.
+
+#### Canonical relationship and mutation APIs
+
+- `place_membership` is the only canonical place hierarchy. Extend its
+  `relationship_type` to include `trail_section` as well as general containment, and add an
+  optional per-parent display label/order only if the preview requires it.
+- Move every reader and writer from `places.part_of` to `place_membership`, verify parity,
+  then remove `part_of` and its mirroring triggers in a later migration.
+- Revoke direct authenticated writes to canonical visits and relationship tables after the
+  frontend has moved to atomic RPCs.
+- Provide atomic, authorized RPCs for creating a place with its first visit, creating a visit,
+  editing a visit, deleting/restoring a visit, moving a visit, setting participants, attaching
+  or detaching a child visit, and attaching evidence.
+- Every RPC must be idempotent, permission-checked, transaction-safe, and return the refreshed
+  card/read model. A dropped connection must not create a duplicate visit.
+
+### 0.4 Canonical counting rules
+
+Create one accepted/taken visit view and make all stats, badges, lists, cards, Smart Albums and
+exports read it.
+
+| Number | Exact rule |
+|---|---|
+| Places | Distinct accepted, nondeleted, non-trail places with at least one accepted taken visit |
+| Place visits | Accepted taken visits whose `place_id` is that place, including child visits |
+| Headline Visits | Accepted taken visits with `parent_visit_id IS NULL` |
+| Trips | Top-level accepted taken visits satisfying canonical `counts_as_trip` |
+| Planned | Accepted `status='planned'`, shown separately and never in historical totals |
+| First/last visit | `min(start_date)` / `max(end_date)` over accepted taken visits |
+| Miles | Sum accepted activity distance once per stable/shared source identity |
+| Trails taken | Distinct trail rollups with an accepted taken visit on the trail or a member section |
+
+A Cape Cod Aug 2–7 parent visit containing Linnell Landing, a restaurant and a museum is one
+headline Visit, one Trip, and four distinct Places. Each child place still shows its own visit.
+
+Stop using `places.visit_count`, `first_visit` and `last_visit` as independent facts. Prefer
+the canonical view at the current dataset size. If performance later requires caches, they
+must be maintained for insert/update/delete/restore/move and proven against the view in tests.
+
+All `SECURITY DEFINER` stats functions must explicitly filter authorization, acceptance,
+`status`, `deleted_at`, draft/suggestion state and participants. Never assume RLS filters rows
+inside a definer function.
+
+### 0.5 Working trail model
+
+A trail is a place rollup, not an outing and not an activity.
+
+```text
+Trail place (does not increment Places)
+└── place_membership relationship_type='trail_section'
+    ├── Section place (counts as a Place when visited)
+    └── Trailhead/section place (counts as a Place when visited)
+```
+
+Rules:
+
+1. A real outing has one canonical visit row. If the section is known, `visits.place_id` is the
+   section. Do not also create a visit on the parent trail. If the section is unknown, the
+   visit may temporarily belong directly to the trail and be moved later through an RPC.
+2. A trail card rolls up visits, activities, photos and miles from the trail and its member
+   sections. Deduplicate by stable visit/evidence/activity identity, never merely by calendar
+   day: two genuine outings on one day are still two visits.
+3. The visit row on a trail card displays the section name from canonical membership. There is
+   no separate Sections list on the card.
+4. `trails_taken` counts a trail once if any qualifying direct or member visit exists. A trail
+   itself does not increment Places; visited section places do.
+5. Expand `place_membership` queries recursively only where nested trail structures are
+   intentionally supported, with cycle prevention and bounded depth.
+6. Resolve the known trail/member duplicate data through an audit table and explicit review.
+   Do not mass-delete manual visits. Future ingest must attach duplicate evidence to the same
+   visit instead of creating trail-level and section-level twins.
+
+A drawn trail definition is not a completed activity. Create a separate table for reference
+geometry:
+
+```text
+trail_routes(
+  id,
+  trail_place_id,
+  section_place_id null,
+  name,
+  geometry/polyline,
+  distance_m,
+  source,            -- drawn | osm | import
+  created_by,
+  created_at,
+  updated_at
+)
+```
+
+Actual hikes, walks, runs and rides remain `activities`, link to `visit_id`, and contribute
+miles. A reference `trail_route` draws the trail but never creates a visit or adds mileage.
+Migrate current `source='drawn'` rows carefully: classify them from usage and put ambiguous
+ones in review rather than assuming they are reference paths or completed outings.
+
+Expose one `trail_card(place_id, viewer_profile_id)` RPC/read model returning the trail header,
+canonical visit rows with section names, participant-scoped counts, actual activities, reference
+geometry, media and totals. The frontend must not reconstruct trail rollups independently.
+
+### 0.6 Card implementation — keep the style, fix the contract
+
+The authenticated artifact above is the visual reference. Preserve the locked structure:
+
+1. cover with close control;
+2. name over the cover;
+3. ratings immediately beneath the name, two columns when two raters exist;
+4. address and a human sentence such as “Visited twice · 12 photos” or visit dates;
+5. category pills, excluding city/region pills;
+6. sections in this order: **VISITS**, **PHOTOS AND VIDEOS**, **ROUTES**, applicable place
+   categories such as **RESTAURANTS**, then **NOTES AND REVIEWS**;
+7. footer actions. Destination/trail: “Add another visit” and “Delete”. Blank card: Save and
+   Cancel. Visit editor: Save and Cancel, with destructive actions visually separated.
+
+Build one shared card shell with typed modes (`place`, `visit`, `activity`, `trail`, `new`).
+Do not keep one enormous component full of mode-specific queries. Separate presentation from
+backend adapters, and pass a stable card view model into the shared shell.
+
+Backend/card contract:
+
+- Add a versioned `experience_card`/`visit_card` read RPC or equivalent typed query returning
+  the complete mode-specific view model. Avoid dozens of browser requests and frontend joins.
+- Header totals and list rows come from the same returned dataset so labels cannot disagree.
+- Every row has stable IDs and explicit `can_edit`; do not infer permissions in JSX.
+- Loading, empty, saving, saved, error and stale-suggestion states must be visible and usable.
+- Preserve unsaved input after an RPC error. Never silently catch a failed write and render an
+  empty list as the current helpers do.
+
+#### Destination card
+
+- Visits are grouped by year, newest first; only years with visits appear.
+- Each visit row shows formatted dates, participant names and a quiet evidence summary.
+- A qualifying parent visit may show “3 places” and expand its explicit child visits.
+- Do not show passive “Trip” badges. Qualification changes presentation only through the
+  explicit nested contents and trip statistics.
+- “Add another visit” opens the inline visit form and saves through one atomic RPC.
+
+#### Visit card/editor
+
+- Scope every section to `visit_id`: media, routes/activities, notes, reviews and child places.
+- Use an explicit Save action for the complete edit. Do not autosave start and end dates as
+  separate writes; an intermediate invalid range must never reach the database.
+- Fields: date range, `planned/taken/cancelled` status if cancelled is added, participant
+  multi-select, note, “Count this as a trip” switch, optional parent trip selector, and child
+  visit management when this visit qualifies as a trip.
+- The switch writes `trip_marked`; a multi-day visit qualifies without setting it. Explain
+  this in helper text: “Multi-day visits already count. Turn this on only for a single-day
+  trip.”
+- Attaching a child opens a search of existing visits first. Creating a new child visit is a
+  secondary action. Never create a duplicate place merely to add it to a trip.
+- Show evidence read-only with its source and date. Corrections use explicit move/detach
+  actions that create auditable writes.
+
+#### Trail card
+
+- Use the exact shared visual shell and section order.
+- The sub-line reads naturally: “Visited 35 times · 44.8 miles · 27 photos”.
+- VISITS contains direct and member-section visits once each; the section name sits on its
+  visit row. No Sections list.
+- PHOTOS AND VIDEOS rolls up media linked to those canonical visits.
+- ROUTES shows a map and list of actual activity routes; reference trail geometry may appear
+  as map context but must not be counted as an outing or miles.
+- Do not show Restaurants on a trail card unless Erica later explicitly approves it.
+- “Add another visit” asks for date(s), participants and an optional section. “Add/edit trail
+  route” is a distinct edit action because drawing the trail is not logging an outing.
+
+#### Blank/new card
+
+- Same shell with empty fields, not a separate form design.
+- Ask “Is this a trail with sections?” once. If yes, create the trail place and optional
+  reference route; create a first visit only when the user supplies an outing date.
+- For a normal place, saving with a supplied date creates the place and first visit atomically.
+- Address is prefilled from the tapped map location and remains editable.
+
+Accessibility and responsive acceptance:
+
+- mobile width 320–430 px and desktop;
+- keyboard-accessible disclosures and controls;
+- visible focus, proper labels, `aria-expanded` and `aria-pressed` where appropriate;
+- 44 px touch targets for primary actions;
+- no color-only status; no modal hidden behind the map/search stacking context;
+- existing typography, colors and spacing tokens are reused instead of introducing a second
+  design system.
+
+### 0.7 Automation and legacy cleanup
+
+The first production migration must unschedule `detect-trips-nightly`. The current Edge
+Function writes retired trip-places and visits directly; it must not run during this migration.
+Its replacement may create `suggestions` with evidence and confidence, but may not mutate
+places, visits, membership, participants or statistics.
+
+After parity and production verification, remove:
+
+- orphan `trip_people` and `trip_notes` plus their grants, policies, helpers and generated
+  types;
+- dead `trip_timeline`/trip-note frontend helpers;
+- legacy trip-category code and scheduled detector;
+- direct visit mutation helpers;
+- `places.part_of` and sync triggers after every reader uses `place_membership`;
+- `solo_profile` after participant parity;
+- misleading comments and tests describing superseded rules.
+
+Search the entire repository, including Edge Functions, cron migrations, generated types,
+tests and `docs/STATE.md`; cleanup is not complete while an executable retired mechanism or
+contradictory current instruction remains. Historical passages may remain only when clearly
+marked superseded.
+
+### 0.8 Required migration sequence
+
+Do not ship this as one destructive migration.
+
+1. **Freeze and measure:** unschedule the detector; backup; production read-only audit.
+2. **Add:** new columns, participant/evidence/trail-route tables, constraints, indexes, RLS and
+   RPCs. No old column/table removal.
+3. **Backfill:** idempotently populate participants, accepted state, evidence and memberships;
+   quarantine ambiguity.
+4. **Prove parity:** old/new counts by Both/Erica/Josh, cards for representative destination,
+   multi-day visit, single-day marked visit, trail, planned visit, deleted place and draft.
+5. **Switch readers:** canonical views/RPCs, then frontend card and all stats/badges/exports.
+6. **Switch writers:** atomic RPCs only; revoke direct authenticated writes.
+7. **Observe:** deploy preview, complete authenticated mobile/desktop verification, then
+   production. Re-run counts and inspect logs.
+8. **Remove:** only after explicit production sign-off, remove legacy schema and frontend code
+   in a later migration.
+
+Every phase is its own commit with a plain-language message. Do not mix backup/Cloudflare/GitHub
+workflow repairs into the schema commits. Do not deploy production while required CI is red.
+
+### 0.9 Tests that make the decision permanent
+
+Database tests must prove at least:
+
+- planned/cancelled visits do not affect historical counts;
+- deleted, suggested and unaccepted places do not count;
+- a multi-day visit appears in both trip count and trip list and can own explicit children;
+- a marked single-day visit counts as a trip;
+- unmarking it reverses only that human decision;
+- child visits count on their place cards but not as extra headline Visits;
+- a Josh-only parent cannot swallow an Erica-only child;
+- parent cycles and out-of-range children are rejected;
+- two real same-day outings remain two visits;
+- an idempotent retry remains one visit;
+- moving/deleting/restoring a visit updates every relevant read model;
+- first/last dates can move inward and clear;
+- evidence deletion cannot erase an accepted decision;
+- one trail-section outing is one visit, one trail outing and one activity distance, never a
+  parent/section twin;
+- reference trail geometry adds zero visits and zero miles;
+- `place_membership` cannot dangle or cycle;
+- anon cannot execute mutation or private read RPCs; viewer/editor/owner rules remain intact.
+
+Frontend tests must prove the shared card order and banned content, plus:
+
+- destination, visit, trail and blank modes render the same shell;
+- counts and rows use the same backend payload;
+- visit Save is atomic and errors preserve input;
+- participant multi-select round-trips explicit rows;
+- trip children are explicit, editable and never date-inferred;
+- trail visits show section names without a Sections list;
+- planned visits are visibly planned and absent from historical totals;
+- the card passes the existing accessibility suite at mobile and desktop sizes.
+
+Run the full local migration chain from an empty database, all SQL regression tests, generated
+type checks, unit/component tests, production build and the deliberately small browser smoke
+suite. Do not delete meaningful tests to make CI faster; move volatile pixel/copy assertions
+out of required CI while retaining data-contract, accessibility and core-flow coverage.
+
+### 0.10 Definition of done
+
+Claude must not say this is complete until all of these are true:
+
+- one current model in this file and no executable contradictory mechanism;
+- clean migration from empty database and from a production-shaped snapshot;
+- old/new parity report reviewed, with every intentional count difference explained;
+- detector disabled or proposal-only;
+- no direct frontend writes to canonical visit/membership state;
+- generated Supabase types match the deployed schema;
+- destination, visit, trail and blank card verified against the authenticated artifact on
+  mobile and desktop;
+- GitHub required checks green;
+- Cloudflare preview shows the same tested commit;
+- production migration and deploy IDs recorded here;
+- post-deploy read-only counts and representative cards verified;
+- backup restoration instructions still match the final schema and no longer list retired
+  `trips`/`trip_stops` tables.
+
+If any of those is missing, report **in progress** or **blocked**, name the exact gap, and do
+not start another redesign.
 
 ---
 
