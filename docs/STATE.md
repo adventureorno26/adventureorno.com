@@ -1004,6 +1004,100 @@ SECURITY DEFINER functions in production. (An earlier draft of this note claimed
 otherwise — that check wrongly counted PostGIS's own `geometry_columns`,
 `geography_columns` and `spatial_ref_sys`, which `0154` deliberately excludes.)
 
+## 6b. BACKUP AND RECOVERY (built 2026-08-12)
+
+### The state it replaced
+
+**There was no backup of this database anywhere.** Supabase's backup list was empty
+and PITR was off, verified through the Management API. A bad migration, a dropped
+table or a lost account would have taken **149 places, 489 visits** and every note,
+rating, date and photo-to-visit link with it. The scripts that existed
+(`export-data.sh`, `restore-data.sh`) were never scheduled, never encrypted, never
+retained and never tested.
+
+### What runs now
+
+`.github/workflows/backup.yml` — **separate from `ci.yml` on purpose**, so a backup
+never stops because a code check went red, and a red backup is not lost among other
+failing jobs.
+
+| Job | When | What |
+| --- | --- | --- |
+| `database` | nightly 07:17 UTC | every table → JSONL + manifest (row counts + sha256), **age-encrypted before upload**, then R2 with retention |
+| `objects` | nightly | mirrors `adventureorno-photos` → `aon-backups/objects/` (incremental) |
+| `freshness` | nightly, `always()` | **fails if no recent artifact exists** |
+| `verify restore` | on demand | restores the newest backup into a disposable Postgres 17 and checks every row count |
+
+**Retention (grandfather-father-son):** 14 daily · 8 weekly (Sundays) · 12 monthly
+(the 1st). ~3 MB a night, inside R2's free tier. A single rolling copy is not a
+backup — it overwrites itself with the corrupted version the night after something
+breaks.
+
+### Encryption
+
+`age`. R2 only ever receives ciphertext, so a leaked R2 token exposes nothing.
+
+- **Public key** (encrypts; safe anywhere): `age1zsd4ptmy57sl2ad9utgafylsw5yl5y87luuhn9h5afywz28sdaps20aw52` — repo variable `AGE_RECIPIENT`.
+- **Private key** (decrypts): `~/.aon-backup/backup-key.txt`, mode 600, **never printed and never committed**; also GitHub secret `AGE_SECRET_KEY` so the verify job can restore.
+- ⚠️ **If that private key is lost, every backup is unreadable.** Keep a copy somewhere that is not this Mac — a password manager is fine.
+
+### Photos are backed up separately, because the dump is only a manifest
+
+`photos` and `videos` rows carry **R2 object keys, not bytes**. Restoring the database
+alone gives rows pointing at nothing — and every map marker is a photo, so that is not
+a restore. `scripts/backup-r2.mjs` mirrors the objects; **362 objects, 289 MB** at first
+run. The object mirror is *not* encrypted: opaque blobs under UUID keys, already
+private in R2, and re-encrypting nightly would force a full re-upload on every key
+rotation. The database backup — the names, notes, coordinates and dates that make the
+photos mean anything — **is** encrypted.
+
+### Proven, not assumed
+
+Run end-to-end on 2026-08-12: pulled from R2 → decrypted → schema rebuilt from the
+migration chain into a fresh Postgres 17 → every row loaded → **all 38 tables matched
+the manifest exactly, 18,833 rows, zero errors.**
+
+It failed twice first, which is the entire argument for testing restores:
+1. Hand-built INSERTs died 18,024 times on `uuid[]` vs `jsonb`. Fixed with
+   `jsonb_populate_record`, letting Postgres cast into its own row type.
+2. Then `permission denied to COPY from a file` (Supabase's `postgres` is not a
+   superuser → use `\copy`) and `cannot insert a non-DEFAULT value into column "geom"`
+   (generated columns must be excluded; they recompute from lat/lng).
+
+A backup nobody has restored is a rumour. This one has been restored.
+
+### Recovery objectives
+
+| | |
+| --- | --- |
+| **RPO** (data you can lose) | **≤ 24 h** — nightly. An outage at 07:00 loses that day's edits. |
+| **RTO** (time to be back) | **≈ 30–45 min** — ~2 min to fetch and decrypt, ~4 min to rebuild the schema, ~2 min to load, the rest for Supabase project setup and re-pointing the app. |
+| **Objects RPO** | ≤ 24 h, incremental |
+
+### How to actually recover
+
+1. `AGE_KEY_FILE=~/.aon-backup/backup-key.txt npm run backup:verify` — proves the
+   artifact and the key still work, on a disposable database, before touching anything.
+2. New Supabase project → `supabase link` → apply the migration chain
+   (`scripts/db-bootstrap.sh`). The dump carries `_migrations.jsonl` so the schema can
+   be rebuilt to **exactly** the chain the data came from.
+3. Load the rows the way `verify-restore.sh` does (`\copy` + `jsonb_populate_record`,
+   generated columns excluded).
+4. Copy `aon-backups/objects/` back into the photos bucket.
+5. **Credentials are NOT in the backup, deliberately** — `ingest_tokens`,
+   `strava_accounts`, `google_tokens` and `oauth_states` are excluded, because
+   restoring them restores someone's ability to act as her. Recreate by: signing in
+   with Google again, reconnecting Strava in Settings, and minting a new device ingest
+   token for the iPhone Shortcut. Everything else comes back from the dump.
+6. Point the app at the new project (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
+   and the Worker secrets in §12c).
+
+### Raw dumps still never go in git
+
+`supabase/snapshots/` is gitignored and `.backup-work/` was added to `.gitignore` with
+this work. The repo is **public** (§ above) — anything committed is world-readable the
+moment it is pushed.
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
