@@ -142,6 +142,44 @@ previously appliable only through `scripts/db-bootstrap.sh`). No object definiti
 and the end state is identical, but the rule was broken before it existed. Recorded here
 rather than left for someone to discover. From now on: new sequential migrations only.
 
+### 0.4a PARITY PROVED — on a production-shaped snapshot, 2026-08-12
+
+§0.8 phase 4. Today's encrypted backup was restored into a disposable **Postgres 17**,
+the idempotent backfills were run against that real data, and the old counting was
+compared with the canonical `accepted_visits` + `visit_profiles` model.
+
+| Scope | Places old → new | Visits old → new | Trips old → new |
+|---|---|---|---|
+| **Both** | 52 → **52** | 101 → **101** | 16 → **16** |
+| **Erica** | 128 → **128** | 442 → **442** | 42 → **42** |
+| **Josh** | 57 → **57** | 148 → **148** | 29 → **29** |
+
+**Every number matches. There is no intentional difference to explain yet** — which is
+the point of doing this before switching any reader: the new model reproduces today's
+answers exactly, so a later change in a number will mean a real decision rather than an
+accident.
+
+Backfill results on that snapshot:
+
+- **participants:** 590 rows across all 489 visits, 2 real members, **0 sent for review**
+- **activities → visits:** **445 linked, 0 ambiguous, 0 with no covering visit**
+
+The zero-ambiguity result is worth stating plainly, because the 78 known trail/member
+same-day pairs were expected to produce two candidate visits. They did not: each
+activity sits at ONE place, and the duplicate pairs are a trail visit and a *section*
+visit — different places — so the "same place, covering day, exactly one candidate" rule
+never had to choose. The duplication is still there and still needs §0.5.6's review; it
+simply does not corrupt the activity links.
+
+**A disaster-recovery bug was found and fixed doing this.** `jsonb_populate_record`
+leaves a column that is absent from an older dump as NULL — it does **not** apply the
+column default — so the moment `0163` added NOT NULL columns, restoring **any earlier
+backup** died with *"null value in column trip_marked violates not-null constraint"*.
+The backup you need is always older than the schema you restore onto, so this would have
+bitten precisely when it mattered. `scripts/verify-restore.sh` now inserts only the
+columns the dump actually contains and lets the schema default the rest, and reports
+which columns were newer than the backup.
+
 ### 0.3 Target database model
 
 #### Places
