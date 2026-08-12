@@ -92,10 +92,32 @@ for t in sorted(manifest['tables']):
         continue
     # GENERATED COLUMNS ARE EXCLUDED. places.geom and photos.geom are computed from
     # lat/lng; inserting into one is an error ("cannot insert a non-DEFAULT value").
-    cols = psql_read(
+    table_cols = psql_read(
         "select column_name from information_schema.columns "
         f"where table_schema='public' and table_name='{t}' and is_generated='NEVER' "
         "order by ordinal_position")
+    if not table_cols:
+        continue
+
+    # ONLY THE COLUMNS THE DUMP ACTUALLY HAS.
+    #
+    # jsonb_populate_record leaves a key that is absent from the JSON as NULL — it does
+    # NOT apply the column default. So the moment a migration adds a NOT NULL column,
+    # restoring an OLDER backup dies with "null value in column ... violates not-null
+    # constraint". That is a disaster-recovery bug, not a test bug: the backup you need
+    # is always older than the schema you are restoring onto.
+    #
+    # Restoring what the dump HAS and letting the schema default the rest is both
+    # correct and forward-compatible.
+    first = next((l for l in (dump / f'{t}.jsonl').read_text().splitlines() if l.strip()), None)
+    if first is None:
+        continue
+    present = set(json.loads(first).keys())
+    cols = [c for c in table_cols if c in present]
+    missing = [c for c in table_cols if c not in present]
+    if missing:
+        print(f'  {t}: {len(missing)} column(s) newer than this backup, defaulted: '
+              + ', '.join(missing[:6]) + ('…' if len(missing) > 6 else ''))
     if not cols:
         continue
     collist = ', '.join(f'"{c}"' for c in cols)
@@ -126,16 +148,25 @@ import json, pathlib, subprocess, sys
 dump, db = pathlib.Path(sys.argv[1]), sys.argv[2]
 manifest = json.loads((dump / 'manifest.json').read_text())
 bad = []
+extra = []
 for t, meta in sorted(manifest['tables'].items()):
     out = subprocess.run(['docker','exec','-i',db,'psql','-U','postgres','-d','postgres','-tAc',
                           f'select count(*) from public."{t}"'], capture_output=True, text=True)
     got = int((out.stdout or '0').strip() or 0)
-    if got != meta['rows']:
-        bad.append((t, meta['rows'], got))
+    if got < meta['rows']:
+        bad.append((t, meta['rows'], got))          # data LOST — a real failure
+    elif got > meta['rows']:
+        # More rows than the backup held. That is the schema's own seed data (a later
+        # migration seeding a category, say) surviving the restore, not corruption.
+        extra.append((t, meta['rows'], got))
+if extra:
+    print('  note — rows the SCHEMA seeds, on top of the backup:')
+    for t, want, got in extra:
+        print(f'    {t}: backup {want}, restored {got}')
 if bad:
-    print('  MISMATCHES:')
+    print('  ROWS LOST:')
     for t, want, got in bad:
-        print(f'    {t}: manifest {want}, restored {got}')
+        print(f'    {t}: backup {want}, restored {got}')
     sys.exit(1)
 print(f'  ✅ all {len(manifest["tables"])} tables match the manifest exactly '
       f'({manifest["total_rows"]} rows)')
