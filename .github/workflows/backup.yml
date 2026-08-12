@@ -53,10 +53,15 @@ jobs:
           grep '^BACKUP_FILE=' /tmp/out.txt >> "$GITHUB_OUTPUT"
           grep '^BACKUP_KEY=' /tmp/out.txt >> "$GITHUB_OUTPUT"
 
+      # The step outputs go through `env:`, NOT interpolated into the run block —
+      # zizmor flags `${{ }}` inside `run:` as template injection, and it is right:
+      # an expression that expands into a shell command is an execution vector.
       - name: Upload to R2 and prune old generations
         env:
           CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: node scripts/backup-upload.mjs "${{ steps.dump.outputs.BACKUP_FILE }}" "${{ steps.dump.outputs.BACKUP_KEY }}"
+          BACKUP_FILE: ${{ steps.dump.outputs.BACKUP_FILE }}
+          BACKUP_KEY: ${{ steps.dump.outputs.BACKUP_KEY }}
+        run: node scripts/backup-upload.mjs "$BACKUP_FILE" "$BACKUP_KEY"
 
   objects:
     name: objects
