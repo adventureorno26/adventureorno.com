@@ -63,8 +63,13 @@ verify_jwt = false
 [functions.strava-webhook]
 verify_jwt = false
 
-[functions.detect-trips]
-verify_jwt = false
+# RETIRED 2026-08-12 — the deployment was DELETED at Erica's instruction ("disable
+# the nightly auto-detect feature"). Left commented rather than removed so a bulk
+# `supabase functions deploy` cannot quietly bring it back, and so the reason is
+# here if anyone wonders where it went. The source is still in
+# supabase/functions/detect-trips/ and one deploy restores it.
+# [functions.detect-trips]
+# verify_jwt = false
 
 [functions.geocode-new-places]
 verify_jwt = false

@@ -1,3 +1,15 @@
+// ⚠️ RETIRED 2026-08-12. NOT DEPLOYED. Do not redeploy without asking Erica.
+//
+// "disable the nightly auto-detect feature". The nightly cron was already gone; the
+// deployment was deleted, which is what actually disabled it.
+//
+// It also CONTRADICTS THE LOCKED SYSTEM (docs/STATE.md §2): it creates places tagged
+// 'trip' with suggested=true, and §2 says a multi-day visit counts as a trip but is
+// NEVER labelled — migration 0133 removed the trip category outright. So if this ever
+// ran again it would recreate exactly the labelled trip-places that were removed.
+//
+// The source is kept, not deleted, so the clustering logic is not lost.
+//
 // detect-trips — passively drafts trips from photos + Strava activities.
 //
 // Algorithm (temporal gap clustering with a home filter — tuned to our sparse
