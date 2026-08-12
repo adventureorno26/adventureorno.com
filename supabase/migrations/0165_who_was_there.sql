@@ -89,8 +89,12 @@ begin
    where v.solo_profile is not null
   on conflict do nothing;
 
-  -- 2. NULL meant "both" — only translate it when there are exactly two real members.
-  if v_count = 2 then
+  -- 2. NULL meant "not solo" — i.e. everyone. Translate it whenever the household is
+  --    small enough for that to be unambiguous: ONE member (it was them) or TWO (it was
+  --    both). With three or more, "both" genuinely does not say which two, so the row
+  --    goes to review rather than being guessed — §0.3's rule, without hardcoding the
+  --    number 2 the way the first version did.
+  if v_count between 1 and 2 then
     insert into public.visit_profiles (visit_id, profile_id)
     select v.id, m from public.visits v, unnest(v_members) m
      where v.solo_profile is null
@@ -98,11 +102,11 @@ begin
   else
     insert into public.visit_participant_review (visit_id, reason)
     select v.id,
-           format('solo_profile was NULL ("both") but there are %s real member profiles, not 2', v_count)
+           format('solo_profile was NULL ("both") but there are %s real member profiles — which two?', v_count)
       from public.visits v
      where v.solo_profile is null
     on conflict (visit_id) do nothing;
-    raise notice 'PARTICIPANTS: % visit(s) sent for review — expected 2 real members, found %',
+    raise notice 'PARTICIPANTS: % visit(s) sent for review — "both" is ambiguous with % real members',
       (select count(*) from public.visits where solo_profile is null), v_count;
   end if;
 
@@ -134,12 +138,12 @@ begin
   else
     select array_agg(id) into v_members from public.profiles
      where role in ('owner','editor') and coalesce(display_name,'') !~* '(test|bot)';
-    if coalesce(array_length(v_members,1),0) = 2 then
+    if coalesce(array_length(v_members,1),0) between 1 and 2 then
       insert into public.visit_profiles (visit_id, profile_id)
       select new.id, m from unnest(v_members) m on conflict do nothing;
     else
       insert into public.visit_participant_review (visit_id, reason)
-      values (new.id, 'solo_profile NULL with other than 2 real members')
+      values (new.id, 'solo_profile NULL and "both" is ambiguous with 3+ real members')
       on conflict (visit_id) do nothing;
     end if;
   end if;

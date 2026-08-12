@@ -180,6 +180,36 @@ bitten precisely when it mattered. `scripts/verify-restore.sh` now inserts only 
 columns the dump actually contains and lets the schema default the rest, and reports
 which columns were newer than the backup.
 
+### 0.5a READERS SWITCHED — parity held, 2026-08-12
+
+§0.8 phase 5. `wander_stats` and `trips_list` now read the canonical model, and the
+numbers did not move — measured again through the live functions against a restored
+production snapshot:
+
+| Scope | Places | Miles | Trips |
+|---|---|---|---|
+| Both | **52** | 436.5 | **16** |
+| Erica | **128** | 1956.8 | **42** |
+| Josh | **57** | 992.6 | **29** |
+
+`trips_list(null)` returns exactly 16 rows — the list and the count now come from the
+same definition and cannot disagree.
+
+**A hardcoded household size was caught by the test suite.** The obvious translation of
+`solo_profile IS NULL` was "exactly two participant rows" — which bakes in that this
+household has two people. `0137` failed immediately: *"marking a visit as a trip must add
+one trip (0 -> 0)"*, because a test database does not happen to contain two members.
+The honest rule is about membership, not arithmetic: **a visit is shared when every real
+member was on it** (`public.is_shared_visit`). Two members gives exactly the 101 that
+`solo_profile IS NULL` gave; one gives that person's visits; three gives what all three
+shared. Nothing hardcodes 2 — which matters, because adding a third person is the entire
+point of the flok work.
+
+The same mistake was in the WRITER trigger and was fixed there too: `NULL` means "not
+solo", so it now populates every real member when the household is small enough for that
+to be unambiguous (one or two), and sends the row to review at three or more rather than
+guessing which two were meant.
+
 ### 0.3 Target database model
 
 #### Places
