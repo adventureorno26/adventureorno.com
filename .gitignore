@@ -53,3 +53,6 @@ NewClaude.md
 
 # Disposable DB bootstrap error log
 .db-bootstrap.errors.log
+
+# Backup working directory — plaintext dumps live here briefly; never commit.
+.backup-work/

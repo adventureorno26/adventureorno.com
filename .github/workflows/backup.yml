@@ -1,0 +1,128 @@
+name: Backup
+
+# NIGHTLY, ENCRYPTED, VERIFIED.
+#
+# On 2026-08-12 an audit found there was NO backup of this database anywhere:
+# Supabase's own backup list was empty and PITR was off. A bad migration or a lost
+# account would have taken 149 places, 489 visits and every note, rating and date
+# with it.
+#
+# This is a SEPARATE workflow from ci.yml on purpose. A backup must not stop running
+# because a code check went red, and a red backup must be obvious rather than being
+# one more failing job in a big CI run.
+on:
+  schedule:
+    - cron: "17 7 * * *" # 07:17 UTC ≈ 03:17 US Eastern — after the day's activity
+  workflow_dispatch:
+    inputs:
+      verify:
+        description: "Also restore the backup into a disposable Postgres 17 and check it"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false # never cancel a backup halfway
+
+jobs:
+  database:
+    name: database
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+
+      - name: Dump and encrypt
+        id: dump
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          # PUBLIC key only. Encrypting needs nothing secret; only a restore needs
+          # the private key, which lives with Erica and in AGE_SECRET_KEY.
+          AGE_RECIPIENT: ${{ vars.AGE_RECIPIENT }}
+        run: |
+          node scripts/backup-db.mjs | tee /tmp/out.txt
+          grep '^BACKUP_FILE=' /tmp/out.txt >> "$GITHUB_OUTPUT"
+          grep '^BACKUP_KEY=' /tmp/out.txt >> "$GITHUB_OUTPUT"
+
+      - name: Upload to R2 and prune old generations
+        env:
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/backup-upload.mjs "${{ steps.dump.outputs.BACKUP_FILE }}" "${{ steps.dump.outputs.BACKUP_KEY }}"
+
+  objects:
+    name: objects
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      # The database dump holds photo ROWS; the JPEGs live in R2. A restore needs
+      # both halves, so this runs every night too. It is incremental — only new
+      # objects are copied.
+      - name: Mirror photo and video objects
+        env:
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/backup-r2.mjs
+
+  freshness:
+    name: freshness
+    needs: [database, objects]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      # THE ALERT. A failed job already turns this workflow red and GitHub emails
+      # about it — but the worse failure is silence: the schedule quietly stops (a
+      # disabled workflow, a revoked token) and nothing is red because nothing ran.
+      # This asserts a FRESH ARTIFACT EXISTS, which is the only claim that matters.
+      - name: A recent backup must exist in R2
+        env:
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/backup-freshness.mjs
+
+  verify:
+    name: verify restore
+    # Weekly (Sundays) and on demand. Restoring is slower than backing up, and a
+    # backup nobody has restored is a rumour — but doing it nightly is not worth the
+    # minutes when the shape only changes with a migration.
+    if: github.event_name == 'workflow_dispatch' && inputs.verify
+    needs: [database]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
+        with:
+          version: latest
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      - name: Start a disposable Postgres 17
+        run: |
+          mkdir -p /tmp/hold && mv supabase/migrations/*.sql /tmp/hold/
+          supabase start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          mv /tmp/hold/*.sql supabase/migrations/
+      - name: Restore the newest backup and check every row count
+        env:
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          AGE_SECRET_KEY: ${{ secrets.AGE_SECRET_KEY }}
+        run: |
+          printf '%s\n' "$AGE_SECRET_KEY" > /tmp/age.key && chmod 600 /tmp/age.key
+          AGE_KEY_FILE=/tmp/age.key bash scripts/verify-restore.sh
