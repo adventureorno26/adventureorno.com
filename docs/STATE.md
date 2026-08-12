@@ -71,6 +71,77 @@ Claude must do all of the following and record the results in this section:
 5. Take and verify a recoverable database backup before any production migration.
 6. Create new sequential migrations. Never edit an already-applied migration.
 
+### 0.2a PREFLIGHT RESULTS — recorded 2026-08-12, production READ-ONLY
+
+Nothing in production was changed to produce this. No keys, tokens, coordinates or notes
+are reproduced here.
+
+**Backup taken and PROVEN restorable first (§0.2.5).** `db/2026-08-12/s0-preflight-…age`,
+2.44 MB, encrypted. Restored into a disposable Postgres 17 from the migration chain:
+**all 38 tables matched the manifest exactly, 18,834 rows, zero errors.**
+
+| # | Measure | Result |
+|---|---|---|
+| 1 | Visits by status | **489 taken, 0 planned.** 52 multi-day, 9 carry `is_trip` |
+| 2 | Exact duplicate visits | **0** |
+| 3 | Overlapping visits at one place | **0** |
+| 4 | Deleted/draft/suggested places with taken visits | **7 places, 8 visits** — none deleted or suggested; all are `saved = false` |
+| 5 | Legacy `trip` place tags | **0** |
+| 6 | Orphan `trip_people` / `trip_notes` | **0 rows each** (the tables still exist) |
+| 7 | `part_of` vs `place_membership` | **In perfect sync** — 0 either way, 19 rows each. Only `relationship_type` in use is `contains` |
+| 8 | Trail/member same-outing duplicates | **78 pairs** — 77 trail visits, 78 section visits, across 7 trails |
+| 9 | Attribution | 388 visits name a profile; **101 use null-means-both** |
+| 10 | `activities.visit_id` | **Does not exist.** 445 activities, and **0 rows with `source='drawn'`** |
+| 11 | Trails | 6 trails, 19 membership rows, 143 `counts_as_place` |
+| 12 | §0.3's new visit fields | **None exist yet** — clean slate |
+| 13 | Headline numbers today | 132 places, 489 taken visits, 16 trips (Both) |
+| 14 | Authorization surface §0.4 must audit | **127 SECURITY DEFINER functions**, 43 public tables |
+
+**What this changes about the plan:**
+
+- **Item 8 is the only large data problem.** 78 pairs is the same duplication found on
+  2026-08-11 and deliberately left alone. §0.5.6 says resolve it through an audit table and
+  explicit review, never a mass delete — and the numbers confirm that is the right call:
+  77 of the trail-level visits are involved, so a blind delete would touch most of the
+  Appalachian Trail's history.
+- **Item 7 removes a whole risk.** `part_of` and `place_membership` already agree exactly,
+  so the §0.3 migration off `part_of` is a rename of the source of truth, not a
+  reconciliation. `trail_section` still has to be added to `relationship_type`.
+- **Item 10 removes another.** There are **no** `source='drawn'` activities, so the
+  `trail_routes` migration has no ambiguous legacy rows to classify — §0.5's "migrate
+  current drawn rows carefully" is a no-op on this dataset.
+- **Item 1 means the planned-visit rules are untested by real data.** 0 planned visits
+  exist, so §0.9's planned/cancelled tests must be built on fixtures.
+- **Item 4 is smaller than it looks.** None are deleted or suggested; all 7 are
+  `saved = false` auto-created admin areas. They need a decision, not a cleanup script.
+- **Item 6:** the tables are empty but still present, so §0.7's removal is safe whenever
+  the parity phase completes.
+
+**§0.7's first requirement is already satisfied:** `detect-trips-nightly` was already
+unscheduled (production has three cron jobs — `dedupe-joint-outings`, `purge-trash`,
+`rebuild-revealed-area`), and the Edge Function deployment was deleted 2026-08-12. It
+cannot run during the migration because it no longer exists.
+
+**⚠️ VISUAL REVIEW IS BLOCKED — not done, not claimed.** The authenticated artifact
+`7d3ec882…?via=auto_preview` returns *"Page not found – Claude / Sign in"* to this
+browser, and the content frame (`…frame.claudeusercontent.com`) 404s unauthenticated. The
+HTML Erica pasted is the claude.ai shell, not the card — the card renders inside a
+sandboxed iframe. Claude published that artifact and still holds its exact source, and
+rendering that source locally confirms the STRUCTURE matches §2: section order Visits →
+Photos and videos → Routes → Notes and reviews, rating under the name, cover with close
+control, address line, category pills, Save/Cancel footer, the trail question asked once,
+and none of the banned words. **But screenshots cannot be captured in this environment**
+(the tool times out), so desktop and mobile rendering have NOT been visually compared.
+Per §0.2.2 this is reported, not glossed: **Erica needs to supply screenshots**, or
+confirm that the published source is an acceptable reference.
+
+**⚠️ CONFLICT TO NAME — §0.2.6 vs work already merged today.** §0.2.6 says *never edit an
+already-applied migration*. Earlier on 2026-08-12, in merged PR #30, migrations `0001` and
+`0044` **were edited** — guarded, so a fresh database could apply the chain at all (it was
+previously appliable only through `scripts/db-bootstrap.sh`). No object definition changed
+and the end state is identical, but the rule was broken before it existed. Recorded here
+rather than left for someone to discover. From now on: new sequential migrations only.
+
 ### 0.3 Target database model
 
 #### Places
