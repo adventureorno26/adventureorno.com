@@ -122,7 +122,12 @@ unscheduled (production has three cron jobs — `dedupe-joint-outings`, `purge-t
 `rebuild-revealed-area`), and the Edge Function deployment was deleted 2026-08-12. It
 cannot run during the migration because it no longer exists.
 
-**⚠️ VISUAL REVIEW IS BLOCKED — not done, not claimed.** The authenticated artifact
+**VISUAL REFERENCE — RESOLVED BY ERICA, 2026-08-12: "it is acceptable."** The published
+artifact source (held locally, and the same content the artifact serves) is the approved
+visual reference for §0.6. Screenshots of the authenticated page were never obtainable
+here; that is recorded below rather than papered over, and her decision closes it.
+
+**⚠️ Why it was blocked, for the record — not done by Claude, not claimed.** The authenticated artifact
 `7d3ec882…?via=auto_preview` returns *"Page not found – Claude / Sign in"* to this
 browser, and the content frame (`…frame.claudeusercontent.com`) 404s unauthenticated. The
 HTML Erica pasted is the claude.ai shell, not the card — the card renders inside a
