@@ -63,7 +63,7 @@ jobs:
       # an expression that expands into a shell command is an execution vector.
       - name: Upload to R2 and prune old generations
         env:
-          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN_MASTER }}
           BACKUP_FILE: ${{ steps.dump.outputs.BACKUP_FILE }}
           BACKUP_KEY: ${{ steps.dump.outputs.BACKUP_KEY }}
         run: node scripts/backup-upload.mjs "$BACKUP_FILE" "$BACKUP_KEY"
@@ -87,7 +87,7 @@ jobs:
       # objects are copied.
       - name: Mirror photo and video objects
         env:
-          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN_MASTER }}
         run: node scripts/backup-r2.mjs
 
   freshness:
@@ -112,7 +112,7 @@ jobs:
       # This asserts a FRESH ARTIFACT EXISTS, which is the only claim that matters.
       - name: A recent backup must exist in R2
         env:
-          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN_MASTER }}
         run: node scripts/backup-freshness.mjs
 
   verify:
@@ -146,7 +146,7 @@ jobs:
           mv /tmp/hold/*.sql supabase/migrations/
       - name: Restore the newest backup and check every row count
         env:
-          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN_MASTER }}
           AGE_SECRET_KEY: ${{ secrets.AGE_SECRET_KEY }}
         run: |
           printf '%s\n' "$AGE_SECRET_KEY" > /tmp/age.key && chmod 600 /tmp/age.key

@@ -1033,6 +1033,19 @@ failing jobs.
 backup — it overwrites itself with the corrupted version the night after something
 breaks.
 
+### The token CI needs is NOT the deploy token
+
+`secrets.CLOUDFLARE_API_TOKEN` deploys Pages and has **no R2 permission** — the first
+real backup run failed all three jobs with `403 … Authentication error`, after the dump
+and encryption had already succeeded. The backup jobs use
+`secrets.CLOUDFLARE_API_TOKEN_MASTER`, which is the same value as
+`CLOUDFLARE_API_TOKEN_MASTER` in `.env.local`.
+
+⚠️ **That is a broad account token.** A least-privilege token scoped to R2 read on
+`adventureorno-photos` and read/write on `aon-backups` would be better, and is worth
+doing when there is a reason to touch it — it just cannot be minted from the API, so it
+is a dashboard job.
+
 ### Encryption
 
 `age`. R2 only ever receives ciphertext, so a leaked R2 token exposes nothing.
