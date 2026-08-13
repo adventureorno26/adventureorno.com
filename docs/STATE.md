@@ -122,7 +122,12 @@ unscheduled (production has three cron jobs — `dedupe-joint-outings`, `purge-t
 `rebuild-revealed-area`), and the Edge Function deployment was deleted 2026-08-12. It
 cannot run during the migration because it no longer exists.
 
-**⚠️ VISUAL REVIEW IS BLOCKED — not done, not claimed.** The authenticated artifact
+**VISUAL REFERENCE — RESOLVED BY ERICA, 2026-08-12: "it is acceptable."** The published
+artifact source (held locally, and the same content the artifact serves) is the approved
+visual reference for §0.6. Screenshots of the authenticated page were never obtainable
+here; that is recorded below rather than papered over, and her decision closes it.
+
+**⚠️ Why it was blocked, for the record — not done by Claude, not claimed.** The authenticated artifact
 `7d3ec882…?via=auto_preview` returns *"Page not found – Claude / Sign in"* to this
 browser, and the content frame (`…frame.claudeusercontent.com`) 404s unauthenticated. The
 HTML Erica pasted is the claude.ai shell, not the card — the card renders inside a
@@ -141,6 +146,74 @@ already-applied migration*. Earlier on 2026-08-12, in merged PR #30, migrations 
 previously appliable only through `scripts/db-bootstrap.sh`). No object definition changed
 and the end state is identical, but the rule was broken before it existed. Recorded here
 rather than left for someone to discover. From now on: new sequential migrations only.
+
+### 0.4a PARITY PROVED — on a production-shaped snapshot, 2026-08-12
+
+§0.8 phase 4. Today's encrypted backup was restored into a disposable **Postgres 17**,
+the idempotent backfills were run against that real data, and the old counting was
+compared with the canonical `accepted_visits` + `visit_profiles` model.
+
+| Scope | Places old → new | Visits old → new | Trips old → new |
+|---|---|---|---|
+| **Both** | 52 → **52** | 101 → **101** | 16 → **16** |
+| **Erica** | 128 → **128** | 442 → **442** | 42 → **42** |
+| **Josh** | 57 → **57** | 148 → **148** | 29 → **29** |
+
+**Every number matches. There is no intentional difference to explain yet** — which is
+the point of doing this before switching any reader: the new model reproduces today's
+answers exactly, so a later change in a number will mean a real decision rather than an
+accident.
+
+Backfill results on that snapshot:
+
+- **participants:** 590 rows across all 489 visits, 2 real members, **0 sent for review**
+- **activities → visits:** **445 linked, 0 ambiguous, 0 with no covering visit**
+
+The zero-ambiguity result is worth stating plainly, because the 78 known trail/member
+same-day pairs were expected to produce two candidate visits. They did not: each
+activity sits at ONE place, and the duplicate pairs are a trail visit and a *section*
+visit — different places — so the "same place, covering day, exactly one candidate" rule
+never had to choose. The duplication is still there and still needs §0.5.6's review; it
+simply does not corrupt the activity links.
+
+**A disaster-recovery bug was found and fixed doing this.** `jsonb_populate_record`
+leaves a column that is absent from an older dump as NULL — it does **not** apply the
+column default — so the moment `0163` added NOT NULL columns, restoring **any earlier
+backup** died with *"null value in column trip_marked violates not-null constraint"*.
+The backup you need is always older than the schema you restore onto, so this would have
+bitten precisely when it mattered. `scripts/verify-restore.sh` now inserts only the
+columns the dump actually contains and lets the schema default the rest, and reports
+which columns were newer than the backup.
+
+### 0.5a READERS SWITCHED — parity held, 2026-08-12
+
+§0.8 phase 5. `wander_stats` and `trips_list` now read the canonical model, and the
+numbers did not move — measured again through the live functions against a restored
+production snapshot:
+
+| Scope | Places | Miles | Trips |
+|---|---|---|---|
+| Both | **52** | 436.5 | **16** |
+| Erica | **128** | 1956.8 | **42** |
+| Josh | **57** | 992.6 | **29** |
+
+`trips_list(null)` returns exactly 16 rows — the list and the count now come from the
+same definition and cannot disagree.
+
+**A hardcoded household size was caught by the test suite.** The obvious translation of
+`solo_profile IS NULL` was "exactly two participant rows" — which bakes in that this
+household has two people. `0137` failed immediately: *"marking a visit as a trip must add
+one trip (0 -> 0)"*, because a test database does not happen to contain two members.
+The honest rule is about membership, not arithmetic: **a visit is shared when every real
+member was on it** (`public.is_shared_visit`). Two members gives exactly the 101 that
+`solo_profile IS NULL` gave; one gives that person's visits; three gives what all three
+shared. Nothing hardcodes 2 — which matters, because adding a third person is the entire
+point of the flok work.
+
+The same mistake was in the WRITER trigger and was fixed there too: `NULL` means "not
+solo", so it now populates every real member when the household is small enough for that
+to be unambiguous (one or two), and sends the row to review at three or more rather than
+guessing which two were meant.
 
 ### 0.3 Target database model
 
