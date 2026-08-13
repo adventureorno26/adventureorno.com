@@ -6974,3 +6974,35 @@ button.mi-row:hover {
   font-size: 13px;
   text-decoration: none;
 }
+
+/* THE BLANK CARD'S COVER — the same position the saved card puts it in, and a real
+   control: it opens the photo picker the card already had (§0.6). */
+.npd-cover {
+  position: relative;
+  height: 92px;
+  margin: -14px -14px 10px;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(135deg, #1d2942, #2b3c5e);
+  border-bottom: 1px solid var(--border-soft, rgba(255, 255, 255, 0.07));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.npd-cover-btn {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0 16px;
+}
+.npd-cover-btn:hover {
+  color: var(--fg);
+}
+.npd-cover .npd-x {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}

@@ -270,16 +270,31 @@ export default function NewPlaceDraft({
         aria-label="New place"
         tabIndex={-1}
       >
-        <div className="npd-head">
-          <b>{wanted ? 'Somewhere to go later' : 'A place I’ve been'}</b>
+        {/* THE COVER, exactly where the saved card has it (§0.6: cover, then name).
+            It is a real control — it opens the same picker the Photos section uses —
+            not a label pretending to be one. Photos chosen here are attached on Save,
+            and the first becomes the cover. */}
+        <div className="npd-cover">
+          <button type="button" className="npd-cover-btn" onClick={() => fileRef.current?.click()}>
+            {files.length > 0
+              ? `${files.length} photo${files.length === 1 ? '' : 's'} — the first is the cover`
+              : 'Add a cover photo'}
+          </button>
           <button className="npd-x" onClick={requestCancel} aria-label="Cancel">
             ×
           </button>
         </div>
+        <div className="npd-head">
+          <b>{wanted ? 'Somewhere to go later' : 'A place you have been'}</b>
+        </div>
 
         <label className="npd-row">
           <span>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name this place"
+          />
         </label>
 
         <div className="npd-row">
