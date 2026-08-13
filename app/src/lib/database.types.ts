@@ -47,6 +47,7 @@ export type Database = {
           summary_polyline: string | null
           trailhead: string | null
           type: string
+          visit_id: string | null
         }
         Insert: {
           also_profiles?: string[]
@@ -76,6 +77,7 @@ export type Database = {
           summary_polyline?: string | null
           trailhead?: string | null
           type: string
+          visit_id?: string | null
         }
         Update: {
           also_profiles?: string[]
@@ -105,6 +107,7 @@ export type Database = {
           summary_polyline?: string | null
           trailhead?: string | null
           type?: string
+          visit_id?: string | null
         }
         Relationships: [
           {
@@ -131,6 +134,64 @@ export type Database = {
           {
             foreignKeyName: "activities_solo_profile_fkey"
             columns: ["solo_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_options: {
+        Row: {
+          active: boolean
+          activity_type: string | null
+          created_at: string
+          created_by: string | null
+          kind: string
+          label: string
+          place_category: string | null
+          slug: string
+          sort: number
+        }
+        Insert: {
+          active?: boolean
+          activity_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          kind: string
+          label: string
+          place_category?: string | null
+          slug: string
+          sort?: number
+        }
+        Update: {
+          active?: boolean
+          activity_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          kind?: string
+          label?: string
+          place_category?: string | null
+          slug?: string
+          sort?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_options_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -172,6 +233,35 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_visit_review: {
+        Row: {
+          activity_id: string
+          candidates: number
+          noted_at: string
+          reason: string
+        }
+        Insert: {
+          activity_id: string
+          candidates?: number
+          noted_at?: string
+          reason: string
+        }
+        Update: {
+          activity_id?: string
+          candidates?: number
+          noted_at?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_visit_review_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: true
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
         ]
@@ -1105,6 +1195,13 @@ export type Database = {
             foreignKeyName: "photos_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photos_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "visits"
             referencedColumns: ["id"]
           },
@@ -1714,6 +1811,84 @@ export type Database = {
           },
         ]
       }
+      trail_routes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          distance_m: number | null
+          geom: unknown
+          id: string
+          name: string | null
+          polyline: string | null
+          section_place_id: string | null
+          source: string
+          trail_place_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          distance_m?: number | null
+          geom?: unknown
+          id?: string
+          name?: string | null
+          polyline?: string | null
+          section_place_id?: string | null
+          source?: string
+          trail_place_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          distance_m?: number | null
+          geom?: unknown
+          id?: string
+          name?: string | null
+          polyline?: string | null
+          section_place_id?: string | null
+          source?: string
+          trail_place_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trail_routes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trail_routes_section_place_id_fkey"
+            columns: ["section_place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "trail_routes_section_place_id_fkey"
+            columns: ["section_place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trail_routes_trail_place_id_fkey"
+            columns: ["trail_place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "trail_routes_trail_place_id_fkey"
+            columns: ["trail_place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_migration_exceptions: {
         Row: {
           detected_at: string
@@ -1845,6 +2020,81 @@ export type Database = {
           },
         ]
       }
+      visit_evidence: {
+        Row: {
+          created_at: string
+          evidence_date: string | null
+          evidence_id: string
+          evidence_type: string
+          source_key: string | null
+          visit_id: string
+        }
+        Insert: {
+          created_at?: string
+          evidence_date?: string | null
+          evidence_id: string
+          evidence_type: string
+          source_key?: string | null
+          visit_id: string
+        }
+        Update: {
+          created_at?: string
+          evidence_date?: string | null
+          evidence_id?: string
+          evidence_type?: string
+          source_key?: string | null
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_evidence_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_evidence_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_participant_review: {
+        Row: {
+          noted_at: string
+          reason: string
+          visit_id: string
+        }
+        Insert: {
+          noted_at?: string
+          reason: string
+          visit_id: string
+        }
+        Update: {
+          noted_at?: string
+          reason?: string
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_participant_review_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: true
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_participant_review_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: true
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       visit_people: {
         Row: {
           created_at: string
@@ -1873,6 +2123,53 @@ export type Database = {
             foreignKeyName: "visit_people_visit_id_fkey"
             columns: ["visit_id"]
             isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_people_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_profiles: {
+        Row: {
+          created_at: string
+          profile_id: string
+          visit_id: string
+        }
+        Insert: {
+          created_at?: string
+          profile_id: string
+          visit_id: string
+        }
+        Update: {
+          created_at?: string
+          profile_id?: string
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_profiles_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_profiles_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
             referencedRelation: "visits"
             referencedColumns: ["id"]
           },
@@ -1880,6 +2177,8 @@ export type Database = {
       }
       visits: {
         Row: {
+          accepted_at: string | null
+          accepted_by: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -1888,13 +2187,19 @@ export type Database = {
           is_trip: boolean
           manual: boolean
           note: string | null
+          parent_visit_id: string | null
           place_id: string
           solo_override: boolean
           solo_profile: string | null
+          source: string
           start_date: string
           status: string
+          trip_marked: boolean
+          updated_at: string
         }
         Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
           created_at?: string
           created_by?: string | null
           decided_at?: string | null
@@ -1903,13 +2208,19 @@ export type Database = {
           is_trip?: boolean
           manual?: boolean
           note?: string | null
+          parent_visit_id?: string | null
           place_id: string
           solo_override?: boolean
           solo_profile?: string | null
+          source?: string
           start_date: string
           status?: string
+          trip_marked?: boolean
+          updated_at?: string
         }
         Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
           created_at?: string
           created_by?: string | null
           decided_at?: string | null
@@ -1918,13 +2229,38 @@ export type Database = {
           is_trip?: boolean
           manual?: boolean
           note?: string | null
+          parent_visit_id?: string | null
           place_id?: string
           solo_override?: boolean
           solo_profile?: string | null
+          source?: string
           start_date?: string
           status?: string
+          trip_marked?: boolean
+          updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "visits_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_parent_visit_id_fkey"
+            columns: ["parent_visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_parent_visit_id_fkey"
+            columns: ["parent_visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "visits_place_id_fkey"
             columns: ["place_id"]
@@ -1950,6 +2286,121 @@ export type Database = {
       }
     }
     Views: {
+      accepted_visits: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string | null
+          created_by: string | null
+          decided_at: string | null
+          end_date: string | null
+          id: string | null
+          is_headline: boolean | null
+          is_trip: boolean | null
+          is_trip_qualified: boolean | null
+          manual: boolean | null
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string | null
+          solo_override: boolean | null
+          solo_profile: string | null
+          source: string | null
+          start_date: string | null
+          status: string | null
+          trip_marked: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          decided_at?: string | null
+          end_date?: string | null
+          id?: string | null
+          is_headline?: never
+          is_trip?: boolean | null
+          is_trip_qualified?: never
+          manual?: boolean | null
+          note?: string | null
+          parent_visit_id?: string | null
+          place_id?: string | null
+          solo_override?: boolean | null
+          solo_profile?: string | null
+          source?: string | null
+          start_date?: string | null
+          status?: string | null
+          trip_marked?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          decided_at?: string | null
+          end_date?: string | null
+          id?: string | null
+          is_headline?: never
+          is_trip?: boolean | null
+          is_trip_qualified?: never
+          manual?: boolean | null
+          note?: string | null
+          parent_visit_id?: string | null
+          place_id?: string | null
+          solo_override?: boolean | null
+          solo_profile?: string | null
+          source?: string | null
+          start_date?: string | null
+          status?: string | null
+          trip_marked?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visits_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_parent_visit_id_fkey"
+            columns: ["parent_visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_parent_visit_id_fkey"
+            columns: ["parent_visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "visits_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_solo_profile_fkey"
+            columns: ["solo_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_mileage: {
         Row: {
           activity_count: number | null
@@ -2127,6 +2578,51 @@ export type Database = {
           who: string[]
         }[]
       }
+      add_activity_to_visit: {
+        Args: {
+          p_client_key?: string
+          p_distance_m?: number
+          p_name?: string
+          p_option: string
+          p_visit: string
+        }
+        Returns: {
+          also_profiles: string[]
+          athlete_id: number | null
+          created_at: string
+          distance: number
+          elapsed_time: number | null
+          elevation_gain: number | null
+          elevation_profile: Json | null
+          geom: unknown
+          id: string
+          is_race: boolean
+          lat: number | null
+          lng: number | null
+          local_date: string | null
+          moving_time: number | null
+          name: string | null
+          owner_profile: string | null
+          place_id: string | null
+          shared_group_id: string | null
+          solo_profile: string | null
+          source: string | null
+          source_id: string | null
+          start_date: string | null
+          start_date_local: string | null
+          strava_id: number | null
+          summary_polyline: string | null
+          trailhead: string | null
+          type: string
+          visit_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "activities"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       add_place_category: {
         Args: {
           p_color?: string
@@ -2135,6 +2631,65 @@ export type Database = {
           p_review?: string
         }
         Returns: string
+      }
+      add_place_to_visit: {
+        Args: {
+          p_client_key?: string
+          p_lat?: number
+          p_lng?: number
+          p_name: string
+          p_option: string
+          p_visit: string
+        }
+        Returns: {
+          activity_categories: string[]
+          address: string | null
+          admin1: string | null
+          auto: boolean
+          boundary: unknown
+          bucket: boolean
+          categories: string[]
+          category: string | null
+          city: string | null
+          country: string | null
+          counts_as_place: boolean | null
+          cover_photo_id: string | null
+          cover_pos_y: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          favorite: string | null
+          first_visit: string | null
+          geocoded_at: string | null
+          geom: unknown
+          holds_children: boolean
+          id: string
+          is_home: boolean
+          is_trail: boolean
+          kind: string
+          last_visit: string | null
+          lat: number
+          lng: number
+          name: string
+          name_locked: boolean
+          name_scope: string | null
+          named_by: string | null
+          needs_geocode: boolean
+          park: string | null
+          part_of: string[]
+          rating: number | null
+          review: string | null
+          saved: boolean
+          suggested: boolean
+          visit_count: number
+          website: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "places"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       add_to_container: {
         Args: { p_child: string; p_parent: string }
@@ -2207,6 +2762,36 @@ export type Database = {
         Args: { p_activity: string; p_race_name: string; p_race_place?: string }
         Returns: string
       }
+      attach_child_visit: {
+        Args: { p_child: string; p_parent: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       can_rename_place: {
         Args: { p_caller: string; p_place: string }
         Returns: boolean
@@ -2245,6 +2830,10 @@ export type Database = {
         Args: { p_provider?: string; p_state: string }
         Returns: string
       }
+      counts_as_trip: {
+        Args: { v: Database["public"]["Tables"]["visits"]["Row"] }
+        Returns: boolean
+      }
       create_experience: {
         Args: { p_key: string; p_place: Json; p_visit?: Json }
         Returns: Json
@@ -2272,6 +2861,36 @@ export type Database = {
       dedupe_shared_outings: { Args: never; Returns: number }
       delete_trip_note: { Args: { p_id: string }; Returns: undefined }
       deny_join_request: { Args: { p_id: string }; Returns: undefined }
+      detach_child_visit: {
+        Args: { p_child: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       disablelongtransactions: { Args: never; Returns: string }
       dismiss_duplicate: {
         Args: { p_a: string; p_b: string }
@@ -2307,6 +2926,43 @@ export type Database = {
           }
         | { Args: { schema_name: string; table_name: string }; Returns: string }
         | { Args: { table_name: string }; Returns: string }
+      edit_visit: {
+        Args: {
+          p_end?: string
+          p_note?: string
+          p_start?: string
+          p_status?: string
+          p_trip?: boolean
+          p_visit: string
+        }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       enablelongtransactions: { Args: never; Returns: string }
       ensure_visit: {
         Args: { p_day: string; p_place: string }
@@ -2454,6 +3110,7 @@ export type Database = {
       is_generic_activity_name: { Args: { p_name: string }; Returns: boolean }
       is_member: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
+      is_shared_visit: { Args: { p_visit: string }; Returns: boolean }
       last_automated_upload: { Args: never; Returns: string }
       last_seen: {
         Args: never
@@ -2531,6 +3188,36 @@ export type Database = {
           miles: number
           type: string
         }[]
+      }
+      move_visit_to_place: {
+        Args: { p_place: string; p_visit: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       naming_rules_list: { Args: never; Returns: Json }
       occasion_count: { Args: { p_profile?: string }; Returns: number }
@@ -2814,6 +3501,8 @@ export type Database = {
       set_visit_dates: {
         Args: { p_end: string; p_start: string; p_visit: string }
         Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -2822,11 +3511,15 @@ export type Database = {
           is_trip: boolean
           manual: boolean
           note: string | null
+          parent_visit_id: string | null
           place_id: string
           solo_override: boolean
           solo_profile: string | null
+          source: string
           start_date: string
           status: string
+          trip_marked: boolean
+          updated_at: string
         }
         SetofOptions: {
           from: "*"
@@ -2838,6 +3531,8 @@ export type Database = {
       set_visit_is_trip: {
         Args: { p_is_trip: boolean; p_visit: string }
         Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -2846,11 +3541,15 @@ export type Database = {
           is_trip: boolean
           manual: boolean
           note: string | null
+          parent_visit_id: string | null
           place_id: string
           solo_override: boolean
           solo_profile: string | null
+          source: string
           start_date: string
           status: string
+          trip_marked: boolean
+          updated_at: string
         }
         SetofOptions: {
           from: "*"
@@ -2862,6 +3561,20 @@ export type Database = {
       set_visit_note: {
         Args: { p_note: string; p_visit: string }
         Returns: undefined
+      }
+      set_visit_participants: {
+        Args: { p_profiles: string[]; p_visit: string }
+        Returns: {
+          created_at: string
+          profile_id: string
+          visit_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "visit_profiles"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       set_visit_place: {
         Args: { p_place: string; p_visit: string }
