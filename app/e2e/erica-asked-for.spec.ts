@@ -48,6 +48,15 @@ async function ready(page: import('@playwright/test').Page, path: string) {
   }
 }
 
+/** Settings' Stats card is a <details>; its contents are hidden until it is open —
+ *  the same disclosure pattern as the Visits section on a card. */
+async function openStats(page: import('@playwright/test').Page) {
+  const summary = page.locator('details.stats-dropdown > summary').first();
+  await expect(summary).toBeVisible();
+  if ((await page.locator('details.stats-dropdown[open]').count()) === 0) await summary.click();
+  await expect(page.locator('details.stats-dropdown[open]').first()).toBeVisible();
+}
+
 /** The Visits section is a <details>; its rows are hidden until it is open. */
 async function openVisits(page: import('@playwright/test').Page) {
   const summary = page.locator('.visits-summary');
@@ -235,10 +244,13 @@ it.describe('the rest of the app — what she asked for', () => {
     page,
   }) => {
     await ready(page, '/settings');
-    await page.getByText(/Trips/).first().click();
-    // A list of trips, each editable, and a way to add one.
-    await expect(page.locator('.trip-row').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /add a trip/i })).toBeVisible();
+    await openStats(page);
+    await page.locator('.stat-open').click();
+    // A list of trips, each row opening its visit, and a way to add one.
+    const first = page.locator('.trip-row').first();
+    await expect(first).toBeVisible();
+    await expect(first).toHaveAttribute('href', /^\/visit\//); // the ROW is the control
+    await expect(page.getByRole('link', { name: /add a trip/i })).toBeVisible();
   });
 
   it('"The number of visits to each place should be the count on that dropdown"', async ({
@@ -256,6 +268,7 @@ it.describe('the rest of the app — what she asked for', () => {
     await expect(page.locator('.stats-bar')).toBeVisible();
     await expect(page.locator('.stats-bar')).not.toContainText(/trips?\b/i);
     await ready(page, '/settings');
-    await expect(page.getByText(/Trips/).first()).toBeVisible();
+    await openStats(page);
+    await expect(page.locator('.stat-open')).toContainText(/Trips/);
   });
 });
