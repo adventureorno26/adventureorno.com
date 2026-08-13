@@ -12,7 +12,8 @@ set local request.jwt.claims = '{"sub":"aaaa7777-0000-0000-0000-00000000c001"}';
 
 -- THE CAPE COD SHAPE: a trip to a place, during which you visit other places.
 do $$
-declare cc uuid; beach uuid; food uuid; tv uuid; occ_before int; occ_after int; pl_before int; pl_after int;
+declare cc uuid; beach uuid; food uuid; tv uuid; bv uuid; fv uuid; elsewhere uuid;
+        occ_before int; occ_after int; pl_before int; pl_after int;
 begin
   select public.occasion_count(null) into occ_before;
   select places_count into pl_before from public.wander_stats(null);
@@ -22,24 +23,50 @@ begin
   insert into public.places (name, lat, lng, saved, categories) values ('V134 Arnolds', 41.72, -70.02, true, array['dining']) returning id into food;
 
   insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (cc, '2026-08-02','2026-08-07', true, null) returning id into tv;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (beach,'2026-08-03','2026-08-03', true, null);
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (food, '2026-08-05','2026-08-05', true, null);
+  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (beach,'2026-08-03','2026-08-03', true, null) returning id into bv;
+  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (food, '2026-08-05','2026-08-05', true, null) returning id into fv;
 
   -- Before marking: three ordinary visits, three occasions.
   select public.occasion_count(null) into occ_after;
   if occ_after <> occ_before + 3 then
     raise exception 'FAIL: unmarked visits should each be an occasion (% -> %)', occ_before, occ_after; end if;
 
-  -- Mark the week as a trip. It becomes ONE occasion.
+  -- ⚠️ UPDATED 2026-08-13 for §0.1, which supersedes the rule this test encoded.
+  --
+  -- It used to be enough to MARK the week: occasion_count folded in any visit whose
+  -- dates sat inside a marked trip's range — at ANY place, with no relationship to it.
+  -- §0.1: "Do not infer trip contents from overlapping dates alone." On the real data
+  -- that inference was swallowing 15 visits.
+  --
+  -- The OUTCOME this test cares about is unchanged and still asserted: a week away is
+  -- ONE occasion. It is now reached deliberately — the beach and the restaurant are
+  -- GROUPED under the week — rather than by a date coincidence that also caught
+  -- unrelated visits.
   perform public.set_visit_is_trip(tv, true);
+  perform public.attach_child_visit(bv, tv);
+  perform public.attach_child_visit(fv, tv);
   select public.occasion_count(null) into occ_after;
   if occ_after <> occ_before + 1 then
     raise exception 'FAIL: the week must be ONE occasion, got % (expected %)', occ_after, occ_before + 1; end if;
+
+
 
   -- ...but all three are still PLACES.
   select places_count into pl_after from public.wander_stats(null);
   if pl_after <> pl_before + 3 then
     raise exception 'FAIL: the beach and restaurant must still count as places (% -> %)', pl_before, pl_after; end if;
+
+  -- And the inference is genuinely gone: an UNRELATED visit inside the same dates,
+  -- somewhere else entirely, is still its own occasion.
+  insert into public.places (name, lat, lng, saved) values ('V134 Elsewhere', 38.9, -77.4, true)
+    returning id into elsewhere;
+  insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
+    values (elsewhere, '2026-08-04', '2026-08-04', true, null);
+  select public.occasion_count(null) into occ_after;
+  if occ_after <> occ_before + 2 then
+    raise exception 'FAIL: an unrelated visit was swallowed by the trip''s dates (% vs %)',
+      occ_after, occ_before + 2; end if;
+
   raise notice 'PASS 1: the week is one occasion; the beach and restaurant are still places';
 end $$;
 
@@ -58,16 +85,37 @@ begin
   raise notice 'PASS 2: trip contents = % (its own place excluded)', names;
 end $$;
 
--- 3) UNMARKING PUTS THEM BACK. Nothing is stored, so nothing can drift.
+-- 3) ⚠️ REWRITTEN 2026-08-13 for §0.4, which supersedes what this asserted.
+--
+--    It used to say: unmarking the trip frees the visits inside it. That followed from
+--    the old model, where a trip was ONLY a visit someone marked, so unmarking made it
+--    an ordinary visit again and the date-inference stopped folding things into it.
+--
+--    §0.4: "counts_as_trip = … (end_date > start_date OR trip_marked)". Cape Cod is
+--    2-7 August — MULTI-DAY — so it qualifies as a trip whether or not anyone marks it.
+--    Unmarking is for turning a SINGLE-DAY visit into a trip and back; it cannot demote
+--    a week away. §0.6 says so in the helper text: "Multi-day visits already count. Turn
+--    this on only for a single-day trip."
+--
+--    So what is asserted now is the truth of the new model: unmarking changes nothing
+--    for a multi-day visit, and DETACHING is how a visit leaves a trip.
 do $$
-declare tv uuid; occ int; base int;
+declare tv uuid; occ int; base int; kids uuid[];
 begin
   select v.id into tv from public.visits v join public.places p on p.id=v.place_id where p.name='V134 Cape Cod';
   select public.occasion_count(null) into base;
+
   perform public.set_visit_is_trip(tv, false);
   select public.occasion_count(null) into occ;
+  if occ <> base then
+    raise exception 'FAIL: unmarking a MULTI-DAY visit must change nothing — it still qualifies (% -> %)', base, occ; end if;
+
+  -- Detaching is the deliberate act that frees them.
+  select array_agg(id) into kids from public.visits where parent_visit_id = tv;
+  perform public.detach_child_visit(k) from unnest(kids) k;
+  select public.occasion_count(null) into occ;
   if occ <> base + 2 then
-    raise exception 'FAIL: unmarking should free the 2 contained visits (% -> %)', base, occ; end if;
+    raise exception 'FAIL: detaching should free the 2 contained visits (% -> %)', base, occ; end if;
   if (select count(*) from public.trip_contents(tv)) <> 0 then
     raise exception 'FAIL: an unmarked visit still reports contents'; end if;
   perform public.set_visit_is_trip(tv, true);   -- put it back for later tests
