@@ -13,11 +13,14 @@ import { reverseGeocode, type SearchResult } from '../lib/maptiler';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { haversineMeters } from '../lib/geo';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
+import { whoChoices, whoProfileId } from '../lib/participants';
+import { showSnack } from '../lib/snackbar';
 import MapSearch from './MapSearch';
 import { useDialog } from '../lib/useDialog';
 import type { Place } from '../lib/types';
 
-type Who = 'both' | 'mine' | 'josh';
+/** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
+type Who = string;
 
 // How close another place must be to count as a possible duplicate, by type.
 // Tight for point venues (a restaurant next door is a different place); wide for
@@ -87,7 +90,7 @@ export default function NewPlaceDraft({
   const [poiChecked, setPoiChecked] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const joshId = people.find((p) => p.id !== meId)?.id ?? null;
+  const choices = whoChoices(people, meId, { everyone: 'together' });
   // Idempotency keys per save action (reused on retry, reset on success). One for
   // the "create new place" action, one for "add to an existing (duplicate) place".
   const keyNew = useRef<string | null>(null);
@@ -95,9 +98,7 @@ export default function NewPlaceDraft({
 
   // Map the tri-state Who selector to the create_experience `who` param.
   function whoParam(): string | undefined {
-    if (who === 'mine') return meId ?? undefined;
-    if (who === 'josh') return joshId ?? undefined;
-    return undefined; // 'both' — leave attribution unset
+    return whoProfileId(who, meId) ?? undefined; // 'both' — leave attribution unset
   }
 
   // Name/region from the coordinates, unless the caller preset a name.
@@ -181,8 +182,16 @@ export default function NewPlaceDraft({
       if (website) await updatePlace(placeId, { website }).catch(() => undefined);
       // Somewhere-to-go-later has no visit, so there is nothing to attribute.
       if (!wanted && who !== 'both') {
-        const pid = who === 'mine' ? meId : joshId;
-        await setPlaceSolo(placeId, pid ?? null).catch(() => undefined);
+        // Not swallowed: losing this silently means the place is saved and
+        // attributed to the wrong people, with nothing on screen to say so.
+        await setPlaceSolo(placeId, whoProfileId(who, meId)).catch((e: unknown) => {
+          showSnack({
+            message:
+              e instanceof Error
+                ? `Saved, but could not set who was there: ${e.message}`
+                : 'Saved, but could not set who was there.',
+          });
+        });
       }
 
       if (files.length) {
@@ -411,14 +420,14 @@ export default function NewPlaceDraft({
           <div className="npd-row">
             <span>Who was there</span>
             <div className="ps-who-toggle">
-              {(['both', 'mine', 'josh'] as const).map((k) => (
+              {choices.map((c) => (
                 <button
-                  key={k}
+                  key={c.key}
                   type="button"
-                  className={who === k ? 'on' : ''}
-                  onClick={() => setWho(k)}
+                  className={who === c.key ? 'on' : ''}
+                  onClick={() => setWho(c.key)}
                 >
-                  {k === 'both' ? 'Together' : k === 'mine' ? 'Just me' : 'Just Josh'}
+                  {c.label}
                 </button>
               ))}
             </div>

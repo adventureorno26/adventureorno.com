@@ -3,10 +3,13 @@ import { setPlaceSolo, updatePlace } from '../lib/data';
 import { showSnack } from '../lib/snackbar';
 import type { MapPerson } from '../lib/data';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
+import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
 import MapSearch from './MapSearch';
 import type { Place } from '../lib/types';
 
-type Who = 'both' | 'mine' | 'josh';
+/** 'both' | 'mine' | a profile id. Built from the real members (lib/participants),
+ *  never from a hardcoded pair. */
+type Who = string;
 
 /** Compact, place-card-style editor: rename, fix the location with an
  *  address/place search (for photos with no GPS), retag, rate, set who was
@@ -38,7 +41,7 @@ export default function PlaceQuickEdit({
   const [name, setName] = useState(place.name);
   const [busy, setBusy] = useState<string | null>(null);
   const [solo, setSolo] = useState<string | null>(soloProfile);
-  const joshId = people.find((p) => p.id !== meId)?.id ?? null;
+  const choices = whoChoices(people, meId, { everyone: 'together' });
 
   async function patch(p: Partial<Place>, label = 'Saving…') {
     setBusy(label);
@@ -57,11 +60,11 @@ export default function PlaceQuickEdit({
   }
 
   function who(): Who {
-    // Derived from the visits: null = both.
-    return solo == null ? 'both' : solo === joshId ? 'josh' : 'mine';
+    // Derived from the visits: null = everyone.
+    return whoKey(solo, meId);
   }
   async function setWho(k: Who) {
-    const profileId = k === 'both' ? null : k === 'mine' ? meId : joshId;
+    const profileId = whoProfileId(k, meId);
     setBusy('Saving…');
     try {
       // setPlaceSolo writes every VISIT at this place; the place itself holds no
@@ -176,15 +179,19 @@ export default function PlaceQuickEdit({
                 value={visitWho ?? 'both'}
                 onChange={(e) => onVisitWho(e.target.value as Who)}
               >
-                <option value="both">Together</option>
-                <option value="mine">Just me</option>
-                <option value="josh">Just Josh</option>
+                {choices.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
             ) : (
               <select value={who()} onChange={(e) => void setWho(e.target.value as Who)}>
-                <option value="both">Together</option>
-                <option value="mine">Just me</option>
-                <option value="josh">Just Josh</option>
+                {choices.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
               </select>
             )}
           </div>
