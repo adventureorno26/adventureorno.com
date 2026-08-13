@@ -215,6 +215,53 @@ solo", so it now populates every real member when the household is small enough 
 to be unambiguous (one or two), and sends the row to review at three or more rather than
 guessing which two were meant.
 
+### 0.7a APPLIED TO PRODUCTION — 2026-08-13
+
+§0.8 phase 7. Migrations `0163`–`0169` are live. **Parity held exactly.**
+
+| Scope | Places | Visits | Trips |
+|---|---|---|---|
+| Both | 52 → **52** | 101 → **101** | 16 → **16** |
+| Erica | 128 → **128** | 442 → **442** | 42 → **42** |
+| Josh | 57 → **57** | 148 → **148** | 29 → **29** |
+
+Measured on production before the migration with the OLD rules, and after it through the
+CANONICAL model. Not one number moved, which is the whole point of phases 3–6.
+
+**Migration ledger versions recorded** (the Management API runs SQL and records nothing —
+the 2026-08-11 audit found eight applied-but-unrecorded migrations, and a restore rebuilds
+from this ledger):
+
+    20260813170000  0163_visits_gain_a_spine
+    20260813170001  0164_add_an_activity
+    20260813170002  0165_who_was_there
+    20260813170003  0166_evidence_and_trail_routes
+    20260813170004  0167_link_activities_to_their_visit
+    20260813170005  0168_the_numbers_read_the_canonical_model
+    20260813170006  0169_one_way_to_change_a_visit
+
+**Backfill results in production:**
+
+| | |
+|---|---|
+| participant rows | **590** across all 489 visits, **0 for review** |
+| activities linked to a visit | **445 of 445**, **0 ambiguous**, 0 orphaned |
+| evidence rows | **620** |
+| accepted visits | **489** — all of Erica's history |
+| dropdown options seeded | **8** |
+
+**Frontend state:** `15458752` — unchanged, and deliberately so. The app still writes visits
+directly; both spellings of every field stay in step during the compatibility period, so
+this migration is invisible to anyone using the site. `verify:live` confirms it: the same
+**18 checks pass and the same 4 fail** as before, and the 4 are the UI work that has not
+been built yet, not regressions.
+
+Types regenerated from the deployed schema; `tsc` clean; 112 unit tests pass.
+
+**Pre-migration backup**, taken and PROVEN restorable first:
+`db/2026-08-13/pre-phase7-aon-db-2026-08-13.tar.gz.age` — 18,838 rows, all 38 tables
+matching on restore into a disposable Postgres 17.
+
 ### 0.3 Target database model
 
 #### Places
