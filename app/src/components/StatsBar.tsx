@@ -6,16 +6,13 @@ import {
   fetchMileage,
   fetchRacesList,
   fetchRaceStats,
-  fetchTripsList,
   fetchWanderStats,
   type ActivityListRow,
   type RaceRow,
   type RaceStat,
-  type TripRow,
   type WanderStats,
 } from '../lib/strava';
 import { fetchAllEntries } from '../lib/data';
-import { visitDates } from '../lib/visitDates';
 
 interface Props {
   places: Place[];
@@ -91,7 +88,7 @@ export default function StatsBar({
       (!viewSet || viewSet.has(p.id)),
   );
   // Main bar shows Places + Miles + Races. Cities/States moved to Settings.
-  const [detail, setDetail] = useState<null | 'places' | 'miles' | 'trips' | 'races'>(null);
+  const [detail, setDetail] = useState<null | 'places' | 'miles' | 'races'>(null);
   const [typeList, setTypeList] = useState<{ type: string; rows: ActivityListRow[] } | null>(null);
   const placeList = [...visited].sort((a, b) => a.name.localeCompare(b.name));
   const toggle = (k: typeof detail) => {
@@ -168,15 +165,6 @@ export default function StatsBar({
   }, [places.length, personFilter]);
   const raceCount = raceStats.reduce((s, r) => s + Number(r.n), 0);
 
-  // Trips: §2 counts a visit of more than one day, whether or not anyone labelled it.
-  // The number comes from wander_stats; this is the list you get when you tap it.
-  const [tripsList, setTripsList] = useState<TripRow[]>([]);
-  useEffect(() => {
-    fetchTripsList(personFilter)
-      .then(setTripsList)
-      .catch(() => setTripsList([]));
-  }, [places.length, personFilter]);
-
   // Tapping an activity-type row (e.g. "123 runs") drills into the actual list of
   // those activities, newest first — each links to its day.
   function openType(type: string) {
@@ -206,15 +194,9 @@ export default function StatsBar({
         >
           <b>{animated.toFixed(1)}</b> <span className="label">miles</span>
         </button>
-        {wander && wander.trips_count > 0 && (
-          <button
-            className={`stat ${detail === 'trips' ? 'on' : ''}`}
-            onClick={() => toggle('trips')}
-          >
-            <b>{wander.trips_count}</b>{' '}
-            <span className="label">{wander.trips_count === 1 ? 'trip' : 'trips'}</span>
-          </button>
-        )}
+        {/* TRIPS IS NOT HERE. Erica: "I did not want Trips in the toggle on the main
+            page, I wanted it under Stats." It lives in Settings › Stats, where the
+            whole list opens. */}
         {raceCount > 0 && (
           <button
             className={`stat ${detail === 'races' ? 'on' : ''}`}
@@ -236,11 +218,9 @@ export default function StatsBar({
               <b>
                 {detail === 'places'
                   ? 'All places'
-                  : detail === 'trips'
-                    ? 'Every visit that ran more than one day'
-                    : detail === 'races'
-                      ? 'Races — tap one to see every time you ran it'
-                      : 'Activity totals — tap a type to see the list'}
+                  : detail === 'races'
+                    ? 'Races — tap one to see every time you ran it'
+                    : 'Activity totals — tap a type to see the list'}
               </b>
             )}
             <button className="stat-detail-x" onClick={closeDetail}>
@@ -272,17 +252,6 @@ export default function StatsBar({
                 ))}
               </>
             )}
-            {detail === 'trips' &&
-              tripsList.map((t) => (
-                <Link key={t.visit_id} to={`/visit/${t.visit_id}`} onClick={closeDetail}>
-                  {t.name}
-                  <span className="label">
-                    {' '}
-                    · {visitDates(t.start_date, t.end_date)} ·{' '}
-                    {t.nights === 1 ? '1 night' : `${t.nights} nights`}
-                  </span>
-                </Link>
-              ))}
             {detail === 'places' &&
               combinedList.map((it) => (
                 <Link key={it.id} to={it.to} onClick={closeDetail}>

@@ -51,7 +51,11 @@ export default function AddSheet({
   onPhotos: (files: File[]) => void;
   onClose: () => void;
 }) {
-  const [kind, setKind] = useState<AddKind | null>(null);
+  // ADD OPENS THE CARD, NOT A MENU (Erica, many times): "Instead of add leading
+  // to 'What are you adding?' it should lead to a fillable card." The card starts
+  // open in 'visited' mode — the overwhelmingly common case — and photos and the
+  // bucket-list option are choices INSIDE it rather than a question in front of it.
+  const [kind, setKind] = useState<AddKind | null>('visited');
   const [note, setNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const sheetRef = useDialog<HTMLDivElement>(onClose);
