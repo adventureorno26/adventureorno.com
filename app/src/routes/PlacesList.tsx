@@ -10,6 +10,7 @@ import {
 } from '../lib/categories';
 import { buildPlaceTree } from '../lib/containers';
 import type { Place } from '../lib/types';
+import StatsBar from '../components/StatsBar';
 
 export default function PlacesList() {
   const { profile } = useAuth();
@@ -161,6 +162,13 @@ export default function PlacesList() {
         <span>Map</span>
       </Link>
       <h1>Places</h1>
+
+      {/* STATS AT THE TOP OF PLACES (Erica, 2026-08-11: "the stats section was supposed
+          to be moved to the top of places"). The same bar the map uses, so the numbers
+          cannot disagree between the two pages — one component, one backend call. */}
+      {places && places.length > 0 && (
+        <StatsBar places={places} onFilterCategory={() => undefined} />
+      )}
 
       <input
         placeholder="Search places…"

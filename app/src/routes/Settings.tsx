@@ -32,7 +32,14 @@ import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
-import { backfillPage, beginStravaLink, isMyStravaConnected } from '../lib/strava';
+import {
+  backfillPage,
+  beginStravaLink,
+  fetchTripsList,
+  isMyStravaConnected,
+  type TripRow,
+} from '../lib/strava';
+import { visitDates } from '../lib/visitDates';
 import { importFileActivity, parseActivityFile, parseFitActivity } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import SharedHub from '../components/SharedHub';
@@ -270,6 +277,13 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 /** Our stats — same pill style as the map. National Parks lands with that feature. */
 function OurStatsCard({ personId }: { personId: string | null }) {
   const [s, setS] = useState<SettingsStats | null>(null);
+  const [trips, setTrips] = useState<TripRow[]>([]);
+  const [showTrips, setShowTrips] = useState(false);
+  useEffect(() => {
+    fetchTripsList(personId)
+      .then(setTrips)
+      .catch(() => setTrips([]));
+  }, [personId]);
   useEffect(() => {
     // Discard a stale response if the person toggle changed before it resolved.
     let live = true;
@@ -292,12 +306,49 @@ function OurStatsCard({ personId }: { personId: string | null }) {
       <details className="stats-dropdown">
         <summary>Stats</summary>
         <div className="our-stats">
+          {/* TRIPS LIVES HERE, not in the map's toggle row (Erica, 2026-08-11).
+              The count comes from the same canonical definition the list does, so
+              they cannot disagree. */}
+          <button
+            className={`stat stat-open ${showTrips ? 'on' : ''}`}
+            onClick={() => setShowTrips((v) => !v)}
+            aria-expanded={showTrips}
+          >
+            <b>{trips.length}</b> <span className="label">Trips</span>
+          </button>
           {pills.map((p) => (
             <div key={p.label} className="stat">
               <b>{p.value}</b> <span className="label">{p.label}</span>
             </div>
           ))}
         </div>
+
+        {showTrips && (
+          <div className="trip-list">
+            {trips.length === 0 ? (
+              <p className="muted" style={{ fontSize: 13 }}>
+                No trips yet. A visit of more than one day counts as one.
+              </p>
+            ) : (
+              trips.map((t) => (
+                // THE WHOLE ROW OPENS THE VISIT (Erica: "instead of an edit link just
+                // make the trips click to edit"). The dates are editable there.
+                <Link key={t.visit_id} className="trip-row" to={`/visit/${t.visit_id}`}>
+                  <span className="trip-name">{t.name}</span>
+                  <span className="label">
+                    {visitDates(t.start_date, t.end_date)} ·{' '}
+                    {t.nights === 1 ? '1 night' : `${t.nights} nights`}
+                  </span>
+                </Link>
+              ))
+            )}
+            {/* "Add a trip should open the same card as everywhere else" — a trip is
+                just a visit of more than one day, so there is nothing extra to fill in. */}
+            <Link className="btn-add-trip" to="/add">
+              + Add a trip
+            </Link>
+          </div>
+        )}
       </details>
     </div>
   );
