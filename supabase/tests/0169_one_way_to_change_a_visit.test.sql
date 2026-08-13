@@ -149,7 +149,7 @@ begin
   select count(*) into n from public.activities where id = act and place_id = b_place;
   if n <> 1 then raise exception 'FAIL: the activity did not move with its visit'; end if;
 
-  if has_function_privilege('anon','public.edit_visit(uuid,date,date,text,boolean,text)','EXECUTE')
+  if has_function_privilege('anon','public.edit_visit(uuid,date,date,text,boolean,text,boolean)','EXECUTE')
   or has_function_privilege('anon','public.set_visit_participants(uuid,uuid[])','EXECUTE')
   or has_function_privilege('anon','public.attach_child_visit(uuid,uuid)','EXECUTE')
   or has_function_privilege('anon','public.move_visit_to_place(uuid,uuid)','EXECUTE') then
