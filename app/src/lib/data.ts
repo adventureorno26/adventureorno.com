@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, sqlNull } from './supabase';
 import type { Json } from './database.types';
 import { applyCategories } from './categories';
 import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
@@ -24,7 +24,7 @@ export async function addCategory(
     p_label: label,
     p_icon: icon,
     p_color: color,
-    p_review: review ?? null,
+    p_review: review ?? undefined,
   });
   if (error) throw error;
   await loadCategories();
@@ -180,7 +180,9 @@ export async function fetchTripContents(visitId: string): Promise<TripContent[]>
  * visits.
  */
 export async function fetchOccasionCount(profileId?: string | null): Promise<number> {
-  const { data, error } = await supabase.rpc('occasion_count', { p_profile: profileId ?? null });
+  const { data, error } = await supabase.rpc('occasion_count', {
+    p_profile: profileId ?? undefined,
+  });
   if (error) return 0;
   return (data as number) ?? 0;
 }
@@ -194,7 +196,9 @@ export async function fetchItemCounts(): Promise<{ entries: number; visits: numb
 }
 
 export async function fetchSettingsStats(personId?: string | null): Promise<SettingsStats | null> {
-  const { data, error } = await supabase.rpc('settings_stats', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('settings_stats', {
+    p_profile: personId ?? undefined,
+  });
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
   return (row ?? null) as SettingsStats | null;
@@ -228,11 +232,23 @@ export interface TripNote {
   note: string;
 }
 
-/** Auto day-by-day timeline of everything that happened on a trip. */
-export async function fetchTripTimeline(tripId: string): Promise<TripTimelineItem[]> {
-  const { data, error } = await supabase.rpc('trip_timeline', { p_trip: tripId });
-  if (error) return [];
-  return (data ?? []) as TripTimelineItem[];
+/**
+ * Auto day-by-day timeline of everything that happened on a trip.
+ *
+ * ⚠️ THIS HAS NEVER WORKED. It called `trip_timeline`, an RPC that does not exist in
+ * this database and, as far as the migration history shows, never did — and then
+ * swallowed the resulting error with `if (error) return []`, so it returned an empty
+ * timeline forever instead of failing. Typing the Supabase client is what surfaced it.
+ *
+ * It has ZERO callers, and it belongs to the retired trip-table model (§0.1: a trip is
+ * a qualifying visit, never a table). Left in place rather than deleted because
+ * removals need Erica's say-so; it now fails loudly instead of lying quietly.
+ */
+export async function fetchTripTimeline(_tripId: string): Promise<TripTimelineItem[]> {
+  throw new Error(
+    'fetchTripTimeline is not implemented: the trip_timeline RPC does not exist. ' +
+      'A trip is a qualifying visit — read its contents with trip_contents / card_view.',
+  );
 }
 /** Manual per-day plan notes on a trip. */
 export async function fetchTripNotes(tripId: string): Promise<TripNote[]> {
@@ -263,7 +279,9 @@ export interface ClimbingStats {
 }
 /** Total vertical climbed + Everests, from per-activity elevation gain. */
 export async function fetchClimbingStats(personId?: string | null): Promise<ClimbingStats> {
-  const { data, error } = await supabase.rpc('climbing_stats', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('climbing_stats', {
+    p_profile: personId ?? undefined,
+  });
   if (error) return { total_ft: 0, everests: 0 };
   const row = (Array.isArray(data) ? data[0] : data) ?? {};
   return { total_ft: Number(row.total_ft ?? 0), everests: Number(row.everests ?? 0) };
@@ -271,14 +289,14 @@ export async function fetchClimbingStats(personId?: string | null): Promise<Clim
 
 /** Summits reached — matched from hike GPS tracks against OSM peaks. */
 export async function fetchPeaksBagged(personId?: string | null): Promise<Peak[]> {
-  const { data, error } = await supabase.rpc('peaks_bagged', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('peaks_bagged', { p_profile: personId ?? undefined });
   if (error) return [];
   return (data ?? []) as Peak[];
 }
 
 /** How many US states / world countries we've actually set foot in (not bucket). */
 export async function fetchGeoCoverage(personId?: string | null): Promise<GeoCoverage | null> {
-  const { data, error } = await supabase.rpc('geo_coverage', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('geo_coverage', { p_profile: personId ?? undefined });
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
@@ -315,7 +333,7 @@ export async function fetchTrackingStatus(): Promise<TrackingStatus[]> {
 export async function setMyRating(placeId: string, rating: number | null): Promise<void> {
   const { error } = await supabase.rpc('set_my_rating', {
     p_place: placeId,
-    p_rating: rating,
+    p_rating: sqlNull(rating), // null clears the rating
   });
   if (error) throw error;
 }
@@ -355,9 +373,9 @@ export async function dateNightPick(
   radiusKm?: number,
 ): Promise<string | null> {
   const { data, error } = await supabase.rpc('date_night_pick', {
-    p_lat: lat ?? null,
-    p_lng: lng ?? null,
-    p_radius_km: radiusKm ?? null,
+    p_lat: lat ?? undefined,
+    p_lng: lng ?? undefined,
+    p_radius_km: radiusKm ?? undefined,
   });
   if (error) return null;
   return (data as string | null) ?? null;
@@ -422,8 +440,8 @@ export async function matchPhoto(
   if (!takenAt) return [];
   const { data, error } = await supabase.rpc('match_photo', {
     p_taken_at: takenAt,
-    p_lat: lat ?? null,
-    p_lng: lng ?? null,
+    p_lat: lat ?? undefined,
+    p_lng: lng ?? undefined,
   });
   if (error) return [];
   return (data ?? []) as PhotoSuggestion[];
@@ -561,7 +579,7 @@ const VISIT_COLS =
 export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {
   const { error } = await supabase.rpc('set_visit_solo', {
     p_visit: visitId,
-    p_profile: profileId,
+    p_profile: sqlNull(profileId), // null = both
   });
   if (error) throw error;
 }
@@ -570,7 +588,7 @@ export async function setVisitSolo(visitId: string, profileId: string | null): P
 export async function setPlaceSolo(placeId: string, profileId: string | null): Promise<void> {
   const { error } = await supabase.rpc('set_place_solo', {
     p_place: placeId,
-    p_profile: profileId,
+    p_profile: sqlNull(profileId), // null = both
   });
   if (error) throw error;
 }
@@ -680,7 +698,9 @@ export async function fetchSpatialMembers(containerId: string): Promise<string[]
 export async function fetchPlaceVisitCounts(
   profileId: string | null,
 ): Promise<Map<string, number>> {
-  const { data, error } = await supabase.rpc('place_visit_counts', { p_profile: profileId });
+  const { data, error } = await supabase.rpc('place_visit_counts', {
+    p_profile: profileId ?? undefined,
+  });
   if (error) throw error;
   const out = new Map<string, number>();
   for (const row of (data ?? []) as Array<{ place_id: string; visits: number }>) {
@@ -691,7 +711,7 @@ export async function fetchPlaceVisitCounts(
 
 export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('place_ids_for_view', {
-    p_profile: profileId ?? null,
+    p_profile: profileId ?? undefined,
   });
   if (error) throw error;
   return new Set(
@@ -769,7 +789,7 @@ export async function addVisit(
     p_place: placeId,
     p_start: start,
     p_end: end,
-    p_client_key: clientKey ?? null,
+    p_client_key: clientKey ?? undefined,
   });
   if (error) throw error;
   return data as unknown as Visit;
@@ -813,7 +833,7 @@ export async function setPlaceName(
   const { data, error } = await supabase.rpc('set_place_name', {
     p_place: placeId,
     p_name: name,
-    p_scope: scope,
+    p_scope: scope ?? undefined,
   });
   if (error) throw error;
   return data as unknown as Place;

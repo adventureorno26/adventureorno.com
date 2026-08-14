@@ -1,7 +1,7 @@
 // Strava client helpers: mileage aggregates, per-place activities/counts, OAuth
 // connect link, and the paginated backfill driver.
 
-import { supabase } from './supabase';
+import { supabase, sqlNull } from './supabase';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
@@ -13,7 +13,7 @@ const ACTIVITY_COLS =
 export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {
   const { error } = await supabase.rpc('set_activity_solo', {
     p_activity: activityId,
-    p_profile: profileId,
+    p_profile: sqlNull(profileId), // null = both; the argument is required
   });
   if (error) throw error;
 }
@@ -26,7 +26,7 @@ export const STATS_CUTOFF = '2025-12-21';
 /** Mileage by type. Pass a profile id for "just that person"; omit for both. */
 export async function fetchMileage(personId?: string | null): Promise<MileageRow[]> {
   const { data, error } = await supabase.rpc('mileage_by_person', {
-    p_profile: personId ?? null,
+    p_profile: personId ?? undefined,
   });
   if (error) throw error;
   return (data ?? []) as MileageRow[];
@@ -143,7 +143,7 @@ export interface WanderStats {
 /** Headline stats from the visit-level model: places (each counts once), miles,
  *  and trips (per occurrence). Pass a profile id for that person; omit for Both. */
 export async function fetchWanderStats(personId?: string | null): Promise<WanderStats> {
-  const { data, error } = await supabase.rpc('wander_stats', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('wander_stats', { p_profile: personId ?? undefined });
   if (error) throw error;
   const r = (data?.[0] ?? {}) as Partial<WanderStats>;
   return {
@@ -179,7 +179,7 @@ export async function assignActivityToRace(
   const { data, error } = await supabase.rpc('assign_activity_to_race', {
     p_activity: activityId,
     p_race_name: raceName,
-    p_race_place: racePlaceId ?? null,
+    p_race_place: racePlaceId ?? undefined,
   });
   if (error) throw error;
   return data as string;
@@ -187,14 +187,14 @@ export async function assignActivityToRace(
 
 /** Runnings per distance bucket for a person (null = Both). */
 export async function fetchRaceStats(personId?: string | null): Promise<RaceStat[]> {
-  const { data, error } = await supabase.rpc('race_stats', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('race_stats', { p_profile: personId ?? undefined });
   if (error) throw error;
   return (data ?? []) as RaceStat[];
 }
 
 /** One row per named race: how many times run, miles, and distance bucket. */
 export async function fetchRacesList(personId?: string | null): Promise<RaceRow[]> {
-  const { data, error } = await supabase.rpc('races_list', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('races_list', { p_profile: personId ?? undefined });
   if (error) throw error;
   return (data ?? []) as RaceRow[];
 }
@@ -212,7 +212,7 @@ export interface TripRow {
 }
 
 export async function fetchTripsList(personId?: string | null): Promise<TripRow[]> {
-  const { data, error } = await supabase.rpc('trips_list', { p_profile: personId ?? null });
+  const { data, error } = await supabase.rpc('trips_list', { p_profile: personId ?? undefined });
   if (error) throw error;
   return (data ?? []) as TripRow[];
 }
@@ -357,7 +357,7 @@ export async function updateActivity(id: string, name: string, type?: string): P
   const { error } = await supabase.rpc('update_activity', {
     p_id: id,
     p_name: name,
-    p_type: type ?? null,
+    p_type: type ?? undefined,
   });
   if (error) throw error;
 }
@@ -376,7 +376,7 @@ export async function createManualActivity(args: {
   const { data, error } = await supabase.rpc('create_manual_activity', {
     p_name: args.name,
     p_type: args.type,
-    p_place: args.placeId,
+    p_place: sqlNull(args.placeId), // an activity need not have a place
     p_polyline: args.polyline,
     p_distance: args.distance,
     p_lat: args.lat,

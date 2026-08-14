@@ -71,6 +71,12 @@ const RAW = import.meta.glob('../**/*.{ts,tsx}', {
   eager: true,
 }) as Record<string, string>;
 
+const HOOKS = import.meta.glob('../../../.githooks/*', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
 describe('no member is hardcoded', () => {
   it('has no hand-written person choice anywhere in the app', () => {
     const offenders: string[] = [];
@@ -83,5 +89,28 @@ describe('no member is hardcoded', () => {
       if (/Just\s+(Josh|Erica)\b/.test(code)) offenders.push(`${path} (a member named in a label)`);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The client stays typed, and the gate stays real.
+// ---------------------------------------------------------------------------
+describe('the generated types actually reach the code', () => {
+  it('creates the Supabase client with the Database generic', () => {
+    // Without `createClient<Database>`, `.from()` and `.rpc()` accept ANY string:
+    // a table that does not exist and an RPC that does not exist both typecheck.
+    // That is how a call to `trip_timeline` — never a function in this database —
+    // shipped and silently returned an empty list.
+    const [, src] = Object.entries(RAW).find(([p]) => p.endsWith('/supabase.ts')) ?? [];
+    expect(src, 'app/src/lib/supabase.ts should be readable').toBeTruthy();
+    expect(src).toMatch(/createClient<Database>\(/);
+  });
+
+  it('does not typecheck the app with the solution stub, which checks nothing', () => {
+    // `app/tsconfig.json` is `{"files": [], "references": [...]}`. `tsc -p` does not
+    // follow project references, so that command compiles NOTHING and always exits 0.
+    // The hook and CI must use `tsc -b`.
+    const [, hook] = Object.entries(HOOKS).find(([p]) => p.endsWith('pre-commit')) ?? [];
+    if (hook) expect(hook).not.toMatch(/tsc -p .*tsconfig\.json/);
   });
 });
