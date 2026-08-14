@@ -392,59 +392,11 @@ export interface Peak {
   place_id: string | null; // the place/trail where it was bagged (for its card)
 }
 
-export interface TripTimelineItem {
-  day: string;
-  kind: 'activity' | 'spot';
-  title: string;
-  sub: string | null;
-  place_id: string | null;
-}
-export interface TripNote {
-  id: string;
-  day: string;
-  note: string;
-}
-
-/**
- * Auto day-by-day timeline of everything that happened on a trip.
- *
- * ⚠️ THIS HAS NEVER WORKED. It called `trip_timeline`, an RPC that does not exist in
- * this database and, as far as the migration history shows, never did — and then
- * swallowed the resulting error with `if (error) return []`, so it returned an empty
- * timeline forever instead of failing. Typing the Supabase client is what surfaced it.
- *
- * It has ZERO callers, and it belongs to the retired trip-table model (§0.1: a trip is
- * a qualifying visit, never a table). Left in place rather than deleted because
- * removals need Erica's say-so; it now fails loudly instead of lying quietly.
- */
-export async function fetchTripTimeline(_tripId: string): Promise<TripTimelineItem[]> {
-  throw new Error(
-    'fetchTripTimeline is not implemented: the trip_timeline RPC does not exist. ' +
-      'A trip is a qualifying visit — read its contents with trip_contents / card_view.',
-  );
-}
-/** Manual per-day plan notes on a trip. */
-export async function fetchTripNotes(tripId: string): Promise<TripNote[]> {
-  const { data, error } = await supabase
-    .from('trip_notes')
-    .select('id, day, note')
-    .eq('trip_id', tripId)
-    .order('day');
-  if (error) return [];
-  return (data ?? []) as TripNote[];
-}
-export async function addTripNote(tripId: string, day: string, note: string): Promise<void> {
-  const { error } = await supabase.rpc('add_trip_note', {
-    p_trip: tripId,
-    p_day: day,
-    p_note: note,
-  });
-  if (error) throw error;
-}
-export async function deleteTripNote(id: string): Promise<void> {
-  const { error } = await supabase.rpc('delete_trip_note', { p_id: id });
-  if (error) throw error;
-}
+// The trip-as-a-table helpers — fetchTripTimeline, fetchTripNotes, addTripNote,
+// deleteTripNote and their types — were removed in §0.8 phase 8 step 1 (migration
+// 0182), along with the `trip_notes`/`trip_people` tables they wrote. Both tables were
+// empty and nothing called any of it. A trip is a qualifying VISIT (§0.1); its contents
+// come from `card_view`, and a note lives on the visit.
 
 export interface ClimbingStats {
   total_ft: number;

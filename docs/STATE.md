@@ -678,6 +678,38 @@ Do not ship this as one destructive migration.
 Every phase is its own commit with a plain-language message. Do not mix backup/Cloudflare/GitHub
 workflow repairs into the schema commits. Do not deploy production while required CI is red.
 
+### 0.8a PHASE 8 SEQUENCED — signed off 2026-08-14
+
+Phase 8 is the removal phase. It is **five migrations, smallest and most provable
+first**, because a removal that turns out to be wrong is the expensive kind of mistake.
+Each step states the precondition that makes it safe, and each was measured on
+production before being written — not assumed.
+
+| # | Removes | Precondition | Measured |
+| --- | --- | --- | --- |
+| 1 | `trip_people`, `trip_notes`, `add_trip_note`, `delete_trip_note`, and the dead frontend helpers | empty, no inbound FKs, no callers | **0 rows** each, **no** FKs, **0** callers ✅ |
+| 2 | superseded comments and tests describing retired rules | the rule they describe is genuinely gone | pending |
+| 3 | `visits.solo_profile`, `activities.solo_profile` | participant rows agree with the column, everywhere | visits disagreeing **0**, activities disagreeing **0** ✅ |
+| 4 | `places.part_of` + `places_sync_membership` | §0.7: **every reader uses `place_membership`** | ❌ **NOT MET** — see below |
+| 5 | `visits.is_trip` in favour of `trip_marked` | the two never disagree, and no row reads the raw column | disagreeing **0** ✅, rows switched in #49 ✅ |
+
+**Step 4 is blocked, and deliberately last.** `part_of` and `place_membership` agree
+perfectly in both directions today (19 = 19, 0 unmatched either way), but the gate is
+not agreement — it is that nothing READS `part_of` any more. The frontend still reads it
+in six places (`PlacePanel` sections and members, `containers.ts`, `MapView`) and WRITES
+it in four, and seven database functions use it. `part_of` is currently the **record**
+and `place_membership` the mirror (§8), so those writes are correct until the readers
+move. Step 4 therefore needs a frontend change and a `set_place_containers` RPC first,
+and only then the column and its trigger go.
+
+**Ordering rationale.** 1 has nothing to argue about. 2 is text. 3 is a large but proven
+DB change with parity measured at zero drift. 5 is small but touches the toggle Erica
+uses, so it goes after the model is otherwise settled. 4 is last because it is the only
+one whose precondition is currently false.
+
+Nothing here is bundled: §0.8 requires each phase to be its own commit with a
+plain-language message, and a removal PR mixed with a repair is a removal nobody read.
+
 ### 0.9 Tests that make the decision permanent
 
 Database tests must prove at least:
