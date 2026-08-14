@@ -164,10 +164,99 @@ export interface TripContent {
  * The places you went to during a trip.
  *
  * Cape Cod is a place AND the trip you took there; Linnell Landing is a place you
- * visited during it. The contents are derived from the trip's DATES — nothing is
- * stored, so marking or unmarking a trip changes them immediately and nothing can
- * drift. Every stored version of this (trip_stops, part_of, suggested trips) did.
+ * visited during it.
+ *
+ * ⚠️ The description this comment used to carry — "derived from the trip's DATES,
+ * nothing is stored" — was the old model, and it was the bug: any visit whose dates
+ * fell inside a trip's range was folded into it, at ANY place, so a restaurant in
+ * another state appeared inside a Cape Cod week. 0172 rewrote this onto
+ * `parent_visit_id`: a trip contains what someone explicitly put in it (§0.1).
+ *
+ * Prefer {@link fetchCardView}, which returns each visit's contents in the same
+ * payload as the count beside it.
  */
+/** One visit row on a card: everything the card draws for it, counted server-side. */
+export interface CardVisit {
+  id: string;
+  place_id: string;
+  start_date: string;
+  end_date: string | null;
+  note: string | null;
+  /** counts_as_trip: multi-day, OR marked by a person (§0.4). */
+  is_trip_qualified: boolean;
+  /** False when this visit is grouped inside another — it is not a separate occasion. */
+  is_headline: boolean;
+  parent_visit_id: string | null;
+  /** On a trail card, the section this visit was logged at. Null on the trail itself. */
+  segment: string | null;
+  people: { id: string; name: string | null }[];
+  photos: number;
+  videos: number;
+  routes: number;
+  children: number;
+  contents: {
+    visit_id: string;
+    place_id: string;
+    place_name: string;
+    start_date: string;
+    end_date: string | null;
+  }[];
+}
+
+/** The whole card, in one answer. Mode is derived from the arguments, never passed. */
+export interface CardView {
+  version: number;
+  mode: 'place' | 'trail' | 'visit';
+  can_edit: boolean;
+  place: {
+    id: string;
+    name: string;
+    address: string | null;
+    admin1: string | null;
+    lat: number | null;
+    lng: number | null;
+    is_trail: boolean;
+    cover_photo_id: string | null;
+    categories: string[];
+  };
+  visit: { id: string; start_date: string; end_date: string | null } | null;
+  ratings: { name: string | null; profile_id: string; rating: number }[];
+  visits: CardVisit[];
+  routes: { id: string; name: string | null; type: string; distance: number | null }[];
+  photos: { id: string; day: string | null; caption: string | null }[];
+  members: { id: string; name: string; rating: number | null; category: string }[];
+  totals: {
+    visits: number;
+    trips: number;
+    photos: number;
+    videos: number;
+    routes: number;
+    miles: number;
+    members: number;
+  };
+}
+
+/**
+ * THE card read model (§0.6). One request returns the header, the rows and the totals,
+ * and the totals are computed from the very rows returned — so a label cannot disagree
+ * with the list beneath it, which is how a card ended up saying "Visits (1)" above a
+ * list of two and a trail said 32 while its sections held 30 more.
+ *
+ * It also replaces a burst of requests: the visits, their photo and video counts, and a
+ * separate trip-contents call per trip.
+ */
+export async function fetchCardView(opts: {
+  placeId?: string;
+  visitId?: string;
+}): Promise<CardView> {
+  const { data, error } = await supabase.rpc('card_view', {
+    p_place: opts.placeId ?? undefined,
+    p_visit: opts.visitId ?? undefined,
+  });
+  if (error) throw error;
+  return data as unknown as CardView;
+}
+
 export async function fetchTripContents(visitId: string): Promise<TripContent[]> {
   const { data, error } = await supabase.rpc('trip_contents', { p_visit: visitId });
   if (error) return [];

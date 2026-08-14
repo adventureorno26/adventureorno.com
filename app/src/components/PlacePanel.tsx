@@ -12,9 +12,9 @@ import {
   fetchCityBoundary,
   fetchEntries,
   fetchMapPeople,
+  fetchCardView,
   fetchPlace,
   fetchPlaceRatings,
-  fetchPlaceVisitStats,
   fetchVisits,
   fetchVisitsForPlaces,
   newExperienceKey,
@@ -23,12 +23,12 @@ import {
   setPlaceName,
   canRenamePlace,
   setVisitIsTrip,
-  fetchTripContents,
   type TripContent,
   setVisitDates,
   setVisitSolo,
   updatePlace,
   type MapPerson,
+  type CardView,
 } from '../lib/data';
 import {
   activityDay,
@@ -211,15 +211,50 @@ export default function PlacePanel({
     [place.id, sectionIdKey],
   );
 
-  async function reloadVisits() {
-    const rows = await loadVisits().catch(() => []);
-    setVisits(rows);
-    setVisitStats(await fetchPlaceVisitStats(place.id).catch(() => ({})));
-    const trips = rows.filter((v) => v.is_trip);
-    const pairs = await Promise.all(
-      trips.map(async (v) => [v.id, await fetchTripContents(v.id).catch(() => [])] as const),
+  /** Spread one card payload into the pieces the card draws. Both the first load and
+   *  every reload go through here, so they cannot get out of step. */
+  function applyCard(card: CardView) {
+    setVisitStats(
+      Object.fromEntries(card.visits.map((v) => [v.id, { photos: v.photos, videos: v.videos }])),
     );
-    setTripContents(Object.fromEntries(pairs));
+    setTripContents(
+      Object.fromEntries(
+        card.visits
+          .filter((v) => v.contents.length > 0)
+          .map((v) => [
+            v.id,
+            v.contents.map((c) => ({
+              place_id: c.place_id,
+              place_name: c.place_name,
+              visit_id: c.visit_id,
+              start_date: c.start_date,
+              end_date: c.end_date ?? c.start_date,
+            })),
+          ]),
+      ),
+    );
+  }
+
+  async function reloadVisits() {
+    // ONE request for the counts and the contents (§0.6). This used to be
+    // `place_visit_stats` plus one `trip_contents` call per trip — N+1 requests whose
+    // answers could disagree with each other and with the list they labelled.
+    //
+    // The photo counts also change, for the better: place_visit_stats matched photos
+    // by DATE against the place and never looked at `photos.visit_id`, so a photo
+    // pinned to one visit was counted for every visit whose range covered its day.
+    // Measured on production: 175 of 177 photos are pinned, 10 visits' counts change,
+    // and none drops to zero.
+    try {
+      const [rows, card] = await Promise.all([loadVisits(), fetchCardView({ placeId: place.id })]);
+      setVisits(rows);
+      applyCard(card);
+    } catch (e) {
+      // Swallowing this showed an empty, confident card instead of saying it failed.
+      setError(
+        e instanceof Error ? `Could not load this card: ${e.message}` : 'Could not load this card.',
+      );
+    }
   }
 
   // Mark a visit as a trip, or unmark it. The ONLY way is_trip is ever set — it is
@@ -328,12 +363,28 @@ export default function PlacePanel({
     let active = true;
     setVisits(null);
     setNotes(null);
-    loadVisits()
-      .then((rows) => active && setVisits(rows))
-      .catch(() => active && setVisits([]));
-    fetchPlaceVisitStats(place.id)
-      .then((s) => active && setVisitStats(s))
-      .catch(() => active && setVisitStats({}));
+    // The trip contents used to be loaded ONLY by reloadVisits, never here, so opening
+    // a card showed a trip with nothing inside it until you happened to edit something.
+    // One card payload now feeds the first render as well.
+    void (async () => {
+      try {
+        const [rows, card] = await Promise.all([
+          loadVisits(),
+          fetchCardView({ placeId: place.id }),
+        ]);
+        if (!active) return;
+        setVisits(rows);
+        applyCard(card);
+      } catch (e) {
+        if (!active) return;
+        setVisits([]);
+        setError(
+          e instanceof Error
+            ? `Could not load this card: ${e.message}`
+            : 'Could not load this card.',
+        );
+      }
+    })();
     fetchEntries(place.id)
       .then((rows) => active && setNotes(rows))
       .catch(() => active && setNotes([]));
