@@ -3491,6 +3491,14 @@ export type Database = {
           visits: number
         }[]
       }
+      place_visit_people: {
+        Args: { p_place: string }
+        Returns: {
+          display_name: string
+          profile_id: string
+          visit_id: string
+        }[]
+      }
       place_visit_stats: {
         Args: { p_place: string }
         Returns: {

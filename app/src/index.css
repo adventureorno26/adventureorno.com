@@ -7071,3 +7071,11 @@ button.mi-row:hover {
   margin: 0 0 4px;
   font-size: 13px;
 }
+
+/* "Roma already has a visit 27–31 March. These join it…" — said before you save, so
+   joining an existing stay is a thing you can see coming rather than a thing that
+   happened. */
+.ps-join {
+  margin: 0 0 8px;
+  padding-left: 2px;
+}
