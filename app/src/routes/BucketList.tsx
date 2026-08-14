@@ -15,6 +15,7 @@ import type { Place } from '../lib/types';
 import { BucketIcon, PinIcon } from '../components/Icons';
 import MapSearch from '../components/MapSearch';
 import BucketMap from '../components/BucketMap';
+import { showSnack } from '../lib/snackbar';
 
 export default function BucketList() {
   const { profile } = useAuth();
@@ -48,6 +49,13 @@ export default function BucketList() {
     });
     try {
       await toggleWish(placeId);
+    } catch (e) {
+      // There was no catch here at all: the optimistic update stood, the failure
+      // surfaced as an unhandled rejection, and only the reconcile below hinted
+      // that anything had gone wrong.
+      showSnack({
+        message: e instanceof Error ? `Could not save that: ${e.message}` : 'Could not save that.',
+      });
     } finally {
       fetchWishes()
         .then(setWishes)
