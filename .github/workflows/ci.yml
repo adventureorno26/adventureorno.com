@@ -256,7 +256,15 @@ jobs:
       - name: Gitleaks (current tree)
         run: |
           VER=8.18.4
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" | tar -xz gitleaks
+          # --retry: this download has failed the build four times with curl (22) 503
+          # and curl (56), none of them a finding. A red check that means nothing
+          # teaches you to re-run without reading it.
+          # To a FILE, not a pipe: a retry that fires mid-stream would hand tar the
+          # tail of one attempt glued to the head of the next.
+          curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 20 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
           ./gitleaks detect --no-git --redact --exit-code 1 --verbose
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -277,7 +285,9 @@ jobs:
         if: needs.classify.outputs.security_deps == 'true'
         run: |
           VER=2.4.0
-          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${VER}/osv-scanner_linux_amd64" -o osv-scanner
+          curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 20 \
+            "https://github.com/google/osv-scanner/releases/download/v${VER}/osv-scanner_linux_amd64" \
+            -o osv-scanner
           chmod +x osv-scanner
           node scripts/check-osv.mjs ./osv-scanner
 
