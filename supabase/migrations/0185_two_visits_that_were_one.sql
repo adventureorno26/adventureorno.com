@@ -48,12 +48,26 @@ begin
     raise exception 'those visits are to different places — move one first if that is what you mean';
   end if;
 
-  -- Nothing may be left pointing at the visit that is about to go.
-  update public.photos      set visit_id = p_keep where visit_id = p_absorb;
-  update public.videos      set visit_id = p_keep where visit_id = p_absorb;
-  update public.activities  set visit_id = p_keep where visit_id = p_absorb;
-  update public.visits      set parent_visit_id = p_keep where parent_visit_id = p_absorb;
+  -- WIDEN THE DATES FIRST. The 0170 parent/child trigger refuses a child that falls
+  -- outside its trip's range, and a visit grouped inside the absorbed half is very
+  -- likely outside the surviving half's ORIGINAL dates — that is what made them look
+  -- like two stays. Repointing before widening fails with "the visit falls outside the
+  -- trip's dates", which is the trigger doing its job on my own bad ordering.
+  update public.visits
+     set start_date = least(v_keep.start_date, v_absorb.start_date),
+         end_date   = greatest(coalesce(v_keep.end_date, v_keep.start_date),
+                               coalesce(v_absorb.end_date, v_absorb.start_date)),
+         note       = coalesce(nullif(btrim(coalesce(v_keep.note, '')), ''),
+                               nullif(btrim(coalesce(v_absorb.note, '')), '')),
+         manual     = true
+   where id = p_keep
+  returning * into v_keep;
 
+  -- THEN UNION THE PEOPLE, still before repointing. 0170 also refuses a child holding
+  -- someone the trip does not: a visit grouped inside the absorbed half carries that
+  -- half's participants, so if Josh was only on those days, moving the child first
+  -- fails with "someone on that visit was not on the trip". Both refusals are the
+  -- constraint working — the merge simply has to happen in the order the model implies.
   insert into public.visit_profiles (visit_id, profile_id)
   select p_keep, profile_id from public.visit_profiles where visit_id = p_absorb
   on conflict do nothing;
@@ -67,16 +81,11 @@ begin
     from public.visit_evidence where visit_id = p_absorb
   on conflict do nothing;
 
-  -- The stay is the union of the two, and the note survives from whichever had one.
-  update public.visits
-     set start_date = least(v_keep.start_date, v_absorb.start_date),
-         end_date   = greatest(coalesce(v_keep.end_date, v_keep.start_date),
-                               coalesce(v_absorb.end_date, v_absorb.start_date)),
-         note       = coalesce(nullif(btrim(coalesce(v_keep.note, '')), ''),
-                               nullif(btrim(coalesce(v_absorb.note, '')), '')),
-         manual     = true
-   where id = p_keep
-  returning * into v_keep;
+  -- Nothing may be left pointing at the visit that is about to go.
+  update public.photos      set visit_id = p_keep where visit_id = p_absorb;
+  update public.videos      set visit_id = p_keep where visit_id = p_absorb;
+  update public.activities  set visit_id = p_keep where visit_id = p_absorb;
+  update public.visits      set parent_visit_id = p_keep where parent_visit_id = p_absorb;
 
   delete from public.visits where id = p_absorb;
 
