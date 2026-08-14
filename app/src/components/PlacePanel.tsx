@@ -46,6 +46,7 @@ import { showSnack } from '../lib/snackbar';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
+import AddActivity from './AddActivity';
 import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
@@ -1481,6 +1482,21 @@ export default function PlacePanel({
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {/* "+ Add an activity" — a run, a walk, a winery, a restaurant. It sits
+                            under the two lists it feeds, because that is what it adds to:
+                            a route joins What we did, a place joins Places visited and
+                            gets a card and a visit of its own. */}
+              {canEdit && open && isVisit && (
+                <AddActivity
+                  visitId={r.key}
+                  startDate={r.start}
+                  endDate={r.end}
+                  onAdded={async () => {
+                    await Promise.all([reloadVisits(), reloadActs()]);
+                  }}
+                />
               )}
 
               {canEdit && open && isVisit && (

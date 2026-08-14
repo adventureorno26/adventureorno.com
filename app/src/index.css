@@ -7006,3 +7006,45 @@ button.mi-row:hover {
   top: 6px;
   right: 8px;
 }
+
+/* "+ Add an activity" — the dropdown on the visit card, and the small form that
+   follows it. Deliberately built from the controls already on the card (.kind-select,
+   the .ve-dates date input) rather than a new visual language: it sits between the
+   two lists it feeds, so it must not read as a different kind of thing. No icons. */
+.add-activity {
+  padding: 0 10px 8px;
+}
+.aa-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.aa-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.aa-form input,
+.aa-form select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 7px;
+}
+/* The name is the field she is actually here to fill in; miles is an aside. */
+.aa-form label:first-child input {
+  min-width: 160px;
+}
+.aa-form input[inputmode='decimal'] {
+  width: 72px;
+}
+.aa-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
