@@ -6,7 +6,67 @@ CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` �
 are recoverable from git history if a decision needs looking up. Do not recreate them:
 plans go HERE.
 
-Last updated: 2026-08-12.
+Last updated: 2026-08-14.
+
+## NOW — the order of work (locked 2026-08-14)
+
+The immediate product is a reliable private web app for **Erica and Josh**. The future
+commercial Apple and Android product is named **Flok**. The two goals share a core, but
+commercial scale must not destabilize the app Erica and Josh are trying to use today.
+
+The sequence is:
+
+1. **Stabilize the private core.** Place, visit, trip, trail, card, saves, imports,
+   photos/videos, statistics, authentication, backup, CI and production deployment must
+   agree and work for both accounts.
+2. **Self-host the map.** Finish the MapLibre + PMTiles path in Phase 4, approve the
+   visual palette, cut production over with rollback, then remove paid basemap dependence.
+3. **Build the complete web feature set.** The one-page editing flow, collaborative trip
+   planning, Together approvals, remaining importers, and the other work recorded below
+   are queued here. They are not cancelled or abandoned.
+4. **Build Flok for Apple and Android, then commercialize.** Reuse the proven domain
+   model and APIs; add tenancy, privacy boundaries, billing, legal/provider compliance,
+   support and native-only integrations only after the private core is dependable.
+
+**“Later” means sequenced, not postponed indefinitely.** Do not delete desired features
+to make the schedule look shorter. Finish one vertical slice, deploy it, verify it in the
+real app, and then take the next slice.
+
+### Current stabilization gate
+
+Do not begin a new feature lane until all items below are true for the same commit:
+
+- [x] Production migration `0177_the_card_answers_in_one_call` is applied and recorded.
+  Verified 2026-08-14: all 177 migrations are in the ledger, `videos.visit_id` exists,
+  and production `card_view` is version 2.
+- [x] A current recoverable backup exists before that migration. Verified 2026-08-14:
+  encrypted database backup from today, five generations retained, and 362 media objects
+  mirrored.
+- [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
+  saved result.
+- [ ] Josh can sign in and perform every action allowed to the editor role without seeing
+  an unexplained permission or save failure.
+- [ ] Map, place card, visit page, Add/import, photos, stats and logout pass a short manual
+  smoke test on the production commit recorded in `/version.json`.
+- [ ] Required CI is green on Node 22; production deploys only the exact gated SHA.
+- [ ] Backup freshness and migration-ledger checks are hard production-deploy gates.
+- [ ] GitHub CLI authentication is healthy for the repository owner, so commits, checks,
+  PRs and deploy evidence can be inspected instead of guessed.
+
+### How to move faster without repeating work
+
+- Keep **one active implementation PR**. Finish, deploy and verify it before starting the
+  next feature PR. Separate worktrees are allowed for independent documentation or audit
+  work, but two agents must not edit the same files at the same time.
+- Database contract first: migration → generated types → backend/RPC → frontend → tests →
+  production verification. Never deploy a frontend that requires an unapplied migration.
+- Use a small required gate for every PR: format/lint, unit tests, database migration tests,
+  build, and one deterministic smoke test. Run broader browser/accessibility/security suites
+  nightly or when their files change; do not remove the tests that protect data and deploys.
+- Batch Erica's visual decisions into one preview gate per feature. Code after approval,
+  then verify the finished production screen once.
+- Record every accepted decision and its proof here. Do not create another backlog,
+  decisions log or competing agent instruction file.
 
 ---
 
@@ -1007,8 +1067,7 @@ CONTRADICTS something written here. Otherwise keep working (see
 ## 5. The plan
 
 Each phase ends the same way: **it works when Erica drives it**, a test that fails if it
-regresses, an entry in `decisions.md`, and this file updated. Not "deployed and probably
-fine."
+regresses, and this file records the decision and proof. Not "deployed and probably fine."
 
 **The verification rule (see CLAUDE.md):** every change is opened in the app, on
 production, after it deploys. Done means seen on the screen. When the database and the
@@ -1019,43 +1078,29 @@ screen disagree, the screen is right.
 This file. Every other planning document was archived, then DELETED (2026-08-11). The "removed on
 purpose" register in §7 exists so nothing is silently lost again.
 
-### Phase 1 — Make erasure impossible  *(audited 2026-08-11: NOT done)*
+### Phase 1 — Stabilize the private core  *(ACTIVE)*
 
 - ✅ **The build FAILS when a required `VITE_*` is empty** (2026-08-11). A Vite plugin,
   `requireClientEnv` in `app/vite.config.ts`, refuses to build without the Supabase URL
   and key, or without at least one map source. Proven by blanking each and watching the
   build exit 1. `scripts/check-env-example.mjs` still only checks DOCUMENTATION — the two
   together now cover both halves.
-- **Cloudflare Pages holds no environment variables** (verified via the API). Corrected
-  2026-08-11: this is NOT currently dangerous, because the live project
-  (`adventureorno`, which serves adventureorno.com) is **direct-upload only** — it has no
-  git source and no build command, so Cloudflare never builds it. Every deploy is a
-  bundle built here with `.env.local` supplying the values.
-- **There is a SECOND Pages project, `adventureorno-com`, connected to GitHub with an
-  empty build command.** It serves only `adventureorno-com.pages.dev`. It is a leftover,
-  and it already causes confusion: the "Cloudflare Pages" check on every PR points at it,
-  not at the project that actually serves the site. Decide whether to delete it.
-- ✅ **Deploys go through CI on green — on CLOUDFLARE, not GitHub Actions** (2026-08-11).
-  Erica is not upgrading the GitHub plan, so the gate moved to Cloudflare Pages, which
-  builds from git on its free tier. The build command is
-  `npm ci && npm run lint && npm run test && npm run build`, so **a failing test or a
-  lint error fails the deployment**. Verified on a real build: eslint + prettier, 88 app
-  tests, 20 worker tests, then the Vite build — and the bundle it produced is
-  byte-identical to the hand-deployed one.
-  Cloudflare now holds every `VITE_*` (set 2026-08-11, production and preview) plus
-  `NODE_VERSION=22`, so its builds are not blank.
-  **Remaining:** the custom domain still points at the OLD direct-upload project
-  (`adventureorno`), so this pipeline currently publishes only to
-  `adventureorno-com.pages.dev`. Moving the domain makes it the real deploy path —
-  it is outward-facing, so it needs Erica's word first.
-  GitHub Actions stays for the heavy suite when minutes allow; it is no longer the gate.
-- An acceptance list for the things she cares about, as tests that fail loudly.
+- ✅ The only live Pages project is `adventureorno-com`; it owns `adventureorno.com` and
+  `www.adventureorno.com`. Do not create another project. The earlier two-project notes
+  were historical and are superseded by §12b.
+- ✅ Production deployment is a GitHub Actions job behind the release gate and the
+  `PRODUCTION_DEPLOY_ENABLED` switch. Cloudflare automatic production-branch deployment
+  must stay disabled. The workflow builds the exact SHA and verifies it through
+  `/version.json`; §6 and §12b are authoritative.
+- **Remaining:** make production deployment refuse to run when the repository contains a
+  migration that is absent from the production ledger; keep backup freshness visible;
+  complete the Erica/Josh acceptance list at the top of this file.
 
 ### Phase 2 — Make the model show through ✅ (2026-08-10)
 
 (see above)
 
-### Phase 3 — The one page  *(not started)*
+### Phase 3 — The one page  *(QUEUED AFTER CORE + MAP; not cancelled)*
 
 Inbox → **Edit**, absorbing add / import / ingest / sort / edit / organize / delete / fix
 per §3. `/add` is the door; these still exist as separate surfaces and must fold into it
@@ -1068,6 +1113,76 @@ and the Settings → Data grid. Plus:
   your Google Photos" banner).
 
 ### Phase 4 — A map we own  *(THE GOAL. Mapbox is a stopgap, not the destination)*
+
+**Authoritative implementation plan, 2026-08-14. This block supersedes older cost,
+project-status and architecture claims later in Phase 4.**
+
+MapLibre GL JS is the renderer, not the map service. It is open source and has no usage
+fee, but storage, requests, geocoding, routing, imagery and operations still have costs.
+Use OpenStreetMap-derived vector data packaged as PMTiles from Protomaps. Never point a
+commercial app at the community `tile.openstreetmap.org` servers.
+
+Architecture:
+
+```text
+MapLibre in the web app
+        │ HTTP range requests
+        ▼
+tiles.adventureorno.com — read-only tile Worker + edge cache
+        │
+        ▼
+Cloudflare R2 — versioned PMTiles, glyphs, sprite and style artifacts
+
+Separate admin/copy Worker — imports and verifies a new snapshot; never serves users
+```
+
+Build it in this order:
+
+1. **Inventory before creating anything.** Confirm the one Cloudflare account, the live
+   Pages project, `aon-basemap` bucket, current copy Worker/upload state, custom-domain
+   ownership and secrets. Reuse or remove intentionally; never create another Pages
+   project to escape an unclear configuration.
+2. **Choose a right-sized first extract.** Start with the regions Erica and Josh actually
+   use plus enough context for their routes. Do not copy a whole planet merely because it
+   is available. Record measured file size, request volume and monthly cost; widen coverage
+   when the product needs it.
+3. **Finish resumable import.** Copy to a versioned key such as
+   `maps/planet-YYYYMMDD.pmtiles`, retain progress outside the live object, cap concurrency
+   below Worker connection limits, and make retries idempotent.
+4. **Build a separate read-only tile Worker.** Support byte ranges correctly, set immutable
+   cache headers for versioned assets, restrict CORS to approved origins, expose a health
+   endpoint, and never put copy/admin controls on its public routes.
+5. **Self-host every visual dependency.** Store glyphs and sprites with the PMTiles/style;
+   inspect the browser network panel to prove the rendered basemap does not call Mapbox,
+   MapTiler, Protomaps build storage or community OSM tile servers.
+6. **Approve the palette before styling production.** Provide Erica with visual previews
+   of the same recognizable area, zoom and overlays in at least these three directions:
+   `Night Navy` (current dark card tokens), `Ink + Sand` (warmer land and restrained blue
+   water), and `Slate + Moss` (charcoal base with muted natural greens). Each preview must
+   show roads, water, parks/trails, labels, place markers, a selected marker, a route and
+   the card beside the map on desktop and mobile. Record the chosen screenshot or artifact
+   link here; hex values alone are not approval.
+7. **Integrate behind a source switch.** Preserve map camera, markers, clusters, routes,
+   popups and reduced-motion behavior. Keep the current basemap as an explicit rollback
+   path until the self-hosted source passes production smoke tests.
+8. **Cut over and prove it.** Test known locations and routes, range requests, cache hits,
+   mobile use, keyboard access, failure behavior and `/version.json`. Watch errors and R2
+   request volume for 24 hours before removing the temporary fallback.
+9. **Refresh monthly and on demand.** Import a new versioned snapshot, validate PMTiles
+   header and size, render known locations, switch one configuration pointer, retain the
+   prior version for rollback, then delete older versions according to retention policy.
+
+Commercial boundary: self-hosting OSM-derived tiles is compatible with a commercial app
+when attribution and relevant data licenses are followed. It does **not** provide
+geocoding, routing, satellite imagery, traffic or Strava data rights. Keep those as
+separate replaceable services and review provider terms before Flok charges users.
+
+**Phase 4 is done only when** Erica approves a rendered palette, the production map and
+route overlays work for both accounts, third-party basemap calls are absent, attribution
+is visible, cost/usage monitoring exists, refresh and rollback are documented and tested,
+and the old dependency can be disabled without blanking the app.
+
+#### Historical map research (keep for evidence; do not execute over the plan above)
 
 The point is **not to be limited by somebody else's charges, and not to be switchable-off
 by somebody else**. MapTiler proved the second half by suspending the account and taking
@@ -1139,10 +1254,19 @@ saturation of her connection.
 and weather (Open-Meteo). Self-hosting search is a separate decision — Nominatim/Photon
 are the options.
 
-### Phase 5 — Commercial readiness  *(not started; deliberately last)*
+### Phase 5 — Complete web features, then native Flok  *(QUEUED; not cancelled)*
 
-Multi-tenant Spaces, per-tenant quotas, branding, install flows. Two constraints already
-established and not negotiable by wishing:
+First finish the web features recorded in this file on top of the stable private core:
+the one-page edit flow, collaborative planning, Together approvals, remaining importers,
+and approved card/map work. Then build native Apple and Android clients named **Flok**
+against versioned APIs rather than forking the business rules into three implementations.
+
+Commercial readiness includes tenant isolation, per-tenant quotas, account deletion and
+export, billing/entitlements, privacy/terms/consent, abuse controls, observability, support,
+app-store release automation and tested data migration from AdventureOrNo. These are real
+deliverables, not reasons to rewrite the private app today.
+
+Two provider constraints are already established and not negotiable by wishing:
 
 - **Google Photos can no longer answer "photos from that day."** The library scopes were
   removed in March 2025; the Picker returns no GPS and cannot search by date or location.
@@ -1903,23 +2027,23 @@ A place attaches to a container two ways:
 - **spatially** — coordinates inside a `boundary` polygon (cities, regions)
 - **by explicit link** — `place_membership`, for trails and destinations
 
-`place_membership` is canonical. `places.part_of` is the legacy array that the
-membership trigger mirrors; write through `part_of`, read from `place_membership`.
+`place_membership` is canonical. `places.part_of` is a compatibility mirror only.
+Write relationships through the canonical mutation API from §0.3; never add a new direct
+writer to `part_of`.
 
 #### The statistics
 
 Every stat uses the same view rule, so they can never disagree:
 
-```
-p_profile IS NULL  ->  visits where solo_profile IS NULL          ("Both")
-otherwise          ->  that person's visits PLUS the Both visits
-```
+Use `accepted_visits` joined to `visit_profiles`. An absent participant row means unknown,
+not "Both"; shared attribution requires explicit participant rows. The older
+`solo_profile IS NULL` rule is retired compatibility history.
 
 | Stat   | Definition                                                         |
 | ------ | ------------------------------------------------------------------ |
 | Places | distinct places with a qualifying visit, where`counts_as_place`  |
 | Visits | count of visit rows (the map badge = number of visits, never days) |
-| Trips  | count of qualifying visits where`is_trip` and `status='taken'` |
+| Trips  | count of accepted top-level visits where canonical `counts_as_trip` is true |
 | Miles  | sum of`activities.distance`, attributed the same way             |
 
 #### Naming (migrations 0129–0131)
@@ -1987,7 +2111,10 @@ database and the screen disagree, the screen is right.
 #### Stack (do not substitute without asking)
 
 - Frontend: React 18 + Vite + TypeScript. MapLibre GL JS v5 for all maps. Deployed to Cloudflare Pages.
-- Basemap: MapTiler (key in env `VITE_MAPTILER_KEY`). Geocoding: MapTiler Geocoding API.
+- Current basemap: Mapbox raster fallback rendered by MapLibre GL JS v5. Target basemap:
+  self-hosted Protomaps PMTiles in Cloudflare R2 through the read-only tile Worker in
+  Phase 4. Geocoding currently uses Mapbox with a MapTiler fallback; it is a separate
+  replaceable service, not part of the self-hosted basemap.
 - Backend: Supabase — Postgres 15 with PostGIS, Auth, Edge Functions (Deno), pg_cron.
 - Photo storage: Cloudflare R2, accessed only through the `photo-gateway` Worker (upload + signed reads).
 - Workers: Wrangler-managed, in `/workers`. Edge Functions in `/supabase/functions`.
@@ -2050,8 +2177,8 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
 - `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (the `sb_publishable_...` key) are
   client-safe and live in `.env.local` / Pages env vars. The **service_role key is never
   committed, printed, or logged** — Supabase/Wrangler secrets and `.env.local` only.
-- `VITE_MAPTILER_KEY` is client-safe; the key is domain-restricted to adventureorno.com +
-  localhost in the MapTiler dashboard.
+- `VITE_MAPBOX_TOKEN` and `VITE_MAPTILER_KEY` are client-side fallback credentials and
+  must be origin-restricted in their provider dashboards. Neither is the target basemap.
 - Actual key values: see `.env.local` (gitignored) — MANUAL-SETUP.md records the
   provider/dashboard source, never the value.
 
@@ -2069,8 +2196,9 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
 
 #### Conventions
 
-- Every phase ends with: migrations applied, `npm run lint && npm run test` clean, deployed
-  preview verified, PR opened, and a short entry appended to `/docs/decisions.md`.
+- Every phase ends with: migrations applied and recorded, `npm run lint && npm run test`
+  clean, deployed preview verified, PR opened, and the decision/proof recorded in this
+  file. Do not recreate `/docs/decisions.md`.
 - Secrets only via Wrangler secrets / Supabase secrets / `.env.local` (gitignored). Never commit
   keys. `.env.example` lists every var with a comment.
 - Small commits with imperative messages.
@@ -2220,17 +2348,12 @@ project; do not create a replacement project.
 No step here authorizes a production change. Verify the target project, commit,
 environment, and backup/rollback path before acting.
 
-#### Phase 1: stop red commits from auto-promoting
+#### Production-branch auto-deploy is disabled
 
-The project currently treats `main` as its production branch and can deploy even
-when repository CI is red. Freeze that path first:
-
-1. Cloudflare dashboard → **Workers & Pages** → `adventureorno-com` →
-   **Settings** → **Builds & deployments** → **Configure Production deployments**.
-2. Clear **Enable automatic production branch deployments** and save. Keep preview
-   deployments enabled if they are useful; they do not control the custom domain.
-3. Push no production deployment as part of this setting change. Confirm the
-   existing known deployment remains served.
+This safety change is complete. Keep **automatic production branch deployments** disabled
+for `adventureorno-com`. The only production path is the gated `deploy-production` job in
+`.github/workflows/ci.yml`; do not re-enable Cloudflare Git integration as a second path.
+Preview deployments may remain enabled because they do not control the custom domain.
 
 Cloudflare documents this control in
 [Branch deployment controls](https://developers.cloudflare.com/pages/configuration/branch-build-controls/).
@@ -2274,21 +2397,13 @@ The command requires `CLOUDFLARE_ACCOUNT_ID` and a scoped
 test `/login` and `/no-such-page`; confirm the deployment's commit and production
 alias in Cloudflare before considering the promotion complete.
 
-#### Required end state: CI-gated promotion
+#### CI-gated promotion is implemented
 
-After authenticated/mutating Playwright is green on fictional disposable data:
-
-1. Create a Cloudflare API token limited to **Account / Cloudflare Pages / Edit**
-   for the correct account.
-2. Add `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and the real production
-   build-time values as GitHub Actions environment secrets. Protect a GitHub
-   environment named `production` with required reviewer approval.
-3. Add a deploy job that runs only for a push to `main`, declares `needs` for
-   every required CI job, rebuilds from that same checked-out SHA, and runs the
-   Wrangler command above. Do not use `workflow_run` with untrusted PR artifacts.
-4. Keep Cloudflare automatic production deployments disabled. Prove the gate by
-   observing that a deliberately failing test commit cannot create a production
-   deployment, then promote a fully green commit.
+`.github/workflows/ci.yml` already runs `deploy-production` only for a green push to
+`main` when `PRODUCTION_DEPLOY_ENABLED=true`, rebuilds the exact SHA, deploys it to
+`adventureorno-com`, and checks production `/version.json`. Keep its Cloudflare token
+scoped to Pages edit for the correct account. The remaining hardening is to require a
+fresh backup and `STRICT=1 npm run check:ledger` before the build is uploaded.
 
 Cloudflare's official pattern is documented in
 [Direct Upload with continuous integration](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/).
