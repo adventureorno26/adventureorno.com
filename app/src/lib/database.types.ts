@@ -2660,6 +2660,26 @@ export type Database = {
           who: string[]
         }[]
       }
+      add_activity_option: {
+        Args: { p_kind: string; p_label: string; p_type?: string }
+        Returns: {
+          active: boolean
+          activity_type: string | null
+          created_at: string
+          created_by: string | null
+          kind: string
+          label: string
+          place_category: string | null
+          slug: string
+          sort: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "activity_options"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       add_activity_to_visit: {
         Args: {
           p_client_key?: string

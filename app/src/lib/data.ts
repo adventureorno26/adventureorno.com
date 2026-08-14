@@ -257,6 +257,90 @@ export async function fetchCardView(opts: {
   return data as unknown as CardView;
 }
 
+/** One entry in the "+ Add an activity" dropdown. The list is DATA, not a hardcoded
+ *  array, so adding an option is a row rather than a deploy. */
+export interface ActivityOption {
+  slug: string;
+  label: string;
+  /** route = something you did, on this visit. place = somewhere you went, which
+   *  becomes a place with its own card and its own visits. */
+  kind: 'route' | 'place';
+}
+
+export async function fetchActivityOptions(): Promise<ActivityOption[]> {
+  const { data, error } = await supabase
+    .from('activity_options')
+    .select('slug, label, kind, sort')
+    .eq('active', true)
+    .order('sort');
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    slug: r.slug,
+    label: r.label,
+    kind: r.kind as 'route' | 'place',
+  }));
+}
+
+/** Log something we DID on this visit — a run, a walk, a hike, a ride.
+ *  Idempotent on the client key, so a retried save cannot log it twice. */
+export async function addActivityToVisit(args: {
+  visitId: string;
+  option: string;
+  name?: string | null;
+  distanceMeters?: number | null;
+  clientKey?: string;
+  /** Which day of the visit. Omitted = its first day. Outside it is an error. */
+  day?: string | null;
+}): Promise<void> {
+  const { error } = await supabase.rpc('add_activity_to_visit', {
+    p_visit: args.visitId,
+    p_option: args.option,
+    p_name: args.name ?? undefined,
+    p_distance_m: args.distanceMeters ?? undefined,
+    p_client_key: args.clientKey ?? undefined,
+    p_day: args.day ?? undefined,
+  });
+  if (error) throw error;
+}
+
+/** Add somewhere we WENT during this visit — a winery, a restaurant, a bar.
+ *  "A restaurant is a place. A winery is a place. the dates are visits to those
+ *  places." So this creates the place, groups it under this one, and gives it its
+ *  own visit. Coordinates default to the parent place's. */
+export async function addPlaceToVisit(args: {
+  visitId: string;
+  option: string;
+  name: string;
+  clientKey?: string;
+  /** The day you went. A dinner is ONE day, not the whole trip — inheriting the
+   *  parent's range made it multi-day, and a multi-day visit is a trip (§0.4). */
+  day?: string | null;
+}): Promise<{ id: string; name: string }> {
+  const { data, error } = await supabase.rpc('add_place_to_visit', {
+    p_visit: args.visitId,
+    p_option: args.option,
+    p_name: args.name,
+    p_client_key: args.clientKey ?? undefined,
+    p_day: args.day ?? undefined,
+  });
+  if (error) throw error;
+  return data as unknown as { id: string; name: string };
+}
+
+/** Add a new option to the dropdown. `kind` is the model decision: something you
+ *  did, or somewhere you went. */
+export async function addActivityOption(
+  label: string,
+  kind: 'route' | 'place',
+): Promise<ActivityOption> {
+  const { data, error } = await supabase.rpc('add_activity_option', {
+    p_label: label,
+    p_kind: kind,
+  });
+  if (error) throw error;
+  return data as unknown as ActivityOption;
+}
+
 export async function fetchTripContents(visitId: string): Promise<TripContent[]> {
   const { data, error } = await supabase.rpc('trip_contents', { p_visit: visitId });
   if (error) return [];

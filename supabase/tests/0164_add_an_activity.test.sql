@@ -177,8 +177,9 @@ begin
   select count(*) into n from public.activity_options where active;
   if n < 8 then raise exception 'FAIL: expected the 8 seeded options, got %', n; end if;
 
-  if has_function_privilege('anon', 'public.add_activity_to_visit(uuid,text,text,double precision,text)', 'EXECUTE')
-  or has_function_privilege('anon', 'public.add_place_to_visit(uuid,text,text,double precision,double precision,text)', 'EXECUTE')
+  -- signatures gained a trailing p_day in 0181
+  if has_function_privilege('anon', 'public.add_activity_to_visit(uuid,text,text,double precision,text,date)', 'EXECUTE')
+  or has_function_privilege('anon', 'public.add_place_to_visit(uuid,text,text,double precision,double precision,text,date)', 'EXECUTE')
   or has_table_privilege('anon', 'public.activity_options', 'SELECT') then
     raise exception 'FAIL: anon can reach the activity dropdown or its RPCs';
   end if;
