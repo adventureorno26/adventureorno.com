@@ -252,6 +252,21 @@ export interface CardView {
  * It also replaces a burst of requests: the visits, their photo and video counts, and a
  * separate trip-contents call per trip.
  */
+/**
+ * Merge two visits to the same place into one occasion.
+ *
+ * Everything moves — photos, videos, routes, participants, companions, evidence and
+ * anything grouped inside — and the dates widen to cover both. It refuses across
+ * places; moving a visit somewhere else is {@link moveVisit}, a different decision.
+ */
+export async function mergeVisits(keepId: string, absorbId: string): Promise<void> {
+  const { error } = await supabase.rpc('merge_visits', {
+    p_keep: keepId,
+    p_absorb: absorbId,
+  });
+  if (error) throw error;
+}
+
 export async function fetchCardView(opts: {
   placeId?: string;
   visitId?: string;

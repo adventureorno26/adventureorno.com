@@ -988,6 +988,7 @@ export default function PlacePanel({
         a.place_id && a.place_id !== place.id
           ? (allPlaces.find((p) => p.id === a.place_id)?.name ?? null)
           : null,
+      placeId: null as string | null, // an activity row is not a visit; never mergeable
       trip: false,
       target: { type: 'activity' as const, id: a.id },
     }));
@@ -1031,6 +1032,9 @@ export default function PlacePanel({
       end: v.end_date as string,
       sort: v.start_date,
       solo: soloBy.get(v.id) ?? null,
+      // merge_visits refuses across places, so an offer must not span a trail and
+      // one of its sections.
+      placeId: v.place_id as string | null,
       target: { type: 'visit' as const, id: v.id },
     }));
   // ONE ROW PER OUTING. Rolling a trail's sections in showed that 27 of the
