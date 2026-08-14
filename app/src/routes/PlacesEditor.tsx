@@ -28,9 +28,11 @@ import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import PhotoMatchReview from '../components/PhotoMatchReview';
 import AuthedImg from '../components/AuthedImg';
 import type { Photo, Place, Visit } from '../lib/types';
+import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
 
-type PersonKey = 'all' | 'mine' | 'josh' | 'both';
-type Who = 'both' | 'mine' | 'josh';
+/** 'all' | 'both' | 'mine' | a profile id — built from the real members. */
+type PersonKey = string;
+type Who = string;
 type RowStatus = 'saving' | 'saved' | 'error' | undefined;
 
 function fmtVisit(v: Visit): string {
@@ -101,7 +103,12 @@ export default function PlacesEditor() {
   useEffect(load, []);
 
   const meId = profile?.id ?? null;
-  const joshId = useMemo(() => people.find((p) => p.id !== meId)?.id ?? null, [people, meId]);
+  const whoOptions = useMemo(
+    () => whoChoices(people, meId, { everyone: 'together' }),
+    [people, meId],
+  );
+  /** Everyone except the signed-in member, in the order they appear. */
+  const others = useMemo(() => people.filter((x) => x.id !== meId), [people, meId]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -113,13 +120,13 @@ export default function PlacesEditor() {
       if (person === 'all') return true;
       const set = placePeople.get(p.id) ?? new Set<string>();
       const hasMe = meId ? set.has(meId) : false;
-      const hasJosh = joshId ? set.has(joshId) : false;
       if (person === 'mine') return hasMe;
-      if (person === 'josh') return hasJosh;
-      if (person === 'both') return hasMe && hasJosh;
-      return true;
+      // 'both' means EVERY member was there, which is the honest reading once
+      // there are three of us — it used to mean "me and the other one".
+      if (person === 'both') return people.every((x) => set.has(x.id));
+      return set.has(person);
     });
-  }, [places, q, person, placePeople, meId, joshId]);
+  }, [places, q, person, placePeople, meId, people]);
 
   function setRowStatus(id: string, s: RowStatus) {
     setStatus((cur) => ({ ...cur, [id]: s }));
@@ -170,17 +177,14 @@ export default function PlacesEditor() {
     return vs.find((v) => v.id === selVisit[p.id]) ?? vs[0];
   }
   function whoOfVisit(v: Visit): Who {
-    if (v.solo_profile == null) return 'both';
-    if (v.solo_profile === joshId) return 'josh';
-    return 'mine';
+    return whoKey(v.solo_profile, meId);
   }
   // Place-level fallback (no visits): from who has contributed anything here.
   function whoOfPlace(id: string): Who {
     const set = placePeople.get(id) ?? new Set<string>();
-    const hasMe = meId ? set.has(meId) : false;
-    const hasJosh = joshId ? set.has(joshId) : false;
-    if (hasMe && hasJosh) return 'both';
-    if (hasJosh && !hasMe) return 'josh';
+    if (people.length > 0 && people.every((x) => set.has(x.id))) return 'both';
+    const only = others.find((x) => set.has(x.id) && !(meId && set.has(meId)));
+    if (only) return only.id;
     return 'mine';
   }
   // Union of everyone across a place's visits: a visit with a solo profile counts
@@ -188,17 +192,16 @@ export default function PlacesEditor() {
   function peopleUnion(visits: Visit[]): Set<string> {
     const set = new Set<string>();
     for (const vv of visits) {
+      // A null solo profile means EVERYONE, which is every member — not the
+      // signed-in person plus one assumed other.
       if (vv.solo_profile) set.add(vv.solo_profile);
-      else {
-        if (meId) set.add(meId);
-        if (joshId) set.add(joshId);
-      }
+      else for (const x of people) set.add(x.id);
     }
     return set;
   }
 
   async function setWho(p: Place, key: Who) {
-    const profileId = key === 'both' ? null : key === 'mine' ? meId : joshId;
+    const profileId = whoProfileId(key, meId);
     const v = selectedVisit(p);
     setRowStatus(p.id, 'saving');
     try {
@@ -226,10 +229,8 @@ export default function PlacesEditor() {
         setPlacePeople((cur) => {
           const next = new Map(cur);
           const set = new Set<string>();
-          if (key === 'both') {
-            if (meId) set.add(meId);
-            if (joshId) set.add(joshId);
-          } else if (profileId) set.add(profileId);
+          if (key === 'both') for (const x of people) set.add(x.id);
+          else if (profileId) set.add(profileId);
           next.set(p.id, set);
           return next;
         });
@@ -440,22 +441,25 @@ export default function PlacesEditor() {
           className="pe-search"
         />
         <div className="pe-personfilter">
-          {(['all', 'mine', 'josh', 'both'] as const).map((k) => (
-            <button
-              key={k}
-              className={person === k ? 'on' : ''}
-              onClick={() => setPerson(k)}
-              type="button"
-            >
-              {k === 'all'
-                ? 'All'
-                : k === 'mine'
-                  ? 'Just me'
-                  : k === 'josh'
-                    ? 'Just Josh'
-                    : 'Together'}
-            </button>
-          ))}
+          {[{ key: 'all', label: 'All' }, ...whoOptions.filter((c) => c.key !== 'both')].map(
+            (c) => (
+              <button
+                key={c.key}
+                className={person === c.key ? 'on' : ''}
+                onClick={() => setPerson(c.key)}
+                type="button"
+              >
+                {c.label}
+              </button>
+            ),
+          )}
+          <button
+            className={person === 'both' ? 'on' : ''}
+            onClick={() => setPerson('both')}
+            type="button"
+          >
+            Together
+          </button>
         </div>
         <span className="label">{filtered.length} places</span>
       </div>
@@ -590,9 +594,11 @@ export default function PlacesEditor() {
                   </td>
                   <td className="pe-col-who">
                     <select value={who} onChange={(e) => void setWho(p, e.target.value as Who)}>
-                      <option value="both">Together</option>
-                      <option value="mine">Just me</option>
-                      <option value="josh">Just Josh</option>
+                      {whoOptions.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.label}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="pe-col-photos">

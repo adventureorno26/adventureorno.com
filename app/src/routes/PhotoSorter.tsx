@@ -23,9 +23,11 @@ import { enqueueUpload } from '../lib/uploadQueue';
 import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
 import type { Place } from '../lib/types';
+import { whoChoices, whoProfileId } from '../lib/participants';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
-type Who = 'both' | 'mine' | 'josh';
+/** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
+type Who = string;
 
 interface Item {
   id: string;
@@ -96,7 +98,7 @@ export default function PhotoSorter() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const meId = profile?.id ?? null;
-  const joshId = people.find((p) => p.id !== meId)?.id ?? null;
+  const whoOptions = whoChoices(people, meId, { everyone: 'together' });
 
   useEffect(() => {
     fetchPlaces()
@@ -322,7 +324,7 @@ export default function PhotoSorter() {
       // other visits that merely share the same month at this place (which would
       // overwrite a separate visit's attribution).
       const who = groupWho[g.id] ?? 'both';
-      const profileId = who === 'both' ? null : who === 'mine' ? meId : joshId;
+      const profileId = whoProfileId(who, meId);
       const days = new Set<string>(
         g.items
           .map((it) => (override ? override : (it.takenAt ?? '').slice(0, 10)))
@@ -543,9 +545,11 @@ export default function PhotoSorter() {
                             setGroupWho((cur) => ({ ...cur, [g.id]: e.target.value as Who }))
                           }
                         >
-                          <option value="both">Together</option>
-                          <option value="mine">Just me</option>
-                          <option value="josh">Just Josh</option>
+                          {whoOptions.map((c) => (
+                            <option key={c.key} value={c.key}>
+                              {c.label}
+                            </option>
+                          ))}
                         </select>
                       </label>
                     </div>
