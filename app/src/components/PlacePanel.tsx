@@ -295,7 +295,9 @@ export default function PlacePanel({
       // "leave as-is" meant the dropdown kept the value she picked while the
       // database kept the old one. It looked saved and was not.
       setError(
-        e instanceof Error ? `Could not change who was there: ${e.message}` : 'Could not change who was there.',
+        e instanceof Error
+          ? `Could not change who was there: ${e.message}`
+          : 'Could not change who was there.',
       );
     }
   }
@@ -368,7 +370,9 @@ export default function PlacePanel({
         .then(setRatings)
         .catch(() => undefined);
       setError(
-        e instanceof Error ? `Could not save that rating: ${e.message}` : 'Could not save that rating.',
+        e instanceof Error
+          ? `Could not save that rating: ${e.message}`
+          : 'Could not save that rating.',
       );
     }
   }

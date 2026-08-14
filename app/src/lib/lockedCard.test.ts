@@ -110,3 +110,19 @@ describe('the locked card — the sections, in the locked order', () => {
     expect(title, 'the name must come before the rating').toBeLessThan(rating);
   });
 });
+
+describe('a multi-day visit IS a trip', () => {
+  // §0.4: a visit counts as a trip when it is MULTI-DAY or someone marked it. The
+  // rows used to read the raw `is_trip` column, which only ever means "someone
+  // marked it" — so a week away nobody thought to mark did not read as a trip.
+  // Approved 2026-08-14; on the live data this moved 46 visits into the trip
+  // reading (9 marked, 55 qualifying).
+  it('decides from counts_as_trip, not from the marked flag alone', () => {
+    expect(CARD, 'the row must ask isTrip(), which reads is_trip_qualified').toMatch(
+      /trip:\s*isTrip\(v\)/,
+    );
+    expect(CARD, 'the raw marked column must not decide the row on its own').not.toMatch(
+      /trip:\s*v\.is_trip\b/,
+    );
+  });
+});
