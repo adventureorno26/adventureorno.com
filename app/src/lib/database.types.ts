@@ -2036,6 +2036,7 @@ export type Database = {
           source: string
           taken_at: string | null
           uploaded_by: string | null
+          visit_id: string | null
         }
         Insert: {
           content_type?: string
@@ -2050,6 +2051,7 @@ export type Database = {
           source?: string
           taken_at?: string | null
           uploaded_by?: string | null
+          visit_id?: string | null
         }
         Update: {
           content_type?: string
@@ -2064,6 +2066,7 @@ export type Database = {
           source?: string
           taken_at?: string | null
           uploaded_by?: string | null
+          visit_id?: string | null
         }
         Relationships: [
           {
@@ -2078,6 +2081,20 @@ export type Database = {
             columns: ["place_id"]
             isOneToOne: false
             referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
             referencedColumns: ["id"]
           },
         ]
