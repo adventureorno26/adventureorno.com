@@ -24,6 +24,7 @@ import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
 import type { Place } from '../lib/types';
 import { whoChoices, whoProfileId } from '../lib/participants';
+import { assignStayGroups } from '../lib/photoGroups';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
 /** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
@@ -31,7 +32,7 @@ type Who = string;
 
 interface Item {
   id: string;
-  groupId: string; // stable cluster key: place + month (a single visit/trip)
+  groupId: string; // stable cluster key: place + STAY (see lib/photoGroups)
   file?: File;
   photoId?: string;
   url?: string;
@@ -48,10 +49,10 @@ interface Group {
   placeId: string | null;
   placeName: string;
   items: Item[];
-  ym: string; // YYYY-MM (or 'nodate')
+  /** The stay's first day, for ordering. Was YYYY-MM, which is also how the
+   *  grouping used to work — see lib/photoGroups. */
+  startsOn: string;
 }
-
-const ym = (iso?: string): string => (iso ? iso.slice(0, 7) : 'nodate');
 
 // Earliest photo date in a group, as YYYY-MM-DD (prefills the editable visit date).
 function groupDay(its: Item[]): string {
@@ -77,10 +78,10 @@ function dateRangeLabel(items: Item[]): string {
     : `${short(ds[0])} – ${full(ds[ds.length - 1])}`;
 }
 
-/** Sort photos into places — grouped into VISITS (same place, different month =
+/** Sort photos into places — grouped into VISITS (same place, days that run together =
  *  a separate trip). Pick a batch (Google Photos, files, or your phone inbox);
  *  the engine proposes a place from each photo's date + your movement history,
- *  splits them into per-month visits, and you confirm who was on each. */
+ *  splits them into one visit per stay, and you confirm who was on each. */
 export default function PhotoSorter() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -121,7 +122,7 @@ export default function PhotoSorter() {
     let done = 0;
     const builtRaw = await mapPool(
       files,
-      async (file): Promise<Item> => {
+      async (file): Promise<Omit<Item, 'groupId'>> => {
         const [g, takenAt] = await Promise.all([
           readGps(file).catch(() => null),
           readTakenAt(file).catch(() => undefined),
@@ -132,7 +133,6 @@ export default function PhotoSorter() {
         setNote(`Matching ${done} of ${files.length}…`);
         return {
           id: `${Date.now()}-${Math.round(done)}-${file.name}`,
-          groupId: `${top?.place_id ?? 'none'}::${ym(takenAt)}`,
           file,
           url: URL.createObjectURL(file),
           takenAt,
@@ -145,7 +145,7 @@ export default function PhotoSorter() {
       },
       5,
     );
-    setItems(builtRaw.filter((x): x is Item => x != null));
+    setItems(assignStayGroups(builtRaw.filter((x) => x != null) as Omit<Item, 'groupId'>[]));
     setNote(null);
     setPhase('review');
   }
@@ -162,14 +162,13 @@ export default function PhotoSorter() {
     let done = 0;
     const built = await mapPool(
       photos,
-      async (ph): Promise<Item> => {
+      async (ph): Promise<Omit<Item, 'groupId'>> => {
         const cands = await matchPhoto(ph.taken_at ?? null, ph.lat, ph.lng).catch(() => []);
         const top = cands[0];
         done++;
         setNote(`Matching ${done} of ${photos.length}…`);
         return {
           id: ph.id,
-          groupId: `${top?.place_id ?? 'none'}::${ym(ph.taken_at ?? undefined)}`,
           photoId: ph.id,
           takenAt: ph.taken_at ?? undefined,
           lat: ph.lat ?? undefined,
@@ -181,7 +180,7 @@ export default function PhotoSorter() {
       },
       6,
     );
-    setItems(built.filter((x): x is Item => x != null));
+    setItems(assignStayGroups(built.filter((x) => x != null) as Omit<Item, 'groupId'>[]));
     setNote(null);
     setPhase('review');
   }
@@ -203,7 +202,7 @@ export default function PhotoSorter() {
     }
   }
 
-  // One group per (place + month) = one visit. Newest month first; unassigned last.
+  // One group per STAY at a place = one visit. Newest first; unassigned last.
   const groups = useMemo<Group[]>(() => {
     const map = new Map<string, Item[]>();
     for (const it of items) {
@@ -215,21 +214,29 @@ export default function PhotoSorter() {
       placeId: its[0].placeId,
       placeName: its[0].placeName,
       items: its,
-      ym: ym(its[0].takenAt),
+      startsOn:
+        its.reduce<string>((earliest, x) => {
+          const d = x.takenAt ? x.takenAt.slice(0, 10) : '';
+          return d && (!earliest || d < earliest) ? d : earliest;
+        }, '') || 'nodate',
     }));
     return arr.sort((a, b) => {
       const au = a.placeId == null;
       const bu = b.placeId == null;
       if (au !== bu) return au ? 1 : -1;
-      return b.ym.localeCompare(a.ym);
+      return b.startsOn.localeCompare(a.startsOn);
     });
   }, [items]);
 
   // Reassign a whole group (all its items) to a place — keeps the group intact so
-  // the same place in two different months stays as two separate visits.
+  // two separate stays at the same place stay as two separate visits.
   function reassign(groupId: string, placeId: string | null, placeName: string) {
     setItems((cur) =>
-      cur.map((it) => (it.groupId === groupId ? { ...it, placeId, placeName, reason: '' } : it)),
+      // Regrouped after the move: sending this group to a place where a run of days
+      // already sits should JOIN that stay, not sit beside it as a second visit.
+      assignStayGroups(
+        cur.map((it) => (it.groupId === groupId ? { ...it, placeId, placeName, reason: '' } : it)),
+      ),
     );
   }
 
@@ -321,7 +328,7 @@ export default function PhotoSorter() {
         if (r && r.ok) added++;
       });
       // Attribute ONLY the visits this group's photos actually landed on — never
-      // other visits that merely share the same month at this place (which would
+      // other visits that merely fall near this one at this place (which would
       // overwrite a separate visit's attribution).
       const who = groupWho[g.id] ?? 'both';
       const profileId = whoProfileId(who, meId);
@@ -374,8 +381,8 @@ export default function PhotoSorter() {
         <div className="card">
           <p style={{ marginTop: 0, color: 'var(--muted)' }}>
             Pick a batch of photos — the app reads each date, works out where you were, and splits
-            them into <b>visits</b> (same place on a different month = a separate trip). Confirm the
-            place and who was there for each.
+            them into <b>visits</b> (a run of days at one place = one trip). Confirm the place and
+            who was there for each.
           </p>
           {inboxCount != null && inboxCount > 0 && (
             <div className="ps-inbox">

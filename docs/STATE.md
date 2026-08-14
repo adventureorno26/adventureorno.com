@@ -648,6 +648,32 @@ Do not ship this as one destructive migration.
 Every phase is its own commit with a plain-language message. Do not mix backup/Cloudflare/GitHub
 workflow repairs into the schema commits. Do not deploy production while required CI is red.
 
+### 0.8b A CALENDAR MONTH IS NOT A FACT ABOUT A TRIP — fixed 2026-08-14
+
+Erica: *"I just added some photos from Rome and because photos were in different months
+they were separated into 2 visits, even though the dates were consecutive (March
+27-April 2)."*
+
+`PhotoSorter` keyed every group on **place + `YYYY-MM`** (`iso.slice(0, 7)`), and said so
+in the interface: *"same place on a different month = a separate trip"*. Rome, 27 March
+to 2 April, is one stay that happens to cross a boundary in the calendar, so it arrived
+as two visits.
+
+**The database never had this bug.** `rebuild_place_visits` groups days with
+gaps-and-islands — `d - row_number() over (order by d)` is constant across a run of
+consecutive days — which does not know what a month is. The client and the database
+disagreed about what a visit IS, and the client was wrong. That is the §8 shape again:
+one rule with two implementations.
+
+`app/src/lib/photoGroups.ts` now holds the client's copy, matching the database, with one
+deliberate difference: **a gap of up to two blank days does not split a stay**, because
+a day you took no photographs is still a day of the trip. Strictly-consecutive would have
+produced the same complaint the first time she spent a day without a camera.
+
+Nine tests, the first of which is Rome itself. Regrouping also happens when a group is
+reassigned to a place, so moving photos to a place where a run of days already sits JOINS
+that stay instead of sitting beside it as a second visit.
+
 ### 0.9 Tests that make the decision permanent
 
 Database tests must prove at least:
