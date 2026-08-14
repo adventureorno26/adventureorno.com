@@ -19,24 +19,39 @@ set local request.jwt.claims = '{"sub":"bbbb0174-0000-0000-0000-000000000001"}';
 
 -- ---------------------------------------------------------------------------
 -- 1. NOBODY CAN EMPTY A TABLE. TRUNCATE ignores every RLS policy we have.
+--
+-- SCOPED TO WHAT WE OWN, and that scope is not a convenience. Applying 0174 to
+-- production revealed three objects this cannot close: PostGIS's own
+-- `spatial_ref_sys`, `geometry_columns` and `geography_columns`. They are owned by
+-- `supabase_admin` and their grants were issued by `supabase_admin`, and Postgres only
+-- lets the GRANTOR revoke — so `postgres`, which is what our migrations run as, cannot
+-- touch them. An unscoped assertion passed locally (where PostGIS belongs to postgres)
+-- and would have been a false all-clear about production.
+--
+-- They hold no data of ours. Truncating spatial_ref_sys would break coordinate
+-- transforms until it were reloaded; it would not lose a single visit or photo.
 -- ---------------------------------------------------------------------------
 do $$
 declare t text; bad text[] := '{}';
 begin
   for t in
-    select table_name from information_schema.role_table_grants
-     where table_schema = 'public' and privilege_type = 'TRUNCATE'
-       and grantee in ('authenticated','anon')
+    select g.table_name
+      from information_schema.role_table_grants g
+      join pg_class c on c.relname = g.table_name
+      join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
+     where g.table_schema = 'public' and g.privilege_type = 'TRUNCATE'
+       and g.grantee in ('authenticated','anon')
+       and pg_get_userbyid(c.relowner) <> 'supabase_admin'   -- see the note above
   loop
     bad := bad || t;
   end loop;
 
   if array_length(bad,1) > 0 then
-    raise exception 'FAIL: % table(s) still grant TRUNCATE to a browser role, e.g. %',
+    raise exception 'FAIL: % of OUR table(s) still grant TRUNCATE to a browser role, e.g. %',
       array_length(bad,1), bad[1];
   end if;
 
-  raise notice 'PASS 1: no table in public lets a browser role TRUNCATE';
+  raise notice 'PASS 1: no table we own lets a browser role TRUNCATE';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -46,9 +61,13 @@ end $$;
 do $$
 declare n int;
 begin
-  select count(*) into n from information_schema.role_table_grants
-   where table_schema = 'public' and grantee = 'anon';
-  if n > 0 then raise exception 'FAIL: anon still holds % privilege(s) in public', n; end if;
+  select count(*) into n
+    from information_schema.role_table_grants g
+    join pg_class c on c.relname = g.table_name
+    join pg_namespace nn on nn.oid = c.relnamespace and nn.nspname = 'public'
+   where g.table_schema = 'public' and g.grantee = 'anon'
+     and pg_get_userbyid(c.relowner) <> 'supabase_admin';   -- PostGIS's own, see part 1
+  if n > 0 then raise exception 'FAIL: anon still holds % privilege(s) on our tables', n; end if;
 
   create table public.t0174_default_grants (id int);
   select count(*) into n from information_schema.role_table_grants

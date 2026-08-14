@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { Json } from './database.types';
 import { applyCategories } from './categories';
 import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
 
@@ -756,14 +757,22 @@ export async function fetchPlaceVisitStats(
  * one and now uses the canonical path. Retained only as a compatibility export;
  * a lint rule keeps it unused.
  */
-export async function addVisit(placeId: string, start: string, end: string): Promise<Visit> {
-  const { data, error } = await supabase
-    .from('visits')
-    .insert({ place_id: placeId, start_date: start, end_date: end })
-    .select(VISIT_COLS)
-    .single();
+export async function addVisit(
+  placeId: string,
+  start: string,
+  end: string,
+  clientKey?: string,
+): Promise<Visit> {
+  // Through `create_visit`: it validates the range, and with a client key a retry
+  // after a dropped connection returns the SAME visit instead of logging a second.
+  const { data, error } = await supabase.rpc('create_visit', {
+    p_place: placeId,
+    p_start: start,
+    p_end: end,
+    p_client_key: clientKey ?? null,
+  });
   if (error) throw error;
-  return data as Visit;
+  return data as unknown as Visit;
 }
 
 /**
@@ -859,39 +868,59 @@ export async function toggleActivityReaction(activityId: string, emoji: string):
   if (error) throw error;
 }
 
-export async function deleteVisit(id: string): Promise<void> {
-  const { error } = await supabase.from('visits').delete().eq('id', id);
+/** Everything needed to put a deleted visit back — produced by {@link deleteVisit},
+ *  consumed by {@link restoreVisit}. Opaque on purpose: the server decides what an
+ *  undo has to carry, and it is more than the visit row (participants, companions,
+ *  evidence, what the visit contained and what contained it). */
+export type VisitSnapshot = Json;
+
+/**
+ * Delete a visit and get back everything needed to undo it.
+ *
+ * Goes through `delete_visit` rather than deleting the row, because the row is not the
+ * whole story. `visits.parent_visit_id` is ON DELETE SET NULL, so deleting a trip used
+ * to quietly free every visit grouped inside it — no error, no record, and an Undo that
+ * restored the trip but not what was in it. The RPC REFUSES that by default; pass
+ * `'detach'` only after the person has been told what it will do.
+ */
+export async function deleteVisit(
+  id: string,
+  children: 'refuse' | 'detach' = 'refuse',
+): Promise<VisitSnapshot> {
+  const { data, error } = await supabase.rpc('delete_visit', {
+    p_visit: id,
+    p_children: children,
+  });
   if (error) throw error;
+  return data as VisitSnapshot;
 }
 
-/** Recreate a deleted visit with its FULL original record — dates, note, attribution,
- *  override flag, and multi-day/trip flag — as a manual visit (used by visit Undo, so
- *  Undo restores everything, not just the date). */
-export async function restoreVisit(v: Visit): Promise<Visit> {
-  const { data, error } = await supabase
-    .from('visits')
-    .insert({
-      place_id: v.place_id,
-      start_date: v.start_date,
-      end_date: v.end_date,
-      note: v.note,
-      // is_trip is set by a PERSON (migration 0133), so an undo must restore it
-      // explicitly — it is no longer implied by the dates.
-      is_trip: v.is_trip,
-      solo_profile: v.solo_profile,
-      solo_override: v.solo_override,
-      manual: true,
-    })
-    .select(VISIT_COLS)
-    .single();
+/** True when a delete was refused because the visit still holds others. The caller can
+ *  then offer to detach them instead of failing with a raw database message. */
+export function isTripNotEmpty(e: unknown): boolean {
+  return e instanceof Error && /still contains/.test(e.message);
+}
+
+/** Put back what {@link deleteVisit} removed — dates, note, attribution, participants,
+ *  companions, evidence, and the grouping in both directions. The original id is reused
+ *  when it is still free, so anything holding a reference still resolves. */
+export async function restoreVisit(snapshot: VisitSnapshot): Promise<Visit> {
+  const { data, error } = await supabase.rpc('restore_visit', { p_snapshot: snapshot });
   if (error) throw error;
-  return data as Visit;
+  return data as unknown as Visit;
 }
 
 /** Reassign a visit to a different place (e.g. move a generic city visit to a
- *  specific spot with its own address). */
+ *  specific spot with its own address).
+ *
+ *  Through `move_visit_to_place`, not a bare UPDATE: moving a visit has to carry its
+ *  photos and activities with it and record the approval, which an UPDATE of one column
+ *  silently skips. */
 export async function moveVisit(id: string, newPlaceId: string): Promise<void> {
-  const { error } = await supabase.from('visits').update({ place_id: newPlaceId }).eq('id', id);
+  const { error } = await supabase.rpc('move_visit_to_place', {
+    p_visit: id,
+    p_place: newPlaceId,
+  });
   if (error) throw error;
 }
 
@@ -1061,14 +1090,13 @@ export async function createPerson(display_name: string, kind = 'child'): Promis
 
 /** Replace the set of non-login people attached to a visit. */
 export async function setVisitPeople(visitId: string, personIds: string[]): Promise<void> {
-  const del = await supabase.from('visit_people').delete().eq('visit_id', visitId);
-  if (del.error) throw del.error;
-  if (personIds.length) {
-    const { error } = await supabase
-      .from('visit_people')
-      .insert(personIds.map((person_id) => ({ visit_id: visitId, person_id })));
-    if (error) throw error;
-  }
+  // One RPC, one transaction. This used to DELETE then INSERT as two separate
+  // requests, so a dropped connection between them left the visit with nobody on it.
+  const { error } = await supabase.rpc('set_visit_people', {
+    p_visit: visitId,
+    p_people: personIds,
+  });
+  if (error) throw error;
 }
 
 export async function fetchVisitPeople(visitId: string): Promise<string[]> {

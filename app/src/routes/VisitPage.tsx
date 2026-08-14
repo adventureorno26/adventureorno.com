@@ -9,6 +9,8 @@ import {
 } from '../lib/visitDetail';
 import {
   deleteVisit,
+  isTripNotEmpty,
+  restoreVisit,
   fetchMapPeople,
   fetchPlaces,
   setVisitDates,
@@ -118,6 +120,53 @@ export default function VisitPage() {
       await load();
     } catch (e) {
       showSnack({ message: e instanceof Error ? e.message : 'That did not save.' });
+    }
+    setBusy(null);
+  }
+
+  /** Delete this visit, and never quietly free what it contained.
+   *
+   *  `delete_visit` refuses when the visit still holds others, because the foreign key
+   *  would set their parent to NULL with no error and nothing to say it happened. Undo
+   *  restores the whole snapshot, not just the row. */
+  async function removeThisVisit(children: 'refuse' | 'detach' = 'refuse') {
+    // Declared above the render guards, so it cannot assume the visit has loaded.
+    if (!d) return;
+    const visitId = d.visit.id;
+    const placeId = d.place.id;
+    setBusy('Removing…');
+    try {
+      const snapshot = await deleteVisit(visitId, children);
+      showSnack({
+        message:
+          children === 'detach'
+            ? 'Trip removed — the visits inside it are on their own now.'
+            : 'Visit removed.',
+        actionLabel: 'Undo',
+        onAction: async () => {
+          try {
+            await restoreVisit(snapshot);
+          } catch (e) {
+            showSnack({
+              message:
+                e instanceof Error
+                  ? `Could not undo: ${e.message}`
+                  : 'Could not undo — the visit is still removed.',
+            });
+          }
+        },
+      });
+      navigate(`/place/${placeId}`);
+    } catch (e) {
+      if (isTripNotEmpty(e)) {
+        showSnack({
+          message: 'This trip still holds other visits.',
+          actionLabel: 'Remove it anyway',
+          onAction: () => void removeThisVisit('detach'),
+        });
+      } else {
+        showSnack({ message: e instanceof Error ? e.message : 'Could not delete visit' });
+      }
     }
     setBusy(null);
   }
@@ -349,15 +398,7 @@ export default function VisitPage() {
       {canEdit && (
         <div className="btn-row" style={{ marginTop: 22 }}>
           <button onClick={() => setMoving((m) => !m)}>Move this visit</button>
-          <button
-            className="danger"
-            onClick={() =>
-              void run('Removing…', async () => {
-                await deleteVisit(v.id);
-                navigate(`/place/${d.place.id}`);
-              })
-            }
-          >
+          <button className="danger" onClick={() => void removeThisVisit()}>
             Delete
           </button>
         </div>

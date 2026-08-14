@@ -198,6 +198,68 @@ export type Database = {
           },
         ]
       }
+      activity_participant_review: {
+        Row: {
+          activity_id: string
+          created_at: string
+          reason: string
+          resolved_at: string | null
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          reason: string
+          resolved_at?: string | null
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          reason?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_participant_review_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: true
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_profiles: {
+        Row: {
+          activity_id: string
+          created_at: string
+          profile_id: string
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          profile_id: string
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_profiles_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_reactions: {
         Row: {
           activity_id: string
@@ -2179,6 +2241,7 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -2200,6 +2263,7 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
+          client_key?: string | null
           created_at?: string
           created_by?: string | null
           decided_at?: string | null
@@ -2221,6 +2285,7 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
+          client_key?: string | null
           created_at?: string
           created_by?: string | null
           decided_at?: string | null
@@ -2767,6 +2832,7 @@ export type Database = {
         Returns: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -2792,10 +2858,34 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      attach_visit_evidence: {
+        Args: {
+          p_date?: string
+          p_evidence: string
+          p_source_key?: string
+          p_type: string
+          p_visit: string
+        }
+        Returns: {
+          created_at: string
+          evidence_date: string | null
+          evidence_id: string
+          evidence_type: string
+          source_key: string | null
+          visit_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visit_evidence"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       can_rename_place: {
         Args: { p_caller: string; p_place: string }
         Returns: boolean
       }
+      card_view: { Args: { p_place?: string; p_visit?: string }; Returns: Json }
       claim_invite: {
         Args: never
         Returns: {
@@ -2851,21 +2941,21 @@ export type Database = {
         }
         Returns: string
       }
-      current_app_role: { Args: never; Returns: string }
-      data_health: { Args: never; Returns: Json }
-      date_night_pick: {
-        Args: { p_lat?: number; p_lng?: number; p_radius_km?: number }
-        Returns: string
-      }
-      dedupe_joint_outings: { Args: never; Returns: number }
-      dedupe_shared_outings: { Args: never; Returns: number }
-      delete_trip_note: { Args: { p_id: string }; Returns: undefined }
-      deny_join_request: { Args: { p_id: string }; Returns: undefined }
-      detach_child_visit: {
-        Args: { p_child: string }
+      create_visit: {
+        Args: {
+          p_client_key?: string
+          p_end?: string
+          p_note?: string
+          p_parent?: string
+          p_place: string
+          p_profiles?: string[]
+          p_start: string
+          p_trip?: boolean
+        }
         Returns: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -2890,6 +2980,55 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      current_app_role: { Args: never; Returns: string }
+      data_health: { Args: never; Returns: Json }
+      date_night_pick: {
+        Args: { p_lat?: number; p_lng?: number; p_radius_km?: number }
+        Returns: string
+      }
+      dedupe_joint_outings: { Args: never; Returns: number }
+      dedupe_shared_outings: { Args: never; Returns: number }
+      delete_trip_note: { Args: { p_id: string }; Returns: undefined }
+      delete_visit: {
+        Args: { p_children?: string; p_visit: string }
+        Returns: Json
+      }
+      deny_join_request: { Args: { p_id: string }; Returns: undefined }
+      detach_child_visit: {
+        Args: { p_child: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          client_key: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      detach_visit_evidence: {
+        Args: { p_evidence: string; p_type: string; p_visit: string }
+        Returns: undefined
       }
       disablelongtransactions: { Args: never; Returns: string }
       dismiss_duplicate: {
@@ -2930,6 +3069,7 @@ export type Database = {
         Args: {
           p_end?: string
           p_note?: string
+          p_set_note?: boolean
           p_start?: string
           p_status?: string
           p_trip?: boolean
@@ -2938,6 +3078,7 @@ export type Database = {
         Returns: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -3110,6 +3251,7 @@ export type Database = {
       is_generic_activity_name: { Args: { p_name: string }; Returns: boolean }
       is_member: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
+      is_shared_activity: { Args: { p_activity: string }; Returns: boolean }
       is_shared_visit: { Args: { p_visit: string }; Returns: boolean }
       last_automated_upload: { Args: never; Returns: string }
       last_seen: {
@@ -3194,6 +3336,7 @@ export type Database = {
         Returns: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -3403,6 +3546,37 @@ export type Database = {
       }
       restore_photo: { Args: { p_id: string }; Returns: undefined }
       restore_place: { Args: { p_id: string }; Returns: undefined }
+      restore_visit: {
+        Args: { p_snapshot: Json }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          client_key: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       revealed_area_geojson: { Args: never; Returns: Json }
       rule_offer: { Args: { p_activity: string }; Returns: Json }
       search_photos: {
@@ -3503,6 +3677,7 @@ export type Database = {
         Returns: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -3533,6 +3708,7 @@ export type Database = {
         Returns: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string
           created_by: string | null
           decided_at: string | null
@@ -4206,6 +4382,19 @@ export type Database = {
           last_ping: string
           pings: number
           profile_id: string
+        }[]
+      }
+      trip_attachment_candidates: {
+        Args: never
+        Returns: {
+          end_date: string
+          place_name: string
+          start_date: string
+          trip_end: string
+          trip_place_name: string
+          trip_start: string
+          trip_visit_id: string
+          visit_id: string
         }[]
       }
       trip_contents: {
