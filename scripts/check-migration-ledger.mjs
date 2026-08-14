@@ -25,6 +25,7 @@
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { fetchWithRetry } from './lib/retry.mjs';
 
 const PROJECT_REF = 'aanfyhsjbtnqzphuoiem';
 const token = process.env.SUPABASE_ACCESS_TOKEN;
@@ -39,19 +40,23 @@ const files = readdirSync(resolve(root, 'supabase/migrations'))
   .sort();
 
 async function query(sql) {
-  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      // Cloudflare in front of the Management API rejects an unrecognised
-      // User-Agent with 1010; see docs/STATE.md §8.
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36',
+  // Retried: a 5xx from the Management API is not an answer about the ledger.
+  const res = await fetchWithRetry(
+    `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        // Cloudflare in front of the Management API rejects an unrecognised
+        // User-Agent with 1010; see docs/STATE.md §8.
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36',
+      },
+      body: JSON.stringify({ query: sql }),
     },
-    body: JSON.stringify({ query: sql }),
-  });
-  if (!res.ok) throw new Error(`Management API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    { label: 'Management API' },
+  );
   return res.json();
 }
 

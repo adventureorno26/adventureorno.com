@@ -5,6 +5,7 @@
   "description": "Private travel-map web app \u2014 adventureorno.com",
   "workspaces": [
     "app",
+    "scripts",
     "workers/*"
   ],
   "scripts": {
