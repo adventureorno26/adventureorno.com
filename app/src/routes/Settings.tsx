@@ -32,6 +32,7 @@ import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
 import { exportCsv, exportGpx, exportKml } from '../lib/exports';
+import { showSnack } from '../lib/snackbar';
 import {
   backfillPage,
   beginStravaLink,
@@ -549,8 +550,16 @@ function TrackingCard({ myId }: { myId: string }) {
     setSharing(next);
     try {
       await setShareLocation(next);
-    } catch {
+    } catch (e) {
       setSharing(!next); // put the switch back rather than lie about it
+      // ...and say why. A switch that silently flips back looks like the app
+      // ignoring you.
+      showSnack({
+        message:
+          e instanceof Error
+            ? `Could not change location sharing: ${e.message}`
+            : 'Could not change location sharing.',
+      });
     } finally {
       setSharingBusy(false);
     }

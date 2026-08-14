@@ -7,6 +7,7 @@ import {
 } from '../lib/photos';
 import ReactionMark from './ReactionMarks';
 import { MARKS, labelFor } from '../lib/reactions';
+import { showSnack } from '../lib/snackbar';
 
 /** Caption + emoji reactions for one photo, shown under it in the lightbox.
  *  There is no "add a caption" link — tapping the photo itself opens the editor,
@@ -44,15 +45,28 @@ export default function PhotoReactions({
     setReactions(await fetchPhotoReactions(photoId).catch(() => []));
   }
   async function toggle(emoji: string) {
-    await togglePhotoReaction(photoId, emoji).catch(() => undefined);
+    try {
+      await togglePhotoReaction(photoId, emoji);
+    } catch (e) {
+      showSnack({
+        message: e instanceof Error ? `Could not react: ${e.message}` : 'Could not react.',
+      });
+    }
     await reload();
   }
   async function saveCaption() {
     onEditing(false);
     try {
       await setPhotoCaption(photoId, cap);
-    } catch {
-      /* leave as typed */
+    } catch (e) {
+      // "leave as typed" closed the editor and dropped the caption on the floor:
+      // it looked saved and was not.
+      showSnack({
+        message:
+          e instanceof Error
+            ? `Could not save the caption: ${e.message}`
+            : 'Could not save the caption.',
+      });
     }
   }
 
