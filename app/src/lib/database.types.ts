@@ -3328,6 +3328,37 @@ export type Database = {
         Args: { p_loser: string; p_winner: string }
         Returns: undefined
       }
+      merge_visits: {
+        Args: { p_absorb: string; p_keep: string }
+        Returns: {
+          accepted_at: string | null
+          accepted_by: string | null
+          client_key: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          end_date: string
+          id: string
+          is_trip: boolean
+          manual: boolean
+          note: string | null
+          parent_visit_id: string | null
+          place_id: string
+          solo_override: boolean
+          solo_profile: string | null
+          source: string
+          start_date: string
+          status: string
+          trip_marked: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "visits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       mileage_by_person: {
         Args: { p_profile?: string }
         Returns: {
