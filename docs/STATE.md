@@ -245,6 +245,38 @@ bitten precisely when it mattered. `scripts/verify-restore.sh` now inserts only 
 columns the dump actually contains and lets the schema default the rest, and reports
 which columns were newer than the backup.
 
+### 0.7b APPLIED TO PRODUCTION — 2026-08-14
+
+§0.8 phase 7, continued. §0.10 requires the production migration IDs to be recorded
+here; these were applied and each verified against production before the next was
+started. Ledger: **180 of 180 recorded**, `check-migration-ledger.mjs` clean.
+
+| Migration | What it did | Verified in production |
+| --- | --- | --- |
+| `0170` | `accepted_visits` stops bypassing RLS; parent/child triggers; a note can be cleared | `reloptions = {security_invoker=true}`; trigger present |
+| `0171` | `card_view` — one read model for the card | function present |
+| `0172` | the rest of the visit readers onto the canonical model | places 52/52, counts 58/58, trails 28/28 |
+| `0173` | `activity_profiles`; the activity readers; the last date-inference | shared activities **56 → 56**, 501 participant rows, 9 queued for review |
+| `0174` | TRUNCATE and `anon` closed; `create/delete/restore_visit` | 45 tables closed; PostGIS's three cannot be (owned by `supabase_admin`) |
+| `0175` | no function looks a person up by `display_name` | name lookups **0** |
+| `0176` | the RPCs are the only door into a visit | `visits`/`visit_profiles`/`visit_people`/`visit_evidence` read-only to a browser |
+| `0177` | `card_view` v2; `videos.visit_id` | version **2**; 5 of 6 videos pinned, none ambiguous |
+| `0178` | `add_place_to_visit` writes the record, not the mirror | 19 memberships, **0** not backed by `part_of` |
+
+Frontend deployed alongside: `adventureorno.com/version.json` → `ac88ec9`.
+
+**Two intentional differences, both stated before they shipped:**
+
+- `occasion_count` for Both **86 → 101**. The old rule folded any visit whose dates sat
+  inside a marked trip into that trip, at any place. Nothing in the app calls it.
+- visits reading as trips **9 → 55**. §0.4 counts a multi-day visit as a trip whether or
+  not anyone marked it; the stats bar already did, so this ends a disagreement rather
+  than starting one. Approved 2026-08-14.
+
+**What phase 7 still does not have:** the authenticated card verified on mobile and
+desktop against the artifact. Login is Google-only, so this is the one §0.10 line an
+agent cannot close on its own.
+
 ### 0.5a READERS SWITCHED — parity held, 2026-08-12
 
 §0.8 phase 5. `wander_stats` and `trips_list` now read the canonical model, and the
@@ -1673,21 +1705,29 @@ is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resur
 
 1. **Named branches only.** `fix/…`, `chore/…`, `feat/…`. Never commit on `main`.
    `.githooks/pre-commit` refuses, and GitHub refuses the push regardless:
-   *"Changes must be made through a pull request. 10 of 10 required status checks
-   are expected."*
+   *"Changes must be made through a pull request."* The ten separate checks became
+   **four aggregate ones — `build`, `database`, `security`, `smoke`** — each doing only
+   the work the changed files call for. Verified against the branch protection API
+   2026-08-14: those four, `strict: true`, `enforce_admins: true`, no force pushes, no
+   deletions.
 2. **A commit has to earn it.** When app code is staged the hook runs `tsc` and the
    unit tests — including `lockedCard.test.ts` — and refuses on failure. Docs and
    SQL changes do not have to boot vitest. Enable per clone with
    `git config core.hooksPath .githooks`.
-3. **Nothing commits itself.** The global Claude hooks that committed and pushed on
-   every session start and stop are gone (backup:
-   `~/.claude/settings.json.bak-2026-08-11`). That Stop hook is what resurrected
-   `README.md` 90 minutes after it was deleted (§8).
+3. **Nothing commits itself** — ⚠️ **not true again as of 2026-08-14.** The global
+   Claude hooks that committed and pushed on every session start and stop were removed
+   (backup: `~/.claude/settings.json.bak-2026-08-11`); that Stop hook is what
+   resurrected `README.md` 90 minutes after it was deleted (§8). But on 2026-08-14
+   commit `34e0a81` appeared on a working branch, authored as Erica, with a **timestamp
+   for a message** ("Aug 14, 2026, 1:34 PM"), capturing two files mid-edit. Something is
+   auto-committing again. It has not lost work — the content was correct and was
+   re-committed with a real message — but a commit nobody wrote is how the resurrected
+   README started.
 4. **`bypassPermissions` is off** in her Claude settings.
 
 ### THE ONLY ROUTE TO THE LIVE SITE (2026-08-11)
 
-    named branch → pull request → 10 required checks → merge to main
+    named branch → pull request → 4 required checks → merge to main
         → release-gate → production environment approval (Erica)
         → wrangler pages deploy --project-name adventureorno-com
 
