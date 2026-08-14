@@ -3752,6 +3752,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      set_visit_people: {
+        Args: { p_people: string[]; p_visit: string }
+        Returns: undefined
+      }
       set_visit_place: {
         Args: { p_place: string; p_visit: string }
         Returns: undefined
