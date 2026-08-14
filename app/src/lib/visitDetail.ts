@@ -6,7 +6,7 @@
 // someone pinned it there, and a duplicate outing recorded twice is still one
 // thing you did.
 
-import { supabase } from './supabase';
+import { supabase, sqlNull } from './supabase';
 
 export interface VisitActivity {
   id: string;
@@ -88,7 +88,7 @@ export async function setVisitPlace(visitId: string, placeId: string): Promise<v
 export async function setPhotoVisit(photoId: string, visitId: string | null): Promise<void> {
   const { error } = await supabase.rpc('set_photo_visit', {
     p_photo: photoId,
-    p_visit: visitId,
+    p_visit: sqlNull(visitId), // null lets the photo's own date decide again
   });
   if (error) throw error;
 }
