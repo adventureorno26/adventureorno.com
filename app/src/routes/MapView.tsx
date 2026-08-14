@@ -53,6 +53,7 @@ import PersonFilter from '../components/PersonFilter';
 import FilterChips from '../components/FilterChips';
 import SearchPalette from '../components/SearchPalette';
 import MemoryBanner from '../components/MemoryBanner';
+import { showSnack } from '../lib/snackbar';
 
 const SOURCE_ID = 'places';
 // "Where we are" — the people layer, kept separate from places so a person is
@@ -1311,9 +1312,30 @@ export default function MapView() {
       (p.categories?.length ?? 0) === 0 &&
       (p.visit_count ?? 0) === 0;
     if (!looksEmpty) return;
-    const vis = await fetchVisits(id).catch(() => []);
+    // FAIL CLOSED. This used to be `fetchVisits(id).catch(() => [])`, so a network
+    // blip answered "no visits" and the place was deleted anyway — a place with
+    // visits on it, removed because a request failed. Never delete on a maybe.
+    let vis;
+    try {
+      vis = await fetchVisits(id);
+    } catch {
+      return; // could not check — keep the place
+    }
     if (vis.length > 0) return; // a visit was logged — keep it
-    await deletePlace(id).catch(() => undefined);
+
+    try {
+      await deletePlace(id);
+    } catch (e) {
+      // It also used to drop the place off the map whether or not the delete
+      // succeeded, so a failed delete looked exactly like a successful one.
+      showSnack({
+        message:
+          e instanceof Error
+            ? `Could not remove that empty place: ${e.message}`
+            : 'Could not remove that empty place.',
+      });
+      return;
+    }
     setPlaces((prev) => prev.filter((x) => x.id !== id));
   }
 
