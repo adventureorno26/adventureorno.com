@@ -25,10 +25,22 @@ import AuthedImg from '../components/AuthedImg';
 import type { Place } from '../lib/types';
 import { whoChoices, whoProfileId } from '../lib/participants';
 import { assignStayGroups } from '../lib/photoGroups';
+import { showSnack } from '../lib/snackbar';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
 /** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
 type Who = string;
+
+/** A place chosen for a group that has NOT been written yet. Held here until the
+ *  photos are actually saved — see the note on createFromSearch. */
+interface PendingPlace {
+  name: string;
+  lat: number;
+  lng: number;
+  country?: string | null;
+  admin1?: string | null;
+  address?: string | null;
+}
 
 interface Item {
   id: string;
@@ -92,6 +104,8 @@ export default function PhotoSorter() {
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [groupWho, setGroupWho] = useState<Record<string, Who>>({});
   const [groupDate, setGroupDate] = useState<Record<string, string>>({}); // optional date override
+  /** Places chosen but not yet written — keyed by group. Discarded if you never save. */
+  const [pending, setPending] = useState<Record<string, PendingPlace>>({});
   const [note, setNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [inboxCount, setInboxCount] = useState<number | null>(null);
@@ -240,20 +254,28 @@ export default function PhotoSorter() {
     );
   }
 
-  async function createFromSearch(groupId: string, r: SearchResult) {
-    setNote('Creating that place…');
+  /**
+   * Choose a NEW place for this group — without writing it.
+   *
+   * This used to call createPlaceAtomic immediately, so searching for "Roma" put Roma
+   * on the map before a single photograph was uploaded. Walk away mid-sort and the
+   * place stayed there for ever with nothing on it — which is exactly what happened on
+   * 2026-08-14, twice. Nothing is written now until Save.
+   */
+  function createFromSearch(groupId: string, r: SearchResult) {
     try {
-      const created = await createPlaceAtomic({
-        name: r.name,
-        country: r.country,
-        admin1: r.admin1,
-        address: r.address,
-        lat: r.lat,
-        lng: r.lng,
-        saved: true,
-      });
-      setPlaces((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
-      reassign(groupId, created.id, created.name);
+      setPending((cur) => ({
+        ...cur,
+        [groupId]: {
+          name: r.name,
+          lat: r.lat,
+          lng: r.lng,
+          country: r.country,
+          admin1: r.admin1,
+          address: r.address,
+        },
+      }));
+      reassign(groupId, null, r.name);
       setNote(null);
     } catch {
       setNote('Could not create that place.');
@@ -268,26 +290,46 @@ export default function PhotoSorter() {
     }
     setNote('Naming the new place from its location…');
     const rev = await reverseGeocode(withGps.lng, withGps.lat).catch(() => null);
-    try {
-      const created = await createPlaceAtomic({
+    // Staged, not written — same reason as createFromSearch. "Lungotevere Vaticano"
+    // was created this way and left behind when the sort was abandoned.
+    setPending((cur) => ({
+      ...cur,
+      [groupId]: {
         name: rev?.name ?? 'New place',
+        lat: withGps.lat!,
+        lng: withGps.lng!,
         country: rev?.country ?? null,
         admin1: rev?.admin1 ?? null,
-        lat: withGps.lat,
-        lng: withGps.lng,
-        saved: true,
-        needs_geocode: !rev?.name,
-      });
-      setPlaces((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
-      reassign(groupId, created.id, created.name);
-      setNote(null);
-    } catch {
-      setNote('Could not create the place.');
-    }
+      },
+    }));
+    reassign(groupId, null, rev?.name ?? 'New place');
+    setNote(null);
+  }
+
+  /** Write a group's staged place, if it has one. Called from the save step and
+   *  NOWHERE else — that is the whole point. */
+  async function realisePlace(g: Group): Promise<string | null> {
+    if (g.placeId) return g.placeId;
+    const stage = pending[g.id];
+    if (!stage) return null;
+    const created = await createPlaceAtomic({
+      name: stage.name,
+      country: stage.country ?? null,
+      admin1: stage.admin1 ?? null,
+      address: stage.address ?? null,
+      lat: stage.lat,
+      lng: stage.lng,
+      saved: true,
+      needs_geocode: stage.name === 'New place',
+    });
+    setPlaces((cur) => [...cur, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return created.id;
   }
 
   async function addAll() {
-    const ready = groups.filter((g) => g.placeId);
+    // A group is ready if it has a place, or a place STAGED for it. This is the save
+    // step, and the only place a staged one becomes real.
+    const ready = groups.filter((g) => g.placeId || pending[g.id]);
     const total = ready.reduce((n, g) => n + g.items.length, 0);
     if (total === 0) {
       setNote('Give at least one visit a place first.');
@@ -297,7 +339,20 @@ export default function PhotoSorter() {
     let added = 0;
     let n = 0;
     for (const g of ready) {
-      const pl = places.find((p) => p.id === g.placeId);
+      let placeId: string | null;
+      try {
+        placeId = await realisePlace(g);
+      } catch (e) {
+        showSnack({
+          message:
+            e instanceof Error
+              ? `Could not create ${g.placeName}: ${e.message}`
+              : `Could not create ${g.placeName}.`,
+        });
+        continue;
+      }
+      if (!placeId) continue;
+      const pl = places.find((p) => p.id === placeId);
       // Optional date override → stamps the photos so the derived visit lands on
       // the date you chose (visits are rebuilt from photo dates).
       const override = groupDate[g.id];
@@ -308,14 +363,14 @@ export default function PhotoSorter() {
           n++;
           setNote(`Adding ${n} of ${total}…`);
           if (it.photoId) {
-            return assignPhotoToPlace(it.photoId, g.placeId!, takenAt)
+            return assignPhotoToPlace(it.photoId, placeId, takenAt)
               .then(() => ({ ok: true }))
               .catch(() => null);
           }
           // Through the global upload queue (progress + retry). No-GPS photos fall
           // back to the assigned place's coordinates.
           return enqueueUpload(it.file!, {
-            placeId: g.placeId!,
+            placeId,
             lat: it.lat ?? pl?.lat,
             lng: it.lng ?? pl?.lng,
             takenAt,
@@ -368,7 +423,11 @@ export default function PhotoSorter() {
     );
   }
 
-  const assignedPhotos = groups.filter((g) => g.placeId).reduce((n, g) => n + g.items.length, 0);
+  // Counts groups with a STAGED place too — the Save button must offer to save what
+  // you have chosen, even though none of it is written yet.
+  const assignedPhotos = groups
+    .filter((g) => g.placeId || pending[g.id])
+    .reduce((n, g) => n + g.items.length, 0);
 
   return (
     <div className="photo-sorter">
