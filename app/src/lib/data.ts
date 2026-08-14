@@ -222,7 +222,14 @@ export interface CardView {
   visit: { id: string; start_date: string; end_date: string | null } | null;
   ratings: { name: string | null; profile_id: string; rating: number }[];
   visits: CardVisit[];
-  routes: { id: string; name: string | null; type: string; distance: number | null }[];
+  routes: {
+    id: string;
+    name: string | null;
+    type: string;
+    distance: number | null;
+    /** Who did it, from activity_profiles — not from a nullable solo_profile. */
+    people: { id: string; name: string | null }[];
+  }[];
   photos: { id: string; day: string | null; caption: string | null }[];
   members: { id: string; name: string; rating: number | null; category: string }[];
   totals: {
