@@ -8,6 +8,7 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fetchWithRetry } from './lib/retry.mjs';
 
 const PROJECT_REF = 'aanfyhsjbtnqzphuoiem';
 const token = process.env.SUPABASE_ACCESS_TOKEN;
@@ -24,18 +25,23 @@ const HEADER = [
   '',
 ].join('\n');
 
-const res = await fetch(
-  `https://api.supabase.com/v1/projects/${PROJECT_REF}/types/typescript`,
-  {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      // Management API sits behind a WAF that blocks non-browser agents.
-      'User-Agent': 'Mozilla/5.0 AppleWebKit/537.36',
+// Retried: this failed CI once with a Management API 555 "Internal server error",
+// which had nothing to do with the schema and went green on a re-run.
+let res;
+try {
+  res = await fetchWithRetry(
+    `https://api.supabase.com/v1/projects/${PROJECT_REF}/types/typescript`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        // Management API sits behind a WAF that blocks non-browser agents.
+        'User-Agent': 'Mozilla/5.0 AppleWebKit/537.36',
+      },
     },
-  },
-);
-if (!res.ok) {
-  console.error(`Type generation failed: ${res.status} ${await res.text()}`);
+    { label: 'type generation' },
+  );
+} catch (err) {
+  console.error(`Type generation failed: ${err.message}`);
   process.exit(1);
 }
 const { types } = await res.json();

@@ -140,22 +140,22 @@ are reproduced here.
 2.44 MB, encrypted. Restored into a disposable Postgres 17 from the migration chain:
 **all 38 tables matched the manifest exactly, 18,834 rows, zero errors.**
 
-| # | Measure | Result |
-|---|---|---|
-| 1 | Visits by status | **489 taken, 0 planned.** 52 multi-day, 9 carry `is_trip` |
-| 2 | Exact duplicate visits | **0** |
-| 3 | Overlapping visits at one place | **0** |
-| 4 | Deleted/draft/suggested places with taken visits | **7 places, 8 visits** — none deleted or suggested; all are `saved = false` |
-| 5 | Legacy `trip` place tags | **0** |
-| 6 | Orphan `trip_people` / `trip_notes` | **0 rows each** (the tables still exist) |
-| 7 | `part_of` vs `place_membership` | **In perfect sync** — 0 either way, 19 rows each. Only `relationship_type` in use is `contains` |
-| 8 | Trail/member same-outing duplicates | **78 pairs** — 77 trail visits, 78 section visits, across 7 trails |
-| 9 | Attribution | 388 visits name a profile; **101 use null-means-both** |
-| 10 | `activities.visit_id` | **Does not exist.** 445 activities, and **0 rows with `source='drawn'`** |
-| 11 | Trails | 6 trails, 19 membership rows, 143 `counts_as_place` |
-| 12 | §0.3's new visit fields | **None exist yet** — clean slate |
-| 13 | Headline numbers today | 132 places, 489 taken visits, 16 trips (Both) |
-| 14 | Authorization surface §0.4 must audit | **127 SECURITY DEFINER functions**, 43 public tables |
+| #  | Measure                                          | Result                                                                                                     |
+| -- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 1  | Visits by status                                 | **489 taken, 0 planned.** 52 multi-day, 9 carry `is_trip`                                          |
+| 2  | Exact duplicate visits                           | **0**                                                                                                |
+| 3  | Overlapping visits at one place                  | **0**                                                                                                |
+| 4  | Deleted/draft/suggested places with taken visits | **7 places, 8 visits** — none deleted or suggested; all are `saved = false`                       |
+| 5  | Legacy`trip` place tags                        | **0**                                                                                                |
+| 6  | Orphan`trip_people` / `trip_notes`           | **0 rows each** (the tables still exist)                                                             |
+| 7  | `part_of` vs `place_membership`              | **In perfect sync** — 0 either way, 19 rows each. Only `relationship_type` in use is `contains` |
+| 8  | Trail/member same-outing duplicates              | **78 pairs** — 77 trail visits, 78 section visits, across 7 trails                                  |
+| 9  | Attribution                                      | 388 visits name a profile;**101 use null-means-both**                                                |
+| 10 | `activities.visit_id`                          | **Does not exist.** 445 activities, and **0 rows with `source='drawn'`**                     |
+| 11 | Trails                                           | 6 trails, 19 membership rows, 143`counts_as_place`                                                       |
+| 12 | §0.3's new visit fields                         | **None exist yet** — clean slate                                                                    |
+| 13 | Headline numbers today                           | 132 places, 489 taken visits, 16 trips (Both)                                                              |
+| 14 | Authorization surface §0.4 must audit           | **127 SECURITY DEFINER functions**, 43 public tables                                                 |
 
 **What this changes about the plan:**
 
@@ -213,11 +213,11 @@ rather than left for someone to discover. From now on: new sequential migrations
 the idempotent backfills were run against that real data, and the old counting was
 compared with the canonical `accepted_visits` + `visit_profiles` model.
 
-| Scope | Places old → new | Visits old → new | Trips old → new |
-|---|---|---|---|
-| **Both** | 52 → **52** | 101 → **101** | 16 → **16** |
-| **Erica** | 128 → **128** | 442 → **442** | 42 → **42** |
-| **Josh** | 57 → **57** | 148 → **148** | 29 → **29** |
+| Scope           | Places old → new   | Visits old → new   | Trips old → new  |
+| --------------- | ------------------- | ------------------- | ----------------- |
+| **Both**  | 52 →**52**   | 101 →**101** | 16 →**16** |
+| **Erica** | 128 →**128** | 442 →**442** | 42 →**42** |
+| **Josh**  | 57 →**57**   | 148 →**148** | 29 →**29** |
 
 **Every number matches. There is no intentional difference to explain yet** — which is
 the point of doing this before switching any reader: the new model reproduces today's
@@ -251,11 +251,11 @@ which columns were newer than the backup.
 numbers did not move — measured again through the live functions against a restored
 production snapshot:
 
-| Scope | Places | Miles | Trips |
-|---|---|---|---|
-| Both | **52** | 436.5 | **16** |
+| Scope | Places        | Miles  | Trips        |
+| ----- | ------------- | ------ | ------------ |
+| Both  | **52**  | 436.5  | **16** |
 | Erica | **128** | 1956.8 | **42** |
-| Josh | **57** | 992.6 | **29** |
+| Josh  | **57**  | 992.6  | **29** |
 
 `trips_list(null)` returns exactly 16 rows — the list and the count now come from the
 same definition and cannot disagree.
@@ -279,11 +279,11 @@ guessing which two were meant.
 
 §0.8 phase 7. Migrations `0163`–`0169` are live. **Parity held exactly.**
 
-| Scope | Places | Visits | Trips |
-|---|---|---|---|
-| Both | 52 → **52** | 101 → **101** | 16 → **16** |
-| Erica | 128 → **128** | 442 → **442** | 42 → **42** |
-| Josh | 57 → **57** | 148 → **148** | 29 → **29** |
+| Scope | Places              | Visits              | Trips             |
+| ----- | ------------------- | ------------------- | ----------------- |
+| Both  | 52 →**52**   | 101 →**101** | 16 →**16** |
+| Erica | 128 →**128** | 442 →**442** | 42 →**42** |
+| Josh  | 57 →**57**   | 148 →**148** | 29 →**29** |
 
 Measured on production before the migration with the OLD rules, and after it through the
 CANONICAL model. Not one number moved, which is the whole point of phases 3–6.
@@ -302,13 +302,13 @@ from this ledger):
 
 **Backfill results in production:**
 
-| | |
-|---|---|
-| participant rows | **590** across all 489 visits, **0 for review** |
-| activities linked to a visit | **445 of 445**, **0 ambiguous**, 0 orphaned |
-| evidence rows | **620** |
-| accepted visits | **489** — all of Erica's history |
-| dropdown options seeded | **8** |
+|                              |                                                             |
+| ---------------------------- | ----------------------------------------------------------- |
+| participant rows             | **590** across all 489 visits, **0 for review** |
+| activities linked to a visit | **445 of 445**, **0 ambiguous**, 0 orphaned     |
+| evidence rows                | **620**                                               |
+| accepted visits              | **489** — all of Erica's history                     |
+| dropdown options seeded      | **8**                                                 |
 
 **Frontend state:** `15458752` — unchanged, and deliberately so. The app still writes visits
 directly; both spellings of every field stay in step during the compatibility period, so
@@ -440,16 +440,16 @@ must be selected by visit identity, not merely by an overlapping date.
 Create one accepted/taken visit view and make all stats, badges, lists, cards, Smart Albums and
 exports read it.
 
-| Number | Exact rule |
-|---|---|
-| Places | Distinct accepted, nondeleted, non-trail places with at least one accepted taken visit |
-| Place visits | Accepted taken visits whose `place_id` is that place, including child visits |
-| Headline Visits | Accepted taken visits with `parent_visit_id IS NULL` |
-| Trips | Top-level accepted taken visits satisfying canonical `counts_as_trip` |
-| Planned | Accepted `status='planned'`, shown separately and never in historical totals |
-| First/last visit | `min(start_date)` / `max(end_date)` over accepted taken visits |
-| Miles | Sum accepted activity distance once per stable/shared source identity |
-| Trails taken | Distinct trail rollups with an accepted taken visit on the trail or a member section |
+| Number           | Exact rule                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Places           | Distinct accepted, nondeleted, non-trail places with at least one accepted taken visit |
+| Place visits     | Accepted taken visits whose`place_id` is that place, including child visits          |
+| Headline Visits  | Accepted taken visits with`parent_visit_id IS NULL`                                  |
+| Trips            | Top-level accepted taken visits satisfying canonical`counts_as_trip`                 |
+| Planned          | Accepted`status='planned'`, shown separately and never in historical totals          |
+| First/last visit | `min(start_date)` / `max(end_date)` over accepted taken visits                     |
+| Miles            | Sum accepted activity distance once per stable/shared source identity                  |
+| Trails taken     | Distinct trail rollups with an accepted taken visit on the trail or a member section   |
 
 A Cape Cod Aug 2–7 parent visit containing Linnell Landing, a restaurant and a museum is one
 headline Visit, one Trip, and four distinct Places. Each child place still shows its own visit.
@@ -757,12 +757,12 @@ trips Erica never marked**, and the flag then drove labels and fusing behaviour.
 
 What is being asked for now is **not that**:
 
-| Removed in 0133 | What Erica asked for, 2026-08-11 |
-|---|---|
-| A **stored flag** on the visit row | **No stored flag** |
-| Drove UI labels ("· Trip") | **Nothing in the UI says Trip** — already removed from Visits |
-| Changed rebuild fusing behaviour | **Changes nothing but a number** |
-| Could be wrong about a specific visit forever | A count, recomputed from the dates every time |
+| Removed in 0133                               | What Erica asked for, 2026-08-11                                     |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| A**stored flag** on the visit row       | **No stored flag**                                             |
+| Drove UI labels ("· Trip")                   | **Nothing in the UI says Trip** — already removed from Visits |
+| Changed rebuild fusing behaviour              | **Changes nothing but a number**                               |
+| Could be wrong about a specific visit forever | A count, recomputed from the dates every time                        |
 
 So: **the stats bar counts visits whose end date is after their start date. No column, no
 label, no behaviour.** That satisfies both her instruction and the reason 0047 was reverted.
@@ -786,13 +786,13 @@ Erica: if you want those three to stop counting, unmark them and the number foll
 
 ### How statistics are gathered
 
-| Stat | Counts |
-|---|---|
-| **Places** | Distinct places visited — **each place once** |
-| **Visits** | Every visit, every time |
-| **Trips** | Visits spanning **more than one day** — derived at read time, never stored |
-| **Miles** | Sum of activity distance |
-| **Routes** | Activities with a track |
+| Stat             | Counts                                                                           |
+| ---------------- | -------------------------------------------------------------------------------- |
+| **Places** | Distinct places visited —**each place once**                              |
+| **Visits** | Every visit, every time                                                          |
+| **Trips**  | Visits spanning**more than one day** — derived at read time, never stored |
+| **Miles**  | Sum of activity distance                                                         |
+| **Routes** | Activities with a track                                                          |
 
 ### What every card shows
 
@@ -833,15 +833,13 @@ a destination, a visit, an activity, a trail, and a blank new one.
 5. **Category tags** as pills — Dining, Beach, Winery. **Never city or region pills.**
 6. **The sections**, each headed by a **blue rule with an UPPERCASE WHITE heading**, and a
    quiet count or scope on the right ("12 · every visit"):
-
-   | Section | Holds | On a VISIT card |
-   |---|---|---|
-   | **Visits** | Years as **dropdowns** (Show / Hide), newest first, only years that have visits. Inside, one line per visit: the date, and the segment name if it is a trail. | the one visit |
-   | **Photos and videos** | ONE carousel, in date order, each with its date and the ♥ / 🔥 marks | scoped to the visit |
-   | **Routes** | A map showing **every route from every visit**, then the list: name · type · miles · date. **Hikes, biking, walking and running all live here.** | only that visit's routes |
-   | **Restaurants** | name + stars. Not on a trail card. | scoped to the visit |
-   | **Notes and reviews** | note + date, and "Write a note or review" at the bottom | scoped to the visit |
-
+   | Section                     | Holds                                                                                                                                                              | On a VISIT card          |
+   | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
+   | **Visits**            | Years as**dropdowns** (Show / Hide), newest first, only years that have visits. Inside, one line per visit: the date, and the segment name if it is a trail. | the one visit            |
+   | **Photos and videos** | ONE carousel, in date order, each with its date and the ♥ / 🔥 marks                                                                                              | scoped to the visit      |
+   | **Routes**            | A map showing**every route from every visit**, then the list: name · type · miles · date. **Hikes, biking, walking and running all live here.**     | only that visit's routes |
+   | **Restaurants**       | name + stars. Not on a trail card.                                                                                                                                 | scoped to the visit      |
+   | **Notes and reviews** | note + date, and "Write a note or review" at the bottom                                                                                                            | scoped to the visit      |
 7. **The footer**: "Add another visit" · "Delete". On the blank card: **Save · Cancel**.
 
 **The blank (new) card** is the same card with the fields empty: "Add a cover photo",
@@ -868,17 +866,17 @@ a single date is **"May 2"**, a range is **"5/4 - 5/7"**, and dates are **groupe
 
 Verified live on adventureorno.com, San Diego, deploy `cef831d0`:
 
-| Locked | Live |
-|---|---|
-| Section order: Visits · Photos and videos · Routes · Restaurants · Notes and reviews | ✅ (was Visits · Photos · Notes · "Routes here") |
-| Routes holds the map **and** the list (name · type · miles · date) | ✅ 6 routes listed under the map |
-| Restaurants is its own section, plural | ✅ "Restaurants (2)", "Beaches (1)" — they were folds inside Notes |
-| No "Places" section | ✅ removed; **3 places app-wide have no category and need one** (Fort Rosencrans + 2) |
-| The name, then the rating under it | ✅ (the stars were above it) |
-| Sub-line says what this is | ✅ "Visited once · 12 photos" (was "· 1 visit") |
-| A single date "May 2", a range "5/4 - 5/7" | ✅ everywhere on the card, via `lib/visitDates.ts` (tested) |
-| No "Trip", no "Together" in the Visits section | ✅ both gone; the who-was-here control says "Both" |
-| Photos: one carousel, the marks on it | ✅ (`0913f05d`) |
+| Locked                                                                                   | Live                                                                                       |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Section order: Visits · Photos and videos · Routes · Restaurants · Notes and reviews | ✅ (was Visits · Photos · Notes · "Routes here")                                        |
+| Routes holds the map**and** the list (name · type · miles · date)               | ✅ 6 routes listed under the map                                                           |
+| Restaurants is its own section, plural                                                   | ✅ "Restaurants (2)", "Beaches (1)" — they were folds inside Notes                        |
+| No "Places" section                                                                      | ✅ removed;**3 places app-wide have no category and need one** (Fort Rosencrans + 2) |
+| The name, then the rating under it                                                       | ✅ (the stars were above it)                                                               |
+| Sub-line says what this is                                                               | ✅ "Visited once · 12 photos" (was "· 1 visit")                                          |
+| A single date "May 2", a range "5/4 - 5/7"                                               | ✅ everywhere on the card, via`lib/visitDates.ts` (tested)                               |
+| No "Trip", no "Together" in the Visits section                                           | ✅ both gone; the who-was-here control says "Both"                                         |
+| Photos: one carousel, the marks on it                                                    | ✅ (`0913f05d`)                                                                          |
 
 **Still to build on the card:**
 
@@ -1611,13 +1609,13 @@ Actions minutes, was shown exactly what that exposes, and chose to leave it publ
 
 What is in the history, verified by fetching it anonymously from raw.githubusercontent.com:
 
-| File (added in commit `3d9f1bd`, untracked later in `90ee6fb`) | What |
-| --- | --- |
-| `supabase/snapshots/2026-07-22/location_pings_slim.json` | **16,952 location pings** |
-| `…/activities.json` | 256 activities with coordinates and route geometry |
-| `…/places.json` | 129 places **with street addresses** |
-| `…/photos.json` | 148 photos with lat/lng |
-| `…/visits.json` | 416 visits |
+| File (added in commit`3d9f1bd`, untracked later in `90ee6fb`) | What                                               |
+| ----------------------------------------------------------------- | -------------------------------------------------- |
+| `supabase/snapshots/2026-07-22/location_pings_slim.json`        | **16,952 location pings**                    |
+| `…/activities.json`                                            | 256 activities with coordinates and route geometry |
+| `…/places.json`                                                | 129 places**with street addresses**          |
+| `…/photos.json`                                                | 148 photos with lat/lng                            |
+| `…/visits.json`                                                | 416 visits                                         |
 
 Untracking a file does NOT remove it from history — that is why this survived the
 2026-07 privacy cleanup. `supabase/snapshots/` is gitignored today, so nothing NEW is
@@ -1704,10 +1702,10 @@ is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resur
 
 ### THE PINNED TOOLCHAIN (2026-08-11)
 
-| Thing | Pinned to | Where |
-| --- | --- | --- |
-| Node | **22** | `.nvmrc`, `engines` (`>=22 <23`), CI `setup-node`, Cloudflare `NODE_VERSION` (production AND preview) |
-| Wrangler | **4.113.0, exact** | `app`, `workers/photo-gateway`, `workers/basemap` |
+| Thing    | Pinned to                | Where                                                                                                           |
+| -------- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Node     | **22**             | `.nvmrc`, `engines` (`>=22 <23`), CI `setup-node`, Cloudflare `NODE_VERSION` (production AND preview) |
+| Wrangler | **4.113.0, exact** | `app`, `workers/photo-gateway`, `workers/basemap`                                                         |
 
 The Mac was on **Node 26** while CI ran 22 — the two only agreed by luck. Wrangler was
 worse: `app` had `^4.113.0`, `photo-gateway` had `^3.80.0`, and `workers/basemap` never
@@ -1784,12 +1782,12 @@ retained and never tested.
 never stops because a code check went red, and a red backup is not lost among other
 failing jobs.
 
-| Job | When | What |
-| --- | --- | --- |
-| `database` | nightly 07:17 UTC | every table → JSONL + manifest (row counts + sha256), **age-encrypted before upload**, then R2 with retention |
-| `objects` | nightly | mirrors `adventureorno-photos` → `aon-backups/objects/` (incremental) |
-| `freshness` | nightly, `always()` | **fails if no recent artifact exists** |
-| `verify restore` | on demand | restores the newest backup into a disposable Postgres 17 and checks every row count |
+| Job                | When                 | What                                                                                                                |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `database`       | nightly 07:17 UTC    | every table → JSONL + manifest (row counts + sha256),**age-encrypted before upload**, then R2 with retention |
+| `objects`        | nightly              | mirrors`adventureorno-photos` → `aon-backups/objects/` (incremental)                                           |
+| `freshness`      | nightly,`always()` | **fails if no recent artifact exists**                                                                        |
+| `verify restore` | on demand            | restores the newest backup into a disposable Postgres 17 and checks every row count                                 |
 
 **Retention (grandfather-father-son):** 14 daily · 8 weekly (Sundays) · 12 monthly
 (the 1st). ~3 MB a night, inside R2's free tier. A single rolling copy is not a
@@ -1834,6 +1832,7 @@ migration chain into a fresh Postgres 17 → every row loaded → **all 38 table
 the manifest exactly, 18,833 rows, zero errors.**
 
 It failed twice first, which is the entire argument for testing restores:
+
 1. Hand-built INSERTs died 18,024 times on `uuid[]` vs `jsonb`. Fixed with
    `jsonb_populate_record`, letting Postgres cast into its own row type.
 2. Then `permission denied to COPY from a file` (Supabase's `postgres` is not a
@@ -1844,11 +1843,11 @@ A backup nobody has restored is a rumour. This one has been restored.
 
 ### Recovery objectives
 
-| | |
-| --- | --- |
-| **RPO** (data you can lose) | **≤ 24 h** — nightly. An outage at 07:00 loses that day's edits. |
-| **RTO** (time to be back) | **≈ 30–45 min** — ~2 min to fetch and decrypt, ~4 min to rebuild the schema, ~2 min to load, the rest for Supabase project setup and re-pointing the app. |
-| **Objects RPO** | ≤ 24 h, incremental |
+|                                   |                                                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **RPO** (data you can lose) | **≤ 24 h** — nightly. An outage at 07:00 loses that day's edits.                                                                                           |
+| **RTO** (time to be back)   | **≈ 30–45 min** — ~2 min to fetch and decrypt, ~4 min to rebuild the schema, ~2 min to load, the rest for Supabase project setup and re-pointing the app. |
+| **Objects RPO**             | ≤ 24 h, incremental                                                                                                                                               |
 
 ### How to actually recover
 
@@ -1879,17 +1878,17 @@ moment it is pushed.
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
 lost work and can be restored in minutes.
 
-| What                                                           | When       | Why                                                                                                         | Restore from                                                                                                                      |
-| -------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Address/place editing in the photo sorter (`PlaceQuickEdit`) | 2026-07-26 | She asked for "JUST THE VISIT INFORMATION" — place-level fields were confusing inside a visit-sorting flow | commit`5bb5b6e`; the component still exists, unused. **She now wants it back (Phase 3).**                                 |
-| The`trips` and `trip_stops` tables                         | 2026-08-08 | A trip is a visit you marked, not a separate object                                                         | commit`aa6e553`                                                                                                                 |
-| The 5-step Add wizard                                          | 2026-08-08 | Replaced by one add sheet                                                                                   | commit`fd3004d`                                                                                                                 |
-| Service-worker registration                                    | earlier    | A cached shell served stale code                                                                            | restored 2026-08-10 with HTML network-first                                                                                       |
-| `apply_naming_rule(uuid)` (geofence-only)                    | 2026-08-10 | It could rename 76 activities on start-point alone                                                          | migration`0152`                                                                                                                 |
-| "downtown Leesburg, VA" as an Appalachian Trail section        | 2026-08-10 | Not on the AT.**The place itself was kept** — it holds 3 photos and 2 visits                         | migration`0155` (the earlier membership-row delete did not take: `part_of` is the record and its trigger rebuilds membership) |
-| The **`detect-trips` nightly auto-detection** (deployment deleted) | 2026-08-12 | Erica: "disable the nightly auto-detect feature". Its cron was already unscheduled; the deployment was what remained. It also contradicts §2 — it creates places tagged `trip`, and a trip is never labelled | source kept at `supabase/functions/detect-trips/`; `supabase functions deploy detect-trips` restores it, and the config entry is commented in `supabase/config.toml` |
-| The **Sections list** on a trail card, its walked-sections map, and the per-section date disclosure | 2026-08-11 | The approved preview replaced it: the segment name rides on the visit, so a trail card reads like every other card | commit `438677e0`; the deleted JSX is also saved verbatim in the session scratchpad |
-| The generic **"Places"** section on a card (uncategorised members) | 2026-08-11 | It IS the PLACES HERE section she asked to be rid of. The locked card has category sections and nothing else | commit `a8e60124` + follow-up. **Three places app-wide are affected — Fort Rosencrans (San Diego) and two others. They need a category, not a bucket.** |
+| What                                                                                                     | When       | Why                                                                                                                                                                                                             | Restore from                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Address/place editing in the photo sorter (`PlaceQuickEdit`)                                           | 2026-07-26 | She asked for "JUST THE VISIT INFORMATION" — place-level fields were confusing inside a visit-sorting flow                                                                                                     | commit`5bb5b6e`; the component still exists, unused. **She now wants it back (Phase 3).**                                                                         |
+| The`trips` and `trip_stops` tables                                                                   | 2026-08-08 | A trip is a visit you marked, not a separate object                                                                                                                                                             | commit`aa6e553`                                                                                                                                                         |
+| The 5-step Add wizard                                                                                    | 2026-08-08 | Replaced by one add sheet                                                                                                                                                                                       | commit`fd3004d`                                                                                                                                                         |
+| Service-worker registration                                                                              | earlier    | A cached shell served stale code                                                                                                                                                                                | restored 2026-08-10 with HTML network-first                                                                                                                               |
+| `apply_naming_rule(uuid)` (geofence-only)                                                              | 2026-08-10 | It could rename 76 activities on start-point alone                                                                                                                                                              | migration`0152`                                                                                                                                                         |
+| "downtown Leesburg, VA" as an Appalachian Trail section                                                  | 2026-08-10 | Not on the AT.**The place itself was kept** — it holds 3 photos and 2 visits                                                                                                                             | migration`0155` (the earlier membership-row delete did not take: `part_of` is the record and its trigger rebuilds membership)                                         |
+| The**`detect-trips` nightly auto-detection** (deployment deleted)                                | 2026-08-12 | Erica: "disable the nightly auto-detect feature". Its cron was already unscheduled; the deployment was what remained. It also contradicts §2 — it creates places tagged`trip`, and a trip is never labelled | source kept at`supabase/functions/detect-trips/`; `supabase functions deploy detect-trips` restores it, and the config entry is commented in `supabase/config.toml` |
+| The**Sections list** on a trail card, its walked-sections map, and the per-section date disclosure | 2026-08-11 | The approved preview replaced it: the segment name rides on the visit, so a trail card reads like every other card                                                                                              | commit`438677e0`; the deleted JSX is also saved verbatim in the session scratchpad                                                                                      |
+| The generic**"Places"** section on a card (uncategorised members)                                  | 2026-08-11 | It IS the PLACES HERE section she asked to be rid of. The locked card has category sections and nothing else                                                                                                    | commit`a8e60124` + follow-up. **Three places app-wide are affected — Fort Rosencrans (San Diego) and two others. They need a category, not a bucket.**           |
 
 ---
 
