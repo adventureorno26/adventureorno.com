@@ -56,37 +56,24 @@ export async function fetchActivitiesOfType(
   type: string,
   personId?: string | null,
 ): Promise<ActivityListRow[]> {
-  let query = supabase
-    .from('activities')
-    .select('id, type, name, distance, start_date, place_id, places(name)')
-    .eq('type', type)
-    .order('start_date', { ascending: false, nullsFirst: false });
-  query = personId
-    ? query.or(`solo_profile.is.null,solo_profile.eq.${personId}`)
-    : query.is('solo_profile', null);
-  const { data, error } = await query;
-  if (error) return [];
-  return (data ?? []).map((a) => {
-    const row = a as unknown as {
-      id: string;
-      type: string;
-      name: string | null;
-      distance: number;
-      start_date: string | null;
-      place_id: string | null;
-      places: { name: string } | { name: string }[] | null;
-    };
-    const pl = Array.isArray(row.places) ? row.places[0] : row.places;
-    return {
-      id: row.id,
-      type: row.type,
-      name: row.name,
-      distance: row.distance,
-      start_date: row.start_date,
-      place_id: row.place_id,
-      place_name: pl?.name ?? null,
-    };
+  // Through the RPC (0184). This used to filter the table directly with
+  // `solo_profile.is.null,solo_profile.eq.<person>` — the predicate 0172/0173 removed
+  // from every function in the database, still running here. It scoped by a null, so
+  // it could describe one person or everybody and nothing else.
+  const { data, error } = await supabase.rpc('activities_of_type', {
+    p_type: type,
+    p_profile: personId ?? undefined,
   });
+  if (error) return [];
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    type: row.type,
+    name: row.name,
+    distance: row.distance,
+    start_date: row.start_date,
+    place_id: row.place_id,
+    place_name: row.place_name,
+  }));
 }
 
 export interface PlaceCount {
@@ -117,20 +104,25 @@ export interface ActivityLine {
 /** Activity route geometries for the map. Both view = on/after the cutoff; a
  *  single person's view = ALL their routes (their full history). */
 export async function fetchActivityLines(personId?: string | null): Promise<ActivityLine[]> {
-  let query = supabase
-    .from('activities')
-    .select('id, place_id, type, summary_polyline, owner_profile')
-    .not('summary_polyline', 'is', null);
-  // Both = joint routes only (solo_profile null, incl. drawn trails). A person =
-  // joint + their own.
-  query = personId
-    ? query.or(`solo_profile.is.null,solo_profile.eq.${personId}`)
-    : query.is('solo_profile', null);
-  const { data, error } = await query;
+  // Through the RPC (0184). The map was the last thing in the app filtering on a
+  // null: "Both" meant `solo_profile is null`, which is a statement about a column
+  // rather than about who was there.
+  const { data, error } = await supabase.rpc('activity_lines', {
+    p_profile: personId ?? undefined,
+  });
   if (error) return [];
-  return (data ?? []).filter(
-    (a): a is ActivityLine => !!(a as ActivityLine).summary_polyline,
-  ) as ActivityLine[];
+  // Mapped rather than asserted: the type generator describes a RETURNS TABLE column
+  // by its SQL type and never by its nullability, so it calls owner_profile a string
+  // when it is plainly nullable.
+  return (data ?? [])
+    .filter((a) => !!a.summary_polyline)
+    .map((a) => ({
+      id: a.id,
+      place_id: a.place_id,
+      type: a.type,
+      summary_polyline: a.summary_polyline,
+      owner_profile: (a.owner_profile as string | null) ?? null,
+    }));
 }
 
 /** Total meters by activity type across a set of places (trail + its trailheads). */
