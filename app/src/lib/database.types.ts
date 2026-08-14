@@ -1972,56 +1972,6 @@ export type Database = {
         }
         Relationships: []
       }
-      trip_notes: {
-        Row: {
-          created_at: string
-          day: string
-          id: string
-          note: string
-          trip_id: string
-        }
-        Insert: {
-          created_at?: string
-          day: string
-          id?: string
-          note: string
-          trip_id: string
-        }
-        Update: {
-          created_at?: string
-          day?: string
-          id?: string
-          note?: string
-          trip_id?: string
-        }
-        Relationships: []
-      }
-      trip_people: {
-        Row: {
-          created_at: string
-          person_id: string
-          trip_id: string
-        }
-        Insert: {
-          created_at?: string
-          person_id: string
-          trip_id: string
-        }
-        Update: {
-          created_at?: string
-          person_id?: string
-          trip_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "trip_people_person_id_fkey"
-            columns: ["person_id"]
-            isOneToOne: false
-            referencedRelation: "people"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       videos: {
         Row: {
           content_type: string
@@ -2683,6 +2633,7 @@ export type Database = {
       add_activity_to_visit: {
         Args: {
           p_client_key?: string
+          p_day?: string
           p_distance_m?: number
           p_name?: string
           p_option: string
@@ -2737,6 +2688,7 @@ export type Database = {
       add_place_to_visit: {
         Args: {
           p_client_key?: string
+          p_day?: string
           p_lat?: number
           p_lng?: number
           p_name: string
@@ -2796,10 +2748,6 @@ export type Database = {
       add_to_container: {
         Args: { p_child: string; p_parent: string }
         Returns: undefined
-      }
-      add_trip_note: {
-        Args: { p_day: string; p_note: string; p_trip: string }
-        Returns: string
       }
       addauth: { Args: { "": string }; Returns: boolean }
       addgeometrycolumn:
@@ -3026,7 +2974,6 @@ export type Database = {
       }
       dedupe_joint_outings: { Args: never; Returns: number }
       dedupe_shared_outings: { Args: never; Returns: number }
-      delete_trip_note: { Args: { p_id: string }; Returns: undefined }
       delete_visit: {
         Args: { p_children?: string; p_visit: string }
         Returns: Json

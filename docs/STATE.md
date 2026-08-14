@@ -1,3 +1,5 @@
+ok 
+
 # AdventureOrNo — what this is, and what is left to build
 
 **This is the only planning document.** If a plan is not written here, it is not the plan.
@@ -36,10 +38,10 @@ real app, and then take the next slice.
 
 Do not begin a new feature lane until all items below are true for the same commit:
 
-- [x] Production migration `0177_the_card_answers_in_one_call` is applied and recorded.
+- [X] Production migration `0177_the_card_answers_in_one_call` is applied and recorded.
   Verified 2026-08-14: all 177 migrations are in the ledger, `videos.visit_id` exists,
   and production `card_view` is version 2.
-- [x] A current recoverable backup exists before that migration. Verified 2026-08-14:
+- [X] A current recoverable backup exists before that migration. Verified 2026-08-14:
   encrypted database backup from today, five generations retained, and 362 media objects
   mirrored.
 - [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
@@ -244,38 +246,6 @@ The backup you need is always older than the schema you restore onto, so this wo
 bitten precisely when it mattered. `scripts/verify-restore.sh` now inserts only the
 columns the dump actually contains and lets the schema default the rest, and reports
 which columns were newer than the backup.
-
-### 0.7b APPLIED TO PRODUCTION — 2026-08-14
-
-§0.8 phase 7, continued. §0.10 requires the production migration IDs to be recorded
-here; these were applied and each verified against production before the next was
-started. Ledger: **180 of 180 recorded**, `check-migration-ledger.mjs` clean.
-
-| Migration | What it did | Verified in production |
-| --- | --- | --- |
-| `0170` | `accepted_visits` stops bypassing RLS; parent/child triggers; a note can be cleared | `reloptions = {security_invoker=true}`; trigger present |
-| `0171` | `card_view` — one read model for the card | function present |
-| `0172` | the rest of the visit readers onto the canonical model | places 52/52, counts 58/58, trails 28/28 |
-| `0173` | `activity_profiles`; the activity readers; the last date-inference | shared activities **56 → 56**, 501 participant rows, 9 queued for review |
-| `0174` | TRUNCATE and `anon` closed; `create/delete/restore_visit` | 45 tables closed; PostGIS's three cannot be (owned by `supabase_admin`) |
-| `0175` | no function looks a person up by `display_name` | name lookups **0** |
-| `0176` | the RPCs are the only door into a visit | `visits`/`visit_profiles`/`visit_people`/`visit_evidence` read-only to a browser |
-| `0177` | `card_view` v2; `videos.visit_id` | version **2**; 5 of 6 videos pinned, none ambiguous |
-| `0178` | `add_place_to_visit` writes the record, not the mirror | 19 memberships, **0** not backed by `part_of` |
-
-Frontend deployed alongside: `adventureorno.com/version.json` → `ac88ec9`.
-
-**Two intentional differences, both stated before they shipped:**
-
-- `occasion_count` for Both **86 → 101**. The old rule folded any visit whose dates sat
-  inside a marked trip into that trip, at any place. Nothing in the app calls it.
-- visits reading as trips **9 → 55**. §0.4 counts a multi-day visit as a trip whether or
-  not anyone marked it; the stats bar already did, so this ends a disagreement rather
-  than starting one. Approved 2026-08-14.
-
-**What phase 7 still does not have:** the authenticated card verified on mobile and
-desktop against the artifact. Login is Google-only, so this is the one §0.10 line an
-agent cannot close on its own.
 
 ### 0.5a READERS SWITCHED — parity held, 2026-08-12
 
@@ -678,38 +648,6 @@ Do not ship this as one destructive migration.
 Every phase is its own commit with a plain-language message. Do not mix backup/Cloudflare/GitHub
 workflow repairs into the schema commits. Do not deploy production while required CI is red.
 
-### 0.8a PHASE 8 SEQUENCED — signed off 2026-08-14
-
-Phase 8 is the removal phase. It is **five migrations, smallest and most provable
-first**, because a removal that turns out to be wrong is the expensive kind of mistake.
-Each step states the precondition that makes it safe, and each was measured on
-production before being written — not assumed.
-
-| # | Removes | Precondition | Measured |
-| --- | --- | --- | --- |
-| 1 | `trip_people`, `trip_notes`, `add_trip_note`, `delete_trip_note`, and the dead frontend helpers | empty, no inbound FKs, no callers | **0 rows** each, **no** FKs, **0** callers ✅ |
-| 2 | superseded comments and tests describing retired rules | the rule they describe is genuinely gone | pending |
-| 3 | `visits.solo_profile`, `activities.solo_profile` | participant rows agree with the column, everywhere | visits disagreeing **0**, activities disagreeing **0** ✅ |
-| 4 | `places.part_of` + `places_sync_membership` | §0.7: **every reader uses `place_membership`** | ❌ **NOT MET** — see below |
-| 5 | `visits.is_trip` in favour of `trip_marked` | the two never disagree, and no row reads the raw column | disagreeing **0** ✅, rows switched in #49 ✅ |
-
-**Step 4 is blocked, and deliberately last.** `part_of` and `place_membership` agree
-perfectly in both directions today (19 = 19, 0 unmatched either way), but the gate is
-not agreement — it is that nothing READS `part_of` any more. The frontend still reads it
-in six places (`PlacePanel` sections and members, `containers.ts`, `MapView`) and WRITES
-it in four, and seven database functions use it. `part_of` is currently the **record**
-and `place_membership` the mirror (§8), so those writes are correct until the readers
-move. Step 4 therefore needs a frontend change and a `set_place_containers` RPC first,
-and only then the column and its trigger go.
-
-**Ordering rationale.** 1 has nothing to argue about. 2 is text. 3 is a large but proven
-DB change with parity measured at zero drift. 5 is small but touches the toggle Erica
-uses, so it goes after the model is otherwise settled. 4 is last because it is the only
-one whose precondition is currently false.
-
-Nothing here is bundled: §0.8 requires each phase to be its own commit with a
-plain-language message, and a removal PR mixed with a repair is a removal nobody read.
-
 ### 0.9 Tests that make the decision permanent
 
 Database tests must prove at least:
@@ -896,8 +834,7 @@ a destination, a visit, an activity, a trail, and a blank new one.
    card the sub-line is that visit's dates. Never a raw flag or a count with no noun.
 5. **Category tags** as pills — Dining, Beach, Winery. **Never city or region pills.**
 6. **The sections**, each headed by a **blue rule with an UPPERCASE WHITE heading**, and a
-   quiet count or scope on the right ("12 · every visit"):
-   | Section                     | Holds                                                                                                                                                              | On a VISIT card          |
+   quiet count or scope on the right ("12 · every visit"):| Section                     | Holds                                                                                                                                                              | On a VISIT card          |
    | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
    | **Visits**            | Years as**dropdowns** (Show / Hide), newest first, only years that have visits. Inside, one line per visit: the date, and the segment name if it is a trail. | the one visit            |
    | **Photos and videos** | ONE carousel, in date order, each with its date and the ♥ / 🔥 marks                                                                                              | scoped to the visit      |
@@ -1737,29 +1674,21 @@ is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resur
 
 1. **Named branches only.** `fix/…`, `chore/…`, `feat/…`. Never commit on `main`.
    `.githooks/pre-commit` refuses, and GitHub refuses the push regardless:
-   *"Changes must be made through a pull request."* The ten separate checks became
-   **four aggregate ones — `build`, `database`, `security`, `smoke`** — each doing only
-   the work the changed files call for. Verified against the branch protection API
-   2026-08-14: those four, `strict: true`, `enforce_admins: true`, no force pushes, no
-   deletions.
+   *"Changes must be made through a pull request. 10 of 10 required status checks
+   are expected."*
 2. **A commit has to earn it.** When app code is staged the hook runs `tsc` and the
    unit tests — including `lockedCard.test.ts` — and refuses on failure. Docs and
    SQL changes do not have to boot vitest. Enable per clone with
    `git config core.hooksPath .githooks`.
-3. **Nothing commits itself** — ⚠️ **not true again as of 2026-08-14.** The global
-   Claude hooks that committed and pushed on every session start and stop were removed
-   (backup: `~/.claude/settings.json.bak-2026-08-11`); that Stop hook is what
-   resurrected `README.md` 90 minutes after it was deleted (§8). But on 2026-08-14
-   commit `34e0a81` appeared on a working branch, authored as Erica, with a **timestamp
-   for a message** ("Aug 14, 2026, 1:34 PM"), capturing two files mid-edit. Something is
-   auto-committing again. It has not lost work — the content was correct and was
-   re-committed with a real message — but a commit nobody wrote is how the resurrected
-   README started.
+3. **Nothing commits itself.** The global Claude hooks that committed and pushed on
+   every session start and stop are gone (backup:
+   `~/.claude/settings.json.bak-2026-08-11`). That Stop hook is what resurrected
+   `README.md` 90 minutes after it was deleted (§8).
 4. **`bypassPermissions` is off** in her Claude settings.
 
 ### THE ONLY ROUTE TO THE LIVE SITE (2026-08-11)
 
-    named branch → pull request → 4 required checks → merge to main
+    named branch → pull request → 10 required checks → merge to main
         → release-gate → production environment approval (Erica)
         → wrangler pages deploy --project-name adventureorno-com
 
@@ -1958,9 +1887,9 @@ lost work and can be restored in minutes.
 | Service-worker registration                                                                              | earlier    | A cached shell served stale code                                                                                                                                                                                | restored 2026-08-10 with HTML network-first                                                                                                                               |
 | `apply_naming_rule(uuid)` (geofence-only)                                                              | 2026-08-10 | It could rename 76 activities on start-point alone                                                                                                                                                              | migration`0152`                                                                                                                                                         |
 | "downtown Leesburg, VA" as an Appalachian Trail section                                                  | 2026-08-10 | Not on the AT.**The place itself was kept** — it holds 3 photos and 2 visits                                                                                                                             | migration`0155` (the earlier membership-row delete did not take: `part_of` is the record and its trigger rebuilds membership)                                         |
-| The**`detect-trips` nightly auto-detection** (deployment deleted)                                | 2026-08-12 | Erica: "disable the nightly auto-detect feature". Its cron was already unscheduled; the deployment was what remained. It also contradicts §2 — it creates places tagged`trip`, and a trip is never labelled | source kept at`supabase/functions/detect-trips/`; `supabase functions deploy detect-trips` restores it, and the config entry is commented in `supabase/config.toml` |
+| The**`detect-trips` nightly auto-detection** (deployment deleted)                                      | 2026-08-12 | Erica: "disable the nightly auto-detect feature". Its cron was already unscheduled; the deployment was what remained. It also contradicts §2 — it creates places tagged`trip`, and a trip is never labelled | source kept at`supabase/functions/detect-trips/`; `supabase functions deploy detect-trips` restores it, and the config entry is commented in `supabase/config.toml` |
 | The**Sections list** on a trail card, its walked-sections map, and the per-section date disclosure | 2026-08-11 | The approved preview replaced it: the segment name rides on the visit, so a trail card reads like every other card                                                                                              | commit`438677e0`; the deleted JSX is also saved verbatim in the session scratchpad                                                                                      |
-| The generic**"Places"** section on a card (uncategorised members)                                  | 2026-08-11 | It IS the PLACES HERE section she asked to be rid of. The locked card has category sections and nothing else                                                                                                    | commit`a8e60124` + follow-up. **Three places app-wide are affected — Fort Rosencrans (San Diego) and two others. They need a category, not a bucket.**           |
+| The generic**"Places"** section on a card (uncategorised members)                                        | 2026-08-11 | It IS the PLACES HERE section she asked to be rid of. The locked card has category sections and nothing else                                                                                                    | commit`a8e60124` + follow-up. **Three places app-wide are affected — Fort Rosencrans (San Diego) and two others. They need a category, not a bucket.**           |
 
 ---
 
@@ -2111,12 +2040,12 @@ Use `accepted_visits` joined to `visit_profiles`. An absent participant row mean
 not "Both"; shared attribution requires explicit participant rows. The older
 `solo_profile IS NULL` rule is retired compatibility history.
 
-| Stat   | Definition                                                         |
-| ------ | ------------------------------------------------------------------ |
-| Places | distinct places with a qualifying visit, where`counts_as_place`  |
-| Visits | count of visit rows (the map badge = number of visits, never days) |
-| Trips  | count of accepted top-level visits where canonical `counts_as_trip` is true |
-| Miles  | sum of`activities.distance`, attributed the same way             |
+| Stat   | Definition                                                                   |
+| ------ | ---------------------------------------------------------------------------- |
+| Places | distinct places with a qualifying visit, where`counts_as_place`            |
+| Visits | count of visit rows (the map badge = number of visits, never days)           |
+| Trips  | count of accepted top-level visits where canonical`counts_as_trip` is true |
+| Miles  | sum of`activities.distance`, attributed the same way                       |
 
 #### Naming (migrations 0129–0131)
 

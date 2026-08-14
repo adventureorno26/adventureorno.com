@@ -170,6 +170,9 @@ export default function PlacePanel({
   const [tripContents, setTripContents] = useState<Record<string, TripContent[]>>({});
   /** Visit ids that COUNT as a trip (§0.4), from card_view. */
   const [qualifiedTrips, setQualifiedTrips] = useState<Set<string>>(new Set());
+  /** visit id / activity id → the ONE person on it, or null when everyone was.
+   *  Derived from participant rows; `solo_profile` cannot express three people. */
+  const [soloBy, setSoloBy] = useState<Map<string, string | null>>(new Map());
   const [name, setName] = useState(place.name);
   const [error, setError] = useState<string | null>(null);
 
@@ -221,6 +224,14 @@ export default function PlacePanel({
     // used to read the raw `is_trip` column, which only ever means "someone marked
     // it" — so a week away that nobody thought to mark did not read as a trip.
     setQualifiedTrips(new Set(card.visits.filter((v) => v.is_trip_qualified).map((v) => v.id)));
+    // "Who" on a row is now a QUESTION ABOUT THE PARTICIPANT ROWS: exactly one person
+    // means that person, anything else means everyone. The old `solo_profile` said the
+    // same thing with a null, which is why it could never describe a third member.
+    const solo = new Map<string, string | null>();
+    const only = (people: { id: string }[]) => (people.length === 1 ? people[0].id : null);
+    for (const v of card.visits) solo.set(v.id, only(v.people));
+    for (const r of card.routes) solo.set(r.id, only(r.people));
+    setSoloBy(solo);
     setVisitStats(
       Object.fromEntries(card.visits.map((v) => [v.id, { photos: v.photos, videos: v.videos }])),
     );
@@ -970,7 +981,7 @@ export default function PlacePanel({
       start: '' as string,
       end: '' as string,
       sort: activityDay(a),
-      solo: a.solo_profile as string | null,
+      solo: soloBy.get(a.id) ?? null,
       // An outing logged on a SECTION of a trail names that section, exactly as a
       // visit does — the segment rides on the row, not on a Sections list.
       seg:
@@ -1019,7 +1030,7 @@ export default function PlacePanel({
       start: v.start_date as string,
       end: v.end_date as string,
       sort: v.start_date,
-      solo: v.solo_profile as string | null,
+      solo: soloBy.get(v.id) ?? null,
       target: { type: 'visit' as const, id: v.id },
     }));
   // ONE ROW PER OUTING. Rolling a trail's sections in showed that 27 of the
