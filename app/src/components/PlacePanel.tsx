@@ -167,6 +167,8 @@ export default function PlacePanel({
   // A trip's contents — the places visited inside its dates. Derived server-side
   // from the dates, so it follows marking/unmarking with nothing stored.
   const [tripContents, setTripContents] = useState<Record<string, TripContent[]>>({});
+  /** Visit ids that COUNT as a trip (§0.4), from card_view. */
+  const [qualifiedTrips, setQualifiedTrips] = useState<Set<string>>(new Set());
   const [name, setName] = useState(place.name);
   const [error, setError] = useState<string | null>(null);
 
@@ -214,6 +216,10 @@ export default function PlacePanel({
   /** Spread one card payload into the pieces the card draws. Both the first load and
    *  every reload go through here, so they cannot get out of step. */
   function applyCard(card: CardView) {
+    // §0.4: a visit is a trip when it is MULTI-DAY or someone marked it. The rows
+    // used to read the raw `is_trip` column, which only ever means "someone marked
+    // it" — so a week away that nobody thought to mark did not read as a trip.
+    setQualifiedTrips(new Set(card.visits.filter((v) => v.is_trip_qualified).map((v) => v.id)));
     setVisitStats(
       Object.fromEntries(card.visits.map((v) => [v.id, { photos: v.photos, videos: v.videos }])),
     );
@@ -285,8 +291,12 @@ export default function PlacePanel({
       if (target.type === 'activity') await setActivitySolo(target.id, profileId);
       else await setVisitSolo(target.id, profileId);
       await Promise.all([reloadActs(), reloadVisits()]);
-    } catch {
-      /* leave as-is on failure */
+    } catch (e) {
+      // "leave as-is" meant the dropdown kept the value she picked while the
+      // database kept the old one. It looked saved and was not.
+      setError(
+        e instanceof Error ? `Could not change who was there: ${e.message}` : 'Could not change who was there.',
+      );
     }
   }
 
@@ -351,11 +361,15 @@ export default function PlacePanel({
     });
     try {
       await setMyRating(place.id, n);
-    } catch {
-      /* revert-free: reload on failure */
+    } catch (e) {
+      // Reload to undo the optimistic star — and SAY so. A rating that quietly
+      // springs back reads as the app arguing with you.
       fetchPlaceRatings(place.id)
         .then(setRatings)
         .catch(() => undefined);
+      setError(
+        e instanceof Error ? `Could not save that rating: ${e.message}` : 'Could not save that rating.',
+      );
     }
   }
 
@@ -917,11 +931,15 @@ export default function PlacePanel({
   // because all three were siblings. Only stays that span more than a day, or
   // that were marked as a trip, adopt their activities; a single-day run is
   // already one flat row and gains nothing from nesting.
+  /** Does this visit count as a trip? The server decides (counts_as_trip), with the
+   *  raw marked flag as a fallback for the moment before the card payload lands. */
+  const isTrip = (v: Visit) => qualifiedTrips.has(v.id) || !!v.is_trip;
+
   const nestedActs = new Map<string, Activity[]>();
   const nestedIds = new Set<string>();
   for (const v of visits ?? []) {
     const end = v.end_date || v.start_date;
-    if (!v.is_trip && end <= v.start_date) continue;
+    if (!isTrip(v) && end <= v.start_date) continue;
     const mine = ownActs.filter((a) => {
       const d = activityDay(a);
       // Same place as the visit — a hike on one section does not belong under a
@@ -970,11 +988,11 @@ export default function PlacePanel({
   // place you went, and the days you went are its dates.
   const visitRows = (visits ?? [])
     .filter(
-      (v) => v.is_trip || nestedActs.has(v.id) || !actDays.has(dayKey(v.place_id, v.start_date)),
+      (v) => isTrip(v) || nestedActs.has(v.id) || !actDays.has(dayKey(v.place_id, v.start_date)),
     )
     .map((v) => ({
       key: v.id,
-      trip: v.is_trip,
+      trip: isTrip(v),
       // No "· Trip": Erica asked for the word out of the Visits section entirely.
       // A multi-day visit still COUNTS as a trip in the stats bar (§2); it is just
       // never labelled. Dates in the locked format: "May 2", or "5/4 - 5/7".
