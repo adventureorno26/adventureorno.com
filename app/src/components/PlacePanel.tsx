@@ -7,6 +7,7 @@ import {
   createPlaceAtomic,
   deletePlace,
   deleteVisit,
+  isTripNotEmpty,
   restoreVisit,
   fetchCityBoundary,
   fetchEntries,
@@ -539,21 +540,23 @@ export default function PlacePanel({
     }
   }
 
-  async function removeVisit(id: string) {
-    // Soft UX: remove immediately, offer Undo that restores the FULL original visit
-    // (date, note, attribution, override, trip flag) — friendlier than a browser
-    // confirm, esp. on mobile.
-    const v = (visits ?? []).find((x) => x.id === id);
+  async function removeVisit(id: string, children: 'refuse' | 'detach' = 'refuse') {
+    // Soft UX: remove immediately, offer Undo — friendlier than a browser confirm,
+    // esp. on mobile. The snapshot the server returns is what Undo puts back, and it
+    // is more than the row: participants, companions, evidence, and the grouping in
+    // both directions.
     try {
-      await deleteVisit(id);
+      const snapshot = await deleteVisit(id, children);
       await reloadVisits();
       showSnack({
-        message: 'Visit removed.',
+        message:
+          children === 'detach'
+            ? 'Trip removed — the visits inside it are on their own now.'
+            : 'Visit removed.',
         actionLabel: 'Undo',
         onAction: async () => {
-          if (!v) return;
           try {
-            await restoreVisit(v);
+            await restoreVisit(snapshot);
             await reloadVisits();
           } catch (e) {
             // Undo is the safety net for a destructive action. Swallowing this
@@ -567,6 +570,16 @@ export default function PlacePanel({
         },
       });
     } catch (e) {
+      // Deleting a trip would free everything grouped inside it. The server refuses
+      // rather than doing that quietly, so say what would happen and let her decide.
+      if (isTripNotEmpty(e)) {
+        showSnack({
+          message: 'This trip still holds other visits.',
+          actionLabel: 'Remove it anyway',
+          onAction: () => void removeVisit(id, 'detach'),
+        });
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Could not delete visit');
     }
   }
