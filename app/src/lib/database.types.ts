@@ -2596,10 +2596,32 @@ export type Database = {
         Returns: unknown
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      activities_of_type: {
+        Args: { p_profile?: string; p_type: string }
+        Returns: {
+          distance: number
+          id: string
+          name: string
+          place_id: string
+          place_name: string
+          start_date: string
+          type: string
+        }[]
+      }
       activity_category: { Args: { p_type: string }; Returns: string }
       activity_display_name: {
         Args: { p_given: string; p_place: string; p_type: string }
         Returns: string
+      }
+      activity_lines: {
+        Args: { p_profile?: string }
+        Returns: {
+          id: string
+          owner_profile: string
+          place_id: string
+          summary_polyline: string
+          type: string
+        }[]
       }
       activity_reactions_for: {
         Args: { p_activity: string }

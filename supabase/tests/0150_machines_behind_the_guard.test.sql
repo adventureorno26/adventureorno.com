@@ -109,9 +109,14 @@ declare
   bad text := '';
   -- Group 4.1: these ARE the person deciding. They must record an approval, which is
   -- asserted separately below rather than assumed.
+  --   merge_visits (0185) — a person selecting two rows and saying they were one
+  --     occasion. It repoints photos, videos and activities onto the surviving visit;
+  --     refusing per-photo would leave them on a visit that no longer exists, which is
+  --     the same reasoning merge_places carries below. It cannot run by accident: it
+  --     requires is_editor_or_owner and two ids chosen by hand.
   person_initiated text[] := array[
     'set_place_name','update_activity','reassign_activity',
-    'set_visit_place','set_visit_is_trip','set_photo_visit'];
+    'set_visit_place','set_visit_is_trip','set_photo_visit','merge_visits'];
   -- The Inbox's own machinery: apply_inbox_field writes what she just chose, and
   -- approve_card/undo_approval drive it.
   inbox_internals text[] := array['apply_inbox_field','approve_card','undo_approval'];
