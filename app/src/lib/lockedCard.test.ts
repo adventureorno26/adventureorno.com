@@ -126,3 +126,33 @@ describe('a multi-day visit IS a trip', () => {
     );
   });
 });
+
+describe('merging is offered, never a mode', () => {
+  // Approved 2026-08-14: "Offered when they look like one stay" — a quiet line between
+  // two visits whose dates touch, NOT checkboxes and a Select mode. The visit list
+  // stays one-tap-to-edit, which is the thing Erica asked for in the first place.
+  it('offers the merge in her words', () => {
+    expect(CARD).toMatch(/These look like one stay/);
+  });
+
+  it('asks once, with what moves, before merging anything', () => {
+    expect(CARD, 'it must confirm rather than merge on the first tap').toMatch(
+      /Make these one visit/,
+    );
+    expect(CARD).toMatch(/move across/);
+  });
+
+  it('has no select mode on the visit list', () => {
+    // Not a blanket "no checkboxes" rule — the members picker legitimately uses one.
+    // What must not exist is a Select mode over the VISIT rows, which would stop them
+    // being one-tap-to-edit.
+    expect(CARD).not.toMatch(/Merge \d+ visits/);
+    expect(CARD).not.toMatch(/selectedVisits|visitSelectMode/);
+  });
+
+  it('only offers it for two visits at the SAME place', () => {
+    // merge_visits refuses across places; the card must not offer what the database
+    // will reject — a trail and one of its sections sit in the same list.
+    expect(CARD).toMatch(/later\.placeId !== earlier\.placeId/);
+  });
+});

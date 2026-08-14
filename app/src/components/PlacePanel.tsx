@@ -7,6 +7,7 @@ import {
   createPlaceAtomic,
   deletePlace,
   deleteVisit,
+  mergeVisits,
   isTripNotEmpty,
   restoreVisit,
   fetchCityBoundary,
@@ -144,9 +145,9 @@ export default function PlacePanel({
   // list, with the places visited during it nested inside it.
 
   const [visits, setVisits] = useState<Visit[] | null>(null);
-  const [visitStats, setVisitStats] = useState<Record<string, { photos: number; videos: number }>>(
-    {},
-  );
+  const [visitStats, setVisitStats] = useState<
+    Record<string, { photos: number; videos: number; routes?: number; children?: number }>
+  >({});
   const [trailActs, setTrailActs] = useState<Activity[] | null>(null);
   const [trailMiles, setTrailMiles] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState<Entry[] | null>(null);
@@ -170,6 +171,9 @@ export default function PlacePanel({
   const [tripContents, setTripContents] = useState<Record<string, TripContent[]>>({});
   /** Visit ids that COUNT as a trip (§0.4), from card_view. */
   const [qualifiedTrips, setQualifiedTrips] = useState<Set<string>>(new Set());
+  /** The pair the merge offer is asking about, if any. */
+  const [mergeAsk, setMergeAsk] = useState<{ keep: string; absorb: string } | null>(null);
+  const [mergingVisits, setMergingVisits] = useState(false);
   /** visit id / activity id → the ONE person on it, or null when everyone was.
    *  Derived from participant rows; `solo_profile` cannot express three people. */
   const [soloBy, setSoloBy] = useState<Map<string, string | null>>(new Map());
@@ -233,7 +237,12 @@ export default function PlacePanel({
     for (const r of card.routes) solo.set(r.id, only(r.people));
     setSoloBy(solo);
     setVisitStats(
-      Object.fromEntries(card.visits.map((v) => [v.id, { photos: v.photos, videos: v.videos }])),
+      Object.fromEntries(
+        card.visits.map((v) => [
+          v.id,
+          { photos: v.photos, videos: v.videos, routes: v.routes, children: v.children },
+        ]),
+      ),
     );
     setTripContents(
       Object.fromEntries(
@@ -619,6 +628,26 @@ export default function PlacePanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update the visit dates.');
     }
+  }
+
+  /** Merge the pair the offer is asking about. The surviving visit is the EARLIER one,
+   *  so the stay keeps the id it started with and anything linking to it still works. */
+  async function doMerge() {
+    if (!mergeAsk || mergingVisits) return;
+    setMergingVisits(true);
+    try {
+      await mergeVisits(mergeAsk.keep, mergeAsk.absorb);
+      setMergeAsk(null);
+      await Promise.all([reloadVisits(), reloadActs()]);
+      showSnack({ message: 'Merged into one visit.' });
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? `Could not merge those visits: ${e.message}`
+          : 'Could not merge those visits.',
+      );
+    }
+    setMergingVisits(false);
   }
 
   async function removeVisit(id: string, children: 'refuse' | 'detach' = 'refuse') {
@@ -1381,6 +1410,78 @@ export default function PlacePanel({
         const isTrail = place.is_trail;
         const loading = visits === null || trailActs === null;
         // ONE visit row, so the year groups below cannot drift from each other.
+        /** Days between two ISO dates, positive when b is later. */
+        const dayGap = (a: string, b: string) =>
+          Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
+        /**
+         * Two visits that look like ONE STAY: the same place, with dates that touch or
+         * overlap. This is the offer Erica approved rather than a select-mode — nothing
+         * appears unless the card can see a reason for it.
+         *
+         * `later` is the upper row (the list runs newest first), `earlier` the one under
+         * it, so the gap is measured from the earlier one's end.
+         */
+        const renderMergeOffer = (
+          later: (typeof rows)[number],
+          earlier: (typeof rows)[number] | undefined,
+        ) => {
+          if (!canEdit || !earlier) return null;
+          if (!later.del || !earlier.del) return null; // activity rows are not visits
+          if (!later.placeId || later.placeId !== earlier.placeId) return null;
+          const earlierEnd = earlier.end || earlier.start;
+          if (!earlierEnd || !later.start) return null;
+          const gap = dayGap(earlierEnd, later.start);
+          if (gap < 0 || gap > 1) return null; // overlapping or contiguous only
+
+          const asking = mergeAsk?.keep === earlier.del && mergeAsk?.absorb === later.del;
+          if (!asking) {
+            return (
+              <div className="merge-offer">
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => setMergeAsk({ keep: earlier.del!, absorb: later.del! })}
+                >
+                  These look like one stay · Merge
+                </button>
+              </div>
+            );
+          }
+
+          const moved = [earlier.del, later.del].reduce(
+            (acc, id) => {
+              const st = visitStats[id!];
+              return {
+                photos: acc.photos + (st?.photos ?? 0),
+                routes: acc.routes + (st?.routes ?? 0),
+                inside: acc.inside + (st?.children ?? 0),
+              };
+            },
+            { photos: 0, routes: 0, inside: 0 },
+          );
+          const what = [
+            moved.photos ? `${moved.photos} photo${moved.photos === 1 ? '' : 's'}` : '',
+            moved.routes ? `${moved.routes} route${moved.routes === 1 ? '' : 's'}` : '',
+            moved.inside ? `${moved.inside} place${moved.inside === 1 ? '' : 's'} inside it` : '',
+          ].filter(Boolean);
+
+          return (
+            <div className="merge-offer merge-asking">
+              <p>Make these one visit, {visitDates(earlier.start, later.end || later.start)}?</p>
+              {what.length > 0 && <p className="label">{what.join(', ')} move across.</p>}
+              <div className="btn-row">
+                <button type="button" disabled={mergingVisits} onClick={() => void doMerge()}>
+                  Merge
+                </button>
+                <button type="button" className="link" onClick={() => setMergeAsk(null)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          );
+        };
+
         const renderVisitRow = (r: (typeof rows)[number]) => {
           // A visit row IS the control. Tapping it opens the one editor for
           // that visit — dates, who, trip, delete, and the places visited
@@ -1584,7 +1685,12 @@ export default function PlacePanel({
                             {yearRows.length} {yearRows.length === 1 ? 'visit' : 'visits'}
                           </span>
                         </summary>
-                        {yearRows.map((r) => renderVisitRow(r))}
+                        {yearRows.map((r, i) => (
+                          <div key={r.key}>
+                            {renderVisitRow(r)}
+                            {renderMergeOffer(r, yearRows[i + 1])}
+                          </div>
+                        ))}
                       </details>
                     ));
                   })()}

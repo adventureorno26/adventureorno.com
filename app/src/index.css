@@ -7048,3 +7048,26 @@ button.mi-row:hover {
   align-items: center;
   gap: 8px;
 }
+
+/* "These look like one stay · Merge" — the offer between two visits whose dates touch.
+   Quiet by design: it is a suggestion the card noticed, not a control competing with
+   the visit rows, so it is a plain link at label weight until you tap it. */
+.merge-offer {
+  padding: 2px 10px 8px 22px;
+}
+.merge-offer .link {
+  font-size: 12px;
+  color: var(--muted);
+}
+.merge-offer .link:hover {
+  color: var(--text);
+}
+.merge-asking {
+  border-left: 2px solid var(--border-soft);
+  margin: 0 10px 8px 18px;
+  padding: 8px 10px;
+}
+.merge-asking p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
