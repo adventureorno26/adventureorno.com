@@ -1043,7 +1043,7 @@ export default function PlacePanel({
   // untidy.
 
   // A visit is the occasion; the ride and the run are what we DID during it, so
-  // they hang off it (docs/SCHEMA.md) rather than sitting beside it. Brewster is
+  // they hang off it (docs/STATE.md §0.3) rather than sitting beside it. Brewster is
   // one fused 2-day stay containing a ride and a run — it read as three visits
   // because all three were siblings. Only stays that span more than a day, or
   // that were marked as a trip, adopt their activities; a single-day run is
@@ -1282,7 +1282,7 @@ export default function PlacePanel({
           it. City and Region fetch the OSM boundary as you tap them, and Trail
           switches the card to the trail layout, so there is no second "make this
           a city / region / trail" row. TRIP is not offered at all: a trip is a
-          visit you marked, in the Visits list (docs/SCHEMA.md). */}
+          visit you marked, in the Visits list (docs/STATE.md §0.4). */}
       {canEdit && (
         <div className="cat-edit">
           <div className="cat-picker">

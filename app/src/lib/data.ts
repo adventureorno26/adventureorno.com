@@ -35,7 +35,7 @@ export async function addCategory(
 // to. Geography is exposed as lat/lng doubles (geom is a generated column).
 
 const PLACE_COLS =
-  // No solo_profile: attribution lives on the visit (migration 0136, docs/SCHEMA.md).
+  // No solo_profile: attribution lives on the visit (migration 0136, docs/STATE.md §0.3).
   'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, name_locked, named_by, name_scope, counts_as_place, visit_count, rating, review, is_home, saved, is_trail, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, favorite, holds_children, category, park, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
@@ -937,6 +937,27 @@ export async function fetchPlaceVisitCounts(
   const { data, error } = await supabase.rpc('place_visit_counts', {
     p_profile: profileId ?? undefined,
   });
+  if (error) throw error;
+  const out = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ place_id: string; visits: number }>) {
+    out.set(row.place_id, row.visits);
+  }
+  return out;
+}
+
+/**
+ * Visits per place, BY ANYBODY (0190).
+ *
+ * Not the same question as `fetchPlaceVisitCounts`, which answers "in this view" and
+ * whose null means SHARED visits. Two screens are not asking from inside a view:
+ * which of two duplicate places should survive a merge, and whether we have been
+ * somewhere more than once. Both read `places.visit_count` for want of anything else,
+ * and that column is a mirror nobody refreshes when a VISIT changes — production had
+ * the Appalachian Trail on 39 against 32 real visits, because merging two visits into
+ * one takes the count down and leaves the column alone.
+ */
+export async function fetchPlaceVisitTotals(): Promise<Map<string, number>> {
+  const { data, error } = await supabase.rpc('place_visit_totals');
   if (error) throw error;
   const out = new Map<string, number>();
   for (const row of (data ?? []) as Array<{ place_id: string; visits: number }>) {

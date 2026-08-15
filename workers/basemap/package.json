@@ -4,14 +4,17 @@
   "version": "0.1.0",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
     "typescript": "^5.6.2",
+    "vitest": "^4.1.10",
     "wrangler": "4.113.0"
   },
   "dependencies": {
-    "pmtiles": "^4.5.0"
+    "pmtiles": "^4.5.0",
+    "protomaps-themes-base": "^4.5.0"
   }
 }
