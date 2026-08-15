@@ -809,7 +809,10 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
 }
 
 const VISIT_COLS =
-  'id, place_id, start_date, end_date, note, is_trip, trip_marked, status, solo_override, created_at';
+  // No is_trip: §0.4 says a trip is multi-day OR marked, and `trip_marked` is the
+  // marking. The column is a mirror of trip_marked kept in step by a trigger, and it
+  // is on its way out — nothing should start reading it again in the meantime.
+  'id, place_id, start_date, end_date, note, trip_marked, status, solo_override, created_at';
 
 /** Manually set who a visit belongs to (null = both). Sticks across rebuilds. */
 export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {

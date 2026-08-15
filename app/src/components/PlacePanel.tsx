@@ -1049,7 +1049,11 @@ export default function PlacePanel({
   // already one flat row and gains nothing from nesting.
   /** Does this visit count as a trip? The server decides (counts_as_trip), with the
    *  raw marked flag as a fallback for the moment before the card payload lands. */
-  const isTrip = (v: Visit) => qualifiedTrips.has(v.id) || !!v.is_trip;
+  // §0.4 decides this, and card_view already answers it: is_trip_qualified is
+  // "multi-day OR someone marked it". The `|| v.is_trip` that used to sit here could
+  // only ever repeat the second half — a trigger keeps is_trip and trip_marked
+  // identical — while making it look as though the raw column still had a say.
+  const isTrip = (v: Visit) => qualifiedTrips.has(v.id);
 
   const nestedActs = new Map<string, Activity[]>();
   const nestedIds = new Set<string>();
