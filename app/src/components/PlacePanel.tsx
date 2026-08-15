@@ -6,8 +6,10 @@ import {
   createEntry,
   createPlaceAtomic,
   deletePlace,
+  addToContainer,
   deleteVisit,
   mergeVisits,
+  removeFromContainer,
   isTripNotEmpty,
   restoreVisit,
   fetchCityBoundary,
@@ -877,10 +879,15 @@ export default function PlacePanel({
   // keeps its own marker and just lists under each container it belongs to.
   async function togglePartOf(parentId: string) {
     if (!parentId) return;
-    const cur = place.part_of ?? [];
-    const next = cur.includes(parentId) ? cur.filter((id) => id !== parentId) : [...cur, parentId];
+    const inIt = (place.part_of ?? []).includes(parentId);
     try {
-      await patch({ part_of: next });
+      // Through the container RPCs rather than rewriting the array by hand. Membership
+      // is one fact with two mechanisms (§8) and this is the side that OWNS it; a
+      // hand-written array is how a membership silently disappears.
+      if (inIt) await removeFromContainer(place.id, parentId);
+      else await addToContainer(place.id, parentId);
+      const updated = await fetchPlace(place.id);
+      if (updated) onPlaceChanged(updated);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update that place');
     }
@@ -893,12 +900,17 @@ export default function PlacePanel({
     for (const id of ids) {
       const child = allPlaces.find((p) => p.id === id);
       if (!child) continue;
-      const next = [...new Set([...(child.part_of ?? []), place.id])];
       try {
-        const updated = await updatePlace(id, { part_of: next });
-        onPlaceChanged(updated);
-      } catch {
-        /* skip the ones that fail; keep going */
+        await addToContainer(id, place.id);
+      } catch (e) {
+        // Was silent. Adding five places and having two quietly not stick is the
+        // shape of bug that costs an evening.
+        showSnack({
+          message:
+            e instanceof Error
+              ? `Could not add ${child.name}: ${e.message}`
+              : `Could not add ${child.name}.`,
+        });
       }
     }
     setSelectedMembers(new Set());
