@@ -96,7 +96,7 @@ export default function NewPlaceDraft({
   const [poiChecked, setPoiChecked] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const choices = whoChoices(people, meId, { everyone: 'together' });
+  const choices = whoChoices(people, meId);
   // Idempotency keys per save action (reused on retry, reset on success). One for
   // the "create new place" action, one for "add to an existing (duplicate) place".
   const keyNew = useRef<string | null>(null);

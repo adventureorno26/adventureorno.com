@@ -47,6 +47,10 @@ const BANNED: { word: RegExp; why: string }[] = [
   { word: /put a place inside/i, why: '"+ Put a place inside this one" — gone.' },
   { word: /tap a date/i, why: 'Out of the Visits section entirely.' },
   { word: /this is a trail\b/i, why: 'Not on a destination or visit card.' },
+  {
+    word: /\bboth of us\b/i,
+    why: 'Erica, 2026-08-15: the view is TOGETHER. "Both of us" was still on the visit form.',
+  },
 ];
 
 const CARD = SOURCES.find(([p]) => p.endsWith('components/PlacePanel.tsx'))?.[1] ?? '';

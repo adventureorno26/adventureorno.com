@@ -41,7 +41,7 @@ export default function PlaceQuickEdit({
   const [name, setName] = useState(place.name);
   const [busy, setBusy] = useState<string | null>(null);
   const [solo, setSolo] = useState<string | null>(soloProfile);
-  const choices = whoChoices(people, meId, { everyone: 'together' });
+  const choices = whoChoices(people, meId);
 
   async function patch(p: Partial<Place>, label = 'Saving…') {
     setBusy(label);

@@ -111,7 +111,7 @@ export default function PlacesEditor() {
 
   const meId = profile?.id ?? null;
   const whoOptions = useMemo(
-    () => whoChoices(people, meId, { everyone: 'together' }),
+    () => whoChoices(people, meId),
     [people, meId],
   );
   /** Everyone except the signed-in member, in the order they appear. */

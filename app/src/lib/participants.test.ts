@@ -21,13 +21,11 @@ const THIRD = person('third-id', 'Sam');
 describe('who was there', () => {
   it('reads exactly as it did before, with two members', () => {
     // The control must not visibly change for Erica. Same words, same order.
-    expect(whoChoices([ME, JOSH], ME.id, { everyone: 'together' }).map((c) => c.label)).toEqual([
-      'Together',
-      'Just me',
-      'Just Josh',
-    ]);
+    // TOGETHER, not "Both" (Erica, 2026-08-15: "the view is Together so investigate why
+    // you are saying Both"). The label used to depend on a style option the caller had to
+    // remember to pass, so the same idea appeared under two words on different screens.
     expect(whoChoices([ME, JOSH], ME.id).map((c) => c.label)).toEqual([
-      'Both',
+      'Together',
       'Just me',
       'Just Josh',
     ]);
@@ -55,7 +53,7 @@ describe('who was there', () => {
   it('survives a member with no display name without guessing one', () => {
     const nameless = person('x-id', null as unknown as string);
     expect(whoChoices([ME, nameless], ME.id).map((c) => c.label)).toEqual([
-      'Both',
+      'Together',
       'Just me',
       'Just them',
     ]);
