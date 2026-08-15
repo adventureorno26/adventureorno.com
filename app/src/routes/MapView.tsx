@@ -33,7 +33,6 @@ import { fetchPhotoObjectUrl, mapPool, readGps } from '../lib/photos';
 import { fetchVideoCovers, fetchVideoPosterUrl } from '../lib/videos';
 import { enqueueUpload } from '../lib/uploadQueue';
 import NewPlaceDraft from '../components/NewPlaceDraft';
-import AddSheet from '../components/AddSheet';
 import {
   createManualActivity,
   fetchActivityLines,
@@ -243,7 +242,6 @@ export default function MapView() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
   // The one add sheet (map "+ Add" and the bottom Add tab both open it).
-  const [addSheet, setAddSheet] = useState(false);
   // Explicit new-place draft (map click / search) — nothing saved until Save.
   const [draft, setDraft] = useState<{ lat: number; lng: number; presetName?: string } | null>(
     null,
@@ -990,14 +988,29 @@ export default function MapView() {
   // The bottom Add tab is a link to /?add=1 rather than a page, so tapping it
   // again from anywhere re-opens the same sheet.
   useEffect(() => {
-    // The flag STAYS in the URL while the sheet is open: it is what tells the
+    // The flag STAYS in the URL while the card is open: it is what tells the
     // bottom nav that Add — not Map — is the tab you are on, and it makes Back
-    // close the sheet.
-    setAddSheet(searchParams.get('add') === '1');
+    // close it.
+    //
+    // ADD OPENS THE BLANK CARD (Erica, 2026-08-15: "the user should see the blank card
+    // we designed when they click add"). It used to open AddSheet, a chooser asking what
+    // you wanted to add — which is the thing the 2026-08-11 note already said it must not
+    // be ("ADD opens a FILLABLE CARD — not a chooser"). The code and the decision had
+    // disagreed since.
+    //
+    // No tap on the map is needed: the card opens at whatever the map is centred on, and
+    // its address is prefilled from there and editable, exactly as §0.6 describes.
+    const wantsCard = searchParams.get('add') === '1';
+    if (wantsCard && !draft) {
+      const c = mapRef.current?.getCenter();
+      setDraft({ lat: c?.lat ?? 39.5, lng: c?.lng ?? -98.5 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  /** Clear the Add flag so the bottom nav stops showing Add as the current tab, and so
+   *  tapping Add again re-opens the card. */
   const closeAddSheet = () => {
-    setAddSheet(false);
     if (searchParams.get('add') === '1') navigate('/', { replace: true });
   };
 
@@ -1603,28 +1616,10 @@ export default function MapView() {
             if (drawRouteNamed) startDrawForTrail(placeId, drawRouteNamed);
             else navigate(`/place/${placeId}`);
           }}
-          onCancel={() => setDraft(null)}
-        />
-      )}
-
-      {addSheet && (
-        <AddSheet
-          at={(() => {
-            const c = mapRef.current?.getCenter();
-            return { lat: c?.lat ?? 39.5, lng: c?.lng ?? -98.5 };
-          })()}
-          places={places}
-          people={people}
-          meId={profile?.id ?? null}
-          onSaved={(placeId) => {
+          onCancel={() => {
+            setDraft(null);
             closeAddSheet();
-            void fetchPlaces()
-              .then(setPlaces)
-              .catch(() => undefined);
-            navigate(`/place/${placeId}`);
           }}
-          onPhotos={(files) => void handleAddPhotos(files)}
-          onClose={closeAddSheet}
         />
       )}
 

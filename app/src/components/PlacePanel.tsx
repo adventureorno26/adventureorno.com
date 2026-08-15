@@ -56,6 +56,7 @@ import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
 import { pluralLabel } from '../lib/plural';
 import { byYear, visitDates } from '../lib/visitDates';
+import { everyoneLabel } from '../lib/participants';
 import StarRating from './StarRating';
 
 interface Props {
@@ -1637,7 +1638,7 @@ export default function PlacePanel({
                                   Visits section entirely; it now means tagging someone
                                   in a flok. This control only says who was here, and
                                   "Both" is the word the app already uses for it. */}
-                    <option value="">{people.length > 2 ? 'Everyone' : 'Both'}</option>
+                    <option value="">{everyoneLabel(people)}</option>
                     {people.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
@@ -1843,7 +1844,7 @@ export default function PlacePanel({
                       value={vWho}
                       onChange={(e) => setVWho(e.target.value)}
                     >
-                      <option value="">Both of us</option>
+                      <option value="">{everyoneLabel(people)}</option>
                       {people.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}

@@ -118,7 +118,7 @@ export default function PhotoSorter() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const meId = profile?.id ?? null;
-  const whoOptions = whoChoices(people, meId, { everyone: 'together' });
+  const whoOptions = whoChoices(people, meId);
 
   useEffect(() => {
     fetchPlaces()

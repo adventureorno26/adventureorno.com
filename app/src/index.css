@@ -7100,3 +7100,55 @@ button.mi-row:hover {
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* TIMELINE FOLDS — year, then month, then the days (Erica, 2026-08-15).
+   Text only: the open/closed state is carried by the arrow glyph and
+   aria-expanded, never an icon. */
+.tl-fold {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  padding: 14px 2px;
+  cursor: pointer;
+}
+.tl-fold:hover {
+  background: transparent;
+  border-color: var(--accent);
+}
+.tl-fold-name {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.tl-fold-name::before {
+  content: '▸ ';
+  color: var(--muted);
+  font-weight: 400;
+}
+.tl-fold[aria-expanded='true'] .tl-fold-name::before {
+  content: '▾ ';
+}
+/* A month sits one level in, and reads quieter than its year. */
+.tl-fold-month {
+  padding-left: 14px;
+}
+.tl-fold-month .tl-fold-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tl-fold[aria-expanded='true'] .tl-fold-month .tl-fold-name,
+.tl-fold-month[aria-expanded='true'] .tl-fold-name {
+  color: var(--text);
+}
+.tl-year .tl-month {
+  margin-left: 6px;
+}

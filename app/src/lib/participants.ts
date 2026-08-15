@@ -26,10 +26,16 @@ export interface WhoChoice {
   profileId: string | null;
 }
 
-/** The word for "all of us", which stops being "Both" once there are three. */
-export function everyoneLabel(people: MapPerson[], style: 'both' | 'together' = 'both'): string {
+/** The word for "all of us". It is TOGETHER, always.
+ *
+ * This used to default to "Both" and say "Together" only when a caller asked for it, so
+ * the same idea appeared under two words on different screens — Erica, 2026-08-15: "the
+ * view is Together so investigate why you are saying Both". The style option is gone
+ * rather than re-defaulted, because an option is how the wrong word came back. */
+export function everyoneLabel(people: MapPerson[]): string {
   if (people.length > 2) return 'Everyone';
-  return style === 'together' ? 'Together' : 'Both';
+  // Three people are not "together" as a pair — that word means the two of them.
+  return people.length > 2 ? 'Everyone' : 'Together';
 }
 
 /**
@@ -38,14 +44,8 @@ export function everyoneLabel(people: MapPerson[], style: 'both' | 'together' = 
  * `meId` is listed as "Just me" wherever they appear; everyone else is named. Members
  * without a display name fall back to a neutral placeholder rather than a guess.
  */
-export function whoChoices(
-  people: MapPerson[],
-  meId: string | null | undefined,
-  opts: { everyone?: 'both' | 'together' } = {},
-): WhoChoice[] {
-  const out: WhoChoice[] = [
-    { key: 'both', label: everyoneLabel(people, opts.everyone ?? 'both'), profileId: null },
-  ];
+export function whoChoices(people: MapPerson[], meId: string | null | undefined): WhoChoice[] {
+  const out: WhoChoice[] = [{ key: 'both', label: everyoneLabel(people), profileId: null }];
   if (meId) out.push({ key: 'mine', label: 'Just me', profileId: meId });
   for (const p of people) {
     if (!meId || p.id !== meId) {

@@ -10,7 +10,6 @@ import {
 } from '../lib/categories';
 import { buildPlaceTree } from '../lib/containers';
 import type { Place } from '../lib/types';
-import StatsBar from '../components/StatsBar';
 
 export default function PlacesList() {
   const { profile } = useAuth();
@@ -163,12 +162,14 @@ export default function PlacesList() {
       </Link>
       <h1>Places</h1>
 
-      {/* STATS AT THE TOP OF PLACES (Erica, 2026-08-11: "the stats section was supposed
-          to be moved to the top of places"). The same bar the map uses, so the numbers
-          cannot disagree between the two pages — one component, one backend call. */}
-      {places && places.length > 0 && (
-        <StatsBar places={places} onFilterCategory={() => undefined} />
-      )}
+      {/* NO STATS BAR HERE, AND THAT REMOVES THE GEAR TOO (Erica, 2026-08-15: "the
+          settings icon should not appear when I click on places and neither should the
+          stats bar"). It was put here on 2026-08-11 when she asked for stats at the top
+          of Places; she has now asked for it gone.
+
+          The two complaints are ONE change: the settings gear (`.gear-btn`) is rendered
+          INSIDE StatsBar, so anything that shows the bar shows the gear with it. Do not
+          go looking for a separate gear on this page — there isn't one. */}
 
       <input
         placeholder="Search places…"
