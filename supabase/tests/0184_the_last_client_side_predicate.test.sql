@@ -28,13 +28,15 @@ begin
 
   -- one both of them did, one only B did
   insert into public.activities (name, type, distance, start_date, place_id, visit_id,
-                                 solo_profile, source, owner_profile, summary_polyline)
-    values ('T184 Together', 'Hike', 5000, '2026-04-10T10:00:00Z', p, v.id, null,
+                                 source, owner_profile, summary_polyline)
+    values ('T184 Together', 'Hike', 5000, '2026-04-10T10:00:00Z', p, v.id,
             'manual', a_id, 'abc') returning id into shared_act;
   insert into public.activities (name, type, distance, start_date, place_id, visit_id,
-                                 solo_profile, source, owner_profile, summary_polyline)
-    values ('T184 B only', 'Hike', 6000, '2026-04-10T14:00:00Z', p, v.id, b_id,
+                                 source, owner_profile, summary_polyline)
+    values ('T184 B only', 'Hike', 6000, '2026-04-10T14:00:00Z', p, v.id,
             'manual', b_id, 'def') returning id into solo_act;
+  -- only B did the second one (0188: rows, not a column)
+  perform public.set_activity_solo(solo_act, b_id);
 
   -- THE SHARED VIEW is what everyone did, not what a null says.
   select count(*) into n from public.activities_of_type('Hike', null) where id = shared_act;

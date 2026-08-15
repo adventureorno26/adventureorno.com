@@ -31,8 +31,13 @@ do $$
 declare p uuid; got uuid;
 begin
   insert into public.places (name, lat, lng, saved) values ('V136 Rehoboth', 38.72, -75.07, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile, solo_override)
-    values (p, '2026-05-01','2026-05-03', true, 'aaaa7777-0000-0000-0000-00000000d001', true);
+  insert into public.visits (place_id, start_date, end_date, manual, solo_override)
+    values (p, '2026-05-01','2026-05-03', true, true);
+  -- Erica's alone: replace the everyone-by-default rows (0188).
+  delete from public.visit_profiles vp using public.visits v
+   where vp.visit_id = v.id and v.place_id = p;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v.id, 'aaaa7777-0000-0000-0000-00000000d001' from public.visits v where v.place_id = p;
 
   select solo_profile into got from public.place_attribution() where place_id = p;
   if got is distinct from 'aaaa7777-0000-0000-0000-00000000d001'::uuid then
@@ -41,8 +46,9 @@ begin
 
   -- NEGATIVE CONTROL: add a joint visit and it must flip to Both. If the rule were
   -- removed (e.g. "first visit wins"), this assertion fails.
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
-    values (p, '2026-06-01','2026-06-01', true, null);
+  -- a joint visit: everyone, which a bare insert now means by default
+  insert into public.visits (place_id, start_date, end_date, manual)
+    values (p, '2026-06-01','2026-06-01', true);
   select solo_profile into got from public.place_attribution() where place_id = p;
   if got is not null then
     raise exception 'FAIL: a place with a joint visit must read Both, got %', got;
@@ -56,9 +62,17 @@ do $$
 declare p uuid; got uuid; found boolean;
 begin
   insert into public.places (name, lat, lng, saved) values ('V136 Shared Trail', 39.1, -77.6, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values
-    (p,'2026-01-05','2026-01-05',true,'aaaa7777-0000-0000-0000-00000000d001'),
-    (p,'2026-01-12','2026-01-12',true,'aaaa7777-0000-0000-0000-00000000d002');
+  insert into public.visits (place_id, start_date, end_date, manual) values
+    (p,'2026-01-05','2026-01-05',true),
+    (p,'2026-01-12','2026-01-12',true);
+  -- one visit each, as rows (0188)
+  delete from public.visit_profiles vp using public.visits v
+   where vp.visit_id = v.id and v.place_id = p;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v.id,
+         case when v.start_date = '2026-01-05' then 'aaaa7777-0000-0000-0000-00000000d001'
+              else 'aaaa7777-0000-0000-0000-00000000d002' end::uuid
+    from public.visits v where v.place_id = p;
   select solo_profile, true into got, found from public.place_attribution() where place_id = p;
   if not coalesce(found,false) then raise exception 'FAIL: place missing from place_attribution()'; end if;
   if got is not null then raise exception 'FAIL: Erica-only + Josh-only must read Both, got %', got; end if;
@@ -71,8 +85,12 @@ do $$
 declare p uuid; in_erica boolean; in_josh boolean; in_both boolean;
 begin
   insert into public.places (name, lat, lng, saved) values ('V136 Army Ten Miler', 38.87, -77.06, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile, solo_override)
-    values (p,'2025-10-12','2025-10-12', true, 'aaaa7777-0000-0000-0000-00000000d001', true);
+  insert into public.visits (place_id, start_date, end_date, manual, solo_override)
+    values (p,'2025-10-12','2025-10-12', true, true);
+  delete from public.visit_profiles vp using public.visits v
+   where vp.visit_id = v.id and v.place_id = p;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v.id, 'aaaa7777-0000-0000-0000-00000000d001' from public.visits v where v.place_id = p;
 
   select exists(select 1 from public.place_ids_for_view('aaaa7777-0000-0000-0000-00000000d001') x where x = p) into in_erica;
   select exists(select 1 from public.place_ids_for_view('aaaa7777-0000-0000-0000-00000000d002') x where x = p) into in_josh;

@@ -22,9 +22,9 @@ begin
   insert into public.places (name, lat, lng, saved, categories) values ('V134 Linnell Landing', 41.75, -70.05, true, array['beach']) returning id into beach;
   insert into public.places (name, lat, lng, saved, categories) values ('V134 Arnolds', 41.72, -70.02, true, array['dining']) returning id into food;
 
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (cc, '2026-08-02','2026-08-07', true, null) returning id into tv;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (beach,'2026-08-03','2026-08-03', true, null) returning id into bv;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (food, '2026-08-05','2026-08-05', true, null) returning id into fv;
+  insert into public.visits (place_id, start_date, end_date, manual) values (cc, '2026-08-02','2026-08-07', true) returning id into tv;
+  insert into public.visits (place_id, start_date, end_date, manual) values (beach,'2026-08-03','2026-08-03', true) returning id into bv;
+  insert into public.visits (place_id, start_date, end_date, manual) values (food, '2026-08-05','2026-08-05', true) returning id into fv;
 
   -- Before marking: three ordinary visits, three occasions.
   select public.occasion_count(null) into occ_after;
@@ -60,8 +60,8 @@ begin
   -- somewhere else entirely, is still its own occasion.
   insert into public.places (name, lat, lng, saved) values ('V134 Elsewhere', 38.9, -77.4, true)
     returning id into elsewhere;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
-    values (elsewhere, '2026-08-04', '2026-08-04', true, null);
+  insert into public.visits (place_id, start_date, end_date, manual)
+    values (elsewhere, '2026-08-04', '2026-08-04', true);
   select public.occasion_count(null) into occ_after;
   if occ_after <> occ_before + 2 then
     raise exception 'FAIL: an unrelated visit was swallowed by the trip''s dates (% vs %)',
@@ -130,10 +130,10 @@ begin
   select public.occasion_count(null) into occ_before;
   select places_count into pl_before from public.wander_stats(null);
   insert into public.places (name, lat, lng, saved, categories) values ('V134 W&OD', 39.0, -77.5, true, array['running']) returning id into wod;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values
-    (wod,'2026-02-01','2026-02-01',true,null),
-    (wod,'2026-02-08','2026-02-08',true,null),
-    (wod,'2026-02-15','2026-02-15',true,null);
+  insert into public.visits (place_id, start_date, end_date, manual) values
+    (wod,'2026-02-01','2026-02-01',true),
+    (wod,'2026-02-08','2026-02-08',true),
+    (wod,'2026-02-15','2026-02-15',true);
   select public.occasion_count(null) into occ_after;
   select places_count into pl_after from public.wander_stats(null);
   if occ_after <> occ_before + 3 then raise exception 'FAIL: three runs should be three occasions'; end if;
@@ -147,8 +147,8 @@ declare p uuid; outer_v uuid; inner_v uuid; occ int; base int;
 begin
   select public.occasion_count(null) into base;
   insert into public.places (name, lat, lng, saved) values ('V134 Europe', 48.8, 2.3, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (p,'2026-06-01','2026-06-20',true,null) returning id into outer_v;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile) values (p,'2026-06-05','2026-06-08',true,null) returning id into inner_v;
+  insert into public.visits (place_id, start_date, end_date, manual) values (p,'2026-06-01','2026-06-20',true) returning id into outer_v;
+  insert into public.visits (place_id, start_date, end_date, manual) values (p,'2026-06-05','2026-06-08',true) returning id into inner_v;
   perform public.set_visit_is_trip(outer_v, true);
   perform public.set_visit_is_trip(inner_v, true);
   select public.occasion_count(null) into occ;
@@ -162,8 +162,14 @@ do $$
 declare p uuid; c_e int; c_j int;
 begin
   insert into public.places (name, lat, lng, saved) values ('V134 Josh Only', 45.0, -93.0, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
-    values (p,'2026-04-01','2026-04-01',true,'aaaa7777-0000-0000-0000-00000000c002');
+  insert into public.visits (place_id, start_date, end_date, manual)
+    values (p,'2026-04-01','2026-04-01',true);
+  -- attribution is rows since 0188; a bare insert means everyone, so replace it
+  delete from public.visit_profiles vp using public.visits v
+   where vp.visit_id = v.id and v.place_id = p and v.start_date = '2026-04-01';
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v.id, 'aaaa7777-0000-0000-0000-00000000c002' from public.visits v
+   where v.place_id = p and v.start_date = '2026-04-01';
   select public.occasion_count('aaaa7777-0000-0000-0000-00000000c001') into c_e;
   select public.occasion_count('aaaa7777-0000-0000-0000-00000000c002') into c_j;
   if c_e >= c_j then raise exception 'FAIL: Josh-only visit leaked into Erica''s occasions (e=% j=%)', c_e, c_j; end if;

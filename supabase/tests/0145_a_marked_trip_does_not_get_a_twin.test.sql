@@ -73,15 +73,20 @@ declare p uuid; v uuid; still int; solo uuid;
 begin
   insert into public.places (name, lat, lng, saved) values ('V145 Handmade', 38.0, -78.0, true)
     returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile, solo_override)
-    values (p, '2032-05-01','2032-05-01', true, 'aaaa7777-0000-0000-0000-00000000a145', true)
+  insert into public.visits (place_id, start_date, end_date, manual, solo_override)
+    values (p, '2032-05-01','2032-05-01', true, true)
     returning id into v;
+  -- Attribution is participant rows since 0188; replace the everyone-by-default.
+  delete from public.visit_profiles where visit_id = v;
+  insert into public.visit_profiles (visit_id, profile_id)
+  values (v, 'aaaa7777-0000-0000-0000-00000000a145');
 
   perform public.rebuild_place_visits(p);
 
   select count(*) into still from public.visits where id = v;
   if still <> 1 then raise exception 'FAIL: rebuild deleted a manual visit'; end if;
-  select solo_profile into solo from public.visits where id = v;
+  select case when count(*) = 1 then min(profile_id::text)::uuid end into solo
+    from public.visit_profiles where visit_id = v;
   if solo is distinct from 'aaaa7777-0000-0000-0000-00000000a145'::uuid then
     raise exception 'FAIL: rebuild changed a manual visit''s attribution';
   end if;
