@@ -1284,6 +1284,22 @@ The intent behind the ask is right, though, and splits into two halves.
 None of this changes what the map LOOKS like. It changes who else can read it, which
 matters for a commercial product and for getting data back out (§6b's instinct).
 
+**github.com/opengeospatial IS worth using — for three things, none of them data.**
+Checked 2026-08-15; the org publishes specifications, schemas and test suites:
+
+1. **`ets-ogcapi-tiles10` and friends** — Java conformance test suites. If the basemap
+   Worker claims OGC API – Tiles, there is an EXECUTABLE test that proves it rather than
+   a comment saying so. That is the same bargain as every other guard in this repository.
+2. **`geoparquet`** — the specification Overture actually ships its data in. Reading
+   Overture addresses means reading GeoParquet, so this is the format spec for §4c(c),
+   not an abstraction.
+3. **`ogcapi-features` / `ogcapi-styles` / `ogcapi-tiles`** — the schemas to conform to,
+   in the repository that defines them.
+
+What is NOT there: map data, imagery, tiles, addresses, elevation. The pinned repos are
+`geoparquet`, `ogcapi-features`, `geopackage`, `sensorthings`, `geoapi`, `ogc-geosparql`
+— every one a standard, not a dataset.
+
 #### b. The open data that would actually make the map state of the art
 
 These are the assets the ask was really after, and none of them are OGC's:
