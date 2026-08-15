@@ -1369,6 +1369,87 @@ the same size.
 first attempt at that filter also dropped `places_locality` and would have removed every
 city label, so the guard tests for both.
 
+### Phase 4d — Geocoding we own  *(PLANNED 2026-08-15, nothing built)*
+
+Erica, 2026-08-15: **"I want to use Overture and Photon."** Decided. What follows is how,
+and one honest caveat about the order.
+
+#### There are two different jobs, and only one of them is urgent
+
+| | What it is | Where it happens today |
+| --- | --- | --- |
+| **Reverse** | a coordinate → a name and address | the nightly geocoder, and naming a new place |
+| **Forward** | typing "Blackwater Falls" → a place | the search box on the new-place card |
+
+Reverse is the one that runs UNATTENDED and burns quota; forward is human-paced and cheap.
+That difference decides the order below.
+
+#### THE CAVEAT: Photon does both, so Overture is not on its critical path
+
+Photon answers reverse AND forward, worldwide, from one index. Once it is running, the
+geocoding problem is solved and Overture adds nothing to it.
+
+Overture is still worth having — its **addresses** theme covers places OSM is thin on, and
+its **places** theme has better POI categories than the basemap's `pois` layer — but that
+is ENRICHMENT, not geocoding. Building both at once would mean running a server and an
+import pipeline to answer the same question twice. Photon first; Overture when there is a
+gap Photon actually leaves.
+
+#### Photon — the shape of it
+
+- **Java 21+**, and it can run its index embedded: no separate OpenSearch to operate.
+- **~60 GB** compressed planet index to download (`db` mode), **~95 GB** on disk, growing
+  roughly **10% a year**. (An earlier note in this file guessed 80 GB / 200 GB from
+  memory; these are the measured figures.)
+- Download and verification take **hours**, not minutes. Plan the first run accordingly.
+- Refreshing means fetching a new index; the old one keeps serving until the swap.
+
+**This is the first always-on server in an otherwise entirely serverless stack.** Pages,
+Workers, R2 and Supabase are all managed — nobody patches them, nobody watches their disk.
+A Photon box changes that, and the honest cost is not the ~€40–60/month for 16 GB RAM and
+300 GB of NVMe. It is that something now needs patching, monitoring and an index refresh,
+and that when it falls over at 2am the map still works but naming a place does not.
+
+#### Where it sits
+
+    adventureorno.com/geocode/*   ->   Worker   ->   Photon on a VPS (not public)
+                                          |
+                                          +-------->  Mapbox, while Photon is young
+
+The same shape as `/basemap/*`, for the same three reasons: same-origin so the service
+worker can cache it, **no new CSP entry to be silently blocked** — which is exactly how
+the Mapbox search died unnoticed — and an origin that can be swapped without touching the
+app. Reverse lookups for a rounded coordinate repeat constantly, so the Cache API in front
+absorbs most of the traffic.
+
+**Mapbox stays as failover until Photon has proven itself**, exactly as MapTiler is
+failover for Mapbox today. That preserves the property this whole phase exists for: not
+switchable-off by somebody else.
+
+#### Overture, when its turn comes
+
+- Ships as **GeoParquet** (`geoparquet` at github.com/opengeospatial is the format spec).
+- **CDLA-Permissive v2** where possible, with per-source attribution — CC BY 4.0, Apache
+  2.0, OGL — listed by theme. **The attribution obligations are per source and must be
+  read before Flok charges anyone.**
+- 474M+ address points globally, which is far too much for the Supabase instance. Import
+  is therefore **by region**, driven by where places actually are, and the nearest-address
+  query is a PostGIS `<->` lookup against a GiST index.
+
+#### The order
+
+1. **Photon on a box**, reachable only from the Worker.
+2. **The `/geocode/*` Worker**, with Mapbox failover behind it and its own spend meter —
+   `spendApiCall` already exists and must keep counting, because a meter that stops
+   counting when the provider changes is the false confidence it was written to remove.
+3. **Point `lib/maptiler.ts` and `supabase/functions/_shared/geocode.ts` at it.** Both, or
+   the server keeps paying Mapbox while the client does not.
+4. **Watch it for a fortnight**, then drop Mapbox from the reverse path.
+5. **Overture addresses into PostGIS**, by region, only where Photon proves thin.
+6. Retire `VITE_MAPBOX_TOKEN` from the client entirely.
+
+**Nothing here is built.** No server exists, no bytes copied, no dependency added.
+
 ### Phase 4c — Standards and open data  *(PLANNED 2026-08-15, nothing built)*
 
 Erica asked to "get the API from OGC.org" and use its assets to make the map state of the
