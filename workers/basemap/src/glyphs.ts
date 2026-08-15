@@ -21,7 +21,7 @@
 // of a specific font at a specific version, and Protomaps publishes new fonts under new
 // names rather than editing these.
 
-const UPSTREAM = 'https://protomaps.github.io/basemaps-assets/fonts';
+const UPSTREAM = "https://protomaps.github.io/basemaps-assets/fonts";
 
 /** The theme asks for several Noto Sans faces, and which ones depend on the script a
  *  label happens to be in — Devanagari shows up for names in India. Rather than pin a
@@ -39,16 +39,19 @@ export interface GlyphRequest {
 }
 
 /** Parse and BOUND a glyph path. Exported to be tested without a bucket. */
-export function parseGlyphPath(pathname: string): GlyphRequest | 'not-a-glyph' | 'refused' {
+export function parseGlyphPath(
+  pathname: string,
+): GlyphRequest | "not-a-glyph" | "refused" {
   const m = GLYPH_PATH.exec(decodeURIComponent(pathname));
-  if (!m) return 'not-a-glyph';
+  if (!m) return "not-a-glyph";
   const stack = m[1];
   const start = Number(m[2]);
   const end = Number(m[3]);
-  if (!isAllowedStack(stack)) return 'refused';
+  if (!isAllowedStack(stack)) return "refused";
   // Ranges are exactly the 256-character windows the format defines. Anything else is
   // someone probing, not MapLibre.
-  if (end - start !== 255 || start % 256 !== 0 || start < 0 || end > 65535) return 'refused';
+  if (end - start !== 255 || start % 256 !== 0 || start < 0 || end > 65535)
+    return "refused";
   return { stack, range: `${start}-${end}` };
 }
 
@@ -59,20 +62,20 @@ export async function serveGlyphs(
 ): Promise<Response | null> {
   const url = new URL(req.url);
   const parsed = parseGlyphPath(url.pathname);
-  if (parsed === 'not-a-glyph') return null;
-  if (parsed === 'refused') {
-    return new Response(JSON.stringify({ error: 'unknown font' }), {
+  if (parsed === "not-a-glyph") return null;
+  if (parsed === "refused") {
+    return new Response(JSON.stringify({ error: "unknown font" }), {
       status: 404,
-      headers: { 'content-type': 'application/json' },
+      headers: { "content-type": "application/json" },
     });
   }
 
   const key = `fonts/${parsed.stack}/${parsed.range}.pbf`;
   const headers = {
-    'content-type': 'application/x-protobuf',
+    "content-type": "application/x-protobuf",
     // Immutable: a glyph range is one font at one version, and new fonts get new names.
-    'cache-control': 'public, max-age=31536000, immutable',
-    'access-control-allow-origin': '*',
+    "cache-control": "public, max-age=31536000, immutable",
+    "access-control-allow-origin": "*",
   };
 
   const have = await bucket.get(key);
@@ -83,16 +86,21 @@ export async function serveGlyphs(
     `${UPSTREAM}/${encodeURIComponent(parsed.stack)}/${parsed.range}.pbf`,
   );
   if (!upstream.ok) {
-    return new Response(JSON.stringify({ error: `upstream ${upstream.status}` }), {
-      status: 502,
-      headers: { 'content-type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ error: `upstream ${upstream.status}` }),
+      {
+        status: 502,
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
 
   const bytes = await upstream.arrayBuffer();
   // Written in the background so the person waiting on a label does not wait on a PUT.
   ctx.waitUntil(
-    bucket.put(key, bytes, { httpMetadata: { contentType: 'application/x-protobuf' } }),
+    bucket.put(key, bytes, {
+      httpMetadata: { contentType: "application/x-protobuf" },
+    }),
   );
   return new Response(bytes, { headers });
 }
