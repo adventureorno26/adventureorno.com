@@ -67,7 +67,6 @@ function activity(overrides: Partial<Activity>): Activity {
     summary_polyline: null,
     place_id: null,
     trailhead: null,
-    solo_profile: null,
     ...overrides,
   };
 }
@@ -81,7 +80,6 @@ function visit(overrides: Partial<Visit>): Visit {
     note: null,
     is_trip: false,
     status: 'taken',
-    solo_profile: null,
     solo_override: false,
     created_at: '2026-03-07',
     ...overrides,
