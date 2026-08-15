@@ -156,3 +156,42 @@ describe('merging is offered, never a mode', () => {
     expect(CARD).toMatch(/later\.placeId !== earlier\.placeId/);
   });
 });
+
+describe('the card holds your edits until you save', () => {
+  // Approved 2026-08-14. Erica asked for the same thing twice — for the photo sorter
+  // ("if I save it they are added but if I don't they are discarded") and for the card.
+  // The second half is the point: an edit is ALSO an approval, so saving is the moment
+  // automation loses the right to change that field. That was true for months and the
+  // card never said it.
+  it('has a Save and a Discard', () => {
+    expect(CARD).toMatch(/>\s*\{saving \? 'Saving…' : 'Save'\}\s*</);
+    expect(CARD).toMatch(/Discard/);
+  });
+
+  it('says what the save froze, in her words', () => {
+    expect(CARD).toMatch(/the app will not change/);
+    expect(CARD, 'it must name the fields rather than say "changes saved"').toMatch(
+      /justFroze\.join/,
+    );
+  });
+
+  it('shows that something is waiting', () => {
+    expect(CARD).toMatch(/edited/);
+  });
+
+  it('does not write the name, rating or dates as you type', () => {
+    // Each must be STAGED into the draft. If one of these goes back to awaiting an RPC
+    // directly, the card has quietly returned to save-as-you-type.
+    const staged = CARD.match(/setDraft\(/g) ?? [];
+    expect(staged.length, 'name, rating and dates all stage into the draft').toBeGreaterThan(3);
+    // Staging ON BLUR is fine — saveName no longer writes, it only stages. What must
+    // not happen is a field calling its RPC outside saveCard().
+    const writesOutsideSave = /function saveName\(\)[\s\S]*?\n {2}\}/.exec(CARD)?.[0] ?? '';
+    expect(writesOutsideSave).not.toMatch(/await setPlaceName/);
+  });
+
+  it('keeps what you typed when a save fails', () => {
+    // Throwing away the draft because the network blinked is the worst answer.
+    expect(CARD).toMatch(/The draft is KEPT on failure/);
+  });
+});
