@@ -1181,7 +1181,10 @@ export default function PlacePanel({
           {/* THE NAME, THEN THE RATING UNDER IT — the locked card, bottom-left of
               the photo. The stars used to sit above the name. */}
           <div className="hero-title">
-            <h2 className="title-with-rating">{titleEl}</h2>
+            <h2 className="title-with-rating">
+              {titleEl}
+              {dirty && <span className="edited-dot"> ● edited</span>}
+            </h2>
             <div className="hero-rating">{ratingEl}</div>
           </div>
           {/* Framing slider overlaid on the bottom of the photo when you tap it. */}
@@ -1201,7 +1204,10 @@ export default function PlacePanel({
       ) : (
         <div className="panel-head">
           <div>
-            <h2 className="title-with-rating">{titleEl}</h2>
+            <h2 className="title-with-rating">
+              {titleEl}
+              {dirty && <span className="edited-dot"> ● edited</span>}
+            </h2>
             <div className="rating-above">{ratingEl}</div>
           </div>
           <div className="head-actions">
