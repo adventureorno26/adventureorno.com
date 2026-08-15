@@ -52,10 +52,16 @@ do $$
 declare p uuid; c_both int; c_erica int; c_josh int;
 begin
   insert into public.places (name, lat, lng, saved) values ('V126 Potomac Station', 39.11, -77.55, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, solo_profile, manual) values
-    (p,'2026-03-01','2026-03-01','eeeeeeee-0000-0000-0000-00000000c002', true),
-    (p,'2026-03-05','2026-03-05','eeeeeeee-0000-0000-0000-00000000c002', true),
-    (p,'2026-03-09','2026-03-09','eeeeeeee-0000-0000-0000-00000000c002', true);
+  -- Attribution is participant ROWS since 0188; solo_profile is gone.
+  insert into public.visits (place_id, start_date, end_date, manual) values
+    (p,'2026-03-01','2026-03-01', true),
+    (p,'2026-03-05','2026-03-05', true),
+    (p,'2026-03-09','2026-03-09', true);
+  delete from public.visit_profiles vp using public.visits v
+   where vp.visit_id = v.id and v.place_id = p;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v.id, 'eeeeeeee-0000-0000-0000-00000000c002' from public.visits v where v.place_id = p
+  on conflict do nothing;
 
   select coalesce((select visits from public.place_visit_counts(null) where place_id=p),0) into c_both;
   select coalesce((select visits from public.place_visit_counts('eeeeeeee-0000-0000-0000-00000000c001') where place_id=p),0) into c_erica;
@@ -73,11 +79,24 @@ do $$
 declare p uuid; c_both int; c_erica int; c_josh int;
 begin
   insert into public.places (name, lat, lng, saved) values ('V126 Red Rocks', 39.12, -77.56, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, solo_profile, manual) values
-    (p,'2026-04-01','2026-04-01', null, true),                                            -- Both
-    (p,'2026-04-05','2026-04-05', null, true),                                            -- Both
-    (p,'2026-04-09','2026-04-09','eeeeeeee-0000-0000-0000-00000000c001', true),           -- Erica
-    (p,'2026-04-13','2026-04-13','eeeeeeee-0000-0000-0000-00000000c001', true);           -- Erica
+  insert into public.visits (place_id, start_date, end_date, manual) values
+    (p,'2026-04-01','2026-04-01', true),   -- Both
+    (p,'2026-04-05','2026-04-05', true),   -- Both
+    (p,'2026-04-09','2026-04-09', true),   -- Erica
+    (p,'2026-04-13','2026-04-13', true);   -- Erica
+  -- Both = every real member on the visit; a person = only them.
+  delete from public.visit_profiles vp using public.visits v
+   where vp.visit_id = v.id and v.place_id = p;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v.id, x
+    from public.visits v
+    cross join lateral unnest(
+      case when v.start_date <= '2026-04-05'
+           then array['eeeeeeee-0000-0000-0000-00000000c001'::uuid,
+                      'eeeeeeee-0000-0000-0000-00000000c002'::uuid]
+           else array['eeeeeeee-0000-0000-0000-00000000c001'::uuid] end) x
+   where v.place_id = p
+  on conflict do nothing;
 
   select visits into c_both  from public.place_visit_counts(null) where place_id=p;
   select visits into c_erica from public.place_visit_counts('eeeeeeee-0000-0000-0000-00000000c001') where place_id=p;

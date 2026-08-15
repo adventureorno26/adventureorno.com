@@ -36,10 +36,12 @@ begin
 
   -- but only B ran
   insert into public.activities (name, type, distance, start_date, place_id,
-                                 visit_id, solo_profile, source, owner_profile)
-    values ('T173 Run', 'Run', 8046.72, '2026-04-10T12:00:00Z', p, v, b_id,
+                                 visit_id, source, owner_profile)
+    values ('T173 Run', 'Run', 8046.72, '2026-04-10T12:00:00Z', p, v,
             'manual', b_id)
     returning id into act;
+  -- only B ran it: replace the everyone-by-default rows (0188)
+  perform public.set_activity_solo(act, b_id);
 
   select count(*) into n from public.activity_profiles where activity_id = act;
   if n <> 1 then raise exception 'FAIL: a solo activity must have exactly one participant, got %', n; end if;
@@ -62,7 +64,12 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 2. The mirror stays true while solo_profile still exists (§0.8).
+-- 2. ⚠️ REWRITTEN for 0188, which removed the column this section tested.
+--
+--    It asserted that `solo_profile` and the participant rows could not disagree —
+--    the mirror. There is no column left to disagree with: the rows ARE the
+--    attribution. What still has to hold is that changing who did something replaces
+--    the rows rather than adding to them, and that "everyone" is the default.
 -- ---------------------------------------------------------------------------
 do $$
 declare
@@ -73,29 +80,29 @@ begin
   insert into public.places (name, lat, lng, saved) values ('T173 Loop', 39.2, -77.6, true)
     returning id into p;
   insert into public.activities (name, type, distance, start_date, place_id,
-                                 solo_profile, source, owner_profile)
-    values ('T173 Walk', 'Walk', 3000, '2026-04-11T12:00:00Z', p, a_id,
-            'manual', a_id)
+                                 source, owner_profile)
+    values ('T173 Walk', 'Walk', 3000, '2026-04-11T12:00:00Z', p, 'manual', a_id)
     returning id into act;
 
-  if not exists (select 1 from public.activity_profiles where activity_id = act and profile_id = a_id) then
-    raise exception 'FAIL: insert must write the participant row'; end if;
-
-  -- reattributing moves the row
-  update public.activities set solo_profile = b_id where id = act;
-  if exists (select 1 from public.activity_profiles where activity_id = act and profile_id = a_id) then
-    raise exception 'FAIL: reattributing must remove the old participant'; end if;
-  if not exists (select 1 from public.activity_profiles where activity_id = act and profile_id = b_id) then
-    raise exception 'FAIL: reattributing must add the new participant'; end if;
-
-  -- "Both" means everyone real, which is what NULL used to assert
-  update public.activities set solo_profile = null where id = act;
+  -- A bare insert means EVERYONE, which is what the null used to mean.
   select count(*) into n from public.activity_profiles where activity_id = act;
-  if n <> 2 then raise exception 'FAIL: Both must write every active member, got %', n; end if;
-  if not public.is_shared_activity(act) then
-    raise exception 'FAIL: an activity both did must count as shared'; end if;
+  if n <> 2 then raise exception 'FAIL: a new activity is everyone''s, got % row(s)', n; end if;
 
-  raise notice 'PASS 2: solo_profile and the participant rows cannot disagree';
+  perform public.set_activity_solo(act, a_id);
+  select count(*) into n from public.activity_profiles where activity_id = act;
+  if n <> 1 then raise exception 'FAIL: naming one person must REPLACE, not add, got %', n; end if;
+  if not exists (select 1 from public.activity_profiles where activity_id = act and profile_id = a_id) then
+    raise exception 'FAIL: the wrong person was recorded'; end if;
+
+  perform public.set_activity_solo(act, b_id);
+  if exists (select 1 from public.activity_profiles where activity_id = act and profile_id = a_id) then
+    raise exception 'FAIL: reattributing must remove the previous person'; end if;
+
+  perform public.set_activity_solo(act, null);
+  if not public.is_shared_activity(act) then
+    raise exception 'FAIL: null must put it back to everyone'; end if;
+
+  raise notice 'PASS 2: the rows are the attribution, and everyone is the default';
 end $$;
 
 -- ---------------------------------------------------------------------------

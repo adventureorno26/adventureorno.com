@@ -50,10 +50,10 @@ begin
 
   insert into public.places (name, lat, lng, saved, categories)
     values ('V133 San Diego', 32.7, -117.1, true, array['city']) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
-    values (p, '2026-03-01', '2026-03-06', true, null) returning id into v1;
-  insert into public.visits (place_id, start_date, end_date, manual, solo_profile)
-    values (p, '2026-09-01', '2026-09-05', true, null) returning id into v2;
+  insert into public.visits (place_id, start_date, end_date, manual)
+    values (p, '2026-03-01', '2026-03-06', true) returning id into v1;
+  insert into public.visits (place_id, start_date, end_date, manual)
+    values (p, '2026-09-01', '2026-09-05', true) returning id into v2;
 
   -- ⚠️ THIS RULE CHANGED, 2026-08-11 (migration 0159). It used to assert the
   -- opposite — that duration means NOTHING and only a person marking a visit makes
@@ -103,8 +103,8 @@ declare p uuid; v uuid; before_t int; after_t int;
 begin
   select trips_count into before_t from public.wander_stats(null);
   insert into public.places (name, lat, lng, saved) values ('V133 Future', 48.8, 2.3, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, is_trip, status, solo_profile)
-    values (p, '2027-06-01', '2027-06-10', true, true, 'planned', null) returning id into v;
+  insert into public.visits (place_id, start_date, end_date, manual, is_trip, status)
+    values (p, '2027-06-01', '2027-06-10', true, true, 'planned') returning id into v;
   select trips_count into after_t from public.wander_stats(null);
   if after_t <> before_t then raise exception 'FAIL: a planned trip counted as taken'; end if;
   raise notice 'PASS 5: planned trips are not counted as taken';
@@ -117,8 +117,13 @@ begin
   select trips_count into b_e from public.wander_stats('ffff6666-0000-0000-0000-00000000b001');
   select trips_count into b_j from public.wander_stats('ffff6666-0000-0000-0000-00000000b002');
   insert into public.places (name, lat, lng, saved) values ('V133 Josh Trip', 45.0, -93.0, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, is_trip, solo_profile)
-    values (p, '2026-05-01', '2026-05-04', true, true, 'ffff6666-0000-0000-0000-00000000b002') returning id into v;
+  insert into public.visits (place_id, start_date, end_date, manual, is_trip)
+    values (p, '2026-05-01', '2026-05-04', true, true) returning id into v;
+  -- Josh's trip, and only Josh's: attribution is participant rows since 0188, and a
+  -- bare insert means everyone, so this replaces that default.
+  delete from public.visit_profiles where visit_id = v;
+  insert into public.visit_profiles (visit_id, profile_id)
+  values (v, 'ffff6666-0000-0000-0000-00000000b002');
   select trips_count into c_e from public.wander_stats('ffff6666-0000-0000-0000-00000000b001');
   select trips_count into c_j from public.wander_stats('ffff6666-0000-0000-0000-00000000b002');
   if c_e <> b_e then raise exception 'FAIL: Josh''s trip showed in Erica''s view'; end if;

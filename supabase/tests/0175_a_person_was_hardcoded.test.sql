@@ -60,7 +60,9 @@ begin
   v_visit := (res->>'visit_id')::uuid;
   if v_visit is null then raise exception 'FAIL: no visit was created'; end if;
 
-  select solo_profile into solo from public.visits where id = v_visit;
+  -- attribution is participant rows since 0188
+  select case when count(*) = 1 then min(profile_id::text)::uuid end into solo
+    from public.visit_profiles where visit_id = v_visit;
   if solo is distinct from c_id then
     raise exception 'FAIL: the visit should belong to the third member, got %', solo; end if;
 
@@ -79,15 +81,18 @@ begin
     'key-0175-me',
     jsonb_build_object('name', 'T175 Mine', 'lat', 38.41, 'lng', -77.31),
     jsonb_build_object('date', '2026-07-05', 'who', 'me'));
-  select solo_profile into solo from public.visits where id = (res->>'visit_id')::uuid;
+  select case when count(*) = 1 then min(profile_id::text)::uuid end into solo
+    from public.visit_profiles where visit_id = (res->>'visit_id')::uuid;
   if solo is distinct from a_id then raise exception 'FAIL: ''me'' must be the caller'; end if;
 
   res := public.create_experience(
     'key-0175-both',
     jsonb_build_object('name', 'T175 Both', 'lat', 38.42, 'lng', -77.32),
     jsonb_build_object('date', '2026-07-06', 'who', 'both'));
-  select solo_profile, solo_override into solo, ovr
-    from public.visits where id = (res->>'visit_id')::uuid;
+  select solo_override into ovr from public.visits where id = (res->>'visit_id')::uuid;
+  -- 'both' = every real member on the visit, so no single person to name
+  select case when count(*) = 1 then min(profile_id::text)::uuid end into solo
+    from public.visit_profiles where visit_id = (res->>'visit_id')::uuid;
   if solo is not null then raise exception 'FAIL: ''both'' must leave no solo profile'; end if;
   if not ovr then raise exception 'FAIL: ''both'' is a decision and must be recorded as one'; end if;
 

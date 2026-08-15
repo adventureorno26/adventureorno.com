@@ -23,9 +23,10 @@ begin
   insert into public.places (name, lat, lng, saved) values ('T166 Place', 38.9, -77.4, true)
     returning id into p;
 
-  insert into public.visits (place_id, start_date, end_date, status, manual, solo_profile)
-    values (p, '2026-02-01', '2026-02-01', 'taken', true,
-            'cccc0166-0000-0000-0000-000000000002') returning id into v_solo;
+  -- 0188: attribution is participant rows, and set_visit_solo is how one person is named.
+  insert into public.visits (place_id, start_date, end_date, status, manual)
+    values (p, '2026-02-01', '2026-02-01', 'taken', true) returning id into v_solo;
+  perform public.set_visit_solo(v_solo, 'cccc0166-0000-0000-0000-000000000002');
 
   select count(*) into n from public.visit_profiles where visit_id = v_solo;
   if n <> 1 then raise exception 'FAIL: a named person must be exactly one row, got %', n; end if;
@@ -33,8 +34,9 @@ begin
                   where visit_id = v_solo and profile_id = 'cccc0166-0000-0000-0000-000000000002') then
     raise exception 'FAIL: the wrong person was recorded'; end if;
 
-  insert into public.visits (place_id, start_date, end_date, status, manual, solo_profile)
-    values (p, '2026-02-02', '2026-02-02', 'taken', true, null) returning id into v_both;
+  -- everyone, which a bare insert now means by default
+  insert into public.visits (place_id, start_date, end_date, status, manual)
+    values (p, '2026-02-02', '2026-02-02', 'taken', true) returning id into v_both;
 
   select count(*) into real_members from public.profiles
    where role in ('owner','editor') and coalesce(display_name,'') !~* '(test|bot)';
@@ -61,11 +63,12 @@ declare p uuid; v uuid; n int;
 begin
   insert into public.places (name, lat, lng, saved) values ('T166 Sync', 38.9, -77.4, true)
     returning id into p;
-  insert into public.visits (place_id, start_date, end_date, status, manual, solo_profile)
-    values (p, '2026-02-03', '2026-02-03', 'taken', true,
-            'cccc0166-0000-0000-0000-000000000001') returning id into v;
+  insert into public.visits (place_id, start_date, end_date, status, manual)
+    values (p, '2026-02-03', '2026-02-03', 'taken', true) returning id into v;
+  perform public.set_visit_solo(v, 'cccc0166-0000-0000-0000-000000000001');
 
-  update public.visits set solo_profile = 'cccc0166-0000-0000-0000-000000000002' where id = v;
+  -- reattributing replaces the rows
+  perform public.set_visit_solo(v, 'cccc0166-0000-0000-0000-000000000002');
   select count(*) into n from public.visit_profiles where visit_id = v;
   if n <> 1 then raise exception 'FAIL: expected one participant after the change, got %', n; end if;
   if not exists (select 1 from public.visit_profiles
