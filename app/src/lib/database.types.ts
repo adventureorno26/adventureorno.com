@@ -38,7 +38,6 @@ export type Database = {
           owner_profile: string | null
           place_id: string | null
           shared_group_id: string | null
-          solo_profile: string | null
           source: string | null
           source_id: string | null
           start_date: string | null
@@ -68,7 +67,6 @@ export type Database = {
           owner_profile?: string | null
           place_id?: string | null
           shared_group_id?: string | null
-          solo_profile?: string | null
           source?: string | null
           source_id?: string | null
           start_date?: string | null
@@ -98,7 +96,6 @@ export type Database = {
           owner_profile?: string | null
           place_id?: string | null
           shared_group_id?: string | null
-          solo_profile?: string | null
           source?: string | null
           source_id?: string | null
           start_date?: string | null
@@ -129,13 +126,6 @@ export type Database = {
             columns: ["place_id"]
             isOneToOne: false
             referencedRelation: "places"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "activities_solo_profile_fkey"
-            columns: ["solo_profile"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2220,7 +2210,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -2242,7 +2231,6 @@ export type Database = {
           parent_visit_id?: string | null
           place_id: string
           solo_override?: boolean
-          solo_profile?: string | null
           source?: string
           start_date: string
           status?: string
@@ -2264,7 +2252,6 @@ export type Database = {
           parent_visit_id?: string | null
           place_id?: string
           solo_override?: boolean
-          solo_profile?: string | null
           source?: string
           start_date?: string
           status?: string
@@ -2307,13 +2294,6 @@ export type Database = {
             referencedRelation: "places"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "visits_solo_profile_fkey"
-            columns: ["solo_profile"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
         ]
       }
     }
@@ -2322,6 +2302,7 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
+          client_key: string | null
           created_at: string | null
           created_by: string | null
           decided_at: string | null
@@ -2335,7 +2316,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string | null
           solo_override: boolean | null
-          solo_profile: string | null
           source: string | null
           start_date: string | null
           status: string | null
@@ -2345,6 +2325,7 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
+          client_key?: string | null
           created_at?: string | null
           created_by?: string | null
           decided_at?: string | null
@@ -2358,7 +2339,6 @@ export type Database = {
           parent_visit_id?: string | null
           place_id?: string | null
           solo_override?: boolean | null
-          solo_profile?: string | null
           source?: string | null
           start_date?: string | null
           status?: string | null
@@ -2368,6 +2348,7 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
+          client_key?: string | null
           created_at?: string | null
           created_by?: string | null
           decided_at?: string | null
@@ -2381,7 +2362,6 @@ export type Database = {
           parent_visit_id?: string | null
           place_id?: string | null
           solo_override?: boolean | null
-          solo_profile?: string | null
           source?: string | null
           start_date?: string | null
           status?: string | null
@@ -2422,13 +2402,6 @@ export type Database = {
             columns: ["place_id"]
             isOneToOne: false
             referencedRelation: "places"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "visits_solo_profile_fkey"
-            columns: ["solo_profile"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2680,7 +2653,6 @@ export type Database = {
           owner_profile: string | null
           place_id: string | null
           shared_group_id: string | null
-          solo_profile: string | null
           source: string | null
           source_id: string | null
           start_date: string | null
@@ -2851,7 +2823,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -2974,7 +2945,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3018,7 +2988,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3096,7 +3065,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3345,7 +3313,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3385,7 +3352,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3470,6 +3436,14 @@ export type Database = {
       }
       place_ids_for_view: { Args: { p_profile?: string }; Returns: string[] }
       place_is_saved: { Args: { pid: string }; Returns: boolean }
+      place_memberships_all: {
+        Args: never
+        Returns: {
+          child_id: string
+          parent_id: string
+          relationship_type: string
+        }[]
+      }
       place_people: {
         Args: never
         Returns: {
@@ -3608,7 +3582,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3734,7 +3707,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
@@ -3765,7 +3737,6 @@ export type Database = {
           parent_visit_id: string | null
           place_id: string
           solo_override: boolean
-          solo_profile: string | null
           source: string
           start_date: string
           status: string
