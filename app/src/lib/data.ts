@@ -750,7 +750,7 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
 }
 
 const VISIT_COLS =
-  'id, place_id, start_date, end_date, note, is_trip, status, solo_override, created_at';
+  'id, place_id, start_date, end_date, note, is_trip, trip_marked, status, solo_override, created_at';
 
 /** Manually set who a visit belongs to (null = both). Sticks across rebuilds. */
 export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {
