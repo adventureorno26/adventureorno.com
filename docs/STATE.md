@@ -1594,38 +1594,86 @@ elevation, terrain, points of interest, and recording an activity. Approved by E
 | Activities already carry | `summary_polyline`, `elevation_gain`, `elevation_profile`, `moving_time` |
 | Still third-party | Mapbox → MapTiler geocoding; **public Nominatim called FROM THE BROWSER** (`lib/data.ts`, 2 endpoints); **public Overpass** mirrors in `suggest`; Foursquare in `geocode-new-places` |
 
-#### 6a. Three servers, one way in
+#### 6a. NO SERVERS. Files in our bucket, read by Workers.  *(REWRITTEN 2026-08-15)*
 
-**Photon** (planet — geocoding, both directions), **Valhalla** (routing, snap-to-trail, GPS
-map-matching), **Open Topo Data** (NED 10 m + Copernicus GLO-30 elevation). Each private,
-none publicly addressable. All reached through Workers on our own domain:
+**This section used to specify three always-on servers — Photon, Valhalla and Open Topo
+Data — on a €45–70/month box.** Erica: *"I don't think I need the box and I want to keep
+this free."* She was right, and the reasoning that produced the servers was subtly wrong.
 
-    /geocode/*    /route/*    /elevation/*
+The goal in this file has never been *own everything*. It is **not switchable-off by
+somebody else, and not limited by their charges**. I optimised for the first phrasing and
+it pointed at servers. The second is satisfied by files in R2 — which is how the basemap
+already works, and the pattern was sitting in front of me.
 
-The same pattern as `/basemap/*`, for the same three reasons: same-origin so the service
-worker can cache it, **no new CSP entry to be silently blocked** — which is how the Mapbox
-search died unnoticed — and an origin that can be swapped without touching the app.
-Mapbox stays as failover per service until each is proven, then its token goes.
+**THE TRICK, stated once: a lookup at a coordinate is a TILE READ.** Reverse geocoding and
+elevation both ask "what is at this point?", and that is answered by fetching one tile and
+looking inside it. No process, no graph, no always-on anything — the same shape as
+`/basemap/tiles/{z}/{x}/{y}`.
 
-**This also removes two policy problems, not just costs.** `lib/data.ts` calls the PUBLIC
-Nominatim API directly from the browser, and `suggest` uses public Overpass mirrors. Their
-policies cap use at ~1 req/s and forbid autocomplete; from a browser every user's IP hits
-them with no shared rate limit and no User-Agent we control. Private for two people;
-a compliance problem the day this is commercial.
+| Need | Was | Now |
+| ---- | --- | --- |
+| Reverse geocode | Photon on a box | **Overture → PMTiles in R2**, Worker reads the tile |
+| Elevation / hillshade / 3D | Open Topo Data on a box | **Copernicus GLO-30 → terrain-RGB PMTiles in R2** |
+| Typeahead search | Photon on a box | **Mapbox free tier** — ~100k geocodes/month, two people use a rounding error of it |
+| Routing / map-matching | Valhalla on a box | **PAUSED 2026-08-15** (see 6a-iii) |
 
-#### 6b. Watchtower — built WITH the servers, not after
+**Cost: R2 storage at ~$0.015/GB/month on top of the 137 GB already there.** Dollars, not
+a new class of spend, and R2 egress is free.
 
-Three always-on boxes with nobody watching them is the actual risk in this phase; the
-whole stack until now has been managed. A Worker on a cron probes every service and the
-app's own endpoints, writes to a `service_health` table, surfaces in Settings, and alerts
-after repeated failure. **A probe must check the CONTENT-TYPE, not the status** — the
-lesson of `/basemap/*` answering 200 with the app's HTML for four days.
+##### 6a-i. Overture → PMTiles, GLOBAL
 
-#### 6c. Terrain we own
+**All regions, not a subset.** A Postgres import forced a choice of regions because 474M
+address points do not belong in Supabase; PMTiles removes the choice. Bake Overture's
+addresses and places into tiles in `aon-basemap`, and `/geocode/reverse?lat=&lng=` becomes
+a Worker fetching one tile and returning the nearest point in it.
 
-Bake Copernicus GLO-30 into terrain-RGB PMTiles in `aon-basemap`, served by the same
-Worker. Unlocks hillshade under the map and camera-along-path 3D flyovers rendered by our
-own style. No AWS tiles.
+Mapbox stays as the fallback for anything the tiles cannot answer, exactly as MapTiler
+backs Mapbox today, and the existing `spendApiCall` meter keeps counting across the change
+— a meter that stops counting when the provider changes is the false confidence it was
+written to remove.
+
+##### 6a-ii. Copernicus GLO-30 → terrain-RGB PMTiles
+
+ONE artifact, THREE features: elevation profiles corrected server-side at save time,
+hillshade under the map, and camera-along-path 3D flyovers rendered by our own style. Free
+Cloud-Optimised GeoTIFFs from AWS Open Data, baked once, served by the same Worker.
+
+##### 6a-iii. Routing — PAUSED, and why it is the honest exception
+
+Erica, 2026-08-15: *"lets pause on the routing for now."*
+
+**Valhalla can do everything wanted here** — snap-to-trail, map-matching a GPS trace,
+turn-by-turn. It is the one thing on this list with no tile trick available, because
+routing is a SEARCH ACROSS A GRAPH, not a lookup at a coordinate. It needs a process
+holding that graph.
+
+So routing is a box, or somebody else's box. When it resumes, the free option is
+**FOSSGIS's public Valhalla** (no key, fair use) — the same shape of dependency as Mapbox,
+watched by the same meter, and replaceable later. **Nothing depends on routing today**, so
+pausing costs nothing.
+
+#### 6b. Watchtower  *(BUILT 2026-08-15 — migration 0194, worker deployed)*
+
+Five probes on a 15-minute cron, writing to `service_health`: app, style, tiles.json, a
+real tile and a glyph range. It checks the CONTENT TYPE, not the status code — the whole
+reason it exists is that `/basemap/*` answered 200 with the app's HTML for four days.
+`service_status()` also marks a service STALE after 30 minutes, because a probe that has
+stopped running leaves a green row that reads exactly like a healthy one.
+
+Its probe list already carries commented entries for anything added later; wiring one up
+is deleting a comment.
+
+#### 6c. What "the planet" means, because I blurred it
+
+FOUR different global datasets, from four projects, and the map being global gives you
+none of the others:
+
+| Dataset | For | State |
+| ------- | --- | ----- |
+| Protomaps planet | the map you look at | ✅ **137.3 GB in R2, serving** |
+| Overture places + addresses | click a place, get its name and address | ❌ nothing yet (6a-i) |
+| Copernicus GLO-30 | elevation, hillshade, 3D | ❌ nothing yet (6a-ii) |
+| Photon index | typeahead | ❌ **not being built** — Mapbox covers it free |
 
 #### 6d. Recording, properly — and it is JUST ANOTHER INGEST SOURCE
 
