@@ -77,7 +77,7 @@ export default function StatsBar({
   //
   // This used to filter on the place-level `solo_profile` column, which was null
   // for 129 of 132 places — so nothing was ever excluded and the Army Ten Miler
-  // showed up under "Just Josh". Attribution lives on the VISIT (docs/SCHEMA.md),
+  // showed up under "Just Josh". Attribution lives on the VISIT (docs/STATE.md §0.3),
   // so the list now uses place_ids_for_view: the same filter as the map markers
   // and the headline count, which is why they agree.
   const visited = places.filter(
