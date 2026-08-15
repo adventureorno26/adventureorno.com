@@ -16,6 +16,8 @@
 // there is nothing else to provision and the copy can be resumed by anyone with
 // the bucket.
 
+import { serveGlyphs } from './glyphs';
+import { serveStyle } from './style';
 import { serveTile } from './tiles';
 
 export interface Env {
@@ -79,6 +81,12 @@ export default {
     const tile = await serveTile(req, env.BASEMAP, env.OBJECT_KEY, ctx);
     if (tile) return tile;
 
+    const glyphs = await serveGlyphs(req, env.BASEMAP, ctx);
+    if (glyphs) return glyphs;
+
+    const style = serveStyle(req);
+    if (style) return style;
+
     // ---- start: create the multipart upload and record the plan ------------
     if (url.pathname === '/copy/start') {
       const existing = await readState(env);
@@ -130,7 +138,9 @@ export default {
           batch.map(async (partNumber) => {
             const start = (partNumber - 1) * state.partSize;
             const end = Math.min(start + state.partSize, state.total) - 1;
-            const res = await fetch(state.source, { headers: { Range: `bytes=${start}-${end}` } });
+            const res = await fetch(state.source, {
+              headers: { Range: `bytes=${start}-${end}` },
+            });
             if (res.status !== 206 || !res.body) {
               // A short or wrong part is a corrupt archive that would only show
               // up as a broken tile months later. Fail the whole batch instead.
@@ -167,7 +177,10 @@ export default {
       const state = await readState(env);
       if (!state) return json({ state: 'not started' });
       const head = await env.BASEMAP.head(state.key);
-      return json({ ...summary(state), objectInBucket: head ? head.size : null });
+      return json({
+        ...summary(state),
+        objectInBucket: head ? head.size : null,
+      });
     }
 
     // ---- abort ---------------------------------------------------------------

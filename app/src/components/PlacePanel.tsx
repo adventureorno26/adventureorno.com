@@ -156,7 +156,6 @@ export default function PlacePanel({
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
-  const [vMulti, setVMulti] = useState(false);
   const [vWho, setVWho] = useState(''); // '' = both; else a profile id
   const visitKeyRef = useRef<string | null>(null); // idempotency key per visit submit
   // Editing a visit's dates — "stretch a visit into a trip by adding more days".
@@ -605,7 +604,8 @@ export default function PlacePanel({
 
   async function submitVisit() {
     const start = vStart;
-    const end = vMulti && vEnd ? vEnd : vStart;
+    // No end chosen means one day. An end before the start is a slip, not an intent.
+    const end = vEnd && vEnd >= vStart ? vEnd : vStart;
     if (!start) return;
     try {
       // Atomic + idempotent: the visit and its attribution log together, and a
@@ -620,7 +620,6 @@ export default function PlacePanel({
       setAddingVisit(false);
       setVStart('');
       setVEnd('');
-      setVMulti(false);
       setVWho('');
       await reloadVisits();
       showSnack({ message: 'Visit logged.' });
@@ -1043,7 +1042,7 @@ export default function PlacePanel({
   // untidy.
 
   // A visit is the occasion; the ride and the run are what we DID during it, so
-  // they hang off it (docs/SCHEMA.md) rather than sitting beside it. Brewster is
+  // they hang off it (docs/STATE.md §0.3) rather than sitting beside it. Brewster is
   // one fused 2-day stay containing a ride and a run — it read as three visits
   // because all three were siblings. Only stays that span more than a day, or
   // that were marked as a trip, adopt their activities; a single-day run is
@@ -1286,7 +1285,7 @@ export default function PlacePanel({
           it. City and Region fetch the OSM boundary as you tap them, and Trail
           switches the card to the trail layout, so there is no second "make this
           a city / region / trail" row. TRIP is not offered at all: a trip is a
-          visit you marked, in the Visits list (docs/SCHEMA.md). */}
+          visit you marked, in the Visits list (docs/STATE.md §0.4). */}
       {canEdit && (
         <div className="cat-edit">
           <div className="cat-picker">
@@ -1806,32 +1805,36 @@ export default function PlacePanel({
                 className="primary log-visit-btn"
                 onClick={() => {
                   setAddingVisit(true);
-                  setVStart(new Date().toISOString().slice(0, 10));
+                  const today = new Date().toISOString().slice(0, 10);
+                  setVStart(today);
+                  setVEnd(today);
                 }}
               >
-                {visitCount > 0 ? 'Log another visit' : 'Log a visit'}
+                {visitCount > 0 ? 'Add another visit' : 'Add a visit'}
               </button>
             )}
 
             {canEdit && addingVisit && (
               <div className="entry" style={{ marginTop: 8 }}>
-                <label>Date{vMulti ? ' — from' : ''}</label>
-                <input type="date" value={vStart} onChange={(e) => setVStart(e.target.value)} />
-                {vMulti && (
-                  <>
-                    <label>to</label>
-                    <input type="date" value={vEnd} onChange={(e) => setVEnd(e.target.value)} />
-                  </>
-                )}
-                <label className="check-row">
-                  <input
-                    type="checkbox"
-                    checked={vMulti}
-                    onChange={(e) => setVMulti(e.target.checked)}
-                    style={{ width: 'auto' }}
-                  />
-                  Multiple days
-                </label>
+                <label>From</label>
+                <input
+                  type="date"
+                  value={vStart}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setVStart(next);
+                    // Keep the end with it while it is a single day, so moving the
+                    // start of a one-day visit does not silently make it a range.
+                    if (!vEnd || vEnd === vStart || vEnd < next) setVEnd(next);
+                  }}
+                />
+                <label>To</label>
+                <input
+                  type="date"
+                  value={vEnd}
+                  min={vStart || undefined}
+                  onChange={(e) => setVEnd(e.target.value)}
+                />
                 {people.length >= 2 && (
                   <>
                     <label>Who was there</label>

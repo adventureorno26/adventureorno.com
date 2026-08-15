@@ -9,7 +9,7 @@
 # only their R2 object KEYS (the "R2 object manifest"), never bytes or signed URLs.
 #
 # Source is the LOCAL disposable Supabase db container by default. Encrypt the output
-# with `age` before it leaves your machine (see docs/backup-restore.md); this script
+# with `age` before it leaves your machine (see docs/STATE.md §6b); this script
 # does not handle keys.
 #
 # Usage: scripts/export-data.sh <output-dir> [exported_at_iso]
