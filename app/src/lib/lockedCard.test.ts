@@ -50,6 +50,7 @@ const BANNED: { word: RegExp; why: string }[] = [
 ];
 
 const CARD = SOURCES.find(([p]) => p.endsWith('components/PlacePanel.tsx'))?.[1] ?? '';
+const BLANK = SOURCES.find(([p]) => p.endsWith('components/NewPlaceDraft.tsx'))?.[1] ?? '';
 
 // Words that are fine in general but must never appear in the CARD's visit list.
 const BANNED_IN_VISITS = [
@@ -193,5 +194,45 @@ describe('the card holds your edits until you save', () => {
   it('keeps what you typed when a save fails', () => {
     // Throwing away the draft because the network blinked is the worst answer.
     expect(CARD).toMatch(/The draft is KEPT on failure/);
+  });
+});
+
+describe('the blank card asks the trail question once', () => {
+  // §0.6: the blank card is the same card with the fields empty, plus ONE extra
+  // question asked "once, here only" — "Is this a trail with sections?". It was the
+  // last unbuilt line on the card list. A trail is the one kind of place you cannot
+  // tell from where someone tapped: it is a container whose SECTIONS are the places
+  // that count, so nothing else on the card means the same once the answer is yes.
+  it('asks it, in the words of the plan', () => {
+    expect(BLANK).toMatch(/Is this a trail with sections\?/);
+  });
+
+  it('asks it ONCE — the tag list must not ask the same thing again', () => {
+    // Being a trail IS carrying the `trail` tag. If Trail is also offered in "+ tag"
+    // there are two controls for one fact sitting on the same screen, which is the
+    // shape of bug this codebase keeps having.
+    expect(BLANK).toMatch(/NOT_A_TAG = new Set\(\[[^\]]*'trail'/);
+  });
+
+  it('does not keep a second copy of the answer', () => {
+    // The question reads and writes the tag. A `useState` boolean beside the tag would
+    // be the copy, and the copy is what goes stale.
+    expect(BLANK).toMatch(/const isTrail = tags\.includes\('trail'\)/);
+    expect(BLANK).not.toMatch(/useState(<boolean>)?\((true|false)\); *\/\/ *is ?trail/i);
+  });
+
+  it('lets a trail exist before it has been walked', () => {
+    // A trail you have not walked yet is a normal thing to record. The date is
+    // therefore optional, and with no date no visit is logged — which is exactly what
+    // the plan says: "create a first visit only when the user supplies an outing date".
+    expect(BLANK).toMatch(/Date you walked it \(optional\)/);
+  });
+
+  it('offers the reference route, and draws it the one existing way', () => {
+    expect(BLANK).toMatch(/Draw it after saving/);
+    // Handed back to the caller rather than drawn inside the modal, so a trail's route
+    // is drawn by the same draw mode the trail card uses. Two drawing surfaces would
+    // be two ways to make the same thing.
+    expect(BLANK).toMatch(/onSaved\(placeId, isTrail && drawAfter/);
   });
 });
