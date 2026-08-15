@@ -2213,12 +2213,17 @@ one that passes.
 - **`admin.rpc(...).catch()` is a TypeError** — an rpc() is a thenable, not a Promise.
 - **A date-only string parses as UTC midnight** and renders as the previous day west of
   Greenwich. Parse `YYYY-MM-DD` with local components. (`fmtRunDate` now does this itself.)
-- **`places.part_of` is the record of membership; `place_membership` is a copy.** A
-  trigger rebuilds the table from the array on every update of that place, so deleting a
-  membership row alone does nothing and undoes itself. Write `part_of`. **Still true on
-  2026-08-15**: `add_place_to_visit`, `add_to_container`, `remove_from_container` and
-  `merge_places_auto` all write the array, and `places_sync_membership` mirrors it. §0.3
-  plans to reverse this — until those four move, the column cannot be dropped.
+- **~~`places.part_of` is the record of membership~~ — REVERSED 2026-08-15 by migration
+  0192. `place_membership` is the record; `part_of` is the mirror.** For most of this
+  project's life the opposite was true, and writing a membership row on its own undid
+  itself the next time anyone touched that place — which is why the old wording said
+  "write `part_of`". 0192 dropped `places_sync_membership` and added
+  `membership_sync_part_of` going the other way, and moved every writer:
+  `add_to_container`, `remove_from_container`, `add_place_to_visit`, `merge_places_auto`
+  and **`create_experience`** — that last one is the card's "Part of a trail?", which
+  would otherwise have been accepted and silently dropped. **Write the ROW.** The array is
+  kept correct only until `create_experience`, `rebuild_place_visits` and the exports stop
+  reading it, and then it goes.
 - **The app's global input CSS is `display:block; width:100%`** — it makes a radio 238px
   wide. Pin size on any radio or checkbox.
 - **MapLibre 6** removed the default export; **Vite 8** removed object `manualChunks` and

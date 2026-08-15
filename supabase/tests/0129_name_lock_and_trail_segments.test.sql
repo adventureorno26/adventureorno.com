@@ -80,7 +80,11 @@ begin
   insert into public.places (name, lat, lng, saved, categories) values ('V129 Segment A', 39.01, -77.61, true, array['running']) returning id into s1;
   insert into public.places (name, lat, lng, saved, categories) values ('V129 Segment B', 39.02, -77.62, true, array['running']) returning id into s2;
 
-  update public.places set part_of = array[t] where id in (s1, s2);
+  -- THE ROW IS THE LINK (0192). This used to write part_of and let a trigger build the
+  -- rows; the direction is now the other way about, so writing the array alone would
+  -- link nothing. What is being tested — that a segment belongs to its trail — is
+  -- unchanged.
+  insert into public.place_membership (child_id, parent_id) values (s1, t), (s2, t);
 
   if (select count(*) from public.place_membership where parent_id = t) <> 2 then
     raise exception 'FAIL: segments not linked to the trail'; end if;

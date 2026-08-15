@@ -41,13 +41,24 @@ begin
    where child_id = child and parent_id = parent;
   if n <> 1 then raise exception 'FAIL: setup — the mirror row should exist'; end if;
 
-  -- ...now touch the child's containers for an unrelated reason
+  -- ...now touch the child's containers for an unrelated reason.
+  --
+  -- THE TRAP IS GONE, ON PURPOSE (0192). This used to delete the row above: the array
+  -- was the record and a trigger rebuilt the table from it, so a membership written
+  -- straight into the table undid itself the next time anyone edited that place. The
+  -- direction is now the other way about — the ROW is the record — so the row survives
+  -- and it is the ARRAY that is merely stale until something rebuilds it.
+  --
+  -- The assertion is inverted rather than deleted, because the day this starts deleting
+  -- rows again is a day somebody has put the old trigger back.
   update public.places set part_of = array[other] where id = child;
 
   select count(*) into n from public.place_membership
    where child_id = child and parent_id = parent;
-  if n <> 0 then
-    raise exception 'FAIL: the trap no longer reproduces — has the sync trigger changed?'; end if;
+  if n <> 1 then
+    raise exception
+      'FAIL: writing part_of destroyed a membership row. The old direction is back, and '
+      'a row written on its own will silently undo itself again.'; end if;
 
   raise notice 'PASS 1: a mirror-only membership silently disappears (this is the bug)';
 end $$;
