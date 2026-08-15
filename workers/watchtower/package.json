@@ -1,0 +1,14 @@
+{
+  "name": "@adventureorno/watchtower",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.0.0"
+  }
+}

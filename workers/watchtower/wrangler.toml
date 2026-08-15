@@ -1,0 +1,21 @@
+# watchtower — probes every service we run and records what came back.
+#
+# Deploy: cd workers/watchtower && npx wrangler deploy
+#
+# NOT routed on adventureorno.com. It has no business being reachable from the web; the
+# cron is what runs it, and /watchtower/run exists for a person on workers.dev.
+#
+# Secrets (npx wrangler secret put NAME):
+#   SUPABASE_SERVICE_ROLE_KEY   writes the ledger; RLS forbids anon and authenticated
+name = "adventureorno-watchtower"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Every 15 minutes. service_status() calls a service stale after 30, so one missed run is
+# tolerated and two are not.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+SITE = "https://adventureorno.com"
+SUPABASE_URL = "https://aanfyhsjbtnqzphuoiem.supabase.co"
