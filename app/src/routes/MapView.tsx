@@ -1592,12 +1592,16 @@ export default function MapView() {
           places={places}
           people={people}
           meId={profile?.id ?? null}
-          onSaved={(placeId) => {
+          onSaved={(placeId, drawRouteNamed) => {
             setDraft(null);
             void fetchPlaces()
               .then(setPlaces)
               .catch(() => undefined);
-            navigate(`/place/${placeId}`);
+            // A trail saved with "draw it after saving" goes to the map with the pen
+            // already in hand — the same draw mode the trail card's route action uses,
+            // so there is one way to draw a route, not two.
+            if (drawRouteNamed) startDrawForTrail(placeId, drawRouteNamed);
+            else navigate(`/place/${placeId}`);
           }}
           onCancel={() => setDraft(null)}
         />
