@@ -44,13 +44,8 @@ export function everyoneLabel(people: MapPerson[]): string {
  * `meId` is listed as "Just me" wherever they appear; everyone else is named. Members
  * without a display name fall back to a neutral placeholder rather than a guess.
  */
-export function whoChoices(
-  people: MapPerson[],
-  meId: string | null | undefined,
-): WhoChoice[] {
-  const out: WhoChoice[] = [
-    { key: 'both', label: everyoneLabel(people), profileId: null },
-  ];
+export function whoChoices(people: MapPerson[], meId: string | null | undefined): WhoChoice[] {
+  const out: WhoChoice[] = [{ key: 'both', label: everyoneLabel(people), profileId: null }];
   if (meId) out.push({ key: 'mine', label: 'Just me', profileId: meId });
   for (const p of people) {
     if (!meId || p.id !== meId) {
