@@ -113,13 +113,34 @@ create policy activities_select on public.activities
   );
 
 -- ---------------------------------------------------------------------------
--- 5. THE FEATURE. Outings we did together, and MY miles on them.
+-- 5. THE FEATURE. Outings a GROUP was on, and MY miles across them.
 --
--- The outing count comes from VISITS — our own participants model — so it is identical
--- for both people and carries no Strava restriction. The mileage sums only the viewer's
--- own activities, so it never contains the other person's data.
+-- WHY THIS TAKES A SET AND NOT ONE PERSON (Erica, 2026-08-15: "what if a user has 10
+-- friends and only 7 go? what if I want to search for things I did with 2 specific
+-- people?"). My first version took a single uuid, which bakes in the two-person household
+-- the rest of §0.3 has been getting rid of all day. Seven of ten friends going is the
+-- normal case, not the exception.
+--
+-- So: give it the people you care about, and it returns the outings whose participants
+-- INCLUDE ALL OF THEM. Others may have been there too — "with Josh and Sam" does not mean
+-- "and nobody else".
+--
+-- `together_since` exists because the app already knows this date and only the CLIENT knew
+-- it: STATS_CUTOFF = '2025-12-21' lives in app/src/lib/strava.ts, so the map and the stats
+-- filtered by it while the DATABASE happily held a joint visit dated 2021. One row does.
 -- ---------------------------------------------------------------------------
-create or replace function public.shared_outings(p_with uuid)
+create or replace function public.together_since()
+returns date
+language sql
+immutable
+as $function$ select date '2025-12-21' $function$;
+
+comment on function public.together_since() is
+  'The date Erica and Josh met. Shared history before it is a data error, not history. '
+  'It lived only in the client (STATS_CUTOFF) until 0193, which is how a joint visit '
+  'dated 2021-06-27 came to exist.';
+
+create or replace function public.shared_outings(p_with uuid[])
 returns table (
   outings         integer,
   my_miles        numeric,
@@ -134,17 +155,24 @@ set search_path to 'public'
 as $function$
   select public.assert_member();
 
-  with together as (
-    -- A shared outing is a visit BOTH people are on. That fact is ours.
+  with wanted as (
+    -- The caller is always part of "we", without having to name themselves.
+    select distinct x from unnest(coalesce(p_with, '{}'::uuid[]) || auth.uid()) x
+                          where x is not null
+  ),
+  together as (
+    -- A shared outing is a visit EVERY named person is on. Others may be too.
+    -- This fact is OURS — it comes from visit_profiles, not from Strava.
     select v.id, v.place_id, v.start_date, v.end_date
       from public.accepted_visits v
-     where exists (select 1 from public.visit_profiles vp
-                    where vp.visit_id = v.id and vp.profile_id = auth.uid())
-       and exists (select 1 from public.visit_profiles vp
-                    where vp.visit_id = v.id and vp.profile_id = p_with)
+     where v.start_date >= public.together_since()
+       and not exists (
+             select 1 from wanted w
+              where not exists (select 1 from public.visit_profiles vp
+                                 where vp.visit_id = v.id and vp.profile_id = w.x))
   ),
   mine as (
-    -- MY activities on those days at those places. Only mine, whatever their origin.
+    -- MY activities on those days at those places. Only ever mine.
     select distinct a.id, a.distance
       from public.activities a
       join together t
@@ -155,31 +183,28 @@ as $function$
   )
   select
     (select count(*)::integer from together),
-    -- metres to miles, one place, matching the rest of the app
     coalesce((select round((sum(distance) / 1609.344)::numeric, 1) from mine), 0),
     (select min(start_date) from together),
     (select max(end_date)   from together),
-    -- Honest about what is NOT in the number: the other person's Strava-origin
-    -- activities on the same outings, which we may not show and are not counted.
+    -- Honest about what is NOT counted: their Strava-origin activities on the same
+    -- outings, which we may not show.
     (select count(*)::integer
        from public.activities a
        join together t
          on a.place_id = t.place_id
         and a.start_date::date between t.start_date and t.end_date
       where lower(coalesce(a.original_source, '')) = 'strava'
-        and exists (select 1 from public.activity_profiles ap
-                     where ap.activity_id = a.id and ap.profile_id = p_with)
         and not exists (select 1 from public.activity_profiles ap
                          where ap.activity_id = a.id and ap.profile_id = auth.uid()));
 $function$;
 
-revoke all on function public.shared_outings(uuid) from public;
-revoke all on function public.shared_outings(uuid) from anon;
-grant execute on function public.shared_outings(uuid) to authenticated;
-grant execute on function public.shared_outings(uuid) to service_role;
+revoke all on function public.shared_outings(uuid[]) from public;
+revoke all on function public.shared_outings(uuid[]) from anon;
+grant execute on function public.shared_outings(uuid[]) to authenticated;
+grant execute on function public.shared_outings(uuid[]) to service_role;
 
-comment on function public.shared_outings(uuid) is
-  'Outings you and another person were both on, and YOUR miles across them. The count is '
-  'from visits (ours); the mileage is only the caller''s own, so no Strava data crosses '
-  'accounts. `restricted_rows` says how many of their activities are excluded, so the '
-  'number can be honest about what it leaves out rather than silently short.';
+comment on function public.shared_outings(uuid[]) is
+  'Outings whose participants INCLUDE everyone named (the caller is added automatically), '
+  'and the CALLER''S OWN miles across them. Others may also have been there. The count '
+  'comes from visits, which are ours; the mileage is only the caller''s, so no Strava data '
+  'crosses accounts. Nothing before together_since() is counted.';
