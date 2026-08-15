@@ -1263,6 +1263,68 @@ saturation of her connection.
 and weather (Open-Meteo). Self-hosting search is a separate decision — Nominatim/Photon
 are the options.
 
+### Phase 4b — The map's appearance  *(PLANNED 2026-08-15)*
+
+#### Where the basemap actually is
+
+Found 2026-08-15, and it was not what the plan assumed:
+
+- The planet IS in R2 — `aon-basemap/planet.pmtiles`, **137.3 GB**, zoom 0–15.
+- The Worker serves tiles, glyphs and a style, verified: a z6 tile over Virginia returns
+  38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range 76,044 bytes, and
+  MapLibre renders Loudoun County with **zero errors**.
+- **The zone had zero worker routes registered**, so every `/basemap/*` URL fell through
+  to Pages and answered **200 with the app's HTML**. A 200 from the wrong server is the
+  worst failure available here — nothing looks broken. Check the content-type.
+- The deployed Worker was the **copy-only build from 11 August**; the serving code (#73)
+  had never been deployed. It has been now, DELIBERATELY WITHOUT ITS ROUTE, so nothing
+  user-facing changed.
+
+#### The styles
+
+**Dark is decided: INK** — the card's own palette, so opening a card over the map is one
+surface rather than two:
+
+| | |
+| --- | --- |
+| ground | `#0e1728` (`--panel`) |
+| land | `#131f36` (`--panel-2`) |
+| water | `#16324f` |
+| roads | `#22314f` → `#33507f` → `#3f6fae` |
+| labels | `#eaf1ff` (`--text`) on a `#080e1c` halo |
+
+**Light is not decided.** Four rounds so far; what has been LEARNED is worth keeping,
+because each round failed for a nameable reason:
+
+1. *Pastels* — white roads on a near-white ground with **no casing**, so the road network
+   vanished. Roads on a light map need a darker casing under them; this is not optional.
+2. *Saturated pastels* — better, still four greys with different tints.
+3. *Different treatments* (sepia atlas, green-hero, monochrome-with-one-accent) — rejected
+   outright. They changed the treatment and threw away the **contrast**, which is the part
+   that was working.
+4. *One structure, four rich colour families* — white ground, near-black labels, crisp
+   cased roads fixed; Azure / Emerald / Indigo / Ember vary only the colour.
+
+**The rule that came out of it: the contrast is fixed. Only colour is in question.**
+
+#### Still to do, in order
+
+1. **Choose the light palette.**
+2. **Serve both themes** from the Worker — `/basemap/style.json?theme=dark|light` — so a
+   theme change is a style swap, not a reload.
+3. **Settings → Map appearance**: Dark / Light / Match my device, stored per person.
+4. **Register the route** `adventureorno.com/basemap/*`. The one live change to the
+   domain; reversible by deleting the route.
+5. **Point `basemap.ts`** at `/basemap/style.json`. Same-origin, so the service worker can
+   cache tiles and there is one fewer CSP entry to fail silently — which is exactly how
+   the Mapbox search died.
+6. **Then** MapTiler can be switched off without blanking the app, which is Phase 4's own
+   definition of done.
+
+**No icons, ever.** The style strips every `icon-*` property and keeps `text-field`; a
+first attempt at that filter also dropped `places_locality` and would have removed every
+city label, so the guard tests for both.
+
 ### Phase 4c — Standards and open data  *(PLANNED 2026-08-15, nothing built)*
 
 Erica asked to "get the API from OGC.org" and use its assets to make the map state of the
