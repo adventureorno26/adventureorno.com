@@ -46,7 +46,11 @@ end $$;
 do $$
 declare p uuid; v1 uuid; v2 uuid; base int; after_one int; after_two int; places_after int; places_base int;
 begin
-  select trips_count, places_count into base, places_base from public.wander_stats(null);
+  -- VIEWED AS THE PERSON WHO WAS THERE (0193). `null` is the TOGETHER view, and since
+  -- "just me" became the default a visit one person creates is not shared — so the
+  -- Together view correctly shows nothing. The RULE under test is unchanged; only the
+  -- view it must be asked from.
+  select trips_count, places_count into base, places_base from public.wander_stats('ffff6666-0000-0000-0000-00000000b001'::uuid);
 
   insert into public.places (name, lat, lng, saved, categories)
     values ('V133 San Diego', 32.7, -117.1, true, array['city']) returning id into p;
@@ -64,7 +68,7 @@ begin
   -- unmarking three visits she had marked BY HAND on a single day would be an
   -- automation undoing a human decision (0157). The rule is: more than one day, OR
   -- marked. Both of these span several days, so both count immediately.
-  select trips_count into after_one from public.wander_stats(null);
+  select trips_count into after_one from public.wander_stats('ffff6666-0000-0000-0000-00000000b001'::uuid);
   if after_one <> base + 2 then
     raise exception 'FAIL: two multi-day visits should count as two trips (% -> %)', base, after_one;
   end if;
@@ -73,7 +77,7 @@ begin
   -- it came to be a trip, and must never be counted twice.
   perform public.set_visit_is_trip(v1, true);
   perform public.set_visit_is_trip(v2, true);
-  select trips_count, places_count into after_two, places_after from public.wander_stats(null);
+  select trips_count, places_count into after_two, places_after from public.wander_stats('ffff6666-0000-0000-0000-00000000b001'::uuid);
 
   if after_two <> base + 2 then
     raise exception 'FAIL: marking an already-counted trip double-counted it (% -> %)', base, after_two; end if;
@@ -101,11 +105,11 @@ end $$;
 do $$
 declare p uuid; v uuid; before_t int; after_t int;
 begin
-  select trips_count into before_t from public.wander_stats(null);
+  select trips_count into before_t from public.wander_stats('ffff6666-0000-0000-0000-00000000b001'::uuid);
   insert into public.places (name, lat, lng, saved) values ('V133 Future', 48.8, 2.3, true) returning id into p;
   insert into public.visits (place_id, start_date, end_date, manual, trip_marked, status)
     values (p, '2027-06-01', '2027-06-10', true, true, 'planned') returning id into v;
-  select trips_count into after_t from public.wander_stats(null);
+  select trips_count into after_t from public.wander_stats('ffff6666-0000-0000-0000-00000000b001'::uuid);
   if after_t <> before_t then raise exception 'FAIL: a planned trip counted as taken'; end if;
   raise notice 'PASS 5: planned trips are not counted as taken';
 end $$;

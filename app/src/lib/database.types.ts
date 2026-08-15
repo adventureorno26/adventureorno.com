@@ -35,6 +35,7 @@ export type Database = {
           local_date: string | null
           moving_time: number | null
           name: string | null
+          original_source: string | null
           owner_profile: string | null
           place_id: string | null
           shared_group_id: string | null
@@ -64,6 +65,7 @@ export type Database = {
           local_date?: string | null
           moving_time?: number | null
           name?: string | null
+          original_source?: string | null
           owner_profile?: string | null
           place_id?: string | null
           shared_group_id?: string | null
@@ -93,6 +95,7 @@ export type Database = {
           local_date?: string | null
           moving_time?: number | null
           name?: string | null
+          original_source?: string | null
           owner_profile?: string | null
           place_id?: string | null
           shared_group_id?: string | null
@@ -215,6 +218,13 @@ export type Database = {
             referencedRelation: "activities"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "activity_participant_review_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: true
+            referencedRelation: "visible_activities"
+            referencedColumns: ["id"]
+          },
         ]
       }
       activity_profiles: {
@@ -239,6 +249,13 @@ export type Database = {
             columns: ["activity_id"]
             isOneToOne: false
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_profiles_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "visible_activities"
             referencedColumns: ["id"]
           },
           {
@@ -281,6 +298,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "activity_reactions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "visible_activities"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "activity_reactions_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
@@ -314,6 +338,13 @@ export type Database = {
             columns: ["activity_id"]
             isOneToOne: true
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_visit_review_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: true
+            referencedRelation: "visible_activities"
             referencedColumns: ["id"]
           },
         ]
@@ -1005,6 +1036,13 @@ export type Database = {
             columns: ["activity_id"]
             isOneToOne: false
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "peak_bags_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "visible_activities"
             referencedColumns: ["id"]
           },
           {
@@ -2472,6 +2510,135 @@ export type Database = {
         }
         Relationships: []
       }
+      visible_activities: {
+        Row: {
+          also_profiles: string[] | null
+          athlete_id: number | null
+          created_at: string | null
+          distance: number | null
+          elapsed_time: number | null
+          elevation_gain: number | null
+          elevation_profile: Json | null
+          geom: unknown
+          id: string | null
+          is_race: boolean | null
+          lat: number | null
+          lng: number | null
+          local_date: string | null
+          moving_time: number | null
+          name: string | null
+          original_source: string | null
+          owner_profile: string | null
+          place_id: string | null
+          shared_group_id: string | null
+          source: string | null
+          source_id: string | null
+          start_date: string | null
+          start_date_local: string | null
+          strava_id: number | null
+          summary_polyline: string | null
+          trailhead: string | null
+          type: string | null
+          visit_id: string | null
+        }
+        Insert: {
+          also_profiles?: string[] | null
+          athlete_id?: number | null
+          created_at?: string | null
+          distance?: number | null
+          elapsed_time?: number | null
+          elevation_gain?: number | null
+          elevation_profile?: Json | null
+          geom?: unknown
+          id?: string | null
+          is_race?: boolean | null
+          lat?: number | null
+          lng?: number | null
+          local_date?: string | null
+          moving_time?: number | null
+          name?: string | null
+          original_source?: string | null
+          owner_profile?: string | null
+          place_id?: string | null
+          shared_group_id?: string | null
+          source?: string | null
+          source_id?: string | null
+          start_date?: string | null
+          start_date_local?: string | null
+          strava_id?: number | null
+          summary_polyline?: string | null
+          trailhead?: string | null
+          type?: string | null
+          visit_id?: string | null
+        }
+        Update: {
+          also_profiles?: string[] | null
+          athlete_id?: number | null
+          created_at?: string | null
+          distance?: number | null
+          elapsed_time?: number | null
+          elevation_gain?: number | null
+          elevation_profile?: Json | null
+          geom?: unknown
+          id?: string | null
+          is_race?: boolean | null
+          lat?: number | null
+          lng?: number | null
+          local_date?: string | null
+          moving_time?: number | null
+          name?: string | null
+          original_source?: string | null
+          owner_profile?: string | null
+          place_id?: string | null
+          shared_group_id?: string | null
+          source?: string | null
+          source_id?: string | null
+          start_date?: string | null
+          start_date_local?: string | null
+          strava_id?: number | null
+          summary_polyline?: string | null
+          trailhead?: string | null
+          type?: string | null
+          visit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_owner_profile_fkey"
+            columns: ["owner_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "activities_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activities_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _postgis_deprecate: {
@@ -2644,6 +2811,7 @@ export type Database = {
           local_date: string | null
           moving_time: number | null
           name: string | null
+          original_source: string | null
           owner_profile: string | null
           place_id: string | null
           shared_group_id: string | null
@@ -2856,6 +3024,7 @@ export type Database = {
         Args: { p_caller: string; p_place: string }
         Returns: boolean
       }
+      can_see_activity: { Args: { p_activity: string }; Returns: boolean }
       card_view: { Args: { p_place?: string; p_visit?: string }; Returns: Json }
       claim_invite: {
         Args: never
@@ -3781,6 +3950,16 @@ export type Database = {
           winery: number
         }[]
       }
+      shared_outings: {
+        Args: { p_with: string[] }
+        Returns: {
+          first_together: string
+          last_together: string
+          my_miles: number
+          outings: number
+          restricted_rows: number
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_photo: { Args: { p_id: string }; Returns: undefined }
@@ -4378,6 +4557,7 @@ export type Database = {
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
       strava_oauth_start: { Args: never; Returns: string }
+      together_since: { Args: never; Returns: string }
       toggle_activity_reaction: {
         Args: { p_activity: string; p_emoji: string }
         Returns: undefined

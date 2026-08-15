@@ -28,7 +28,7 @@ end $$;
 --    not "Both". This is the exact bug: the old read said Both because the place
 --    column was null.
 do $$
-declare p uuid; got uuid;
+declare p uuid; got uuid; v uuid;
 begin
   insert into public.places (name, lat, lng, saved) values ('V136 Rehoboth', 38.72, -75.07, true) returning id into p;
   insert into public.visits (place_id, start_date, end_date, manual, solo_override)
@@ -46,9 +46,14 @@ begin
 
   -- NEGATIVE CONTROL: add a joint visit and it must flip to Both. If the rule were
   -- removed (e.g. "first visit wins"), this assertion fails.
-  -- a joint visit: everyone, which a bare insert now means by default
+  -- A JOINT VISIT NOW HAS TO SAY SO (0193). A bare insert used to mean "everyone";
+  -- since "just me" became the default it means the one person who made it, and being
+  -- together is a tag a person accepts rather than something the app assumes.
   insert into public.visits (place_id, start_date, end_date, manual)
-    values (p, '2026-06-01','2026-06-01', true);
+    values (p, '2026-06-01','2026-06-01', true) returning id into v;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v, pr.id from public.profiles pr where pr.role in ('owner','editor')
+  on conflict do nothing;
   select solo_profile into got from public.place_attribution() where place_id = p;
   if got is not null then
     raise exception 'FAIL: a place with a joint visit must read Both, got %', got;
