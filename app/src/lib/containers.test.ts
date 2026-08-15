@@ -79,6 +79,7 @@ function visit(overrides: Partial<Visit>): Visit {
     end_date: '2026-03-07',
     note: null,
     is_trip: false,
+    trip_marked: false,
     status: 'taken',
     solo_override: false,
     created_at: '2026-03-07',
