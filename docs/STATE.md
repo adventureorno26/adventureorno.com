@@ -1688,10 +1688,37 @@ is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resur
    unit tests — including `lockedCard.test.ts` — and refuses on failure. Docs and
    SQL changes do not have to boot vitest. Enable per clone with
    `git config core.hooksPath .githooks`.
-3. **Nothing commits itself.** The global Claude hooks that committed and pushed on
-   every session start and stop are gone (backup:
-   `~/.claude/settings.json.bak-2026-08-11`). That Stop hook is what resurrected
-   `README.md` 90 minutes after it was deleted (§8).
+3. **Nothing commits itself — except GitDoc, which does (found 2026-08-14).** The
+   global Claude hooks that committed and pushed on every session start and stop are
+   gone (backup: `~/.claude/settings.json.bak-2026-08-11`). That Stop hook is what
+   resurrected `README.md` 90 minutes after it was deleted (§8). **But this line was
+   still not true.** Commits kept appearing under Erica's name with a timestamp for a
+   message — `Aug 14, 2026, 10:53 PM` — three times in one evening. They are not git
+   hooks (`.githooks/` holds only `pre-commit`) and not a cron job. They are the
+   **GitDoc** VS Code extension, configured in her *user* settings
+   (`~/Library/Application Support/Code/User/settings.json`):
+
+   ```jsonc
+   "gitdoc.enabled": true,
+   "gitdoc.autoCommitDelay": 30000,   // commit 30s after a file stops changing
+   "gitdoc.autoPush": "onCommit",
+   "gitdoc.pullOnPush": true,
+   ```
+
+   **Why it matters, concretely.** It commits work *while it is being written*: one
+   evening's export fix was split across two timestamp commits mid-edit, and a
+   component change landed on the branch of an unrelated PR because that is what
+   happened to be checked out. It attributes machine-written work to **Erica**. With
+   `autoPush: onCommit` it will also push whatever it commits the moment a branch has
+   an upstream. It respects `pre-commit` (`noVerify: false`), so it cannot commit
+   failing code — but it decides *when* and *what*, which is exactly what rule 3 says
+   nothing should.
+
+   **To turn it off:** in VS Code, `gitdoc.enabled: false` (or the *GitDoc: Disable*
+   command). It is a per-machine editor setting, not a repo setting, so nothing in
+   this repository can prevent it. **Erica's call** — left on until she says
+   otherwise. Until then, a commit here with a timestamp for a message was written by
+   the editor, not by a person or by Claude.
 4. **`bypassPermissions` is off** in her Claude settings.
 
 ### THE ONLY ROUTE TO THE LIVE SITE (2026-08-11)
