@@ -7,7 +7,7 @@ import type { Activity, MileageRow } from './types';
 const ACTIVITY_COLS =
   // local_date is the day it ACTUALLY happened. start_date is UTC, so an evening
   // outing after ~20:00 ET lands on the next calendar day (migration 0143).
-  'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, local_date, lat, lng, summary_polyline, place_id, trailhead, solo_profile';
+  'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, local_date, lat, lng, summary_polyline, place_id, trailhead';
 
 /** Set who an activity belongs to (null = both of us). Rebuilds the place's visits. */
 export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {

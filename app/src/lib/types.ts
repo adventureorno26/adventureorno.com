@@ -75,7 +75,6 @@ export interface Visit {
   // means nothing. The Trips statistic counts these.
   is_trip: boolean;
   status: 'taken' | 'planned'; // planned = a future-dated trip
-  solo_profile: string | null; // who was on this visit (null = both of us)
   solo_override: boolean; // true = human-set; kept across rebuilds
   created_at: string;
 }
@@ -154,7 +153,6 @@ export interface Activity {
   summary_polyline: string | null;
   place_id: string | null;
   trailhead: string | null; // where this run started on a trail (falls back to name)
-  solo_profile: string | null; // who did it (null = both of us)
 }
 
 export interface SharedLink {

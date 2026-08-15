@@ -18,7 +18,6 @@ export interface VisitActivity {
   local_date: string | null;
   start_date: string | null;
   place_id: string | null;
-  solo_profile: string | null;
 }
 
 export interface VisitPhoto {

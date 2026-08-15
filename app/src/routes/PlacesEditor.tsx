@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider';
 import {
   deletePlace,
   fetchAllVisits,
+  fetchVisitPeopleAll,
   fetchMapPeople,
   fetchPlacePeople,
   fetchPlaces,
@@ -58,6 +59,9 @@ export default function PlacesEditor() {
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
   const [visitsByPlace, setVisitsByPlace] = useState<Map<string, Visit[]>>(new Map());
+  /** visit id → the profiles on it (0187). Replaces reading `solo_profile`, which can
+   *  only ever say one person or everybody. */
+  const [visitPeople, setVisitPeople] = useState<Map<string, string[]>>(new Map());
   const [selVisit, setSelVisit] = useState<Record<string, string>>({});
   const [q, setQ] = useState('');
   const [person, setPerson] = useState<PersonKey>('all');
@@ -88,6 +92,9 @@ export default function PlacesEditor() {
       .catch(() => undefined);
     fetchPlacePeople()
       .then(setPlacePeople)
+      .catch(() => undefined);
+    fetchVisitPeopleAll()
+      .then(setVisitPeople)
       .catch(() => undefined);
     fetchAllVisits()
       .then((vs) => {
@@ -177,7 +184,10 @@ export default function PlacesEditor() {
     return vs.find((v) => v.id === selVisit[p.id]) ?? vs[0];
   }
   function whoOfVisit(v: Visit): Who {
-    return whoKey(v.solo_profile, meId);
+    // Exactly one participant means that person; anything else means everyone. That is
+    // what solo_profile's null meant, in a form that can also describe three.
+    const on = visitPeople.get(v.id) ?? [];
+    return whoKey(on.length === 1 ? on[0] : null, meId);
   }
   // Place-level fallback (no visits): from who has contributed anything here.
   function whoOfPlace(id: string): Who {
@@ -192,10 +202,8 @@ export default function PlacesEditor() {
   function peopleUnion(visits: Visit[]): Set<string> {
     const set = new Set<string>();
     for (const vv of visits) {
-      // A null solo profile means EVERYONE, which is every member — not the
-      // signed-in person plus one assumed other.
-      if (vv.solo_profile) set.add(vv.solo_profile);
-      else for (const x of people) set.add(x.id);
+      // Straight from the participant rows now — no interpretation of a null needed.
+      for (const id of visitPeople.get(vv.id) ?? []) set.add(id);
     }
     return set;
   }
@@ -210,9 +218,13 @@ export default function PlacesEditor() {
         // Update the edited visit AND recompute the place's aggregate people as the
         // UNION across ALL its visits — editing one visit must never replace people
         // contributed by other visits.
-        const updated = (visitsByPlace.get(p.id) ?? []).map((x) =>
-          x.id === v.id ? { ...x, solo_profile: profileId ?? null, solo_override: true } : x,
-        );
+        // Reflect the change in the participant map, which is what everything reads.
+        setVisitPeople((cur) => {
+          const next = new Map(cur);
+          next.set(v.id, profileId ? [profileId] : people.map((x) => x.id));
+          return next;
+        });
+        const updated = visitsByPlace.get(p.id) ?? [];
         setVisitsByPlace((cur) => {
           const next = new Map(cur);
           next.set(p.id, updated);
