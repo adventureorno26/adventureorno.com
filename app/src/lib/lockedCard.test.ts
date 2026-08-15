@@ -236,3 +236,18 @@ describe('the blank card asks the trail question once', () => {
     expect(BLANK).toMatch(/onSaved\(placeId, isTrail && drawAfter/);
   });
 });
+
+describe('the card asks the model, not the leftover column', () => {
+  // §0.4 decides what a trip is: MULTI-DAY or someone marked it. card_view answers
+  // that as is_trip_qualified. The card used to write `qualifiedTrips.has(v.id) ||
+  // !!v.is_trip`, which looked like a safety net and was not one — a trigger keeps
+  // visits.is_trip identical to trip_marked, so the second half could only ever repeat
+  // what the first had already said, while making the raw column look load-bearing.
+  //
+  // The column is on its way out (§8). This keeps the card from reaching for it again
+  // in the meantime.
+  it('decides a trip from the card view alone', () => {
+    expect(CARD).toMatch(/const isTrip = \(v: Visit\) => qualifiedTrips\.has\(v\.id\);/);
+    expect(CARD, 'no falling back to the raw column').not.toMatch(/\|\|\s*!!v\.is_trip/);
+  });
+});
