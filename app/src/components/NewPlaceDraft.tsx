@@ -64,7 +64,10 @@ export default function NewPlaceDraft({
   places: Place[];
   people: MapPerson[];
   meId: string | null;
-  onSaved: (placeId: string) => void;
+  // The second argument is the trail's name, and it is only passed when this save
+  // made a trail AND the person asked to draw its route now — the caller hands off
+  // to the map's draw mode instead of opening the card.
+  onSaved: (placeId: string, drawRouteNamed?: string) => void;
   onCancel: () => void;
   // 'visited' = a place I've been (asks when + who). 'bucket' = somewhere to go
   // later, which has no visit and therefore nobody to attribute it to.
@@ -86,6 +89,9 @@ export default function NewPlaceDraft({
   const [who, setWho] = useState<Who>('both');
   const [website, setWebsite] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  // Asked once, here only (§0.6): "Is this a trail with sections?" — and having said
+  // yes, the offer to draw its reference route straight away.
+  const [drawAfter, setDrawAfter] = useState(false);
   const [poi, setPoi] = useState<PoiDetails | null>(null);
   const [poiChecked, setPoiChecked] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -95,6 +101,18 @@ export default function NewPlaceDraft({
   // the "create new place" action, one for "add to an existing (duplicate) place".
   const keyNew = useRef<string | null>(null);
   const keyExisting = useRef<string | null>(null);
+
+  // ONE FACT, ONE PLACE. Being a trail IS carrying the `trail` tag — that is what
+  // sets `is_trail` on save. The question above reads and writes the tag rather than
+  // keeping its own boolean beside it, because a second copy is the bug this codebase
+  // keeps having: two mechanisms for one fact, and the screen reading the copy.
+  const isTrail = tags.includes('trail');
+  function setIsTrail(yes: boolean) {
+    setTags((t) =>
+      yes ? [...t.filter((c) => c !== 'trail'), 'trail'] : t.filter((c) => c !== 'trail'),
+    );
+    if (!yes) setDrawAfter(false);
+  }
 
   // Map the tri-state Who selector to the create_experience `who` param.
   function whoParam(): string | undefined {
@@ -204,7 +222,9 @@ export default function NewPlaceDraft({
         );
       }
       keyNew.current = null;
-      onSaved(placeId);
+      // A new trail whose route she asked to draw goes straight to the map's draw
+      // mode; everything else opens its card.
+      onSaved(placeId, isTrail && drawAfter ? name.trim() || 'New place' : undefined);
     } catch {
       setBusy(null);
     }
@@ -250,9 +270,10 @@ export default function NewPlaceDraft({
 
   // Tags you can actually choose. City and Region are NOT offered: they attach
   // spatially by boundary, so asking is meaningless. Trip is not offered either —
-  // a trip is a visit you marked, not a kind of place (docs/STATE.md §0.4). Trail is
-  // the one container a person sets by hand.
-  const NOT_A_TAG = new Set(['city', 'region', 'trip']);
+  // a trip is a visit you marked, not a kind of place (docs/STATE.md §0.4). Trail is the
+  // one container a person sets by hand, and it is set by the question above — asking
+  // again here would be asking twice.
+  const NOT_A_TAG = new Set(['city', 'region', 'trip', 'trail']);
   const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug) && !NOT_A_TAG.has(c.slug));
 
   // Guard against losing entered work: confirm before closing a dirty draft.
@@ -363,10 +384,56 @@ export default function NewPlaceDraft({
           {website && <div className="npd-current label">Website: {website}</div>}
         </div>
 
+        {/* ASKED ONCE, AND ONLY HERE (§0.6). A trail is the one kind of place that is
+            not obvious from where you tapped: it is a container whose SECTIONS are the
+            places that count, so answering yes changes what the rest of this card
+            means. The answer is not stored twice — it sets the `trail` tag, which is
+            what makes a place a trail, and the tag list below no longer offers it. */}
+        <div className="npd-row">
+          <span>Is this a trail with sections?</span>
+          <div className="ps-who-toggle">
+            <button type="button" className={isTrail ? '' : 'on'} onClick={() => setIsTrail(false)}>
+              No
+            </button>
+            <button type="button" className={isTrail ? 'on' : ''} onClick={() => setIsTrail(true)}>
+              Yes
+            </button>
+          </div>
+          {isTrail && (
+            <span className="label">
+              Its sections are the places that count — this one holds them together.
+            </span>
+          )}
+        </div>
+
         {!wanted && (
           <div className="npd-row">
-            <span>Visit date</span>
+            {/* A trail can exist before you have walked any of it, so its date is
+                genuinely optional: with no date, no visit is logged. */}
+            <span>{isTrail ? 'Date you walked it (optional)' : 'Visit date'}</span>
             <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+          </div>
+        )}
+
+        {isTrail && (
+          <div className="npd-row">
+            <span>Its route</span>
+            <div className="ps-who-toggle">
+              <button
+                type="button"
+                className={drawAfter ? '' : 'on'}
+                onClick={() => setDrawAfter(false)}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                className={drawAfter ? 'on' : ''}
+                onClick={() => setDrawAfter(true)}
+              >
+                Draw it after saving
+              </button>
+            </div>
           </div>
         )}
 

@@ -25,10 +25,47 @@ insert into public.activities (id,type,distance,lat,lng,place_id,start_date)
   on conflict (id) do nothing;
 update public.visits set is_trip = true
   where id = 'b1b1b1b1-0000-0000-0000-000000000001';
+
+-- WHO WAS THERE. Until 2026-08-15 this fixture had no participants at all, so a
+-- round-trip that advertises "attribution survives" was not testing any: triggers are
+-- off here (replica role), so the everyone-by-default trigger from 0188 never fired,
+-- and visit_profiles/activity_profiles were empty in both exports. They matched because
+-- they were both empty.
+--
+-- Since 0188 dropped solo_profile these two tables are the ONLY record of who was on a
+-- visit and who did an activity, so they are exactly what a restore must not lose.
+insert into auth.users (id,email)
+  values ('d1d1d1d1-0000-0000-0000-000000000001','rt@example.invalid')
+  on conflict (id) do nothing;
+insert into public.profiles (id,display_name,role)
+  values ('d1d1d1d1-0000-0000-0000-000000000001','RT Person','owner')
+  on conflict (id) do nothing;
+insert into public.visit_profiles (visit_id,profile_id)
+  values ('b1b1b1b1-0000-0000-0000-000000000001','d1d1d1d1-0000-0000-0000-000000000001')
+  on conflict do nothing;
+insert into public.activity_profiles (activity_id,profile_id)
+  values ('c1c1c1c1-0000-0000-0000-000000000001','d1d1d1d1-0000-0000-0000-000000000001')
+  on conflict do nothing;
+insert into public.visit_evidence (visit_id,evidence_type,evidence_id,evidence_date)
+  values ('b1b1b1b1-0000-0000-0000-000000000001','activity',
+          'c1c1c1c1-0000-0000-0000-000000000001','2026-06-01')
+  on conflict do nothing;
 reset session_replication_role;
 SQL
 
 echo "Export A ..."; bash "$HERE/scripts/export-data.sh" "$TMP/a" 2026-01-01T00:00:00Z >/dev/null
+
+# The round-trip is only meaningful if attribution is IN it. Two empty tables compare
+# equal, which is how this passed for days without testing what it claimed to.
+python3 - "$TMP/a/manifest.json" <<'PY'
+import json, sys
+tables = {t['name']: t['rows'] for t in json.load(open(sys.argv[1]))['tables']}
+for t in ('visit_profiles', 'activity_profiles', 'visit_evidence'):
+    if tables.get(t, 0) < 1:
+        raise SystemExit(f'FAIL: the export has no {t} rows — attribution is not being tested')
+print('  attribution present in the export: '
+      + ', '.join(f'{t}={tables[t]}' for t in ('visit_profiles','activity_profiles','visit_evidence')))
+PY
 echo "Restore from A ..."; AON_RESTORE_CONFIRM=yes bash "$HERE/scripts/restore-data.sh" "$TMP/a" >/dev/null
 echo "Export B ..."; bash "$HERE/scripts/export-data.sh" "$TMP/b" 2026-01-01T00:00:00Z >/dev/null
 

@@ -16,6 +16,8 @@
 // there is nothing else to provision and the copy can be resumed by anyone with
 // the bucket.
 
+import { serveTile } from './tiles';
+
 export interface Env {
   BASEMAP: R2Bucket;
   SOURCE_URL: string;
@@ -69,8 +71,13 @@ async function probeSource(url: string): Promise<{ total: number; ranges: boolea
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+
+    // TILES FIRST: this is the request that actually matters, and it is the only one
+    // that happens more than a handful of times ever.
+    const tile = await serveTile(req, env.BASEMAP, env.OBJECT_KEY, ctx);
+    if (tile) return tile;
 
     // ---- start: create the multipart upload and record the plan ------------
     if (url.pathname === '/copy/start') {

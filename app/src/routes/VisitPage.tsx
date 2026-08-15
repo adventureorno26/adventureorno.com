@@ -233,9 +233,12 @@ export default function VisitPage() {
               }
             />
             <button
-              className={v.is_trip ? 've-btn on' : 've-btn'}
-              aria-pressed={v.is_trip}
-              onClick={() => void run('Saving…', () => setVisitIsTrip(v.id, !v.is_trip))}
+              // The switch is the DECISION a person made — trip_marked — not whether
+              // the visit counts as a trip. A multi-day visit counts either way (§0.4),
+              // so showing it as "on" would make the switch look stuck.
+              className={v.trip_marked ? 've-btn on' : 've-btn'}
+              aria-pressed={v.trip_marked}
+              onClick={() => void run('Saving…', () => setVisitIsTrip(v.id, !v.trip_marked))}
             >
               Trip
             </button>

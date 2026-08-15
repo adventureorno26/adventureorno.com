@@ -41,7 +41,12 @@ export interface Place {
   is_home: boolean;
   saved: boolean; // must be explicitly saved to show on the map / count in stats
   is_trail: boolean; // a linear trail (W&OD, AT, …); runs/hikes group by trailhead
-  part_of: string[]; // ids of places this one is "part of" (trips, trails, …)
+  /** Ids of places this one sits inside (trails, trips, cities).
+   *
+   *  DERIVED, not selected: built from `place_memberships_all()` and attached by the
+   *  fetchers (§0.7 phase 8 step 4). The column behind it is on its way out; write it
+   *  with addToContainer/removeFromContainer, never by hand. */
+  part_of: string[];
   suggested: boolean; // an auto-detected draft awaiting confirmation (e.g. a trip)
   bucket: boolean; // want-to-go wishlist place (not yet visited)
   website: string | null; // optional link for a bucket-list place
@@ -73,7 +78,12 @@ export interface Visit {
   note: string | null;
   // A PERSON marked this visit as a trip (migration 0133). Never derived — duration
   // means nothing. The Trips statistic counts these.
+  /** @deprecated The old spelling. `trip_marked` is the decision a person made;
+   *  whether a visit COUNTS as a trip is counts_as_trip (multi-day OR marked, §0.4)
+   *  and comes from card_view's is_trip_qualified. Going in phase 8 step 5. */
   is_trip: boolean;
+  /** Someone marked this visit as a trip. The switch writes THIS. */
+  trip_marked: boolean;
   status: 'taken' | 'planned'; // planned = a future-dated trip
   solo_override: boolean; // true = human-set; kept across rebuilds
   created_at: string;
