@@ -2,7 +2,7 @@
 // flame on a photo. The basemap theme paints POI and town markers from a sprite sheet,
 // so the style has to have them taken out before it is served.
 import { describe, expect, it } from 'vitest';
-import { withoutIcons } from './style';
+import { withoutIcons, buildStyle, themeFrom } from './style';
 
 const layer = (id: string, layout: Record<string, unknown>) => ({ id, layout });
 
@@ -53,5 +53,67 @@ describe('taking the icons out', () => {
     expect(out.some((l) => Object.keys(l.layout ?? {}).some((k) => k.startsWith('icon-')))).toBe(
       false,
     );
+  });
+});
+
+describe('two themes, and the words in both', () => {
+  // Erica chose INK for dark and DAYLIGHT 2 for light on 2026-08-15, from renders of
+  // this exact layer set. The preview and the product have to be the same map, so these
+  // pin the values she actually looked at.
+  const dark = buildStyle('https://x.test', 'dark') as {
+    layers: {
+      id: string;
+      paint?: Record<string, unknown>;
+      layout?: Record<string, unknown>;
+    }[];
+  };
+  const light = buildStyle('https://x.test', 'light') as typeof dark;
+  const layer = (s: typeof dark, id: string) => s.layers.find((l) => l.id === id)!;
+
+  it('paints Ink for dark — the card’s own ground', () => {
+    expect(layer(dark, 'earth').paint!['background-color']).toBe('#0e1728');
+    expect(layer(dark, 'water').paint!['fill-color']).toBe('#16324f');
+  });
+
+  it('paints Daylight 2 for light', () => {
+    expect(layer(light, 'earth').paint!['background-color']).toBe('#f8f9fa');
+    expect(layer(light, 'water').paint!['fill-color']).toBe('#8ccbf9');
+    expect(layer(light, 'parks').paint!['fill-color']).toBe('#b4dfb4');
+  });
+
+  it('gives the light theme road casings and the dark theme none', () => {
+    // Without a casing a white road on a near-white ground simply disappears. The dark
+    // theme needs none: its roads are already lighter than the ground.
+    expect(light.layers.some((l) => l.id.startsWith('casing'))).toBe(true);
+    expect(dark.layers.some((l) => l.id.startsWith('casing'))).toBe(false);
+  });
+
+  it('uses the modern lettering in BOTH themes', () => {
+    for (const s of [dark, light]) {
+      expect(layer(s, 'place-labels').layout!['text-font']).toEqual(['Noto Sans Medium']);
+      expect(layer(s, 'place-labels').layout!['text-letter-spacing']).toBe(-0.012);
+      expect(layer(s, 'water-labels').layout!['text-font']).toEqual(['Noto Sans Italic']);
+      expect(layer(s, 'place-labels').paint!['text-halo-width']).toBe(1.1);
+    }
+  });
+
+  it('never asks for a font the glyph server cannot serve', () => {
+    // Noto Sans Bold is not published upstream — it answers 502 — so asking for it puts
+    // unlabelled tiles on the map with nothing to say why.
+    const fonts = JSON.stringify([dark, light]).match(/Noto Sans [A-Za-z]+/g) ?? [];
+    expect(new Set(fonts)).toEqual(
+      new Set(['Noto Sans Medium', 'Noto Sans Italic', 'Noto Sans Regular']),
+    );
+  });
+
+  it('defaults to dark, including for a typo', () => {
+    expect(themeFrom('light')).toBe('light');
+    expect(themeFrom('dark')).toBe('dark');
+    expect(themeFrom('lightt')).toBe('dark');
+    expect(themeFrom(null)).toBe('dark');
+  });
+
+  it('has no icon anywhere in either theme', () => {
+    expect(JSON.stringify([dark, light])).not.toMatch(/"icon-/);
   });
 });
