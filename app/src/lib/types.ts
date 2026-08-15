@@ -78,7 +78,12 @@ export interface Visit {
   note: string | null;
   // A PERSON marked this visit as a trip (migration 0133). Never derived — duration
   // means nothing. The Trips statistic counts these.
+  /** @deprecated The old spelling. `trip_marked` is the decision a person made;
+   *  whether a visit COUNTS as a trip is counts_as_trip (multi-day OR marked, §0.4)
+   *  and comes from card_view's is_trip_qualified. Going in phase 8 step 5. */
   is_trip: boolean;
+  /** Someone marked this visit as a trip. The switch writes THIS. */
+  trip_marked: boolean;
   status: 'taken' | 'planned'; // planned = a future-dated trip
   solo_override: boolean; // true = human-set; kept across rebuilds
   created_at: string;
