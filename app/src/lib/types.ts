@@ -218,7 +218,7 @@ export type NewEntry = Pick<Entry, 'place_id' | 'kind' | 'title'> &
 
 // RETIRED (migration 0133) — a trip is a VISIT you marked (`Visit.is_trip`), not a
 // separate noun. These types remain only until the trips/trip_stops tables are
-// dropped; do not build anything new on them. See docs/SCHEMA.md.
+// dropped; do not build anything new on them. See docs/STATE.md §10, The data model.
 export type TripStatus = 'taken' | 'upcoming';
 export type TripStopStatus = 'planned' | 'completed' | 'skipped';
 

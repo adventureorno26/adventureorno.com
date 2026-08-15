@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   dismissDuplicate,
   dupeKey,
   fetchDismissedDupes,
   fetchPlaces,
+  fetchPlaceVisitTotals,
   mergePlaces,
 } from '../lib/data';
 import { haversineMeters } from '../lib/geo';
@@ -25,6 +26,11 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  *  one (the more-visited one wins). */
 export default function Duplicates() {
   const [places, setPlaces] = useState<Place[] | null>(null);
+  // WHICH PLACE SURVIVES IS DECIDED BY THIS. `places.visit_count` is a mirror that
+  // nobody refreshes when a visit changes — merging two visits into one leaves it
+  // where it was — so choosing the winner by it can hand the history to the wrong
+  // place, and a merge is not undone by pressing it again. Counted fresh (0190).
+  const [totals, setTotals] = useState<Map<string, number> | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -37,8 +43,18 @@ export default function Duplicates() {
     fetchDismissedDupes()
       .then(setDismissed)
       .catch(() => undefined);
+    fetchPlaceVisitTotals()
+      .then(setTotals)
+      .catch(() => setTotals(null));
   }
   useEffect(load, []);
+
+  // Falls back to the stored count only while the totals are loading, so the screen
+  // is never blank; the pairs recompute once they arrive.
+  const visitsOf = useCallback(
+    (p: Place) => totals?.get(p.id) ?? (totals ? 0 : (p.visit_count ?? 0)),
+    [totals],
+  );
 
   const pairs = useMemo<Pair[]>(() => {
     const ps = places ?? [];
@@ -51,14 +67,14 @@ export default function Duplicates() {
         const m = haversineMeters({ lat: p.lat, lng: p.lng }, { lat: q.lat, lng: q.lng });
         const sameName = !!p.name && norm(p.name) === norm(q.name);
         if (m <= 150 || (sameName && m <= 3000)) {
-          // Winner = more visits (keeps the richer history).
-          const [a, b] = (p.visit_count ?? 0) >= (q.visit_count ?? 0) ? [p, q] : [q, p];
+          // Winner = more visits (keeps the richer history), counted now.
+          const [a, b] = visitsOf(p) >= visitsOf(q) ? [p, q] : [q, p];
           out.push({ a, b, meters: Math.round(m), sameName });
         }
       }
     }
     return out.sort((x, y) => x.meters - y.meters);
-  }, [places, dismissed]);
+  }, [places, dismissed, visitsOf]);
 
   async function keepSeparate(pair: Pair) {
     setBusy(pair.b.id);
@@ -105,11 +121,11 @@ export default function Duplicates() {
               <div className="dup-main">
                 <div>
                   <Link to={`/place/${pair.a.id}`}>{pair.a.name || 'Untitled'}</Link>{' '}
-                  <span className="label">(keep · {pair.a.visit_count ?? 0} visits)</span>
+                  <span className="label">(keep · {visitsOf(pair.a)} visits)</span>
                 </div>
                 <div>
                   <Link to={`/place/${pair.b.id}`}>{pair.b.name || 'Untitled'}</Link>{' '}
-                  <span className="label">(merge in · {pair.b.visit_count ?? 0} visits)</span>
+                  <span className="label">(merge in · {visitsOf(pair.b)} visits)</span>
                 </div>
                 <span className="label">
                   {pair.sameName ? 'same name · ' : ''}

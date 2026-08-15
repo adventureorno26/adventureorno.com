@@ -52,6 +52,22 @@ function archiveFor(bucket: R2Bucket, key: string): PMTiles {
 
 const TILE_PATH = /^\/basemap\/tiles\/(\d+)\/(\d+)\/(\d+)(?:\.(mvt|pbf))?$/;
 
+/** Parse and BOUND a tile path. Exported so the guards can be tested without a
+ *  137 GB archive: a z/x/y outside the pyramid is a bad request, not a lookup. */
+export function parseTilePath(
+  pathname: string,
+): { z: number; x: number; y: number } | 'not-a-tile' | 'out-of-range' {
+  const m = TILE_PATH.exec(pathname);
+  if (!m) return 'not-a-tile';
+  const z = Number(m[1]);
+  const x = Number(m[2]);
+  const y = Number(m[3]);
+  if (!Number.isInteger(z) || z < 0 || z > 22) return 'out-of-range';
+  const span = 2 ** z;
+  if (x < 0 || y < 0 || x >= span || y >= span) return 'out-of-range';
+  return { z, x, y };
+}
+
 /**
  * Serve `/basemap/tiles/{z}/{x}/{y}.mvt`, and the archive's metadata at
  * `/basemap/tiles.json`.
@@ -80,15 +96,10 @@ export async function serveTile(
     });
   }
 
-  const m = TILE_PATH.exec(url.pathname);
-  if (!m) return null;
-
-  const z = Number(m[1]);
-  const x = Number(m[2]);
-  const y = Number(m[3]);
-  if (!Number.isInteger(z) || z < 0 || z > 22) return json({ error: 'bad zoom' }, 400);
-  const span = 2 ** z;
-  if (x < 0 || y < 0 || x >= span || y >= span) return json({ error: 'tile out of range' }, 400);
+  const parsed = parseTilePath(url.pathname);
+  if (parsed === 'not-a-tile') return null;
+  if (parsed === 'out-of-range') return json({ error: 'tile out of range' }, 400);
+  const { z, x, y } = parsed;
 
   // The Cache API sits in front of R2: a tile already looked at costs no operation.
   const cache = caches.default;
@@ -124,6 +135,9 @@ export async function serveTile(
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
     status,
-    headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*',
+    },
   });
 }
