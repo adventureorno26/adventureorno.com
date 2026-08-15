@@ -1687,6 +1687,145 @@ Therefore, before anything social is built:
   part of a commercial product. Today that is 445 activities and the whole
   `strava-webhook` / `strava-backfill` ingest.
 
+### Phase 7 — Fitness ingest we own  *(APPROVED 2026-08-15; nothing built)*
+
+**Anything that depends on Strava must have a non-Strava path before this is commercial.**
+Today that is all 445 activities.
+
+#### The legal shape, which decides the architecture
+
+- **Strava**: an athlete's data may be shown **only to that athlete**. No feeds, no
+  comparison, no social display. The API now expects a paid subscription, self-serve cap
+  ~10 athletes. So Strava is **per user and private**, and `original_source` is what every
+  visibility rule is written against (0193).
+- **Fitbit**: the legacy API dies ~Sept 2026 and its successor needs a $500–$4,500 CASA
+  assessment. Not worth it.
+- **Aggregators** (Terra, Rook, Spike, Thryve, Vital): $300–500+/month. No.
+
+Therefore: **phone health stores + free direct APIs + ingest rails we own.**
+
+#### 7a. Free direct connectors, in priority order
+
+| # | Provider | Why it is where it is |
+| - | -------- | --------------------- |
+| 1 | **intervals.icu** | The hub. Free API, OAuth, webhooks, original file download; it already pulls Garmin, Polar, Suunto, COROS, Wahoo, Zwift, Strava, Dropbox. **One button ingests a user's whole ecosystem.** Must filter Strava-origin rows before any shared surface |
+| 2 | Polar AccessLink | Free, self-serve, webhooks, GPX/TCX/FIT |
+| 3 | Suunto | Free key, self-serve, new-workout webhook, FIT |
+| 4 | Wahoo | Free, request-based approval, webhooks, FIT URLs |
+| 5 | COROS | Free, form approval — apply once the LLC exists |
+| 6 | Garmin Connect Developer | Free, business-entity application; pushes original FIT. Highest-value hub: Peloton↔Garmin, Zwift→Garmin, TrainerRoad→Garmin, Rouvy→Garmin all terminate here |
+| 7 | RideWithGPS | Free API; also where Hammerhead Karoo auto-uploads land |
+| 8 | Whoop, Oura | Free APIs + webhooks. No GPS — ingest as route-less activities/recovery |
+| 9 | Withings | Free to 5,000 users; body/sleep/steps, no routes |
+| 10 | Concept2 | Free OAuth + webhooks; rowing/skierg/bikeerg per-stroke |
+| 11 | Smashrun | Free OAuth, polyline GPS, running only |
+| 12 | Hevy | Official API (user needs Hevy Pro); strength. Also parse Strong CSV export |
+| 13 | Runalyze / FitTrackee | Free/self-hosted, niche, zero cost |
+
+**No free public API — covered indirectly by 7b, do not chase**: Zepp/Amazfit, Xiaomi,
+Samsung, Runkeeper, adidas, Nike, Peloton, Zwift, TrainerRoad, iFit, Echelon, Hydrow,
+Tonal, Technogym.
+
+#### 7b. Ingest rails we own, in build order
+
+1. **Health-store relay** *(needs the native app — DEFERRED until the LLC)*. iOS
+   HealthKit `HKObserverQuery` + background delivery + `HKWorkoutRoute`; Android Health
+   Connect `ExerciseSessionRecord` + `ExerciseRoute`, with `READ_HEALTH_DATA_HISTORY`
+   (without it only 30 days) and `READ_HEALTH_DATA_IN_BACKGROUND`. **This is the master
+   key** — it covers Peloton, Nike Run Club, Runkeeper, Samsung, the Fitbit app, Zepp,
+   iFit, Hydrow, Tonal and more with zero per-vendor work.
+2. **Share-sheet / file-handler registration** *(days of work; native + PWA where
+   possible)*. Register as a handler for `.gpx`/`.tcx`/`.fit` — iOS custom UTIs +
+   `CFBundleDocumentTypes`, Android `ACTION_SEND`/`ACTION_VIEW`. Then "Export → our app"
+   appears inside Komoot, COROS, Wahoo, OpenTracks, Files, Mail and AirDrop.
+3. **Sync-hub chaining** — ship "Connect intervals.icu" and "Connect Garmin" as the two
+   buttons and document the free chains that terminate there.
+4. **Email-in ingestion** *(1–2 days, ENTIRELY on infrastructure we already run — the best
+   effort-to-coverage item on this list)*. Cloudflare Email Routing + Email Workers (free,
+   25 MiB inbound): `u-<token>@import.<domain>` via catch-all → Worker → R2 → queue →
+   the existing FIT/GPX/TCX parser. Verify sender; dedupe the way `import_file_activity`
+   already does.
+5. **Cloud-drive watch** — Dropbox (App-folder scope) and Google Drive (`changes.watch`,
+   `drive.file` scope to avoid heavy OAuth verification).
+6. **A generic authenticated `POST /ingest`** — `ingest-overland` already proves the
+   pattern; Overland, OwnTracks and GPSLogger all speak simple JSON/GPX POSTs.
+7. **Garmin Connect IQ data field** *(later, a differentiator)* — a tiny CIQ field can
+   `makeWebRequest` to us without waiting on the Developer Program.
+
+**Back pocket only**: a browser extension fetching the user's own files from vendor sites
+in their session — user-initiated, single activity, never server-side with stored
+credentials. **Skip entirely**: desktop watcher apps, FHIR/openfitness.
+
+#### 7c. The in-app recorder *(native — DEFERRED until the LLC)*
+
+Its rules are already written in §6d and do not change: it is **just another ingest
+source**, producing the same normalized activity a file import produces
+(`source='recorded'`), so nothing downstream needs recorder-specific code.
+
+Additions from 2026-08-15: iOS needs only "While Using" for a user-started recorder with
+`allowsBackgroundLocationUpdates` — **do not ask for "Always"**, it hurts App Review and
+trust. Android needs a foreground service with a persistent notification, not
+`ACCESS_BACKGROUND_LOCATION`. `expo-location` + `expo-task-manager` for v1;
+`react-native-background-geolocation` only if drift demands it. Write the finished workout
+back to HealthKit / Health Connect. A 1 Hz recording costs ~5–10%/hour, comparable to
+Strava. OSS to read, not import: OpenTracks, FitoTrack, OutRun.
+
+### Phase 8 — Events, social and the privacy floor  *(APPROVED 2026-08-15; nothing built)*
+
+**User-created events are the product; third-party feeds are garnish.** Every external
+feed is revocable — never architect around one.
+
+#### 8a. Events
+
+- **User-created, three audiences**: private invite / friends-circle / open invite
+  (discoverable pins on the map). Tokenized invite links with **no-account RSVP**,
+  guest-list visibility controls, a maybe list, host update blasts, and date polls.
+  Patterns to mine: Gathio, Rallly, Mobilizon/Gancio. *An open-invite event pinned at a
+  trailhead, visible to anyone looking — no incumbent ships that.*
+- **Free, on-brand feeds**: NPS `/events` (free key, 1,000/hr), Recreation.gov RIDB, city
+  Socrata/CKAN per metro, OpenAgenda where covered.
+- **Races**: RunSignup — free, geo-searchable; complete their free API-caller registration
+  **before 1 Jan 2027**.
+- **iCal/.ics ingest is the universal adapter** — "add a calendar by URL", recurring fetch
+  + rrule expansion. Where there is no feed, read embedded schema.org/Event JSON-LD
+  (facts only; respect robots.txt; nothing behind a login).
+- **Weather**: NWS `api.weather.gov` (free, no key, US). Open-Meteo's free tier is
+  NON-COMMERCIAL — its paid tier is required once we charge.
+- **Do not build**: Facebook Graph events, Meetup, Eventbrite discovery, Yelp, Bandsintown,
+  PredictHQ, parkrun (link out), Ticketmaster (owner decision).
+
+#### 8b. Social
+
+Friend graph + per-item privacy on Postgres RLS: canonical-ordered `friendships`, security
+definer helpers (`is_friend`, `is_blocked_either_way`), a visibility enum on every
+shareable noun, fan-out-on-read feed with Realtime. Comments (one level, soft delete) and
+constrained reactions inherit the post's RLS. Notifications: table + Expo push + Resend.
+
+#### 8c. The privacy floor — NOT optional, and NOT in the UI
+
+- **Default private.** Per-item audience chosen at post time.
+- **Privacy zones**: random-offset centre, trackpoints trimmed **at the data layer before
+  any shareable polyline exists**, hide first/last 200 m by default.
+- Joint-outing merges are **mutual opt-in and default off**.
+- No aggregate heatmaps over private data.
+- **Strava-origin data is excluded from every surface another person can see, in RLS and
+  views — never in the UI** (§6f, 0193).
+
+#### 8d. The moderation floor — mandatory before App Store submission (Guideline 1.2)
+
+OpenAI `omni-moderation-latest` (free, text+images) on posts; a report button, a `reports`
+table, timely response and a published contact; bidirectional blocking enforced in RLS;
+ToS agreement at signup; Cloudflare CSAM scanning on the image zone; NSFWJS on-device
+pre-upload. **Do not use Perspective API — it sunsets 31 Dec 2026.**
+
+#### 8e. Mobile shell *(DEFERRED until the LLC)*
+
+Expo + dev client, monorepo with `packages/core` sharing the Supabase and business logic.
+`@kingstinct/react-native-healthkit`, `react-native-health-connect`. The native map
+consumes **our own** `/basemap/style.json`. **Google Play personal-account rule: 12 testers
+× 14 consecutive days of closed testing before production — start that clock early.**
+EAS free tier is 30 builds/month.
+
 ### Phase 5 — Complete web features, then the native apps  *(QUEUED; not cancelled)*
 
 First finish the web features recorded in this file on top of the stable private core:
