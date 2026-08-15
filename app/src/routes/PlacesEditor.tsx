@@ -43,7 +43,7 @@ function fmtVisit(v: Visit): string {
       day: 'numeric',
       year: 'numeric',
     });
-  return v.is_trip && v.end_date !== v.start_date
+  return (v.trip_marked || v.end_date !== v.start_date) && v.end_date !== v.start_date
     ? `${d(v.start_date)} – ${d(v.end_date)}`
     : d(v.start_date);
 }

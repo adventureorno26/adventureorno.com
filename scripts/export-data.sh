@@ -25,13 +25,33 @@ FORMAT_VERSION=1
 # Schema version = the highest migration number applied to the disposable chain.
 SCHEMA_VERSION="$(ls "$MIGR"/*.sql | sed -E 's:.*/([0-9]{4})_.*:\1:' | sort -n | tail -1)"
 
-# Canonical tables, parents-first. Credential/token tables are intentionally absent.
+# Canonical tables, parents-first. Credential/token tables are intentionally absent
+# (google_tokens, ingest_tokens, oauth_states, strava_accounts), and so are the
+# operational logs (job_runs, ingest_runs) and machine proposals (suggestions).
+#
+# ⚠️ THIS LIST WENT STALE AND IT MATTERED. Until 2026-08-15 it was missing
+# `visit_profiles` and `activity_profiles` — which, since migration 0188 dropped
+# `solo_profile`, are the ONLY record of who was on a visit or who did an activity.
+# Exporting with this tool would have produced a copy of the data with every
+# attribution silently gone: every statistic in the app reads those tables.
+#
+# It was also missing `approved_fields`, the ledger of which fields a PERSON has
+# decided — the thing that stops automation overwriting her work. Losing that does not
+# lose data; it loses the protection on the data, which is worse because it is
+# invisible until something rewrites a name she chose.
+#
+# The nightly backup is NOT affected: `backup-db.mjs` enumerates pg_tables and takes
+# whatever exists, which is why it survived the same schema change untouched. This is
+# the hand-maintained list, and hand-maintained lists rot.
 TABLES=(
   profiles people places place_membership place_membership_exceptions
-  place_categories visits entries activities location_pings photos videos
-  trip_migration_exceptions trip_notes
+  place_categories visits visit_profiles visit_people visit_evidence
+  entries activities activity_profiles activity_options location_pings photos videos
+  trail_routes trip_migration_exceptions
   place_ratings place_wishes photo_reactions activity_reactions peaks parks peak_bags
   board_items shared_links revealed_area deleted_hashes dup_dismissed settings
+  approved_fields approval_undo
+  visit_participant_review activity_participant_review activity_visit_review
 )
 
 psql_db() { docker exec -i "$DB" psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"; }

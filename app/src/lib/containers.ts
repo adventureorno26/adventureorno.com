@@ -101,7 +101,8 @@ export function datesFor(placeId: string, acts: Activity[], visits: Visit[]): Se
       date: v.start_date,
       end,
       note: v.note,
-      isTrip: v.is_trip,
+      // multi-day OR marked (§0.4), rather than the raw marked flag
+      isTrip: v.trip_marked || (!!v.end_date && v.end_date > v.start_date),
       activities: mine.filter((a) => {
         const d = activityDay(a);
         return d !== '' && d >= v.start_date && d <= end;
