@@ -37,16 +37,18 @@ interface StyleLayer {
 export function withoutIcons(layers: StyleLayer[]): StyleLayer[] {
   const out: StyleLayer[] = [];
   for (const layer of layers) {
-    if (!layer.layout || !('icon-image' in layer.layout)) {
+    if (!layer.layout || !Object.keys(layer.layout).some((k) => k.startsWith('icon-'))) {
       out.push(layer);
       continue;
     }
+    const hadImage = 'icon-image' in layer.layout;
     const layout: Record<string, unknown> = { ...layer.layout };
     for (const k of Object.keys(layout)) {
       if (k.startsWith('icon-')) delete layout[k];
     }
-    // Nothing but an icon: there is no word to keep.
-    if (!('text-field' in layout)) continue;
+    // Nothing but an icon: there is no word to keep. (A stray icon-padding with no
+    // icon-image never drew anything, so its layer is not one of these.)
+    if (hadImage && !('text-field' in layout)) continue;
     out.push({ ...layer, layout });
   }
   return out;
