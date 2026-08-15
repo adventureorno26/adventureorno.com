@@ -236,3 +236,38 @@ describe('the blank card asks the trail question once', () => {
     expect(BLANK).toMatch(/onSaved\(placeId, isTrail && drawAfter/);
   });
 });
+
+describe('adding a visit asks for both dates', () => {
+  // Erica, 2026-08-15, having opened a real card: "I opened a card to add a visit and
+  // it doesn't look like the one I finalized and asked not to be changed again. There
+  // should be the option to pick a start date and an end date."
+  //
+  // She was right on both counts. The button said "Log another visit" where §0.6 locks
+  // "Add another visit", and the END DATE WAS HIDDEN behind a "Multiple days" checkbox —
+  // so the form opened with one field, and a Friday-to-Sunday stay could not be entered
+  // without first finding a tickbox that did not look like part of the question.
+  it('uses the locked words', () => {
+    expect(CARD).toMatch(/Add another visit/);
+    expect(CARD, 'the plan says "Add another visit", not "Log"').not.toMatch(/Log a(nother)? visit/);
+  });
+
+  it('shows both dates without a checkbox to find first', () => {
+    expect(CARD).toMatch(/>From</);
+    expect(CARD).toMatch(/>To</);
+    // The checkbox that used to gate the second field.
+    expect(CARD).not.toMatch(/Multiple days/);
+    expect(CARD).not.toMatch(/vMulti/);
+  });
+
+  it('still treats one date as one day', () => {
+    // Both fields visible must not mean every visit becomes a range: leaving them equal
+    // is a single day, and an end before the start is a slip rather than an intent.
+    expect(CARD).toMatch(/vEnd && vEnd >= vStart \? vEnd : vStart/);
+  });
+
+  it('says what a range means before it is saved', () => {
+    // §0.4: a visit over more than one day IS a trip. Better said before saving.
+    expect(CARD).toMatch(/counts as a trip/);
+  });
+});
+
