@@ -1263,6 +1263,81 @@ saturation of her connection.
 and weather (Open-Meteo). Self-hosting search is a separate decision — Nominatim/Photon
 are the options.
 
+### Phase 4c — Standards and open data  *(PLANNED 2026-08-15, nothing built)*
+
+Erica asked to "get the API from OGC.org" and use its assets to make the map state of the
+art. **OGC does not have assets or an API to consume.** The Open Geospatial Consortium is
+a standards body: it publishes specifications — OGC API – Tiles, Features, Maps, Styles,
+plus the older WMS/WMTS and GeoPackage — and nothing else. There is no data or imagery at
+ogc.org to fetch. Recording that plainly so nobody spends a day looking for the download.
+
+The intent behind the ask is right, though, and splits into two halves.
+
+#### a. The standards worth conforming to (interoperability, not pixels)
+
+| Standard | What it buys | Effort |
+| -------- | ------------ | ------ |
+| **OGC API – Tiles** | A discoverable tileset document, so QGIS and OpenLayers can consume our basemap directly instead of via our own `tiles.json` shape. OpenLayers supports it out of the box (`OGCVectorTile`). | Small — mostly an extra JSON document beside the tiles the Worker already serves |
+| **OGC API – Features** | Serving PLACES and VISITS as standard GeoJSON collections, so her own data opens in QGIS and any OGC client. | Medium; an export/interop nicety, not user-facing |
+| **OGC API – Maps / Styles** | Serving the dark/light styles as discoverable style documents. | Small, and only worth it after the styles settle |
+
+None of this changes what the map LOOKS like. It changes who else can read it, which
+matters for a commercial product and for getting data back out (§6b's instinct).
+
+**github.com/opengeospatial IS worth using — for three things, none of them data.**
+Checked 2026-08-15; the org publishes specifications, schemas and test suites:
+
+1. **`ets-ogcapi-tiles10` and friends** — Java conformance test suites. If the basemap
+   Worker claims OGC API – Tiles, there is an EXECUTABLE test that proves it rather than
+   a comment saying so. That is the same bargain as every other guard in this repository.
+2. **`geoparquet`** — the specification Overture actually ships its data in. Reading
+   Overture addresses means reading GeoParquet, so this is the format spec for §4c(c),
+   not an abstraction.
+3. **`ogcapi-features` / `ogcapi-styles` / `ogcapi-tiles`** — the schemas to conform to,
+   in the repository that defines them.
+
+What is NOT there: map data, imagery, tiles, addresses, elevation. The pinned repos are
+`geoparquet`, `ogcapi-features`, `geopackage`, `sensorthings`, `geoapi`, `ogc-geosparql`
+— every one a standard, not a dataset.
+
+#### b. The open data that would actually make the map state of the art
+
+These are the assets the ask was really after, and none of them are OGC's:
+
+- **Overture Maps Foundation** (Linux Foundation; AWS, Meta, Microsoft, TomTom). Open
+  base data with an **addresses** theme — 474M+ address points — plus places/POIs,
+  buildings and transportation. Mostly CDLA-Permissive v2, with per-source attribution
+  (CC BY 4.0, Apache 2.0, OGL) listed by theme. **This is the direct answer to "click a
+  place and get its address"**, which the Protomaps basemap cannot do: its buildings
+  carry `addr_housenumber` and nothing joins it to a street.
+- **Copernicus DEM GLO-30** (AWS Open Data, Cloud-Optimised GeoTIFF, free, no egress
+  cost) for **hillshade and contours**. For an app whose subject is trails and walking,
+  terrain under the map is the single biggest visual upgrade available. US-only
+  alternative at higher resolution: USGS 3DEP.
+- **Sentinel-2 via STAC** on AWS Open Data for a satellite layer, if ever wanted.
+- **MapLibre Tile (MLT)**, announced 2026-01, claims up to 6× compression over MVT.
+  WATCH, do not adopt: the planet ships as PMTiles+MVT and the format is young.
+
+#### c. How this changes the geocoding decision
+
+Overture addresses make a third option real, alongside Nominatim and Photon:
+
+> **Import Overture's address points for the regions we care about into the PostGIS we
+> already run, and answer "what is this address" with a nearest-neighbour query.**
+
+That is not a geocoder — there is no fuzzy text search, no ranking, no worldwide
+coverage — but it answers the reverse question exactly, from our own database, with no
+server to operate and no third party to be switched off by. Forward search (typing an
+address into the new-place card) still needs Mapbox or a real geocoder.
+
+**Sequence, if this is taken up:** Copernicus hillshade first (biggest visible change,
+no new dependency), then Overture addresses into PostGIS (closes the click-for-address
+gap), then OGC API – Tiles conformance (cheap, and makes the basemap quotable as a
+standard service). Photon stays the answer only if forward search must also be
+self-hosted.
+
+**Nothing here is built.** No dependency has been added and no bytes copied.
+
 ### Phase 5 — Complete web features, then native Flok  *(QUEUED; not cancelled)*
 
 First finish the web features recorded in this file on top of the stable private core:
