@@ -242,13 +242,16 @@ export default function VisitPage() {
             {people.length >= 2 && (
               <select
                 className="attribution-select"
-                value={v.solo_profile ?? ''}
+                // From the participant ROWS: exactly one person means that person,
+                // anything else means everyone. That is what solo_profile's null used
+                // to mean, said in a way that can also describe three (§0.3).
+                value={d.people.length === 1 ? d.people[0].id : ''}
                 aria-label="Who was here"
                 onChange={(e) =>
                   void run('Saving…', () => setVisitSolo(v.id, e.target.value || null))
                 }
               >
-                <option value="">Together</option>
+                <option value="">{people.length > 2 ? 'Everyone' : 'Together'}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}

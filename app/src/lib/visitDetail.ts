@@ -52,6 +52,9 @@ export interface VisitDetail {
     solo_profile: string | null;
     solo_override: boolean;
   };
+  /** Who was on this visit, as rows (0186). Replaces reading `visit.solo_profile`,
+   *  which can say one person or everybody and nothing in between. */
+  people: { id: string; name: string | null }[];
   place: {
     id: string;
     name: string;
