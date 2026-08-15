@@ -1263,6 +1263,112 @@ saturation of her connection.
 and weather (Open-Meteo). Self-hosting search is a separate decision — Nominatim/Photon
 are the options.
 
+### Phase 4b — The map's appearance  *(DONE 2026-08-15)*
+
+#### Where the basemap actually is
+
+Found 2026-08-15, and it was not what the plan assumed:
+
+- The planet IS in R2 — `aon-basemap/planet.pmtiles`, **137.3 GB**, zoom 0–15.
+- The Worker serves tiles, glyphs and a style, verified: a z6 tile over Virginia returns
+  38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range 76,044 bytes, and
+  MapLibre renders Loudoun County with **zero errors**.
+- **The zone had zero worker routes registered**, so every `/basemap/*` URL fell through
+  to Pages and answered **200 with the app's HTML**. A 200 from the wrong server is the
+  worst failure available here — nothing looks broken. Check the content-type.
+- The deployed Worker was the **copy-only build from 11 August**; the serving code (#73)
+  had never been deployed.
+- **AND THE ROUTE WAS NEVER PUBLISHABLE.** `routes = [...]` sat at the END of
+  `wrangler.toml`, below `[vars]` — and in TOML a bare key after a table header belongs to
+  that table. Wrangler read it as an environment VARIABLE named `routes` and published
+  nothing, printing it back as `env.routes ([{"pattern":...)`. That is the whole
+  explanation for the zero routes, and it survived because the symptom was a 200.
+
+#### The styles
+
+**Dark is decided: INK** — the card's own palette, so opening a card over the map is one
+surface rather than two:
+
+| | |
+| --- | --- |
+| ground | `#0e1728` (`--panel`) |
+| land | `#131f36` (`--panel-2`) |
+| water | `#16324f` |
+| roads | `#22314f` → `#33507f` → `#3f6fae` |
+| labels | `#eaf1ff` (`--text`) on a `#080e1c` halo |
+
+**Light is decided: DAYLIGHT 2** — Google's idiom one notch richer. Ground `#f8f9fa`,
+water `#8ccbf9`, parks `#b4dfb4` at 0.85, labels `#3c4043`, white roads over cased
+`#dfe4e9` / `#cbd3db` / `#a6b3c0`.
+
+It took five rounds, and each failed for a nameable reason worth keeping:
+
+1. *Pastels* — white roads on a near-white ground with **no casing**, so the road network
+   vanished. Roads on a light map need a darker casing under them; this is not optional.
+2. *Saturated pastels* — better, still four greys with different tints.
+3. *Different treatments* (sepia atlas, green-hero, monochrome-with-one-accent) — rejected
+   outright. They changed the treatment and threw away the **contrast**, which is the part
+   that was working.
+4. *One structure, four rich colour families* — Azure / Emerald / Indigo / Ember. Closer,
+   still not it.
+5. *A real reference* — Google and Apple. That is what settled it, and it showed what
+   every previous round had wrong: **neither of them uses a white ground or saturated
+   water.** Google's ground is a cool off-white, its water a sky blue that RECEDES, its
+   labels dark grey rather than black. I had been pushing saturation up while the
+   references go the other way. Erica picked step 2 of a four-step ladder from there.
+
+**The rules that came out of it:** roads on a light map need a CASING or the network
+vanishes; the contrast is fixed and only colour is in question; and when a look is being
+argued about, go and measure a real one instead of generating another guess.
+
+#### The lettering (2026-08-15)
+
+Our glyph server publishes **Noto Sans Regular, Medium and Italic**. Bold is NOT published
+upstream — it answers 502, and asking for it puts unlabelled tiles on the map with nothing
+to say why, so a test forbids it.
+
+| | was | now |
+| --- | --- | --- |
+| Town names | Regular, +0.02 tracking, 10–17px | **Medium, −0.012 tracking, 11–19px** |
+| Water | Regular, wide tracking | **Italic** — the cartographic convention |
+| Places of interest | 11px | 10.5px |
+| Halos | 1.4–1.6px | **1–1.1px** |
+
+It lives in the shared layer builder, not in a palette, so every theme has it and no future
+one can miss it.
+
+#### Done, in this order
+
+1. ✅ **The light palette** — Daylight 2.
+2. ✅ **Both themes from the Worker** — `/basemap/style.json?theme=dark|light`. An unknown
+   theme is DARK, not an error: an unreadable map is a worse answer to a typo.
+3. ✅ **Settings → Map appearance** — Dark / Light / Match my device, per browser (#88).
+4. ✅ **The route** `adventureorno.com/basemap/*` is registered. **Wrangler cannot manage
+   it**: `CLOUDFLARE_API_TOKEN_MASTER` is account-scoped and zone routes need
+   `CLOUDFLARE_ZONE_ACCESS`, so it was created through the API and wrangler still errors
+   on that one step. Do not read that error as a broken deploy.
+5. ✅ **`basemap.ts` points at it** (#88), and `basemapOptions` became a FUNCTION —
+   as a frozen object it handed every map whichever theme was current at module load.
+6. ✅ **The switch is reversible**: `VITE_SELF_HOSTED_BASEMAP='false'` returns the app to
+   Mapbox raster with no code change. Phase 4 requires the old dependency to be
+   disableable without blanking the app; the reverse has to hold too, or it is a cliff.
+
+**Phase 4 is therefore done**: MapTiler can be switched off without blanking the app.
+
+#### The style is OURS, not `protomaps-themes-base`
+
+The Worker served that package first, and it is good — generated from the same schema the
+planet build uses, so it cannot drift from the data. It was replaced because Erica chose a
+look from renders of a HAND-BUILT layer set, and 68 of somebody else's layers wearing our
+colours would not have been the thing she approved. **The preview and the product have to
+be the same map.** That is also how the first routed response was caught serving 68 layers
+at `#34373d`: both themes returned exactly 60,172 bytes, and 12 and 15 layers cannot be
+the same size.
+
+**No icons, ever.** The style strips every `icon-*` property and keeps `text-field`; a
+first attempt at that filter also dropped `places_locality` and would have removed every
+city label, so the guard tests for both.
+
 ### Phase 4c — Standards and open data  *(PLANNED 2026-08-15, nothing built)*
 
 Erica asked to "get the API from OGC.org" and use its assets to make the map state of the
