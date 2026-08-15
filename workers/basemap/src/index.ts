@@ -16,6 +16,8 @@
 // there is nothing else to provision and the copy can be resumed by anyone with
 // the bucket.
 
+import { serveGlyphs } from "./glyphs";
+import { serveStyle } from "./style";
 import { serveTile } from "./tiles";
 
 export interface Env {
@@ -84,6 +86,12 @@ export default {
     // that happens more than a handful of times ever.
     const tile = await serveTile(req, env.BASEMAP, env.OBJECT_KEY, ctx);
     if (tile) return tile;
+
+    const glyphs = await serveGlyphs(req, env.BASEMAP, ctx);
+    if (glyphs) return glyphs;
+
+    const style = serveStyle(req);
+    if (style) return style;
 
     // ---- start: create the multipart upload and record the plan ------------
     if (url.pathname === "/copy/start") {
