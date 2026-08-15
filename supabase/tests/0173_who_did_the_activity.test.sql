@@ -27,9 +27,15 @@ declare
 begin
   insert into public.places (name, lat, lng, saved) values ('T173 Trailhead', 39.1, -77.5, true)
     returning id into p;
-  -- a visit BOTH of them made
+  -- A VISIT BOTH OF THEM MADE — and since 0193 that has to be SAID. A bare insert used
+  -- to mean everyone; it now means the one person who made it, because being together is
+  -- a tag a person accepts rather than something the app assumes.
   insert into public.visits (place_id, start_date, end_date, status, manual)
     values (p, '2026-04-10', '2026-04-10', 'taken', true) returning id into v;
+  insert into public.visit_profiles (visit_id, profile_id)
+  select v, pr.id from public.profiles pr
+   where pr.role in ('owner','editor') and coalesce(pr.display_name,'') !~* '(test|bot)'
+  on conflict do nothing;
 
   if not public.is_shared_visit(v) then
     raise exception 'FAIL: setup — the visit should have both members on it'; end if;
@@ -84,9 +90,13 @@ begin
     values ('T173 Walk', 'Walk', 3000, '2026-04-11T12:00:00Z', p, 'manual', a_id)
     returning id into act;
 
-  -- A bare insert means EVERYONE, which is what the null used to mean.
+  -- A BARE INSERT MEANS THE PERSON WHO MADE IT (0193). It used to mean everyone — the
+  -- 0188 rule — which is what attached both people to a visit dated five years before
+  -- they met. STATE.md's "TOGETHER, DEFINED" always said the opposite: your own data is
+  -- just yours until someone else accepts a tag.
   select count(*) into n from public.activity_profiles where activity_id = act;
-  if n <> 2 then raise exception 'FAIL: a new activity is everyone''s, got % row(s)', n; end if;
+  if n <> 1 then
+    raise exception 'FAIL: a new activity should be its creator''s alone, got % row(s)', n; end if;
 
   perform public.set_activity_solo(act, a_id);
   select count(*) into n from public.activity_profiles where activity_id = act;

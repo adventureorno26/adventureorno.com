@@ -41,9 +41,18 @@ begin
   select count(*) into real_members from public.profiles
    where role in ('owner','editor') and coalesce(display_name,'') !~* '(test|bot)';
 
+  -- THE DEFAULT CHANGED, 2026-08-15 (0193). This asserted that a bare insert meant BOTH
+  -- real members — the "everyone by default" rule from 0188. STATE.md's "TOGETHER,
+  -- DEFINED" says the opposite and always did: everyone's own data is JUST ME by default,
+  -- and being together is a tag a person accepts. 0188 was the deviation, and it is what
+  -- attached both people to a visit dated five years before they met.
+  --
+  -- So a bare insert now means the ONE person who made it.
   select count(*) into n from public.visit_profiles where visit_id = v_both;
   if real_members = 2 then
-    if n <> 2 then raise exception 'FAIL: NULL should mean both real members, got % rows', n; end if;
+    if n <> 1 then
+      raise exception 'FAIL: a bare insert should attribute to its creator alone, got % rows', n;
+    end if;
   else
     -- MORE than two real members exist in this test database, so "both" is genuinely
     -- ambiguous. The rule is refuse-and-review, never invent participants.

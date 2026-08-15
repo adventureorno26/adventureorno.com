@@ -27,7 +27,10 @@ begin
     returning id into p;
   insert into public.visits (place_id, start_date, end_date, manual) values (p,'2031-03-07','2031-03-07',true);
 
-  select miles into base from public.wander_stats(null);
+  -- ASKED AS THE PERSON WHO WAS THERE (0193). `null` is the TOGETHER view, and since
+  -- "just me" is the default a visit one person creates is not shared, so Together
+  -- correctly shows nothing. The rule under test — one outing counts once — is unchanged.
+  select miles into base from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);
 
   -- 72420 m = 45.0 mi. Three records of the SAME run, within minutes of each other.
   insert into public.activities (type, name, distance, start_date, lat, lng, place_id,
@@ -41,7 +44,7 @@ begin
   -- these were all "everyone's", which a bare insert now means by default (0188)
 
   -- CONTROL: ungrouped, all three count — this is the bug, reproduced.
-  select miles into m_before from public.wander_stats(null);
+  select miles into m_before from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);
   if (m_before - base) < 130 then
     raise exception 'FAIL: control broken — three 45mi records should add ~135 mi, added %',
       round((m_before - base)::numeric,1);
@@ -49,7 +52,7 @@ begin
 
   perform public.group_duplicate_activities(20, 0.10, true);
 
-  select miles into m_after from public.wander_stats(null);
+  select miles into m_after from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);
   if (m_after - base) > 46 or (m_after - base) < 44 then
     raise exception 'FAIL: after grouping the run must count ~45 mi once, counted %',
       round((m_after - base)::numeric,1);
@@ -110,10 +113,10 @@ end $$;
 do $$
 declare m1 double precision; m2 double precision; g1 int; g2 int;
 begin
-  select miles into m1 from public.wander_stats(null);
+  select miles into m1 from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);
   select count(distinct coalesce(shared_group_id,id)) into g1 from public.activities;
   perform public.group_duplicate_activities(20, 0.10, true);
-  select miles into m2 from public.wander_stats(null);
+  select miles into m2 from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);
   select count(distinct coalesce(shared_group_id,id)) into g2 from public.activities;
   if m1 is distinct from m2 or g1 <> g2 then
     raise exception 'FAIL: re-running changed things (miles % -> %, groups % -> %)', m1, m2, g1, g2;

@@ -35,6 +35,12 @@ begin
                                  source, owner_profile, summary_polyline)
     values ('T184 B only', 'Hike', 6000, '2026-04-10T14:00:00Z', p, v.id,
             'manual', b_id, 'def') returning id into solo_act;
+  -- BOTH did the first one, and since 0193 that must be said: the default attributes a
+  -- new row to whoever made it, not to everyone.
+  insert into public.activity_profiles (activity_id, profile_id)
+  values (shared_act, a_id), (shared_act, b_id)
+  on conflict do nothing;
+
   -- only B did the second one (0188: rows, not a column)
   perform public.set_activity_solo(solo_act, b_id);
 

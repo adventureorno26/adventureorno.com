@@ -208,3 +208,73 @@ comment on function public.shared_outings(uuid[]) is
   'and the CALLER''S OWN miles across them. Others may also have been there. The count '
   'comes from visits, which are ours; the mileage is only the caller''s, so no Strava data '
   'crosses accounts. Nothing before together_since() is counted.';
+
+-- ---------------------------------------------------------------------------
+-- 6. "JUST ME" IS THE DEFAULT, which is what STATE.md said all along.
+--
+-- §"TOGETHER, DEFINED" (2026-08-11): *"Everyone's own imported data is 'just me' by
+-- default"*, and co-presence produces a SUGGESTION, never an automatic label.
+--
+-- 0188 — written this morning — did the opposite: `default_participants()` attached EVERY
+-- owner/editor to every new visit and activity. That is almost certainly what produced the
+-- one joint visit dated 2021-06-27, five years before Erica and Josh met: a manual visit
+-- backfilled from an old photo inherited both of them.
+--
+-- WHY THIS NEEDS NO EDGE FUNCTION CHANGE. The worry was that "just me" would strand
+-- machine imports, because `activities` has no `created_by` and a webhook has no
+-- auth.uid(). It carries something better: `athlete_id`, and `strava_accounts` maps that
+-- to a profile. All 180 Strava activities have one, and all 180 resolve. So an import is
+-- attributed to the athlete whose token fetched it — which is both correct and exactly
+-- what the Strava terms require.
+--
+-- EXISTING ROWS ARE LEFT ALONE. 590 participant rows were written under the old default,
+-- including 99 shared visits. Rewriting Erica's history is her decision, not a migration's.
+-- The one 2021 row is flagged in check-data-integrity, not silently changed.
+-- ---------------------------------------------------------------------------
+create or replace function public.default_participants()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare v_owner uuid;
+begin
+  if tg_table_name = 'visits' then
+    -- A person creating a visit is saying they were there. Nobody else is implied.
+    if auth.uid() is not null then
+      insert into public.visit_profiles (visit_id, profile_id)
+      values (new.id, auth.uid())
+      on conflict do nothing;
+    end if;
+    -- No uid means a machine made it. §0.3: it waits for review rather than guessing.
+    return null;
+  end if;
+
+  v_owner := auth.uid();
+  if v_owner is null and new.athlete_id is not null then
+    -- The athlete whose token fetched it. This is the only attribution Strava's terms
+    -- allow, and the only one that is true.
+    select sa.profile_id into v_owner
+      from public.strava_accounts sa where sa.athlete_id = new.athlete_id;
+  end if;
+
+  if v_owner is not null then
+    insert into public.activity_profiles (activity_id, profile_id)
+    values (new.id, v_owner)
+    on conflict do nothing;
+  end if;
+  return null;
+end $function$;
+
+revoke all on function public.default_participants() from public, anon, authenticated;
+
+comment on function public.default_participants() is
+  'JUST ME by default (STATE.md, "TOGETHER, DEFINED"). A person''s new visit is theirs; a '
+  'Strava import belongs to the athlete whose token fetched it, via activities.athlete_id '
+  '-> strava_accounts.profile_id. Nothing is attributed to anyone else — being together is '
+  'a tag a person accepts, never something the app works out.';
+
+-- Strava-origin is decided by the athlete, not by how the row arrived.
+update public.activities
+   set original_source = 'strava'
+ where athlete_id is not null and coalesce(original_source, '') <> 'strava';
