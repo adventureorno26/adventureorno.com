@@ -879,15 +879,23 @@ Verified live on adventureorno.com, San Diego, deploy `cef831d0`:
 | No "Trip", no "Together" in the Visits section                                           | ✅ both gone; the who-was-here control says "Both"                                         |
 | Photos: one carousel, the marks on it                                                    | ✅ (`0913f05d`)                                                                          |
 
-**Still to build on the card:**
+**Still to build on the card — CHECKED AGAINST THE CODE 2026-08-15.** This list was
+written 2026-08-11 and had gone stale: six of its seven items are built. Leaving it
+standing is how work gets done twice, which §0.7 exists to prevent.
 
-- **Years as dropdowns** inside Visits (Show / Hide, newest first, only years that have visits)
-- **Ratings in two columns**, one line across for two raters — and anyone added to the card rates it
-- The **category pills** show the whole palette when you can edit; the locked card shows only this place's tags
-- The **VISIT card** must carry every section in the same order, narrowed to that visit
-- The **TRAIL card**: drop the Sections list, put the segment name on the visit
-- The **BLANK card** — Add opens this, with "Is this a trail with sections?" asked once
-- A **Save button that visibly freezes automation**
+| Was on the list | Now |
+| --- | --- |
+| **Years as dropdowns** inside Visits | ✅ `.visit-year` details, newest open, asserted in `lockedCard.test.ts` |
+| **Ratings in two columns**, anyone on the card rates it | ✅ `.dual-rating`, one line across, mapped over every member |
+| **Category pills** show the whole palette when you can edit | ✅ the full `CATEGORIES` palette when `canEdit`, this place's tags when not |
+| The **VISIT card** carries every section, narrowed to that visit | ✅ `VisitPage`: what we did, photos and videos, notes |
+| The **TRAIL card**: no Sections list, segment on the visit | ✅ asserted in `lockedCard.test.ts` |
+| The **BLANK card** — Add opens it | ✅ `AddSheet` opens the card, asserted live in `verify:live` |
+| A **Save button that visibly freezes automation** | ✅ 2026-08-14, PR #65 — and it says what it froze |
+
+**The one thing genuinely not built:** the blank card does not ask *"Is this a trail with
+sections?"* once. Nothing in the app contains that question. A trail is set by tapping
+the Trail pill afterwards, which works but is not what was asked for.
 
 ### Remove anything that rewrites or confuses this
 
