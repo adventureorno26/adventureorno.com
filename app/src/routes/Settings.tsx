@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
+  mapAppearance,
+  setMapAppearance,
+  usingSelfHosted,
+  type MapAppearance,
+} from '../lib/basemap';
+import {
   addCategory,
   fetchClimbingStats,
   fetchGeoCoverage,
@@ -696,6 +702,59 @@ function PeaksCard({ personId }: { personId: string | null }) {
   );
 }
 
+/**
+ * DARK OR LIGHT, per person and per browser.
+ *
+ * The map is ours now — tiles, glyphs and both styles come from our own R2 through
+ * adventureorno.com/basemap — so a theme is a style swap rather than a different
+ * provider. Changing it reloads the page: MapLibre can accept a new style at
+ * runtime, but every map in the app would need to re-add its own sources and
+ * layers in the right order, and getting that wrong is how a map ends up blank
+ * with nothing in the console.
+ */
+function MapAppearanceSection() {
+  const [choice, setChoice] = useState<MapAppearance>(mapAppearance());
+
+  const CHOICES: { key: MapAppearance; label: string; hint: string }[] = [
+    { key: 'dark', label: 'Dark', hint: 'Matches the place cards' },
+    { key: 'light', label: 'Light', hint: 'Bright, for daylight' },
+    { key: 'auto', label: 'Match my device', hint: 'Follows your phone or laptop' },
+  ];
+
+  function pick(v: MapAppearance) {
+    if (v === choice) return;
+    setMapAppearance(v);
+    setChoice(v);
+    window.location.reload();
+  }
+
+  return (
+    <div className="card">
+      <div className="ps-who-toggle" style={{ marginBottom: 10 }}>
+        {CHOICES.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            className={choice === c.key ? 'on' : ''}
+            onClick={() => pick(c.key)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <p style={{ margin: 0, color: 'var(--muted)', fontSize: 14 }}>
+        {CHOICES.find((c) => c.key === choice)?.hint}. The map reloads when this changes.
+      </p>
+      {!usingSelfHosted && (
+        <p style={{ margin: '8px 0 0', color: 'var(--muted)', fontSize: 13 }}>
+          The app is on the old Mapbox basemap at the moment, which has one appearance — this
+          setting takes effect when it is back on our own map.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** The whole Stats section with one Me / Josh / Both toggle that drives every
  *  pill (each card refetches/refilters for the selected person). */
 function StatsSection() {
@@ -1080,6 +1139,9 @@ export default function Settings() {
 
       {
         <>
+          <h2 style={{ marginTop: 20 }}>Map appearance</h2>
+          <MapAppearanceSection />
+
           <h2 style={{ marginTop: 20 }}>Stats</h2>
           <StatsSection />
 

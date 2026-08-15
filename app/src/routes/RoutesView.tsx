@@ -111,7 +111,7 @@ export default function RoutesView() {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      ...basemapOptions,
+      ...basemapOptions(),
       center: [-98, 39],
       zoom: 3,
       attributionControl: { compact: true },

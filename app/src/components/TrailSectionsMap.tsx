@@ -70,7 +70,7 @@ export default function TrailSectionsMap({ trail, sections }: { trail: Place; se
         if (cancelled || !containerRef.current || mapRef.current) return;
         const map = new maplibregl.Map({
           container: containerRef.current,
-          ...basemapOptions,
+          ...basemapOptions(),
           center: [trail.lng, trail.lat],
           zoom: 9,
           interactive: true,

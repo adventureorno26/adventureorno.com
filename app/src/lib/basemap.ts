@@ -47,6 +47,20 @@
 // Self-hosting (Protomaps .pmtiles in R2 behind our own Worker) remains the
 // endgame: nobody outside can suspend that one.
 
+//
+// ---------------------------------------------------------------------------
+// 2026-08-15: THE ENDGAME ARRIVED. The map is ours.
+// ---------------------------------------------------------------------------
+//
+// `adventureorno.com/basemap/*` now serves tiles, glyphs and a style out of the
+// 137 GB Protomaps planet in our own R2 bucket. Nobody outside can suspend it,
+// meter it, or change its cartography under us.
+//
+// Everything below about Mapbox is KEPT, not fossilised: `VITE_SELF_HOSTED_BASEMAP
+// = 'false'` puts the app back on Mapbox raster in one environment variable, with
+// no code change. Phase 4's own definition of done requires that the old
+// dependency can be turned off without blanking the app — the reverse has to be
+// true as well, or the switch is a cliff rather than a switch.
 import type { StyleSpecification } from 'maplibre-gl';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
@@ -55,7 +69,55 @@ const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY as string | undefined;
 /** Dark, to match the app's theme — the photos and route lines are drawn for it. */
 const MAPBOX_STYLE = 'mapbox/dark-v11';
 
-export const usingMapbox = Boolean(MAPBOX_TOKEN);
+/** Off only by explicit opt-out, so a missing variable means the map is ours. */
+export const usingSelfHosted = import.meta.env.VITE_SELF_HOSTED_BASEMAP !== 'false';
+
+export const usingMapbox = !usingSelfHosted && Boolean(MAPBOX_TOKEN);
+
+// ---------------------------------------------------------------------------
+// Map appearance — a person's choice, per browser
+// ---------------------------------------------------------------------------
+
+export type MapAppearance = 'dark' | 'light' | 'auto';
+const APPEARANCE_KEY = 'aon_map_appearance';
+
+/** What the person chose. DARK is the default: it is the app's own, and it is
+ *  what every photograph and route line on this map was drawn against. */
+export function mapAppearance(): MapAppearance {
+  try {
+    const v = localStorage.getItem(APPEARANCE_KEY);
+    if (v === 'light' || v === 'dark' || v === 'auto') return v;
+  } catch {
+    /* a browser that refuses storage still gets a map */
+  }
+  return 'dark';
+}
+
+export function setMapAppearance(v: MapAppearance): void {
+  try {
+    localStorage.setItem(APPEARANCE_KEY, v);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** The theme to actually ask the Worker for. `auto` follows the device. */
+export function resolvedTheme(): 'dark' | 'light' {
+  const choice = mapAppearance();
+  if (choice !== 'auto') return choice;
+  try {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
+/** Our own style, on our own origin — so the service worker can cache it and
+ *  there is no CSP entry to be silently blocked, which is how the Mapbox search
+ *  died unnoticed. */
+export function selfHostedStyleUrl(): string {
+  return `/basemap/style.json?theme=${resolvedTheme()}`;
+}
 
 const ATTRIBUTION =
   '<a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">© Mapbox</a> ' +
@@ -267,9 +329,25 @@ export function transformRequest(url: string, resourceType?: string): { url: str
   return { url };
 }
 
-/** The options every map shares. Spread into `new maplibregl.Map({...})` so a
- *  new map cannot be added with the style but without the meter. */
-export const basemapOptions = {
-  style: BASEMAP_STYLE,
-  transformRequest,
-} as const;
+/**
+ * The options every map shares. Spread into `new maplibregl.Map({...})` so a new
+ * map cannot be added with the style but without the meter.
+ *
+ * A FUNCTION, not a constant, since 2026-08-15: the style now depends on a setting
+ * a person can change, and a frozen object would hand every map whichever theme
+ * happened to be current when the module first loaded.
+ *
+ * The meter stays even though our own tiles are not billed per request. It was
+ * written to catch a runaway loop — the idle auto-rotate that streamed tiles for
+ * hours and got the MapTiler account suspended — and that bug is still possible.
+ * It now protects R2 operations instead of somebody's invoice.
+ */
+export function basemapOptions(): {
+  style: StyleSpecification | string;
+  transformRequest: typeof transformRequest;
+} {
+  return {
+    style: usingSelfHosted ? selfHostedStyleUrl() : BASEMAP_STYLE,
+    transformRequest,
+  };
+}
