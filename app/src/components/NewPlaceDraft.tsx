@@ -250,7 +250,7 @@ export default function NewPlaceDraft({
 
   // Tags you can actually choose. City and Region are NOT offered: they attach
   // spatially by boundary, so asking is meaningless. Trip is not offered either —
-  // a trip is a visit you marked, not a kind of place (docs/SCHEMA.md). Trail is
+  // a trip is a visit you marked, not a kind of place (docs/STATE.md §0.4). Trail is
   // the one container a person sets by hand.
   const NOT_A_TAG = new Set(['city', 'region', 'trip']);
   const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug) && !NOT_A_TAG.has(c.slug));

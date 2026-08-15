@@ -2128,7 +2128,7 @@ database and the screen disagree, the screen is right.
 /workers/photo-gateway   R2 upload, thumbnailing, signed URL reads
 /supabase/migrations     SQL migrations (numbered, never edited after merge)
 /supabase/functions      ingest-overland, strava-webhook, strava-backfill, invite
-/docs                MANUAL-SETUP.md, ios-shortcuts spec, decisions log
+/docs                STATE.md — this file, and nothing else (2026-08-11)
 ```
 
 #### Non-negotiable business rules
@@ -2308,9 +2308,14 @@ appear on the map within ~a minute; `/settings → Strava → Backfill` pulls hi
 
 #### 7. iPhone setup — Erica's phone (Phase 2–3, ~20 min)
 
-- Build the **daily photo Shortcut** from `/docs/ios-shortcut-daily.md` (Claude Code generates
-  this exact spec in Phase 2). Automations: daily 9:00 PM + "when joining home Wi-Fi", both set
-  to Run Immediately / no confirmation.
+- Build the **daily photo Shortcut**. Automations: daily 9:00 PM + "when joining home Wi-Fi",
+  both set to Run Immediately / no confirmation. **The written spec does not exist** — this
+  line used to point at `/docs/ios-shortcut-daily.md`, which was deleted with every other
+  document on 2026-08-11 and was never folded in here. What is known about the Shortcut is
+  scattered: it filters `Is Screenshot = false` and `Has GPS = true` (§11), and it carries the
+  device ingest token from `.env.local` as `?token=` (C5, §7 — still in plaintext in the
+  request logs). **The Shortcut Erica runs today exists only on her phone.** Writing its
+  steps down here is a real gap, not a formatting one.
 - Install **Overland** (App Store, free). In its settings:
   - **Receiver Endpoint URL:**
     `https://aanfyhsjbtnqzphuoiem.supabase.co/functions/v1/ingest-overland?token=<ERICA_DEVICE_INGEST_TOKEN>`
@@ -2331,9 +2336,9 @@ invite email and optionally adds the site to his home screen (Share → Add to H
 
 - **Strava history:** automatic once Phase 4 auth exists — the backfill function pulls the past
   year (rate-limited, may take ~15 min).
-- **Photos, past year:** build the one-shot variant Shortcut from `/docs/ios-shortcut-backfill.md`
-  (same as daily but date range = last 365 days, runs in month-sized batches you trigger
-  manually — expect it to churn a while; keep the phone plugged in).
+- **Photos, past year:** build the one-shot variant of the daily Shortcut — same steps, date
+  range = last 365 days, run in month-sized batches you trigger manually (expect it to churn;
+  keep the phone plugged in). Its spec doc is gone too, and depends on the daily one above.
 - **Google Timeline (optional):** if you had Google Maps location history on your iPhone, request
   Takeout → Location History (Timeline) → drop the JSON into the importer at /settings/import.
   If you never used Google Timeline, skip — photos + Strava cover the year well.
