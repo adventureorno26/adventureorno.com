@@ -31,13 +31,14 @@ begin
 
   -- 72420 m = 45.0 mi. Three records of the SAME run, within minutes of each other.
   insert into public.activities (type, name, distance, start_date, lat, lng, place_id,
-                                 source, owner_profile, solo_profile, summary_polyline) values
+                                 source, owner_profile, summary_polyline) values
     ('Run','V141 Purcellville to Arlington', 72582, '2031-03-07T13:10:00Z', 39.13, -77.55, p,
-     'strava','aaaa7777-0000-0000-0000-00000000f001', null, 'abc'),
+     'strava','aaaa7777-0000-0000-0000-00000000f001', 'abc'),
     ('Run','V141 running 13:21',             72260, '2031-03-07T13:21:00Z', 39.13, -77.55, p,
-     'file',  'aaaa7777-0000-0000-0000-00000000f001', null, null),
+     'file',  'aaaa7777-0000-0000-0000-00000000f001', null),
     ('Run','V141 Purcellville Running',      71940, '2031-03-07T13:10:00Z', 39.13, -77.55, p,
-     'file',  'aaaa7777-0000-0000-0000-00000000f002', null, null);
+     'file',  'aaaa7777-0000-0000-0000-00000000f002', null);
+  -- these were all "everyone's", which a bare insert now means by default (0188)
 
   -- CONTROL: ungrouped, all three count — this is the bug, reproduced.
   select miles into m_before from public.wander_stats(null);

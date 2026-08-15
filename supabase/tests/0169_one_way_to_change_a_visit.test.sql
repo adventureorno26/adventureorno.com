@@ -56,15 +56,18 @@ begin
                                                  'dddd0169-0000-0000-0000-000000000002']::uuid[]);
   select count(*) into n from public.visit_profiles where visit_id = v;
   if n <> 2 then raise exception 'FAIL: expected 2 participants, got %', n; end if;
-  select solo_profile into solo from public.visits where id = v;
-  if solo is not null then raise exception 'FAIL: two participants must clear solo_profile'; end if;
+  -- 0188 removed the solo_profile mirror; the rows ARE the attribution now, so what
+  -- was asserted about the column is asserted about them.
+  if exists (select 1 from public.visit_profiles where visit_id = v
+              and profile_id = 'dddd0169-0000-0000-0000-000000000001') = false then
+    raise exception 'FAIL: the first participant is missing'; end if;
 
   perform public.set_visit_participants(v, array['dddd0169-0000-0000-0000-000000000002']::uuid[]);
   select count(*) into n from public.visit_profiles where visit_id = v;
   if n <> 1 then raise exception 'FAIL: the set was not replaced, got %', n; end if;
-  select solo_profile into solo from public.visits where id = v;
+  select min(profile_id::text)::uuid into solo from public.visit_profiles where visit_id = v;
   if solo <> 'dddd0169-0000-0000-0000-000000000002' then
-    raise exception 'FAIL: one participant must set solo_profile'; end if;
+    raise exception 'FAIL: the remaining participant is the wrong one'; end if;
 
   begin
     perform public.set_visit_participants(v, array[]::uuid[]);

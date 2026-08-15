@@ -29,7 +29,14 @@ begin
   if v_place is null or v_visit is null then raise exception 'FAIL: null ids from create_experience'; end if;
   if (select count(*) from public.places where id=v_place) <> 1 then raise exception 'FAIL: not exactly one place'; end if;
   if (select count(*) from public.visits where place_id=v_place) <> 1 then raise exception 'FAIL: not exactly one visit'; end if;
-  if not exists (select 1 from public.visits where id=v_visit and solo_override and solo_profile is null) then
+  -- "Both" is now every member on the visit, not a null in a column (0188).
+  if not exists (
+    select 1 from public.visits v
+     where v.id = v_visit and v.solo_override
+       and (select count(*) from public.visit_profiles vp where vp.visit_id = v.id) =
+           (select count(*) from public.profiles p
+             where p.role in ('owner','editor') and coalesce(p.display_name,'') !~* '(test|bot)')
+  ) then
     raise exception 'FAIL: "both" attribution not recorded'; end if;
   raise notice 'PASS 1: San Diego walk — one place, one visit, attributed both';
 end $$;
