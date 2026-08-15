@@ -7079,3 +7079,24 @@ button.mi-row:hover {
   margin: 0 0 8px;
   padding-left: 2px;
 }
+
+/* SAVE — the card holds your edits until you press this, and then says what it froze.
+   Sits with the other card actions rather than floating, because it is a decision you
+   make while looking at the thing, not a toolbar. */
+.card-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+.card-saved {
+  padding: 0 10px 10px;
+  margin: 0;
+}
+/* "● edited" beside the name: the card is holding something unsaved. */
+.edited-dot {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}

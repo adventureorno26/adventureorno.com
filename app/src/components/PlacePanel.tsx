@@ -172,6 +172,35 @@ export default function PlacePanel({
   /** Visit ids that COUNT as a trip (§0.4), from card_view. */
   const [qualifiedTrips, setQualifiedTrips] = useState<Set<string>>(new Set());
   /** The pair the merge offer is asking about, if any. */
+  /**
+   * EDITS WAIT FOR SAVE (approved 2026-08-14).
+   *
+   * The card used to write every field the moment you touched it. Erica asked for the
+   * opposite and gave the reason twice — once for the photo sorter ("if I save it they
+   * are added but if I don't they are discarded") and once for the card. So a change
+   * goes here first, and nothing reaches the database until Save.
+   *
+   * WHY IT SAYS WHAT IT FROZE. Every edit is already an approval: `record_approval`
+   * fires, `may_autowrite` starts returning false, and the machine can no longer touch
+   * that field (§0.7, migration 0150). That has been true for months and the card never
+   * mentioned it — so the one thing a person most needs to know about their own edit,
+   * that it is now permanent against automation, was invisible.
+   */
+  const [draft, setDraft] = useState<{
+    name?: string;
+    rating?: number | null;
+    visitDates?: Record<string, { start: string; end: string }>;
+    visitNote?: Record<string, string>;
+  }>({});
+  const dirty =
+    draft.name !== undefined ||
+    draft.rating !== undefined ||
+    Object.keys(draft.visitDates ?? {}).length > 0 ||
+    Object.keys(draft.visitNote ?? {}).length > 0;
+  const [saving, setSaving] = useState(false);
+  /** What the last Save froze, so the card can say it in her words. */
+  const [justFroze, setJustFroze] = useState<string[]>([]);
+
   const [mergeAsk, setMergeAsk] = useState<{ keep: string; absorb: string } | null>(null);
   const [mergingVisits, setMergingVisits] = useState(false);
   /** visit id / activity id → the ONE person on it, or null when everyone was.
@@ -382,20 +411,8 @@ export default function PlacePanel({
       else next[myId] = n;
       return next;
     });
-    try {
-      await setMyRating(place.id, n);
-    } catch (e) {
-      // Reload to undo the optimistic star — and SAY so. A rating that quietly
-      // springs back reads as the app arguing with you.
-      fetchPlaceRatings(place.id)
-        .then(setRatings)
-        .catch(() => undefined);
-      setError(
-        e instanceof Error
-          ? `Could not save that rating: ${e.message}`
-          : 'Could not save that rating.',
-      );
-    }
+    // Staged: the star fills in straight away, and Save is what makes it yours.
+    setDraft((d) => ({ ...d, rating: n }));
   }
 
   useEffect(() => {
@@ -620,18 +637,64 @@ export default function PlacePanel({
       setError('A visit cannot end before it starts.');
       return;
     }
-    try {
-      await setVisitDates(id, s0, e0);
-      await reloadVisits();
-      await refreshPlace();
-      showSnack({ message: 'Visit dates updated.' });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update the visit dates.');
-    }
+    setDraft((d) => ({
+      ...d,
+      visitDates: { ...(d.visitDates ?? {}), [id]: { start: s0, end: e0 } },
+    }));
   }
 
   /** Merge the pair the offer is asking about. The surviving visit is the EARLIER one,
    *  so the stay keeps the id it started with and anything linking to it still works. */
+  /**
+   * Write everything that is waiting, then say what it froze.
+   *
+   * Each field goes through the RPC that CLAIMS it — set_place_name records the owner
+   * and the scope, set_my_rating and set_visit_dates record the approval — so saving is
+   * the moment the machine loses the right to change any of them.
+   */
+  async function saveCard() {
+    if (!dirty || saving) return;
+    setSaving(true);
+    const froze: string[] = [];
+    try {
+      if (draft.name !== undefined) {
+        const updated = await setPlaceName(place.id, draft.name, nameScope);
+        onPlaceChanged(updated);
+        froze.push('the name');
+      }
+      if (draft.rating !== undefined) {
+        await setMyRating(place.id, draft.rating);
+        froze.push('the rating');
+      }
+      const dates = Object.entries(draft.visitDates ?? {});
+      for (const [id, r] of dates) await setVisitDates(id, r.start, r.end);
+      if (dates.length) froze.push(dates.length === 1 ? 'those dates' : 'those dates');
+
+      setDraft({});
+      setJustFroze(froze);
+      await Promise.all([reloadVisits(), refreshPlace()]);
+    } catch (e) {
+      // The draft is KEPT on failure — throwing away what she typed because the
+      // network blinked is the worst possible answer.
+      setError(
+        e instanceof Error ? `Could not save: ${e.message}` : 'Could not save those changes.',
+      );
+    }
+    setSaving(false);
+  }
+
+  /** Throw the waiting edits away and put the fields back. */
+  function discardCard() {
+    setDraft({});
+    setJustFroze([]);
+    setName(place.name);
+    if (profile?.id) {
+      fetchPlaceRatings(place.id)
+        .then(setRatings)
+        .catch(() => undefined);
+    }
+  }
+
   async function doMerge() {
     if (!mergeAsk || mergingVisits) return;
     setMergingVisits(true);
@@ -714,20 +777,17 @@ export default function PlacePanel({
   // A name is chosen by a person and belongs to them. Go through set_place_name so
   // the owner and the space are recorded — a plain PATCH would set the text without
   // claiming it, and nothing would stop it drifting later.
-  async function saveName() {
+  function saveName() {
     setEditingName(false);
     const next = name.trim();
     if (!next || next === place.name) {
       setName(place.name);
+      setDraft((d) => ({ ...d, name: undefined }));
       return;
     }
-    try {
-      const updated = await setPlaceName(place.id, next, nameScope);
-      onPlaceChanged(updated);
-    } catch (e) {
-      setName(place.name);
-      setError(e instanceof Error ? e.message : 'Could not rename this place.');
-    }
+    // Staged. set_place_name runs on Save, so the name is claimed and recorded in one
+    // deliberate act rather than as a side effect of the field losing focus.
+    setDraft((d) => ({ ...d, name: next }));
   }
 
   // "Edit address" search: sets the full address + pin + state/country (for the
@@ -1697,6 +1757,27 @@ export default function PlacePanel({
                 </div>
               )}
             </details>
+
+            {/* SAVE, AND SAY WHAT IT FROZE. Nothing on this card is written until this
+                is pressed, and an edit is also an approval — after saving, automation
+                may not change these fields again (§0.7, 0150). That has always been
+                true and was never said out loud. */}
+            {canEdit && dirty && (
+              <div className="card-save">
+                <button className="primary" disabled={saving} onClick={() => void saveCard()}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" className="link" disabled={saving} onClick={discardCard}>
+                  Discard
+                </button>
+              </div>
+            )}
+            {canEdit && !dirty && justFroze.length > 0 && (
+              <p className="card-saved label">
+                Saved. {justFroze.join(', ')} {justFroze.length === 1 ? 'is' : 'are'} yours now —
+                the app will not change {justFroze.length === 1 ? 'it' : 'them'}.
+              </p>
+            )}
 
             {canEdit && !addingVisit && (
               <button
