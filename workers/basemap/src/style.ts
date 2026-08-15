@@ -16,7 +16,7 @@
 //      domain, so there is no third-party host in the critical path of the map — which
 //      is the entire point of Phase 4, after MapTiler suspended the account and took
 //      every map in the app with it.
-import layersFor from "protomaps-themes-base";
+import layersFor from 'protomaps-themes-base';
 
 // A NOTE ON THE LAYER COUNT, because it looks wrong and is not. The package's ESM
 // default export returns 68 layers; its CJS `layers()` named export returns 66, missing
@@ -42,21 +42,18 @@ interface StyleLayer {
 export function withoutIcons(layers: StyleLayer[]): StyleLayer[] {
   const out: StyleLayer[] = [];
   for (const layer of layers) {
-    if (
-      !layer.layout ||
-      !Object.keys(layer.layout).some((k) => k.startsWith("icon-"))
-    ) {
+    if (!layer.layout || !Object.keys(layer.layout).some((k) => k.startsWith('icon-'))) {
       out.push(layer);
       continue;
     }
-    const hadImage = "icon-image" in layer.layout;
+    const hadImage = 'icon-image' in layer.layout;
     const layout: Record<string, unknown> = { ...layer.layout };
     for (const k of Object.keys(layout)) {
-      if (k.startsWith("icon-")) delete layout[k];
+      if (k.startsWith('icon-')) delete layout[k];
     }
     // Nothing but an icon: there is no word to keep. (A stray icon-padding with no
     // icon-image never drew anything, so its layer is not one of these.)
-    if (hadImage && !("text-field" in layout)) continue;
+    if (hadImage && !('text-field' in layout)) continue;
     out.push({ ...layer, layout });
   }
   return out;
@@ -64,12 +61,8 @@ export function withoutIcons(layers: StyleLayer[]): StyleLayer[] {
 
 export function buildStyle(origin: string): unknown {
   const raw = (
-    layersFor as unknown as (
-      source: string,
-      theme: string,
-      opts: { lang: string },
-    ) => StyleLayer[]
-  )("basemap", "dark", { lang: "en" });
+    layersFor as unknown as (source: string, theme: string, opts: { lang: string }) => StyleLayer[]
+  )('basemap', 'dark', { lang: 'en' });
 
   return {
     version: 8,
@@ -78,11 +71,11 @@ export function buildStyle(origin: string): unknown {
     glyphs: `${origin}/basemap/fonts/{fontstack}/{range}.pbf`,
     sources: {
       basemap: {
-        type: "vector",
+        type: 'vector',
         tiles: [`${origin}/basemap/tiles/{z}/{x}/{y}.mvt`],
         minzoom: 0,
         maxzoom: 15,
-        attribution: "© OpenStreetMap contributors",
+        attribution: '© OpenStreetMap contributors',
       },
     },
     layers: withoutIcons(raw),
@@ -91,14 +84,14 @@ export function buildStyle(origin: string): unknown {
 
 export function serveStyle(req: Request): Response | null {
   const url = new URL(req.url);
-  if (url.pathname !== "/basemap/style.json") return null;
+  if (url.pathname !== '/basemap/style.json') return null;
   return new Response(JSON.stringify(buildStyle(url.origin)), {
     headers: {
-      "content-type": "application/json",
+      'content-type': 'application/json',
       // Short: the style is cheap to rebuild and this is the thing most likely to be
       // adjusted while the look is being settled.
-      "cache-control": "public, max-age=300",
-      "access-control-allow-origin": "*",
+      'cache-control': 'public, max-age=300',
+      'access-control-allow-origin': '*',
     },
   });
 }

@@ -16,9 +16,9 @@
 // there is nothing else to provision and the copy can be resumed by anyone with
 // the bucket.
 
-import { serveGlyphs } from "./glyphs";
-import { serveStyle } from "./style";
-import { serveTile } from "./tiles";
+import { serveGlyphs } from './glyphs';
+import { serveStyle } from './style';
+import { serveTile } from './tiles';
 
 export interface Env {
   BASEMAP: R2Bucket;
@@ -51,35 +51,29 @@ async function readState(env: Env): Promise<CopyState | null> {
 
 async function writeState(env: Env, s: CopyState): Promise<void> {
   await env.BASEMAP.put(stateKey(env.OBJECT_KEY), JSON.stringify(s), {
-    httpMetadata: { contentType: "application/json" },
+    httpMetadata: { contentType: 'application/json' },
   });
 }
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { 'content-type': 'application/json' },
   });
 }
 
 /** How big is the source, and does it do ranges? Both are required. */
-async function probeSource(
-  url: string,
-): Promise<{ total: number; ranges: boolean }> {
-  const head = await fetch(url, { method: "HEAD" });
+async function probeSource(url: string): Promise<{ total: number; ranges: boolean }> {
+  const head = await fetch(url, { method: 'HEAD' });
   if (!head.ok) throw new Error(`source HEAD ${head.status}`);
   return {
-    total: Number(head.headers.get("content-length") ?? 0),
-    ranges: (head.headers.get("accept-ranges") ?? "").includes("bytes"),
+    total: Number(head.headers.get('content-length') ?? 0),
+    ranges: (head.headers.get('accept-ranges') ?? '').includes('bytes'),
   };
 }
 
 export default {
-  async fetch(
-    req: Request,
-    env: Env,
-    ctx: ExecutionContext,
-  ): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
     // TILES FIRST: this is the request that actually matters, and it is the only one
@@ -94,21 +88,17 @@ export default {
     if (style) return style;
 
     // ---- start: create the multipart upload and record the plan ------------
-    if (url.pathname === "/copy/start") {
+    if (url.pathname === '/copy/start') {
       const existing = await readState(env);
       if (existing && !existing.done) {
-        return json(
-          { error: "a copy is already in progress", state: summary(existing) },
-          409,
-        );
+        return json({ error: 'a copy is already in progress', state: summary(existing) }, 409);
       }
       const { total, ranges } = await probeSource(env.SOURCE_URL);
-      if (!total) return json({ error: "source did not report a size" }, 502);
-      if (!ranges)
-        return json({ error: "source does not support range requests" }, 502);
+      if (!total) return json({ error: 'source did not report a size' }, 502);
+      if (!ranges) return json({ error: 'source does not support range requests' }, 502);
 
       const upload = await env.BASEMAP.createMultipartUpload(env.OBJECT_KEY, {
-        httpMetadata: { contentType: "application/octet-stream" },
+        httpMetadata: { contentType: 'application/octet-stream' },
       });
       const state: CopyState = {
         uploadId: upload.uploadId,
@@ -125,10 +115,9 @@ export default {
     }
 
     // ---- step: copy the next N parts ---------------------------------------
-    if (url.pathname === "/copy/step") {
+    if (url.pathname === '/copy/step') {
       const state = await readState(env);
-      if (!state)
-        return json({ error: "no copy in progress; call /copy/start" }, 404);
+      if (!state) return json({ error: 'no copy in progress; call /copy/start' }, 404);
       if (state.done) return json(summary(state));
 
       // PARALLEL, because one stream is the bottleneck. A single 100 MB part
@@ -136,20 +125,13 @@ export default {
       // at about thirteen hours. The parts are independent — R2 accepts them in
       // any order — so a batch is fetched and uploaded concurrently and only
       // merged into the state once every one of them has succeeded.
-      const n = Math.max(
-        1,
-        Math.min(24, Number(url.searchParams.get("n") ?? 8)),
-      );
-      const upload = env.BASEMAP.resumeMultipartUpload(
-        state.key,
-        state.uploadId,
-      );
+      const n = Math.max(1, Math.min(24, Number(url.searchParams.get('n') ?? 8)));
+      const upload = env.BASEMAP.resumeMultipartUpload(state.key, state.uploadId);
       const totalParts = Math.ceil(state.total / state.partSize);
 
       const first = state.parts.length + 1;
       const batch: number[] = [];
-      for (let i = 0; i < n && first + i <= totalParts; i++)
-        batch.push(first + i);
+      for (let i = 0; i < n && first + i <= totalParts; i++) batch.push(first + i);
 
       if (batch.length > 0) {
         const results = await Promise.all(
@@ -191,9 +173,9 @@ export default {
     }
 
     // ---- status -------------------------------------------------------------
-    if (url.pathname === "/copy/status") {
+    if (url.pathname === '/copy/status') {
       const state = await readState(env);
-      if (!state) return json({ state: "not started" });
+      if (!state) return json({ state: 'not started' });
       const head = await env.BASEMAP.head(state.key);
       return json({
         ...summary(state),
@@ -202,32 +184,29 @@ export default {
     }
 
     // ---- abort ---------------------------------------------------------------
-    if (url.pathname === "/copy/abort") {
+    if (url.pathname === '/copy/abort') {
       const state = await readState(env);
-      if (!state) return json({ error: "nothing to abort" }, 404);
+      if (!state) return json({ error: 'nothing to abort' }, 404);
       if (!state.done) {
-        await env.BASEMAP.resumeMultipartUpload(
-          state.key,
-          state.uploadId,
-        ).abort();
+        await env.BASEMAP.resumeMultipartUpload(state.key, state.uploadId).abort();
       }
       await env.BASEMAP.delete(stateKey(env.OBJECT_KEY));
       return json({ aborted: true });
     }
 
     // Proves the route is wired to our own domain before any tile depends on it.
-    if (url.pathname === "/basemap/health") {
+    if (url.pathname === '/basemap/health') {
       const head = await env.BASEMAP.head(env.OBJECT_KEY);
       const state = await readState(env);
       return json({
         ok: true,
         servedFrom: url.host,
-        planet: head ? { bytes: head.size } : "copy not finished",
-        copy: state ? summary(state) : "not started",
+        planet: head ? { bytes: head.size } : 'copy not finished',
+        copy: state ? summary(state) : 'not started',
       });
     }
 
-    return json({ error: "not found" }, 404);
+    return json({ error: 'not found' }, 404);
   },
 };
 

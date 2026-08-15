@@ -46,6 +46,7 @@ export interface VisitDetail {
     end_date: string;
     note: string | null;
     is_trip: boolean;
+    trip_marked: boolean;
     manual: boolean;
     status: string;
     solo_profile: string | null;
