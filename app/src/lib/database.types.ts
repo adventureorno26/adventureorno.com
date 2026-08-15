@@ -3436,6 +3436,14 @@ export type Database = {
       }
       place_ids_for_view: { Args: { p_profile?: string }; Returns: string[] }
       place_is_saved: { Args: { pid: string }; Returns: boolean }
+      place_memberships_all: {
+        Args: never
+        Returns: {
+          child_id: string
+          parent_id: string
+          relationship_type: string
+        }[]
+      }
       place_people: {
         Args: never
         Returns: {
