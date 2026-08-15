@@ -9,16 +9,6 @@ name = "adventureorno-basemap"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
-[[r2_buckets]]
-binding = "BASEMAP"
-bucket_name = "aon-basemap"
-
-[vars]
-# The daily planet build being copied. 137.3 GB, zoom 0-15, PMTiles spec 3.
-SOURCE_URL = "https://build.protomaps.com/20260810.pmtiles"
-# The object it lands on inside the bucket.
-OBJECT_KEY = "planet.pmtiles"
-
 # ON OUR OWN DOMAIN, not workers.dev.
 #
 # Three reasons, all of which have bitten this project already:
@@ -30,6 +20,22 @@ OBJECT_KEY = "planet.pmtiles"
 #
 # A Worker route takes precedence over Pages for matching paths, so /basemap/* comes
 # here and everything else still goes to the app.
+#
+# THIS MUST STAY ABOVE [r2_buckets] AND [vars]. In TOML a bare key after a table header
+# belongs to that table: when this block sat at the end of the file, wrangler read it as
+# a VARIABLE named `routes` and published no route at all. The zone had zero routes, and
+# every /basemap/ URL fell through to Pages, which answered 200 with the app's HTML —
+# a failure that looks exactly like success.
 routes = [
   { pattern = "adventureorno.com/basemap/*", zone_name = "adventureorno.com" }
 ]
+
+[[r2_buckets]]
+binding = "BASEMAP"
+bucket_name = "aon-basemap"
+
+[vars]
+# The daily planet build being copied. 137.3 GB, zoom 0-15, PMTiles spec 3.
+SOURCE_URL = "https://build.protomaps.com/20260810.pmtiles"
+# The object it lands on inside the bucket.
+OBJECT_KEY = "planet.pmtiles"
