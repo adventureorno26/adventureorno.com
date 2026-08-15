@@ -38,7 +38,7 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
     for (const p of places) bounds.extend([p.lng, p.lat]);
     const map = new maplibregl.Map({
       container: ref.current,
-      ...basemapOptions,
+      ...basemapOptions(),
       bounds: bounds.isEmpty() ? undefined : bounds,
       center: bounds.isEmpty() ? [-98, 39] : undefined,
       zoom: bounds.isEmpty() ? 3 : undefined,

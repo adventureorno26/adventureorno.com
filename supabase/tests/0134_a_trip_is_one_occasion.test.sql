@@ -76,7 +76,7 @@ do $$
 declare tv uuid; n int; names text;
 begin
   select v.id into tv from public.visits v join public.places p on p.id=v.place_id
-   where p.name='V134 Cape Cod' and v.is_trip;
+   where p.name='V134 Cape Cod' and v.trip_marked;
   select count(*), string_agg(place_name, ', ' order by place_name) into n, names
     from public.trip_contents(tv);
   if n <> 2 then raise exception 'FAIL: expected 2 places inside the trip, got % (%)', n, names; end if;

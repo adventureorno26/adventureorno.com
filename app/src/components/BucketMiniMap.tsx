@@ -36,7 +36,7 @@ export default function BucketMiniMap({ places }: { places: Place[] }) {
     if (!ref.current || mapRef.current || places.length === 0) return;
     const map = new maplibregl.Map({
       container: ref.current,
-      ...basemapOptions,
+      ...basemapOptions(),
       interactive: false,
       attributionControl: false,
       bounds: denseBounds(),

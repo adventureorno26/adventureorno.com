@@ -2204,7 +2204,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -2225,7 +2224,6 @@ export type Database = {
           decided_at?: string | null
           end_date: string
           id?: string
-          is_trip?: boolean
           manual?: boolean
           note?: string | null
           parent_visit_id?: string | null
@@ -2246,7 +2244,6 @@ export type Database = {
           decided_at?: string | null
           end_date?: string
           id?: string
-          is_trip?: boolean
           manual?: boolean
           note?: string | null
           parent_visit_id?: string | null
@@ -2309,7 +2306,6 @@ export type Database = {
           end_date: string | null
           id: string | null
           is_headline: boolean | null
-          is_trip: boolean | null
           is_trip_qualified: boolean | null
           manual: boolean | null
           note: string | null
@@ -2332,7 +2328,6 @@ export type Database = {
           end_date?: string | null
           id?: string | null
           is_headline?: never
-          is_trip?: boolean | null
           is_trip_qualified?: never
           manual?: boolean | null
           note?: string | null
@@ -2355,7 +2350,6 @@ export type Database = {
           end_date?: string | null
           id?: string | null
           is_headline?: never
-          is_trip?: boolean | null
           is_trip_qualified?: never
           manual?: boolean | null
           note?: string | null
@@ -2817,7 +2811,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -2939,7 +2932,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -2982,7 +2974,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -3059,7 +3050,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -3307,7 +3297,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -3346,7 +3335,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -3583,7 +3571,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -3708,7 +3695,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null
@@ -3738,7 +3724,6 @@ export type Database = {
           decided_at: string | null
           end_date: string
           id: string
-          is_trip: boolean
           manual: boolean
           note: string | null
           parent_visit_id: string | null

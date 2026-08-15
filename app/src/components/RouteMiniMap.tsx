@@ -67,7 +67,7 @@ export default function RouteMiniMap({ place }: { place: Place }) {
         if (cancelled || !containerRef.current || mapRef.current) return;
         const map = new maplibregl.Map({
           container: containerRef.current,
-          ...basemapOptions,
+          ...basemapOptions(),
           center: [place.lng, place.lat],
           zoom: 11,
           interactive: false,

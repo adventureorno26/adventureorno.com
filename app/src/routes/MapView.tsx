@@ -443,7 +443,7 @@ export default function MapView() {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      ...basemapOptions,
+      ...basemapOptions(),
 
       // Open framed on the whole contiguous US (responsive to screen size).
       bounds: [

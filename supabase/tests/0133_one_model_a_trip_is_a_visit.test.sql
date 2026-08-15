@@ -60,7 +60,7 @@ begin
   -- it a trip. STATE.md §2, which Erica locked, says:
   --   "A VISIT for more than one day counts as a TRIP in the stats bar, but nothing
   --    needs to be labelled as a trip."
-  -- So a multi-day visit counts on its own now. `is_trip` still counts too, because
+  -- So a multi-day visit counts on its own now. `trip_marked` still counts too, because
   -- unmarking three visits she had marked BY HAND on a single day would be an
   -- automation undoing a human decision (0157). The rule is: more than one day, OR
   -- marked. Both of these span several days, so both count immediately.
@@ -88,10 +88,10 @@ do $$
 declare p uuid; v uuid; still boolean;
 begin
   insert into public.places (name, lat, lng, saved) values ('V133 Brewster', 41.76, -70.08, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, is_trip)
+  insert into public.visits (place_id, start_date, end_date, manual, trip_marked)
     values (p, '2018-07-16', '2018-07-17', true, true) returning id into v;
   perform public.rebuild_place_visits(p);
-  select is_trip into still from public.visits where id = v;
+  select trip_marked into still from public.visits where id = v;
   if still is null then raise exception 'FAIL: rebuild deleted a marked trip'; end if;
   if not still then raise exception 'FAIL: rebuild cleared the trip mark'; end if;
   raise notice 'PASS 4: a marked trip survives an automated rebuild';
@@ -103,7 +103,7 @@ declare p uuid; v uuid; before_t int; after_t int;
 begin
   select trips_count into before_t from public.wander_stats(null);
   insert into public.places (name, lat, lng, saved) values ('V133 Future', 48.8, 2.3, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, is_trip, status)
+  insert into public.visits (place_id, start_date, end_date, manual, trip_marked, status)
     values (p, '2027-06-01', '2027-06-10', true, true, 'planned') returning id into v;
   select trips_count into after_t from public.wander_stats(null);
   if after_t <> before_t then raise exception 'FAIL: a planned trip counted as taken'; end if;
@@ -117,7 +117,7 @@ begin
   select trips_count into b_e from public.wander_stats('ffff6666-0000-0000-0000-00000000b001');
   select trips_count into b_j from public.wander_stats('ffff6666-0000-0000-0000-00000000b002');
   insert into public.places (name, lat, lng, saved) values ('V133 Josh Trip', 45.0, -93.0, true) returning id into p;
-  insert into public.visits (place_id, start_date, end_date, manual, is_trip)
+  insert into public.visits (place_id, start_date, end_date, manual, trip_marked)
     values (p, '2026-05-01', '2026-05-04', true, true) returning id into v;
   -- Josh's trip, and only Josh's: attribution is participant rows since 0188, and a
   -- bare insert means everyone, so this replaces that default.
@@ -137,7 +137,7 @@ declare v uuid; ok boolean := false;
 begin
   insert into auth.users (id,email) values ('ffff6666-0000-0000-0000-00000000b003','v133-viewer@example.test') on conflict do nothing;
   insert into public.profiles (id,role,display_name) values ('ffff6666-0000-0000-0000-00000000b003','viewer','V133 Viewer') on conflict do nothing;
-  select id into v from public.visits where is_trip limit 1;
+  select id into v from public.visits where trip_marked limit 1;
   set local request.jwt.claims = '{"sub":"ffff6666-0000-0000-0000-00000000b003"}';
   begin perform public.set_visit_is_trip(v, false); exception when others then ok := true; end;
   if not ok then raise exception 'FAIL: a viewer unmarked a trip'; end if;

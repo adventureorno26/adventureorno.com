@@ -70,25 +70,28 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 2. is_trip and trip_marked are ONE decision with two spellings (§0.3).
--- ---------------------------------------------------------------------------
+-- 2. There is ONE column for the mark now (0191). This used to assert that
+--    is_trip and trip_marked stayed in step; that mirror is gone, so what is
+--    worth asserting is that the mark alone decides.
 do $$
-declare p uuid; v uuid; a boolean; b boolean;
+declare
+  a_id uuid := 'aaaa0164-0000-0000-0000-000000000001';
+  p uuid; v uuid; marked boolean;
 begin
-  insert into public.places (name, lat, lng, saved) values ('T164 Sync', 38.9, -77.4, true)
+  insert into public.places (name, lat, lng, saved) values ('V164 Mark', 38.5, -77.2, true)
     returning id into p;
-  insert into public.visits (place_id, start_date, end_date, status, manual)
-    values (p, '2026-03-01', '2026-03-01', 'taken', true) returning id into v;
+  insert into public.visits (place_id, start_date, end_date, manual)
+    values (p, '2026-02-02', '2026-02-02', true) returning id into v;
 
-  update public.visits set trip_marked = true where id = v;
-  select is_trip, trip_marked into a, b from public.visits where id = v;
-  if not (a and b) then raise exception 'FAIL: setting trip_marked must set is_trip (% / %)', a, b; end if;
+  perform public.set_visit_is_trip(v, true);
+  select trip_marked into marked from public.visits where id = v;
+  if not marked then raise exception 'FAIL: marking a visit did not set trip_marked'; end if;
 
-  update public.visits set is_trip = false where id = v;
-  select is_trip, trip_marked into a, b from public.visits where id = v;
-  if a or b then raise exception 'FAIL: clearing is_trip must clear trip_marked (% / %)', a, b; end if;
+  perform public.set_visit_is_trip(v, false);
+  select trip_marked into marked from public.visits where id = v;
+  if marked then raise exception 'FAIL: unmarking a visit did not clear trip_marked'; end if;
 
-  raise notice 'PASS 2: the two trip flags cannot disagree';
+  raise notice 'PASS 2: one column carries the mark, and set_visit_is_trip drives it';
 end $$;
 
 -- ---------------------------------------------------------------------------
