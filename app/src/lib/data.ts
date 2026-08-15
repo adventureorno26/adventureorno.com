@@ -945,6 +945,27 @@ export async function fetchPlaceVisitCounts(
   return out;
 }
 
+/**
+ * Visits per place, BY ANYBODY (0190).
+ *
+ * Not the same question as `fetchPlaceVisitCounts`, which answers "in this view" and
+ * whose null means SHARED visits. Two screens are not asking from inside a view:
+ * which of two duplicate places should survive a merge, and whether we have been
+ * somewhere more than once. Both read `places.visit_count` for want of anything else,
+ * and that column is a mirror nobody refreshes when a VISIT changes — production had
+ * the Appalachian Trail on 39 against 32 real visits, because merging two visits into
+ * one takes the count down and leaves the column alone.
+ */
+export async function fetchPlaceVisitTotals(): Promise<Map<string, number>> {
+  const { data, error } = await supabase.rpc('place_visit_totals');
+  if (error) throw error;
+  const out = new Map<string, number>();
+  for (const row of (data ?? []) as Array<{ place_id: string; visits: number }>) {
+    out.set(row.place_id, row.visits);
+  }
+  return out;
+}
+
 export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('place_ids_for_view', {
     p_profile: profileId ?? undefined,

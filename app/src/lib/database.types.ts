@@ -3481,6 +3481,13 @@ export type Database = {
           visit_id: string
         }[]
       }
+      place_visit_totals: {
+        Args: never
+        Returns: {
+          place_id: string
+          visits: number
+        }[]
+      }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
         | { Args: { use_typmod?: boolean }; Returns: string }

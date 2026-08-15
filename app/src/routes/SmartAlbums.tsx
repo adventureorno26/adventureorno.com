@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchPlaces } from '../lib/data';
+import { fetchPlaceVisitTotals, fetchPlaces } from '../lib/data';
 import { effectiveCategories } from '../lib/categories';
 import type { Place } from '../lib/types';
 
@@ -8,7 +8,8 @@ interface Album {
   key: string;
   title: string;
   hint: string;
-  match: (p: Place) => boolean;
+  /** `visits` is counted from the visits table (0190), not read off the place row. */
+  match: (p: Place, visits: number) => boolean;
 }
 
 const THIS_YEAR = new Date().getFullYear();
@@ -54,7 +55,10 @@ const ALBUMS: Album[] = [
     key: 'repeat',
     title: 'Repeat visits',
     hint: 'Places we’ve been more than once',
-    match: (p) => (p.visit_count ?? 0) > 1,
+    // Counted, not read off the row: `places.visit_count` is a mirror nobody
+    // refreshes when a visit changes, so a place could sit in here on the strength
+    // of visits that have since been merged into one.
+    match: (_p, visits) => visits > 1,
   },
   {
     key: 'new',
@@ -81,11 +85,15 @@ const ALBUMS: Album[] = [
 export default function SmartAlbums() {
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [totals, setTotals] = useState<Map<string, number> | null>(null);
 
   useEffect(() => {
     fetchPlaces()
       .then((r) => setPlaces(r.filter((p) => p.saved && !p.bucket)))
       .catch(() => setPlaces([]));
+    fetchPlaceVisitTotals()
+      .then(setTotals)
+      .catch(() => setTotals(new Map()));
   }, []);
 
   const albums = useMemo(
@@ -93,10 +101,12 @@ export default function SmartAlbums() {
       (places ?? []).length
         ? ALBUMS.map((a) => ({
             ...a,
-            places: (places ?? []).filter(a.match).sort((x, y) => x.name.localeCompare(y.name)),
+            places: (places ?? [])
+              .filter((p) => a.match(p, totals?.get(p.id) ?? 0))
+              .sort((x, y) => x.name.localeCompare(y.name)),
           })).filter((a) => a.places.length > 0)
         : [],
-    [places],
+    [places, totals],
   );
 
   return (
