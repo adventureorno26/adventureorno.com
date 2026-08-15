@@ -267,6 +267,22 @@ export async function mergeVisits(keepId: string, absorbId: string): Promise<voi
   if (error) throw error;
 }
 
+/** Who was on each visit to a place. One request for the whole place — the editor
+ *  lists many at once, so per-visit would be a request per row (0186). */
+export async function fetchPlaceVisitPeople(
+  placeId: string,
+): Promise<Map<string, { id: string; name: string | null }[]>> {
+  const { data, error } = await supabase.rpc('place_visit_people', { p_place: placeId });
+  if (error) throw error;
+  const out = new Map<string, { id: string; name: string | null }[]>();
+  for (const r of data ?? []) {
+    const list = out.get(r.visit_id) ?? [];
+    list.push({ id: r.profile_id, name: r.display_name });
+    out.set(r.visit_id, list);
+  }
+  return out;
+}
+
 export async function fetchCardView(opts: {
   placeId?: string;
   visitId?: string;
