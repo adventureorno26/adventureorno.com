@@ -1527,6 +1527,45 @@ self-hosted.
 
 **Nothing here is built.** No dependency has been added and no bytes copied.
 
+### Erica's screen rules, 2026-08-15  *(FIX BEFORE ANYTHING ELSE)*
+
+Four things she asked for after using the app. Their state was CHECKED in the code, not
+assumed:
+
+| Rule | State when asked |
+| ---- | ---------------- |
+| **Timeline drills down: YEAR → months → days** | ❌ grouped by MONTH only. There is no year level at all |
+| **Add opens the blank card we designed** | ❌ `/add` opens `AddPage`, a hub with the review queue. `PrimaryNav`'s own comment already says "ADD opens a FILLABLE CARD — not a chooser", so the code and the decision disagreed |
+| **No settings icon on Places** | ❌ appears |
+| **No stats bar on Places** | ❌ appears (`PlacesList.tsx`) |
+
+**The last two are ONE bug.** The gear lives inside `StatsBar` (`.gear-btn`), so anything
+rendering the stats bar gets the gear with it. `PlacesList` renders `<StatsBar>`; removing
+it takes both away. Worth knowing before someone "fixes" the gear separately and wonders
+why it is still there.
+
+### THE STRAVA RULE CANNOT BE DONE WITH RLS  *(found 2026-08-15)*
+
+Josh sees his own Strava data, Erica sees hers, neither sees the other's. Today
+`activities_select` is `using (public.is_member())` — every member sees every activity —
+so the rule is currently violated for all 445 of them (180 `strava`, 265 `file`).
+
+**But changing that policy is not enough.** **32 SECURITY DEFINER functions read
+`public.activities`, and SECURITY DEFINER bypasses RLS entirely:**
+
+    activities_of_type, activity_lines, card_view, climbing_stats, inbox, mileage_by_person,
+    place_days, race_stats, races_list, rebuild_place_visits, visit_detail, wander_stats,
+    wrapped_year_miles … and 19 more
+
+Every count, every card, every statistic goes through one of those. A policy on the table
+would look correct in psql and change nothing in the app.
+
+**So the exclusion has to live where the reading happens**: one helper
+(`public.can_see_activity`), applied in the RLS policy AND in every reader that aggregates
+activities. `original_source` must exist first — `activities.source` records HOW WE GOT IT
+('strava', 'file'), not where it came from, and a file imported via intervals.icu that
+began life on Strava is exactly the case the rule is about.
+
 ### Phase 6 — What we own  *(APPROVED 2026-08-15; nothing built)*
 
 Phase 4 made the MAP ours. This makes the things around it ours: geocoding, routing,
