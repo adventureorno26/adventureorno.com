@@ -271,8 +271,8 @@ begin
       v_override, true, v_uid)
     returning id into v_visit;
 
-    -- WHO WAS THERE, as rows. v_solo null means everyone, which is what the column's
-    -- null meant — said in a form that can also describe a third person.
+    -- WHO WAS THERE, as rows, replacing the everyone-by-default the trigger wrote.
+    delete from public.visit_profiles where visit_id = v_visit;
     insert into public.visit_profiles (visit_id, profile_id)
     select v_visit, x
       from unnest(case when v_solo is not null then array[v_solo]
@@ -369,7 +369,8 @@ begin
   returning * into v_row;
 
   -- Whoever was on the visit did it, until someone says otherwise. Copied as ROWS,
-  -- so a third person on the visit is a third person on the run.
+  -- replacing the everyone-by-default rows the insert trigger just wrote.
+  delete from public.activity_profiles where activity_id = v_row.id;
   insert into public.activity_profiles (activity_id, profile_id)
   select v_row.id, vp.profile_id from public.visit_profiles vp where vp.visit_id = p_visit
   on conflict do nothing;
@@ -463,7 +464,11 @@ begin
   );
 
   -- The people who were on the parent visit were at the restaurant too. As ROWS, so
-  -- 0170's check (everyone on a child was on the trip) can see them.
+  -- 0170's check (everyone on a child was on the trip) can see them. This REPLACES the
+  -- everyone-by-default rows the insert trigger just wrote.
+  delete from public.visit_profiles vp
+   using public.visits c
+   where vp.visit_id = c.id and c.place_id = v_place.id and c.start_date = v_day;
   insert into public.visit_profiles (visit_id, profile_id)
   select c.id, vp.profile_id
     from public.visits c
@@ -535,6 +540,7 @@ begin
   returning id into v_id;
 
   -- Before the cutoff it is the importer's own history; after it, it is everyone's.
+  delete from public.activity_profiles where activity_id = v_id;
   insert into public.activity_profiles (activity_id, profile_id)
   select v_id, x
     from unnest(case when p_date < v_cutoff then array[v_me]
@@ -896,6 +902,56 @@ drop function if exists public.activities_sync_participants();
 -- may only propose" — so it is recreated watching the columns that remain, NOT dropped.
 -- Attribution is no longer one of them: it lives in visit_profiles, and
 -- set_visit_participants marks the visit decided itself.
+-- ---------------------------------------------------------------------------
+-- THE DEFAULT THE NULL USED TO CARRY
+-- ---------------------------------------------------------------------------
+-- `solo_profile IS NULL` meant EVERYONE, and it meant it for free: a visit inserted
+-- anywhere got that meaning by leaving the column alone. The sync triggers then turned
+-- it into rows.
+--
+-- With both gone, a visit inserted by any path that does not name its participants
+-- would have NOBODY on it — and `is_shared_visit` requires every real member, so that
+-- visit would silently disappear from every Both statistic. `ensure_visit`, the
+-- photo/activity triggers and the Strava sync all insert visits and activities without
+-- naming anyone.
+--
+-- So the default becomes explicit: a new visit or activity is EVERYONE's until someone
+-- says otherwise. Same meaning the null had, now written down. The paths that DO know
+-- who was there (create_visit, add_place_to_visit, rebuild_place_visits and friends)
+-- replace these rows immediately afterwards.
+create or replace function public.default_participants()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+begin
+  if tg_table_name = 'visits' then
+    insert into public.visit_profiles (visit_id, profile_id)
+    select new.id, p.id from public.profiles p
+     where p.role in ('owner','editor') and coalesce(p.display_name,'') !~* '(test|bot)'
+    on conflict do nothing;
+  else
+    insert into public.activity_profiles (activity_id, profile_id)
+    select new.id, p.id from public.profiles p
+     where p.role in ('owner','editor') and coalesce(p.display_name,'') !~* '(test|bot)'
+    on conflict do nothing;
+  end if;
+  return null;
+end $function$;
+
+revoke all on function public.default_participants() from public, anon, authenticated;
+
+drop trigger if exists visits_default_participants on public.visits;
+create trigger visits_default_participants
+  after insert on public.visits
+  for each row execute function public.default_participants();
+
+drop trigger if exists activities_default_participants on public.activities;
+create trigger activities_default_participants
+  after insert on public.activities
+  for each row execute function public.default_participants();
+
 drop trigger if exists visits_mark_decided on public.visits;
 create trigger visits_mark_decided
   before update of start_date, end_date, note, is_trip, status on public.visits
