@@ -4485,6 +4485,14 @@ export type Database = {
       }
       visit_detail: { Args: { p_visit: string }; Returns: Json }
       visit_is_inside_trip: { Args: { p_visit: string }; Returns: boolean }
+      visit_people_all: {
+        Args: never
+        Returns: {
+          display_name: string
+          profile_id: string
+          visit_id: string
+        }[]
+      }
       wander_stats: {
         Args: { p_profile?: string }
         Returns: {

@@ -269,6 +269,20 @@ export async function mergeVisits(keepId: string, absorbId: string): Promise<voi
 
 /** Who was on each visit to a place. One request for the whole place — the editor
  *  lists many at once, so per-visit would be a request per row (0186). */
+/** Who was on every visit, in one request. The bulk editor loads all visits at once,
+ *  so asking per place would be a request per place (0187). */
+export async function fetchVisitPeopleAll(): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase.rpc('visit_people_all');
+  if (error) throw error;
+  const out = new Map<string, string[]>();
+  for (const r of data ?? []) {
+    const list = out.get(r.visit_id) ?? [];
+    list.push(r.profile_id);
+    out.set(r.visit_id, list);
+  }
+  return out;
+}
+
 export async function fetchPlaceVisitPeople(
   placeId: string,
 ): Promise<Map<string, { id: string; name: string | null }[]>> {
@@ -736,7 +750,7 @@ export async function fetchPlaceDays(placeId: string): Promise<PlaceDay[]> {
 }
 
 const VISIT_COLS =
-  'id, place_id, start_date, end_date, note, is_trip, status, solo_profile, solo_override, created_at';
+  'id, place_id, start_date, end_date, note, is_trip, status, solo_override, created_at';
 
 /** Manually set who a visit belongs to (null = both). Sticks across rebuilds. */
 export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {
