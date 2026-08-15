@@ -6,6 +6,7 @@ import {
   fetchMapPeople,
   fetchPlaces,
   fetchVisits,
+  setVisitDates,
   matchPhoto,
   setVisitSolo,
 } from '../lib/data';
@@ -22,9 +23,10 @@ import { cancelGooglePick, googlePhotosEnabled, pickFromGooglePhotos } from '../
 import { enqueueUpload } from '../lib/uploadQueue';
 import MapSearch from '../components/MapSearch';
 import AuthedImg from '../components/AuthedImg';
-import type { Place } from '../lib/types';
+import type { Place, Visit } from '../lib/types';
 import { whoChoices, whoProfileId } from '../lib/participants';
 import { assignStayGroups } from '../lib/photoGroups';
+import { visitDates } from '../lib/visitDates';
 import { showSnack } from '../lib/snackbar';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
@@ -106,6 +108,9 @@ export default function PhotoSorter() {
   const [groupDate, setGroupDate] = useState<Record<string, string>>({}); // optional date override
   /** Places chosen but not yet written — keyed by group. Discarded if you never save. */
   const [pending, setPending] = useState<Record<string, PendingPlace>>({});
+  /** Visits already saved at a place, so a group can JOIN one instead of making a
+   *  second visit beside it. Loaded lazily, once per place. */
+  const [placeVisits, setPlaceVisits] = useState<Record<string, Visit[]>>({});
   const [note, setNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [inboxCount, setInboxCount] = useState<number | null>(null);
@@ -326,6 +331,60 @@ export default function PhotoSorter() {
     return created.id;
   }
 
+  // Load the visits already saved at each place a group points at — once per place.
+  useEffect(() => {
+    const wanted = [...new Set(groups.map((g) => g.placeId).filter((id): id is string => !!id))];
+    const missing = wanted.filter((id) => !(id in placeVisits));
+    if (missing.length === 0) return;
+    let active = true;
+    void Promise.all(
+      missing.map(async (id) => [id, await fetchVisits(id).catch(() => [])] as const),
+    ).then((pairs) => {
+      if (active) setPlaceVisits((cur) => ({ ...cur, ...Object.fromEntries(pairs) }));
+    });
+    return () => {
+      active = false;
+    };
+  }, [groups, placeVisits]);
+
+  /** The days this group covers — the override if you set one, otherwise the photos. */
+  function groupRange(g: Group): { start: string; end: string } | null {
+    const override = groupDate[g.id];
+    if (override) return { start: override, end: override };
+    const days = g.items
+      .map((it) => (it.takenAt ? it.takenAt.slice(0, 10) : ''))
+      .filter(Boolean)
+      .sort();
+    if (days.length === 0) return null;
+    return { start: days[0], end: days[days.length - 1] };
+  }
+
+  const dayGap = (a: string, b: string) =>
+    Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
+  /**
+   * The visit these photos belong to, if one already exists.
+   *
+   * Approved 2026-08-14: photos landing on a place that already has a visit on touching
+   * dates JOIN it rather than making a second one. The stay-grouping fix keeps a run of
+   * days together WITHIN a batch; this is the same rule applied across what is already
+   * saved, which is the other half of how Rome ended up as two.
+   */
+  function joinTarget(g: Group): Visit | null {
+    if (!g.placeId) return null; // a brand-new place has nothing to join
+    const range = groupRange(g);
+    if (!range) return null;
+    const existing = placeVisits[g.placeId] ?? [];
+    for (const v of existing) {
+      const vStart = v.start_date;
+      const vEnd = v.end_date || v.start_date;
+      if (!vStart) continue;
+      // touching or overlapping, in either direction
+      if (dayGap(vEnd, range.start) <= 1 && dayGap(range.end, vStart) <= 1) return v;
+    }
+    return null;
+  }
+
   async function addAll() {
     // A group is ready if it has a place, or a place STAGED for it. This is the save
     // step, and the only place a staged one becomes real.
@@ -353,6 +412,33 @@ export default function PhotoSorter() {
       }
       if (!placeId) continue;
       const pl = places.find((p) => p.id === placeId);
+
+      // JOIN AN EXISTING STAY. If this place already has a visit on touching dates,
+      // widen it to cover these days rather than letting a second visit be derived
+      // beside it. Widening is what makes the join real: a day already covered by a
+      // manual visit does not get a derived twin (0157), so the photos land inside the
+      // visit that was already there. This is the other half of the Rome fix — the
+      // grouping keeps a run of days together within a batch, this keeps it together
+      // with what is already saved.
+      const join = joinTarget(g);
+      const range = groupRange(g);
+      if (join && range) {
+        const newStart = range.start < join.start_date ? range.start : join.start_date;
+        const joinEnd = join.end_date || join.start_date;
+        const newEnd = range.end > joinEnd ? range.end : joinEnd;
+        if (newStart !== join.start_date || newEnd !== joinEnd) {
+          try {
+            await setVisitDates(join.id, newStart, newEnd);
+          } catch (e) {
+            showSnack({
+              message:
+                e instanceof Error
+                  ? `Could not extend the existing visit: ${e.message}`
+                  : 'Could not extend the existing visit.',
+            });
+          }
+        }
+      }
       // Optional date override → stamps the photos so the derived visit lands on
       // the date you chose (visits are rebuilt from photo dates).
       const override = groupDate[g.id];
@@ -394,7 +480,7 @@ export default function PhotoSorter() {
       );
       if (days.size) {
         try {
-          const visits = await fetchVisits(g.placeId!);
+          const visits = await fetchVisits(placeId);
           const touched = visits.filter((v) =>
             [...days].some((d) => d >= v.start_date && d <= v.end_date),
           );
@@ -404,7 +490,7 @@ export default function PhotoSorter() {
         }
       }
     }
-    const placesTouched = new Set(ready.map((g) => g.placeId)).size;
+    const placesTouched = new Set(ready.map((g) => g.placeId ?? g.id)).size;
     setSummary(
       `Added ${added} photo${added === 1 ? '' : 's'} across ${placesTouched} visit${placesTouched === 1 ? '' : 's'}.`,
     );
@@ -519,6 +605,26 @@ export default function PhotoSorter() {
                     </span>
                   </div>
                 </div>
+                {/* Approved 2026-08-14: say it BEFORE saving, so joining an existing
+                    stay is visible rather than something that just happened. */}
+                {(() => {
+                  const join = joinTarget(g);
+                  const range = groupRange(g);
+                  if (!join || !range) return null;
+                  const joinEnd = join.end_date || join.start_date;
+                  const start = range.start < join.start_date ? range.start : join.start_date;
+                  const end = range.end > joinEnd ? range.end : joinEnd;
+                  return (
+                    <p className="ps-join label">
+                      {g.placeName} already has a visit {visitDates(join.start_date, joinEnd)}.
+                      These join it
+                      {start !== join.start_date || end !== joinEnd
+                        ? `, making it ${visitDates(start, end)}`
+                        : ''}
+                      .
+                    </p>
+                  );
+                })()}
                 <div className="ps-thumbs">
                   {g.items.slice(0, 12).map((it) =>
                     it.photoId ? (
