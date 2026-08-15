@@ -1,4 +1,7 @@
-# CLAUDE.md — adventureorno.com (becoming "Flok")
+# CLAUDE.md — adventureorno.com
+
+> The commercial apps have **no decided name**. "Flok" was a working title and is NOT
+> decided (Erica, 2026-08-15) — do not use it in the product, the docs or the repo.
 
 > # 👉 READ [`docs/STATE.md`](docs/STATE.md). IT IS THE ONLY DOCUMENT.
 >

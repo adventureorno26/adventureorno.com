@@ -13,7 +13,9 @@ Last updated: 2026-08-14.
 ## NOW — the order of work (locked 2026-08-14)
 
 The immediate product is a reliable private web app for **Erica and Josh**. The future
-commercial Apple and Android product is named **Flok**. The two goals share a core, but
+commercial Apple and Android product **has no decided name** (2026-08-15 — "Flok" was a
+working title and is NOT decided; do not write it into the product, the docs or the
+repo). The two goals share a core, but
 commercial scale must not destabilize the app Erica and Josh are trying to use today.
 
 The sequence is:
@@ -26,7 +28,7 @@ The sequence is:
 3. **Build the complete web feature set.** The one-page editing flow, collaborative trip
    planning, Together approvals, remaining importers, and the other work recorded below
    are queued here. They are not cancelled or abandoned.
-4. **Build Flok for Apple and Android, then commercialize.** Reuse the proven domain
+4. **Build the native Apple and Android apps, then commercialize.** Reuse the proven domain
    model and APIs; add tenancy, privacy boundaries, billing, legal/provider compliance,
    support and native-only integrations only after the private core is dependable.
 
@@ -1184,7 +1186,7 @@ Build it in this order:
 Commercial boundary: self-hosting OSM-derived tiles is compatible with a commercial app
 when attribution and relevant data licenses are followed. It does **not** provide
 geocoding, routing, satellite imagery, traffic or Strava data rights. Keep those as
-separate replaceable services and review provider terms before Flok charges users.
+separate replaceable services and review provider terms before the product charges users.
 
 **Phase 4 is done only when** Erica approves a rendered palette, the production map and
 route overlays work for both accounts, third-party basemap calls are absent, attribution
@@ -1431,7 +1433,7 @@ switchable-off by somebody else.
 - Ships as **GeoParquet** (`geoparquet` at github.com/opengeospatial is the format spec).
 - **CDLA-Permissive v2** where possible, with per-source attribution — CC BY 4.0, Apache
   2.0, OGL — listed by theme. **The attribution obligations are per source and must be
-  read before Flok charges anyone.**
+  read before the product charges anyone.**
 - 474M+ address points globally, which is far too much for the Supabase instance. Import
   is therefore **by region**, driven by where places actually are, and the nearest-address
   query is a PostGIS `<->` lookup against a GiST index.
@@ -1525,11 +1527,132 @@ self-hosted.
 
 **Nothing here is built.** No dependency has been added and no bytes copied.
 
-### Phase 5 — Complete web features, then native Flok  *(QUEUED; not cancelled)*
+### Phase 6 — What we own  *(APPROVED 2026-08-15; nothing built)*
+
+Phase 4 made the MAP ours. This makes the things around it ours: geocoding, routing,
+elevation, terrain, points of interest, and recording an activity. Approved by Erica
+2026-08-15 after an investigation of what is actually deployed.
+
+**Corrections this phase makes to earlier notes in this file:**
+
+- **PLANET, not a regional extract.** A US-or-Europe Photon index was floated on cost
+  grounds and is wrong for this app: her own places already include Roma, Lungotevere
+  Vaticano and Madrid, and the bucket list is international. A geocoder that fails on the
+  next trip is not a geocoder. The disk difference is a few pounds a month.
+- **NO third-party terrain tiles.** Free AWS terrain was floated; we bake our own
+  (§6c). The point of Phase 4 was to stop being switchable-off by somebody else.
+- **hotpot / heatmaps are OUT for now** — a fourth service for a feature nobody has asked
+  for yet.
+
+#### What is actually deployed (verified 2026-08-15, not from these notes)
+
+| | |
+| --- | --- |
+| `aon-basemap` | `planet.pmtiles` **137.3 GB**, plus glyph ranges for Noto Sans Regular/Medium/Italic |
+| Workers | `adventureorno-basemap` (tiles + glyphs + both styles), `adventureorno-photo-gateway` |
+| Zone routes | **exactly one** — `adventureorno.com/basemap/*`. The photo gateway is still on `workers.dev` |
+| Data | 151 places · 487 visits · **445 activities** · 17,017 location pings · 178 photos · **0 trail_routes** |
+| Activities already carry | `summary_polyline`, `elevation_gain`, `elevation_profile`, `moving_time` |
+| Still third-party | Mapbox → MapTiler geocoding; **public Nominatim called FROM THE BROWSER** (`lib/data.ts`, 2 endpoints); **public Overpass** mirrors in `suggest`; Foursquare in `geocode-new-places` |
+
+#### 6a. Three servers, one way in
+
+**Photon** (planet — geocoding, both directions), **Valhalla** (routing, snap-to-trail, GPS
+map-matching), **Open Topo Data** (NED 10 m + Copernicus GLO-30 elevation). Each private,
+none publicly addressable. All reached through Workers on our own domain:
+
+    /geocode/*    /route/*    /elevation/*
+
+The same pattern as `/basemap/*`, for the same three reasons: same-origin so the service
+worker can cache it, **no new CSP entry to be silently blocked** — which is how the Mapbox
+search died unnoticed — and an origin that can be swapped without touching the app.
+Mapbox stays as failover per service until each is proven, then its token goes.
+
+**This also removes two policy problems, not just costs.** `lib/data.ts` calls the PUBLIC
+Nominatim API directly from the browser, and `suggest` uses public Overpass mirrors. Their
+policies cap use at ~1 req/s and forbid autocomplete; from a browser every user's IP hits
+them with no shared rate limit and no User-Agent we control. Private for two people;
+a compliance problem the day this is commercial.
+
+#### 6b. Watchtower — built WITH the servers, not after
+
+Three always-on boxes with nobody watching them is the actual risk in this phase; the
+whole stack until now has been managed. A Worker on a cron probes every service and the
+app's own endpoints, writes to a `service_health` table, surfaces in Settings, and alerts
+after repeated failure. **A probe must check the CONTENT-TYPE, not the status** — the
+lesson of `/basemap/*` answering 200 with the app's HTML for four days.
+
+#### 6c. Terrain we own
+
+Bake Copernicus GLO-30 into terrain-RGB PMTiles in `aon-basemap`, served by the same
+Worker. Unlocks hillshade under the map and camera-along-path 3D flyovers rendered by our
+own style. No AWS tiles.
+
+#### 6d. Recording, properly — and it is JUST ANOTHER INGEST SOURCE
+
+What exists today is not recording: `lib/tracking.ts` drips throttled `watchPosition`
+pings into `location_pings`. That is passive presence. Every one of the 445 activities came
+from Strava or a file.
+
+The recorder must produce the SAME normalized activity a file import produces
+(`source='recorded'`) and go in through the same pipeline, so map display, joint-outing
+detection, stats and sharing need zero recorder-specific code.
+
+Non-negotiables, in order of how much they hurt when missed:
+
+1. **A crash-safe on-device journal.** Every accepted point is written to local storage the
+   moment it arrives, never held only in memory; an unfinished journal offers to resume.
+   A phone dying at mile 9 must not lose miles 1–8. Users forgive jank, never a lost hike.
+2. **Filter before storing** — drop accuracy worse than ~30–50 m, drop implausible
+   teleports, light smoothing. Distance from filtered points only.
+3. **GPS elevation is garbage.** Correct it server-side against our own DEM (§6c/6a) at
+   save time, which is what Strava does.
+4. **Auto-pause** with `moving_time` and `elapsed_time` kept separately.
+5. **Offline finish**: queue the upload and sync later. Trails have no signal.
+6. Foreground-service / user-initiated background location only — **never ask for
+   "Always" location** for a start-button recorder.
+
+#### 6e. Overture Places → PostGIS, replacing Foursquare
+
+**Moving off Foursquare is not a trade, it is a repair.** `geocode-new-places` calls
+`places-api.foursquare.com`, and that key is DEAD (the 2026-08-07 credential audit), so
+`foursquarePoi()` returns null today and that naming path is silently doing nothing.
+Overture Places *includes the Foursquare OS Places donation* — the same underlying data,
+permissively licensed, self-hosted, no key to expire, no rate limit.
+
+Import by region with DuckDB spatial from the GeoParquet releases into a `pois` table
+(PostGIS point, name, current category taxonomy, confidence, GERS id) with trigram/FTS
+indexes. Nearest-POI naming becomes one `ST_DWithin` query. **Attribution is per SOURCE,
+not one licence** — read the per-theme table before charging anyone. Build against the
+CURRENT taxonomy; the legacy `categories` property is deprecated.
+
+**The existing rule still governs all of it: "no suggestion means leave it alone."** Never
+write a placeholder name.
+
+#### 6f. THE STRAVA CONSTRAINT — it shapes the data model, not just the UI
+
+Strava's API terms permit showing an athlete's data **only to that athlete**. No feeds, no
+comparison, no social display, and the API now expects a paid subscription with a
+self-serve cap of 10 athletes.
+
+Therefore, before anything social is built:
+
+- **Every activity records its `original_source`.** Not "how we got it" — where it came
+  from originally, through however many hubs.
+- **Strava-origin data is excluded from every surface visible to another person, and that
+  exclusion lives in RLS and views — NOT in the UI.** A privacy rule enforced in the
+  frontend is a privacy rule that leaks the first time a new screen forgets it.
+- Strava becomes **per-user and private**: each person connects their own account, and
+  nothing Strava-derived crosses between accounts.
+- Anything that currently depends on Strava must have a non-Strava path before it can be
+  part of a commercial product. Today that is 445 activities and the whole
+  `strava-webhook` / `strava-backfill` ingest.
+
+### Phase 5 — Complete web features, then the native apps  *(QUEUED; not cancelled)*
 
 First finish the web features recorded in this file on top of the stable private core:
 the one-page edit flow, collaborative planning, Together approvals, remaining importers,
-and approved card/map work. Then build native Apple and Android clients named **Flok**
+and approved card/map work. Then build native Apple and Android clients (**name undecided**)
 against versioned APIs rather than forking the business rules into three implementations.
 
 Commercial readiness includes tenant isolation, per-tenant quotas, account deletion and
@@ -1665,7 +1788,7 @@ VERIFIED against the live policy (https://www.strava.com/legal/api_policy, effec
 | §5.7  | may not "aggregate, cache, or store geographic location information" | the whole map                  |
 | §6.2  | may not retain Strava data "longer than seven (7) days"              | every history we hold          |
 | §2.3  | data "may be displayed or disclosed … only to that user"            | showing Josh's outing to Erica |
-| §5.8  | "**may not charge end users, in any manner**"                  | charging for Flok at all       |
+| §5.8  | "**may not charge end users, in any manner**"                  | charging for the product at all |
 
 Also: §5.10 forbids it *even with the user's consent*; §5.4 forbids aggregation/analytics;
 §5.5 forbids persistent indexes; §5.3 forbids AI/ML. Access is 1 athlete by default, 10
@@ -1736,7 +1859,7 @@ invent history for a trip you cancelled. When the end date is past, the plan ask
 kept, attached to it, as what you meant to do. No, or no answer, and it stays a plan.
 This is the only door between the two halves, and a human walks through it.
 
-**Who can edit it.** Planning is the reason the Flok graph exists — it is the same
+**Who can edit it.** Planning is the reason the social graph exists — it is the same
 tagging-and-approval model, only pointed forward:
 
 - The planner invites people from their flok. An invite is **accepted, declined, or
