@@ -270,7 +270,7 @@ export default function NewPlaceDraft({
 
   // Tags you can actually choose. City and Region are NOT offered: they attach
   // spatially by boundary, so asking is meaningless. Trip is not offered either —
-  // a trip is a visit you marked, not a kind of place (docs/SCHEMA.md). Trail is the
+  // a trip is a visit you marked, not a kind of place (docs/STATE.md §0.4). Trail is the
   // one container a person sets by hand, and it is set by the question above — asking
   // again here would be asking twice.
   const NOT_A_TAG = new Set(['city', 'region', 'trip', 'trail']);
