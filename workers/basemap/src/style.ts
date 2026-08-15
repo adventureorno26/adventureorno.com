@@ -24,9 +24,32 @@ interface StyleLayer {
   [k: string]: unknown;
 }
 
-/** Layers that draw a picture rather than a word. */
+/**
+ * Take the ICONS out, keep the WORDS.
+ *
+ * My first attempt dropped any layer that set `icon-image`, which is wrong in a way
+ * worth writing down: `places_locality` draws the town dot AND the town NAME in one
+ * layer, so dropping it took every city and town label off the map to remove one dot.
+ *
+ * The icon properties are removed and the layer stays. A layer that was ONLY an icon
+ * has nothing left to draw and goes.
+ */
 export function withoutIcons(layers: StyleLayer[]): StyleLayer[] {
-  return layers.filter((l) => !(l.layout && 'icon-image' in l.layout));
+  const out: StyleLayer[] = [];
+  for (const layer of layers) {
+    if (!layer.layout || !('icon-image' in layer.layout)) {
+      out.push(layer);
+      continue;
+    }
+    const layout: Record<string, unknown> = { ...layer.layout };
+    for (const k of Object.keys(layout)) {
+      if (k.startsWith('icon-')) delete layout[k];
+    }
+    // Nothing but an icon: there is no word to keep.
+    if (!('text-field' in layout)) continue;
+    out.push({ ...layer, layout });
+  }
+  return out;
 }
 
 export function buildStyle(origin: string): unknown {
