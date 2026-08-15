@@ -248,7 +248,9 @@ describe('adding a visit asks for both dates', () => {
   // without first finding a tickbox that did not look like part of the question.
   it('uses the locked words', () => {
     expect(CARD).toMatch(/Add another visit/);
-    expect(CARD, 'the plan says "Add another visit", not "Log"').not.toMatch(/Log a(nother)? visit/);
+    expect(CARD, 'the plan says "Add another visit", not "Log"').not.toMatch(
+      /Log a(nother)? visit/,
+    );
   });
 
   it('shows both dates without a checkbox to find first', () => {
@@ -265,9 +267,10 @@ describe('adding a visit asks for both dates', () => {
     expect(CARD).toMatch(/vEnd && vEnd >= vStart \? vEnd : vStart/);
   });
 
-  it('says what a range means before it is saved', () => {
-    // §0.4: a visit over more than one day IS a trip. Better said before saving.
-    expect(CARD).toMatch(/counts as a trip/);
+  it('does not lecture about trips under the dates', () => {
+    // Removed at Erica's word, 2026-08-15. The rule is real — a visit over more than
+    // one day counts as a trip — but the card is not the place to say it, and she has
+    // asked repeatedly for the word "Trip" to stay out of the Visits section.
+    expect(CARD).not.toMatch(/counts as a trip/);
   });
 });
-

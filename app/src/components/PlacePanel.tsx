@@ -1831,11 +1831,6 @@ export default function PlacePanel({
                   min={vStart || undefined}
                   onChange={(e) => setVEnd(e.target.value)}
                 />
-                {vEnd && vStart && vEnd > vStart && (
-                  <span className="label">
-                    {visitDates(vStart, vEnd)} — more than one day, so this counts as a trip.
-                  </span>
-                )}
                 {people.length >= 2 && (
                   <>
                     <label>Who was there</label>
