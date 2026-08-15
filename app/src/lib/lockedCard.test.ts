@@ -289,3 +289,37 @@ describe('the card asks the model, not the leftover column', () => {
     expect(CARD, 'no falling back to the raw column').not.toMatch(/\|\|\s*!!v\.is_trip/);
   });
 });
+
+describe('the screens Erica asked for on 2026-08-15', () => {
+  const PLACES = SOURCES.find(([p]) => p.endsWith('routes/PlacesList.tsx'))?.[1] ?? '';
+  const TIMELINE = SOURCES.find(([p]) => p.endsWith('routes/Timeline.tsx'))?.[1] ?? '';
+  const MAP = SOURCES.find(([p]) => p.endsWith('routes/MapView.tsx'))?.[1] ?? '';
+  const NAV = SOURCES.find(([p]) => p.endsWith('components/PrimaryNav.tsx'))?.[1] ?? '';
+
+  it('Places has no stats bar — which is also what removes the gear', () => {
+    // ONE change, TWO complaints: the settings gear (.gear-btn) is rendered INSIDE
+    // StatsBar, so anything showing the bar shows the gear. Do not look for a separate
+    // gear on this page.
+    // Match the IMPORT and the ELEMENT, not the word: the comment left in that file
+    // explains why the bar is gone and mentions it by name. A blunt word match fails on
+    // its own explanation — which is the second time today that shape of guard bit.
+    expect(PLACES).not.toMatch(/from '\.\.\/components\/StatsBar'/);
+    expect(PLACES).not.toMatch(/<StatsBar/);
+  });
+
+  it('the timeline folds year, then month, then days', () => {
+    // "the user should see the year, and when clicked that should show the months, then
+    // when clicked the days". It used to open every month of every year at once.
+    expect(TIMELINE).toMatch(/openYears/);
+    expect(TIMELINE).toMatch(/openMonths/);
+    expect(TIMELINE).toMatch(/d\.date\.slice\(0, 4\)/);
+  });
+
+  it('Add opens the blank card, not a chooser', () => {
+    // §0.6 has said this since 2026-08-11 — "ADD opens a FILLABLE CARD, not a chooser" —
+    // while the code opened AddSheet. The decision and the code disagreed for four days.
+    expect(MAP).not.toMatch(/<AddSheet/);
+    expect(MAP).toMatch(/wantsCard/);
+    expect(NAV).toMatch(/to: '\/\?add=1'/);
+  });
+});
