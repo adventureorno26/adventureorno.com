@@ -1928,6 +1928,101 @@ lost work and can be restored in minutes.
 
 ---
 
+## 7c. 2026-08-15 — what changed, and what was found while changing it
+
+Fourteen pull requests (#69–#83). The parts worth remembering are not the features.
+
+### Applied to production
+
+| what | evidence |
+| ---- | -------- |
+| **0190** `place_visit_totals()` + backfill | Appalachian Trail `visit_count` 39 → 31, W&OD 46 → 44 |
+| **Washington, DC** `first_visit` `0202-06-19` → `2017-03-29` | its own earliest visit; earliest photo 2017-03-30 00:03 UTC is the same evening locally |
+| **Two visits dated 2026-12-25 deleted** | Appalachian Trail and Maryland Heights, via `delete_visit`; both returned `evidence: []` |
+
+The two Christmas visits claimed `source='evidence'` and **nothing in the database carried
+that date** — no photo, no ping, no activity. Undo snapshots were captured from
+`delete_visit` before they went.
+
+### A COUNT THAT DECIDES SOMETHING MUST BE COUNTED
+
+`places.visit_count` is a mirror, and **nothing refreshes it when a VISIT changes**:
+`create_visit`, `delete_visit`, `restore_visit`, `merge_visits` and `update_visit_dates`
+all leave it behind. `recompute_place_stats` counts correctly but only runs on the PHOTO
+and ACTIVITY paths. So merging two visits into one — the thing 0185 was built for — takes
+the real count down and leaves the column where it was.
+
+That was not cosmetic: **Duplicates picks which place SURVIVES A MERGE by that number**,
+and a merge is not undone by pressing it again. 0190 adds the reader; #82 moved Duplicates
+and Smart Albums onto it. No trigger was added on purpose — a maintained mirror is what §8
+is removing.
+
+### The preconditions for removing `part_of` and `is_trip` were misread
+
+Both were described as unblocked because their frontend PRs had deployed. They are not.
+
+- **`part_of`** — four functions still WRITE it (`add_place_to_visit`, `add_to_container`,
+  `remove_from_container`, `merge_places_auto`) and `places_sync_membership` copies it into
+  `place_membership`. It is still the record, exactly as §8 says. #71 moved readers only.
+- **`is_trip`** — `visits_sync_trip_flags` keeps it identical to `trip_marked`, but that
+  trigger ALSO stamps `updated_at` and the decision fields, so it must be rewritten rather
+  than dropped. `set_visit_is_trip`, `apply_inbox_field` and `rebuild_place_visits` all
+  still use the column.
+
+Each is a 0188-sized migration. #83 does the safe half of the second one: the card and
+`VISIT_COLS` stop reading `is_trip`, readers first, which is the order that made
+`solo_profile` boring to remove.
+
+### THE MAP WAS NOT SERVING, AND IT LOOKED LIKE IT WAS
+
+Every `/basemap/*` URL returned **200 with the app's HTML**, because:
+
+1. the zone had **zero worker routes registered** — the route in `wrangler.toml` had never
+   been published, so Pages answered the path with its SPA fallback; and
+2. the deployed worker was still the **copy-only version from 11 August**. The tile, glyph
+   and style code (#73) had never been deployed at all.
+
+A 200 from the wrong server is the worst possible failure here: nothing looks broken.
+**Check the content-type, not the status.**
+
+The worker is now deployed WITHOUT its route, so nothing user-facing changed, and verified
+at its `workers.dev` address: `tiles.json` reports zoom 0–15, a z6 tile over Virginia
+returns 38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range 76,044 bytes,
+and MapLibre renders Loudoun County with **zero errors**. Preview sent 2026-08-15.
+
+Still to do, and both are Erica's call: register `adventureorno.com/basemap/*`, then point
+`basemap.ts` at `/basemap/style.json`.
+
+### Two mistakes of the same shape, worth naming
+
+- Resolving a conflict, `package-lock.json` was taken from main and "verified" by checking
+  that it still resolved **pmtiles** — the dependency in mind at the time. It was missing
+  `protomaps-themes-base` and `vitest`, and `npm ci` failed on CI. **Run the check that
+  fails, not the check you were thinking about.**
+- An empty `import.meta.glob` result was read as a hole in the banned-words guard. The glob
+  was fine; the lookup used `lib/data.ts` where the key is `./data.ts`. A change was made to
+  a guard on that false premise and then reverted.
+
+Both look identical from the outside: a narrow check that passes reads exactly like a broad
+one that passes.
+
+### Also
+- **`CLOUDFLARE_API_TOKEN` does not exist in `.env.local`** — it is `CLOUDFLARE_API_TOKEN_MASTER`
+  (account-scoped) and `CLOUDFLARE_ZONE_ACCESS` (zone-scoped). Do not verify an account token
+  with `/user/tokens/verify`; it returns 401 for account tokens even when they are valid. Use
+  a real account endpoint.
+- **The deploy already refuses to ship ahead of the schema** (`check:ledger`, `STRICT=1`), so
+  an unapplied migration blocks the whole pipeline, not just its own change. #81 adds
+  `supabase db push --include-all` in front of it — it needs a `SUPABASE_DB_PASSWORD` secret
+  and does nothing until that exists.
+- **`scripts/check-data-integrity.mjs`** (#79) reads production's DATA, not its shape:
+  impossible dates, visits in the future, visits derived from evidence that is not there, and
+  count drift. A warning, not a failure, because a live database can go dirty with nobody
+  touching the code.
+- **87 visits have no evidence, and 84 of those are fine** — a trail's evidence lives on its
+  sections. Only non-containers count. That distinction is the difference between a real
+  finding and a scary number.
+
 ## 8. Facts that must not be relearned
 
 - **Overpass** rate-limits 2 slots per IP and edge functions share Supabase egress:
@@ -1939,7 +2034,10 @@ lost work and can be restored in minutes.
   Greenwich. Parse `YYYY-MM-DD` with local components. (`fmtRunDate` now does this itself.)
 - **`places.part_of` is the record of membership; `place_membership` is a copy.** A
   trigger rebuilds the table from the array on every update of that place, so deleting a
-  membership row alone does nothing and undoes itself. Write `part_of`.
+  membership row alone does nothing and undoes itself. Write `part_of`. **Still true on
+  2026-08-15**: `add_place_to_visit`, `add_to_container`, `remove_from_container` and
+  `merge_places_auto` all write the array, and `places_sync_membership` mirrors it. §0.3
+  plans to reverse this — until those four move, the column cannot be dropped.
 - **The app's global input CSS is `display:block; width:100%`** — it makes a radio 238px
   wide. Pin size on any radio or checkbox.
 - **MapLibre 6** removed the default export; **Vite 8** removed object `manualChunks` and
