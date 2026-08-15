@@ -36,14 +36,67 @@ export async function addCategory(
 
 const PLACE_COLS =
   // No solo_profile: attribution lives on the visit (migration 0136, docs/SCHEMA.md).
-  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, name_locked, named_by, name_scope, counts_as_place, visit_count, rating, review, is_home, saved, is_trail, part_of, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, favorite, holds_children, category, park, created_by, created_at';
+  'id, name, country, admin1, lat, lng, first_visit, last_visit, cover_photo_id, auto, needs_geocode, name_locked, named_by, name_scope, counts_as_place, visit_count, rating, review, is_home, saved, is_trail, suggested, bucket, website, categories, activity_categories, cover_pos_y, address, city, favorite, holds_children, category, park, created_by, created_at';
 const ENTRY_COLS =
   'id, place_id, kind, title, body, rating, url, date, address, lat, lng, created_by, created_at';
 
+/**
+ * Every place, each carrying the containers it sits inside.
+ *
+ * `part_of` is no longer SELECTED — it is built from `place_memberships_all()` (0189)
+ * and attached here. The array on a Place is now a derived convenience, so the six
+ * screens that read `p.part_of` keep working unchanged while the column underneath it
+ * goes away (§0.7, phase 8 step 4).
+ *
+ * One extra request for ~19 rows, against a full places list that is loaded anyway.
+ */
 export async function fetchPlaces(): Promise<Place[]> {
-  const { data, error } = await supabase.from('places').select(PLACE_COLS);
+  const [{ data, error }, memberships] = await Promise.all([
+    supabase.from('places').select(PLACE_COLS),
+    fetchPlaceMemberships().catch(() => new Map<string, string[]>()),
+  ]);
   if (error) throw error;
-  return (data ?? []) as Place[];
+  return (data ?? []).map((p) => ({
+    ...p,
+    part_of: memberships.get(p.id) ?? [],
+  })) as Place[];
+}
+
+/** Put a place inside another. Writes the record; the mirror follows (§8). */
+export async function addToContainer(childId: string, parentId: string): Promise<void> {
+  const { error } = await supabase.rpc('add_to_container', {
+    p_child: childId,
+    p_parent: parentId,
+  });
+  if (error) throw error;
+}
+
+/** Take a place out of a container. */
+export async function removeFromContainer(childId: string, parentId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_from_container', {
+    p_child: childId,
+    p_parent: parentId,
+  });
+  if (error) throw error;
+}
+
+/** The containers ONE place sits inside. */
+async function containersOf(placeId: string): Promise<string[]> {
+  const all = await fetchPlaceMemberships().catch(() => new Map<string, string[]>());
+  return all.get(placeId) ?? [];
+}
+
+/** child id → the places it sits inside. The canonical membership rows (0189). */
+export async function fetchPlaceMemberships(): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase.rpc('place_memberships_all');
+  if (error) throw error;
+  const out = new Map<string, string[]>();
+  for (const r of data ?? []) {
+    const list = out.get(r.child_id) ?? [];
+    list.push(r.parent_id);
+    out.set(r.child_id, list);
+  }
+  return out;
 }
 
 export async function fetchPlace(id: string): Promise<Place | null> {
@@ -53,7 +106,10 @@ export async function fetchPlace(id: string): Promise<Place | null> {
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
-  return (data as Place) ?? null;
+  if (!data) return null;
+  // part_of is derived from the membership rows now, so a single place has to be
+  // given it too — otherwise refreshing one place empties its containers on screen.
+  return { ...data, part_of: await containersOf(id) } as Place;
 }
 
 /**
@@ -99,7 +155,7 @@ export async function updatePlace(
     .select(PLACE_COLS)
     .single();
   if (error) throw error;
-  return data as Place;
+  return { ...data, part_of: await containersOf(id) } as Place;
 }
 
 /** Soft-delete: moves the place to the trash (restorable for 30 days). */
@@ -128,13 +184,16 @@ export async function fetchTrash(): Promise<TrashItem[]> {
 
 /** Want-to-go places (the Bucket List page), newest first. */
 export async function fetchBucketPlaces(): Promise<Place[]> {
-  const { data, error } = await supabase
-    .from('places')
-    .select(PLACE_COLS)
-    .eq('bucket', true)
-    .order('created_at', { ascending: false });
+  const [{ data, error }, memberships] = await Promise.all([
+    supabase
+      .from('places')
+      .select(PLACE_COLS)
+      .eq('bucket', true)
+      .order('created_at', { ascending: false }),
+    fetchPlaceMemberships().catch(() => new Map<string, string[]>()),
+  ]);
   if (error) throw error;
-  return (data ?? []) as Place[];
+  return (data ?? []).map((p) => ({ ...p, part_of: memberships.get(p.id) ?? [] })) as Place[];
 }
 
 /** Promote a wishlist place into a normal visited place (flip bucket off). */
@@ -1433,14 +1492,12 @@ export async function resolveSuggestedTrip(id: string, keep: boolean): Promise<v
     if (error) throw error;
     return;
   }
-  // Reject: remove this trip from every member's part_of, then delete the draft.
-  const { data: members } = await supabase
-    .from('places')
-    .select('id, part_of')
-    .contains('part_of', [id]);
-  for (const m of members ?? []) {
-    const next = ((m.part_of as string[] | null) ?? []).filter((x) => x !== id);
-    await supabase.from('places').update({ part_of: next }).eq('id', m.id);
+  // Reject: take this trip off every member, then delete the draft. Through
+  // remove_from_container rather than rewriting the array by hand — the same reason
+  // 0178 exists.
+  const members = await fetchPlaceMemberships();
+  for (const [childId, parents] of members) {
+    if (parents.includes(id)) await removeFromContainer(childId, id);
   }
   const { error } = await supabase.from('places').delete().eq('id', id);
   if (error) throw error;
