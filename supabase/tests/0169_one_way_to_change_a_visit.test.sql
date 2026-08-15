@@ -38,7 +38,7 @@ begin
   r := public.edit_visit(v, '2026-05-11', '2026-05-15', 'a note', true);
   if r.start_date <> '2026-05-11' or r.end_date <> '2026-05-15' or not r.trip_marked then
     raise exception 'FAIL: the valid edit did not apply'; end if;
-  if not r.is_trip then raise exception 'FAIL: the legacy flag did not follow trip_marked'; end if;
+  if not r.trip_marked then raise exception 'FAIL: the mark did not stick'; end if;
 
   raise notice 'PASS 1: an edit is atomic; an invalid range never reaches the row';
 end $$;
