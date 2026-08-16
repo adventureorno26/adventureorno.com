@@ -8,7 +8,24 @@ CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` �
 are recoverable from git history if a decision needs looking up. Do not recreate them:
 plans go HERE.
 
-Last updated: 2026-08-14.
+Last updated: 2026-08-16.
+
+**HOW TO READ A ✅ IN THIS FILE (new 2026-08-16).** A tick used to mean "somebody
+finished it", and that turned out to cover five different states — which is how this
+document came to say Phase 4 was DONE while the live site still drew a Mapbox map.
+Every claim of doneness now names which of these it means, and they are not
+interchangeable:
+
+| Status | Means |
+| ------ | ----- |
+| **Built** | the code exists on a branch |
+| **Merged** | it is in `origin/main` |
+| **DB-applied** | its migration is applied to production AND recorded in the ledger |
+| **Deployed** | it is in the bundle `/version.json` reports |
+| **Live-verified** | Erica opened it in the real app and it was right |
+
+Only **Live-verified** is what §5 means by "it works when Erica drives it". Merged is
+not deployed; deployed is not verified.
 
 ## NOW — the order of work (locked 2026-08-14)
 
@@ -42,10 +59,15 @@ Do not begin a new feature lane until all items below are true for the same comm
 
 - [X] Production migration `0177_the_card_answers_in_one_call` is applied and recorded.
   Verified 2026-08-14: all 177 migrations are in the ledger, `videos.visit_id` exists,
-  and production `card_view` is version 2.
-- [X] A current recoverable backup exists before that migration. Verified 2026-08-14:
-  encrypted database backup from today, five generations retained, and 362 media objects
-  mirrored.
+  and production `card_view` was version 2. **It is version 3 as of 0188** — the card
+  reads participants from rows rather than a nullable `solo_profile`.
+- [X] A current recoverable backup exists. Re-verified 2026-08-16 after it had gone
+  **stale at 42h against a 36h limit** — the nightly Backup workflow could not run while
+  GitHub Actions was blocked on billing, so the freshness gate and the thing it guards
+  failed together. Fresh encrypted backup taken 2026-08-16, seven generations, 362 media
+  objects. **The restore itself is only partly proven**: 35 of 36 tables restore with
+  matching row counts; `service_health` restored 0 of 415 rows until the identity-column
+  fix below. No table holding real data was affected.
 - [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
   saved result.
 - [ ] Josh can sign in and perform every action allowed to the editor role without seeing
@@ -1355,7 +1377,24 @@ one can miss it.
    Mapbox raster with no code change. Phase 4 requires the old dependency to be
    disableable without blanking the app; the reverse has to hold too, or it is a cliff.
 
-**Phase 4 is therefore done**: MapTiler can be switched off without blanking the app.
+**Phase 4 is MERGED, not Live-verified** (corrected 2026-08-16). Steps 1–6 above are all
+true of `origin/main` and of the Worker, and the Worker half is genuinely live: a z6 tile
+over Virginia returns 38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range
+76,044 bytes, both styles serve (12 layers dark, 15 light — the 3 extra are road casings),
+an unknown theme falls back to dark, and `/basemap/health` reports the 137.3 GB planet.
+
+**But the app that consumes it never deployed.** Erica, 2026-08-16: *"the map style has
+not changed when I looked at it."* She was right. The deployed bundle at `546ff11` still
+contains `api.mapbox.com/styles/v1/mapbox/dark-v11` and the frozen `basemapOptions`
+object, because #86, #87 and #88 merged AFTER the last successful deploy and CI was
+blocked on billing from 2026-08-15 17:47 UTC.
+
+Phase 4's own definition of done requires "the production map and route overlays work for
+both accounts" and "third-party basemap calls are absent". Production makes a Mapbox call
+for every tile. **It is done when the deploy lands and she says the map looks different.**
+
+The lesson is the one this file keeps relearning in new clothes: *deployed* is a separate
+fact from *merged*, and only one of them is visible from a browser.
 
 #### The style is OURS, not `protomaps-themes-base`
 
@@ -2221,11 +2260,34 @@ Five mechanisms, all evidenced:
 
 ---
 
-### The repository is PUBLIC, and that is a decision, not an oversight (2026-08-11)
+### The repository is PRIVATE again (corrected 2026-08-16 — it says PUBLIC below, and that is wrong)
 
-`github.com/adventureorno26/adventureorno.com` is public. Erica made it public for free
+**As of 2026-08-16 the repository is PRIVATE.** `gh repo view` reports
+`"visibility":"PRIVATE"`, and fetching the old snapshot anonymously from
+`raw.githubusercontent.com` returns **404**, as does the repository page.
+
+This correction matters more than a stale fact usually would, for two reasons:
+
+1. **It explains the outage.** The passage below records that the repo was made public
+   *for free Actions minutes*. A private repo meters those minutes against the free tier
+   and then bills them — and on 2026-08-15 at 17:47 UTC every workflow began failing in
+   5–8 seconds with *"recent account payments have failed or your spending limit needs to
+   be increased."* CI is the only deploy authority, so **production froze at `546ff11`
+   for 16 commits** and the nightly Backup stopped too. Resolved 2026-08-16 by upgrading
+   to GitHub Pro. **GitHub Pro does not retroactively re-run anything** — the blocked
+   runs stay failed and the work has to be re-triggered.
+2. **The instruction below — "do not fix this" — would send the next session the wrong
+   way**, because the thing it says not to fix is no longer the state.
+
+The good news: the data listed below is **no longer publicly readable**.
+
+The original passage is kept because the exposure history is still true, and because
+anything pushed while it WAS public should be assumed to have been seen.
+
+#### The original entry, 2026-08-11 — accurate then, not now
+
+`github.com/adventureorno26/adventureorno.com` was public. Erica made it public for free
 Actions minutes, was shown exactly what that exposes, and chose to leave it public.
-**Do not re-raise this every session, and do not "fix" it.**
 
 What is in the history, verified by fetching it anonymously from raw.githubusercontent.com:
 
@@ -2246,9 +2308,11 @@ in migrations `0057`/`0071`, and it is confirmed dead — the API answers
 *"Legacy API keys are disabled."* It was already rotated; **never ask her to rotate it
 again.**
 
-**What this means going forward:** anything committed here is public the moment it is
-pushed. No data dumps, no `.env` anything, no tokens, no photo coordinates in fixtures
-or test data — ever.
+**What this means going forward:** the rule does not relax now that the repository is
+private again. No data dumps, no `.env` anything, no tokens, no photo coordinates in
+fixtures or test data — ever. Visibility is one setting away from changing back, the
+history is permanent, and a commit made under the assumption of privacy is exactly what
+becomes a leak the day it flips.
 
 ### HOW PRODUCTION DEPLOYS NOW (changed 2026-08-11, at Erica's instruction)
 
@@ -2601,8 +2665,12 @@ at its `workers.dev` address: `tiles.json` reports zoom 0–15, a z6 tile over V
 returns 38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range 76,044 bytes,
 and MapLibre renders Loudoun County with **zero errors**. Preview sent 2026-08-15.
 
-Still to do, and both are Erica's call: register `adventureorno.com/basemap/*`, then point
-`basemap.ts` at `/basemap/style.json`.
+~~Still to do, and both are Erica's call: register `adventureorno.com/basemap/*`, then
+point `basemap.ts` at `/basemap/style.json`.~~ **Both were done later the same day** —
+the route through the API (wrangler cannot manage it, see Phase 4b step 4) and
+`basemap.ts` in #88. Superseded; Phase 4b is authoritative. What was NOT done is
+deploying the bundle that contains #88, which is why the map still looked unchanged on
+2026-08-16.
 
 ### Two mistakes of the same shape, worth naming
 
