@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchInboxCounts } from '../lib/inbox';
 
 // The app's single persistent primary navigation. Text-only (no icons, per
 // Erica's standing preference), styled as a bottom-center glass pill to match
@@ -35,39 +33,24 @@ const TABS: { to: string; label: string; match?: (path: string, search: string) 
 export default function PrimaryNav() {
   const { session, profile } = useAuth();
   const { pathname, search } = useLocation();
-  const [waiting, setWaiting] = useState(0);
-
-  // The count that rides on Add. There is no Inbox tab any more: a sixth tab
-  // clipped at the pill's edge on a 320px phone, and the review queue is not a
-  // separate destination — it is part of getting things in.
-  useEffect(() => {
-    if (!session || !profile) return;
-    let live = true;
-    fetchInboxCounts()
-      .then((c) => {
-        if (live) setWaiting(c.cards ?? 0);
-      })
-      .catch(() => {
-        /* the badge is a nicety; never let it break navigation */
-      });
-    return () => {
-      live = false;
-    };
-  }, [session, profile, pathname]);
 
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
 
-  // FIVE tabs. The Inbox tab is gone — adding and sorting both live behind Add, so
-  // there is one door for getting things in and one (Places) for fixing what is there.
-  // The pending count rides on Add instead of adding a sixth destination.
-  const tabs: typeof TABS = TABS.map((t) =>
-    t.label === 'Add' && waiting ? { ...t, label: `Add ${waiting}` } : t,
-  );
+  // FOUR tabs, and the Add pill says "Add" — nothing else.
+  //
+  // It used to read "Add 3" (Erica, 2026-08-16: "It should just say Add"). The pending
+  // review count rode on the label because the Inbox tab was removed and the number had
+  // to go somewhere. A destination is a place you are going; a queue length is not part
+  // of its name, and one that changes under you makes the pill's width jump.
+  //
+  // Nothing is lost by removing it: /add still heads its queue "To review · N", which is
+  // the screen that can actually do something about the number. That also drops a
+  // fetchInboxCounts() that ran on EVERY navigation just to render one digit.
 
   return (
     <nav className="primary-nav" aria-label="Primary">
-      {tabs.map((t) => {
+      {TABS.map((t) => {
         const active = t.match ? t.match(pathname, search) : pathname === t.to && !addOpen(search);
         return (
           <NavLink

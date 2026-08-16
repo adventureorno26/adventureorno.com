@@ -146,7 +146,39 @@ the elevation model. That is not a regression and not a surprise: replacing it i
 "are we off Mapbox yet" gets the honest answer instead of a clean grep and a wrong
 conclusion.
 
-#### Step 1 — Live-verify what lands with it, in one pass
+#### Step 1 — ✅ **PHASE 4 IS LIVE-VERIFIED, 2026-08-16**
+
+Erica, after the deploy: ***"the map looks different."*** That is the sentence Phase 4's
+definition of done was waiting for, and **Live-verified** is the highest status in the
+table at the top of this file. The basemap is ours, rendered from our own PMTiles in our
+own colours. The terrain DEM above is the one third-party map call left, and it is
+§6a-ii's job, not Phase 4's.
+
+She said one more thing in the same breath: ***"It should just say Add not Add 1 on the
+pill."***
+
+**Fixed.** The count is off the pill. It rode there because retiring the Inbox tab left the
+number homeless — but a destination is a place you are going, and a queue length is not
+part of its name; it also made the pill's width jump as the number changed. **Nothing is
+lost**: `/add` still heads its queue **"To review · N"**, which is the screen that can
+actually do something about it. It also drops a `fetchInboxCounts()` that ran on EVERY
+navigation to render one digit.
+
+**And it uncovered a test that had been wrong for a day without going red.**
+`app/e2e/app.spec.ts` asserted the Add tab links to `/add` and lands on the Add page. #94
+changed that on 08-15 — the tab is `to: '/?add=1'` and opens the blank card over the map.
+The assertions were stale from that moment, and nothing caught it because **this file only
+runs in the nightly `Full browser matrix`, and the nightly was failing in 7 seconds on
+GitHub billing.** The suite itself is sound: it sets `REQUIRE_AUTH_E2E=true`, so it cannot
+silently skip its own authenticated tests. It simply never got to run. Tonight's would
+have caught it.
+
+Two lessons, both already in this file wearing other clothes: **a test that only runs
+nightly is only as good as the nightly**, and the pill assertion is now exact — `/^Add$/`,
+not `/^Add( \d+)?$/` — because a prefix match would let the count creep back without
+failing anything.
+
+#### Step 1 (cont.) — the rest of what landed, still to look at
 
 These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
 
@@ -1525,6 +1557,20 @@ for every tile. **It is done when the deploy lands and she says the map looks di
 
 The lesson is the one this file keeps relearning in new clothes: *deployed* is a separate
 fact from *merged*, and only one of them is visible from a browser.
+
+> ### ✅ PHASE 4 IS LIVE-VERIFIED — 2026-08-16, 21:05 UTC
+>
+> The deploy landed (`a57a928`) and she said it: ***"the map looks different."***
+> The paragraphs above are kept exactly as they were written a few hours earlier, because
+> the gap between them and this line IS the record — every one of those checks was green
+> while the thing itself was not true.
+>
+> The deployed bundle now points at `/basemap/style.json?theme=`; the frozen
+> `basemapOptions` object and `api.mapbox.com/styles/v1/mapbox/dark-v11` are gone from it.
+> **One third-party map call remains and it is not the basemap:**
+> `api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1.json` — the elevation model, which §6a-ii
+> replaces with Copernicus GLO-30. Anyone grepping the bundle for "are we off Mapbox yet"
+> should get that answer, not a clean grep and a wrong conclusion.
 
 #### The style is OURS, not `protomaps-themes-base`
 
