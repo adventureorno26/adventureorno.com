@@ -65,9 +65,10 @@ Do not begin a new feature lane until all items below are true for the same comm
   **stale at 42h against a 36h limit** — the nightly Backup workflow could not run while
   GitHub Actions was blocked on billing, so the freshness gate and the thing it guards
   failed together. Fresh encrypted backup taken 2026-08-16, seven generations, 362 media
-  objects. **The restore itself is only partly proven**: 35 of 36 tables restore with
-  matching row counts; `service_health` restored 0 of 415 rows until the identity-column
-  fix below. No table holding real data was affected.
+  objects. **The restore is now fully proven** (2026-08-16 21:11): after the
+  identity-column fix, all 45 tables restore with row counts matching the manifest
+  exactly — 21,143 rows, zero load errors. It had failed earlier the same day with
+  `service_health` at 0 of 415; no table holding real data was ever affected.
 - [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
   saved result.
 - [ ] Josh can sign in and perform every action allowed to the editor role without seeing
@@ -93,6 +94,158 @@ Do not begin a new feature lane until all items below are true for the same comm
   then verify the finished production screen once.
 - Record every accepted decision and its proof here. Do not create another backlog,
   decisions log or competing agent instruction file.
+
+### THE PLAN TO FINISH — sequenced 2026-08-16, evening
+
+Measured against production, not against this file. Every claim below was checked live
+before it was written down; where the check disagreed with §7d, the check wins and the
+correction is stated.
+
+**Where production actually is, 20:55 UTC 2026-08-16:**
+
+| Fact | Measured |
+| ---- | -------- |
+| `/version.json` | `920e52f` (#99) |
+| `origin/main` | `a57a928` (#100) — **one commit ahead** |
+| Why | CI's `Deploy production` job FAILED on the migration-ledger gate |
+| Migration ledger | **all 196 recorded** — `check:ledger` passes now |
+| `0196` genuinely applied? | **yes** — `visible_activities` exists and `mileage_by_person` reads it |
+
+**CORRECTION to §7d.** It says the billing freeze is the reason nothing is live. That was
+true this morning and is not the reason now. #99 deployed at 20:42. The *current* freeze is
+one commit deep and has a different cause: the deploy gate refused `a57a928` at 20:46
+because `0196` was not yet in the ledger, `0196` was applied by hand shortly after, and
+**nobody re-ran the job**. The gate worked exactly as designed. It is a stale red tick, not
+a broken pipeline.
+
+#### Step 0 — Re-run the deploy. ✅ **Deployed 2026-08-16 21:05 UTC**
+
+Re-ran `Deploy production` on `a57a928`; it passed in 40s with nothing changed but the
+ledger condition being true. `/version.json` now reports `a57a928` — **production and
+`origin/main` are the same commit for the first time since 2026-08-15 16:21 UTC.**
+
+**The self-hosted map is Live-verified as SERVING** (Erica's own look is still what makes
+Phase 4 done, per Step 1):
+
+| Check | Result |
+| ----- | ------ |
+| Deployed `basemap` chunk | points at `/basemap/style.json?theme=` — the frozen Mapbox style object is GONE from the bundle |
+| `style.json?theme=dark` | `application/json`, **12 layers** |
+| `style.json?theme=light` | **15 layers** (the 3 extra are road casings) |
+| A z6 tile over Virginia | `application/vnd.mapbox-vector-tile`, **38,148 bytes** |
+| `/basemap/health` | `ok:true`, planet 137,281,886,877 bytes |
+
+Content-type was checked on every one, because §4b's worst failure was a 200 of the app's
+own HTML from the wrong server.
+
+**ONE THIRD-PARTY MAP CALL SURVIVES, and it is not the basemap.** The deployed chunk still
+requests `api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1.json` — **terrain**, not tiles.
+Phase 4's "third-party basemap calls are absent" is now true of the basemap and false of
+the elevation model. That is not a regression and not a surprise: replacing it is exactly
+§6a-ii (Copernicus GLO-30 → terrain-RGB PMTiles). Recorded so the next person measuring
+"are we off Mapbox yet" gets the honest answer instead of a clean grep and a wrong
+conclusion.
+
+#### Step 1 — ✅ **PHASE 4 IS LIVE-VERIFIED, 2026-08-16**
+
+Erica, after the deploy: ***"the map looks different."*** That is the sentence Phase 4's
+definition of done was waiting for, and **Live-verified** is the highest status in the
+table at the top of this file. The basemap is ours, rendered from our own PMTiles in our
+own colours. The terrain DEM above is the one third-party map call left, and it is
+§6a-ii's job, not Phase 4's.
+
+She said one more thing in the same breath: ***"It should just say Add not Add 1 on the
+pill."***
+
+**Fixed.** The count is off the pill. It rode there because retiring the Inbox tab left the
+number homeless — but a destination is a place you are going, and a queue length is not
+part of its name; it also made the pill's width jump as the number changed. **Nothing is
+lost**: `/add` still heads its queue **"To review · N"**, which is the screen that can
+actually do something about it. It also drops a `fetchInboxCounts()` that ran on EVERY
+navigation to render one digit.
+
+**And it uncovered a test that had been wrong for a day without going red.**
+`app/e2e/app.spec.ts` asserted the Add tab links to `/add` and lands on the Add page. #94
+changed that on 08-15 — the tab is `to: '/?add=1'` and opens the blank card over the map.
+The assertions were stale from that moment, and nothing caught it because **this file only
+runs in the nightly `Full browser matrix`, and the nightly was failing in 7 seconds on
+GitHub billing.** The suite itself is sound: it sets `REQUIRE_AUTH_E2E=true`, so it cannot
+silently skip its own authenticated tests. It simply never got to run. Tonight's would
+have caught it.
+
+Two lessons, both already in this file wearing other clothes: **a test that only runs
+nightly is only as good as the nightly**, and the pill assertion is now exact — `/^Add$/`,
+not `/^Add( \d+)?$/` — because a prefix match would let the count creep back without
+failing anything.
+
+#### Step 1 (cont.) — the rest of what landed, still to look at
+
+These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
+
+| From | What she should see |
+| ---- | ------------------- |
+| #86 #87 #88 | The map is OURS — Ink (dark) / Daylight 2 (light), Settings → Map appearance, **no Mapbox call in the network panel** |
+| #94 | Timeline drills YEAR → months → days; `/add` opens the blank card; no gear and no stats bar on Places |
+| #96 | Mileage is her own; "just me" is the default |
+| #97 | The watchtower checks WHAT came back, not just that something did |
+| #100 | Each person's Strava-origin activities are their own, in every count and card |
+
+Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Worker.
+
+#### Step 2 — Close the six open boxes in the stabilization gate
+
+1. ✅ **The restore is proved — 2026-08-16 21:11 UTC.** The identity-column fix landed in
+   #99 at 20:38, **after** the 18:08 verify run that failed with *"cannot insert a
+   non-DEFAULT value into column id"*, so it had never once been watched working. Ran it:
+
+   | | 18:08 (before) | 21:11 (after) |
+   | --- | --- | --- |
+   | Tables loaded | 35, **errors: 1** | 35, **errors: 0** |
+   | Row counts | `ROWS LOST`, `service_health` 0 of 415 | **all 45 tables match exactly, 21,143 rows** |
+
+   The gate in the stabilization list at the top of this file can now be ticked without the
+   "only partly proven" caveat it has carried since this morning.
+2. Erica: sign in → open a place card → edit and save a visit → reload → it is still there.
+3. Josh: every editor action, with no unexplained permission or save failure.
+4. Manual smoke on the deployed SHA: map, place card, visit page, Add/import, photos,
+   stats, logout.
+5. Confirm both hard gates on a real run — ledger (already proven; it is what blocked
+   `a57a928`) and backup freshness.
+6. ✅ GitHub CLI is healthy — `adventureorno26` is the active account.
+
+#### Step 3 — Close the three traps 08-16 opened and did not finish
+
+- **Nothing reads `cron.job_run_details`.** Verified: zero references anywhere in the
+  repository. `dedupe-joint-outings` failed eight consecutive nights in silence and only a
+  manual look found it. A failed cron row must be able to raise its hand.
+- **A test that keeps the Strava rule enforced.** 17 functions still read
+  `public.activities` directly. Checked one by one, that is *correct* — they are writers
+  and machine jobs, which #100 deliberately kept on the table because the view filters on
+  `auth.uid()` and pg_cron has none. `shared_outings` reads raw and is still right: it
+  returns only the caller's own miles plus an honest `restricted_rows` count. But nothing
+  stops the **next** display reader from selecting straight from the table. Add the test
+  that fails when one does — the lock is fitted now, and this is what keeps it fitted.
+- **A deploy-freeze detector.** §7d already named the tell and it went unused twice in two
+  days: compare `/version.json` to `origin/main`. One command. It should be a check, not a
+  thing somebody remembers.
+
+#### Step 4 — Then the queued lanes, in the order locked on 08-14
+
+Nothing here starts until Steps 0–3 are true for the same commit.
+
+| Lane | State | Note |
+| ---- | ----- | ---- |
+| Phase 1 remainder | nearly closed | Steps 2–3 above ARE the remainder |
+| Phase 3 — the one page | not started | `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
+| Phase 4d — geocoding we own | nothing built | Overture → PMTiles; Mapbox stays the fallback |
+| Phase 6 — what we own | nothing built | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED |
+| Phase 7 — fitness ingest | nothing built | intervals.icu first; email-in is the best effort-to-coverage item |
+| Phase 8 — events, social, privacy floor | nothing built | Much of it is gated on the LLC and the native shell |
+
+**Two things are waiting on Erica and block nothing else** (§"Open, awaiting Erica's
+decision"): whether to attach the **122 photos** that match exactly one visit on one day
+at one place — unambiguous, and 0157 now makes the attachment permanent — and the 32 with
+fabricated `12:00:00` timestamps, which must be proposed rather than written.
 
 ---
 
@@ -1404,6 +1557,20 @@ for every tile. **It is done when the deploy lands and she says the map looks di
 
 The lesson is the one this file keeps relearning in new clothes: *deployed* is a separate
 fact from *merged*, and only one of them is visible from a browser.
+
+> ### ✅ PHASE 4 IS LIVE-VERIFIED — 2026-08-16, 21:05 UTC
+>
+> The deploy landed (`a57a928`) and she said it: ***"the map looks different."***
+> The paragraphs above are kept exactly as they were written a few hours earlier, because
+> the gap between them and this line IS the record — every one of those checks was green
+> while the thing itself was not true.
+>
+> The deployed bundle now points at `/basemap/style.json?theme=`; the frozen
+> `basemapOptions` object and `api.mapbox.com/styles/v1/mapbox/dark-v11` are gone from it.
+> **One third-party map call remains and it is not the basemap:**
+> `api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1.json` — the elevation model, which §6a-ii
+> replaces with Copernicus GLO-30. Anyone grepping the bundle for "are we off Mapbox yet"
+> should get that answer, not a clean grep and a wrong conclusion.
 
 #### The style is OURS, not `protomaps-themes-base`
 
