@@ -1093,6 +1093,15 @@ CONTRADICTS something written here. Otherwise keep working (see
    conflict between the two documents, not just a bug.
 5. ~~**Three doors to Add**~~ — fixed 2026-08-10: `/add` is the one door.
 6. **Transient UI is not transient** (upload box, "finish importing").
+   6b. **THE STRAVA RULE IS NOT ENFORCED IN THE APP** (found 2026-08-16). `0193` built
+   `can_see_activity()` and a correct RLS policy, but **31 of the 32 SECURITY DEFINER
+   readers of `public.activities` ignore both**, and SECURITY DEFINER bypasses RLS. Every
+   count, card and statistic still shows each person the other's Strava-origin activities.
+   Josh's personal approval settles it between him and Erica; it does not settle Strava's
+   terms, so this is a hard precondition for Phase 7 and for charging anyone. See §7d.
+   6c. **Nothing watches whether scheduled jobs SUCCEEDED** (found 2026-08-16).
+   `dedupe-joint-outings` failed silently for eight consecutive nights. The watchtower
+   probes URLs; `cron.job_run_details` has no reader.
 7. **Sorting photos cannot edit the location** — removed 2026-07-26, see §7.
 
 ---
@@ -2399,11 +2408,34 @@ is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resur
    failing code — but it decides *when* and *what*, which is exactly what rule 3 says
    nothing should.
 
-   **To turn it off:** in VS Code, `gitdoc.enabled: false` (or the *GitDoc: Disable*
-   command). It is a per-machine editor setting, not a repo setting, so nothing in
-   this repository can prevent it. **Erica's call** — left on until she says
-   otherwise. Until then, a commit here with a timestamp for a message was written by
-   the editor, not by a person or by Claude.
+   **TURNED OFF 2026-08-16**, by setting `"gitdoc.enabled": false` in
+   `~/Library/Application Support/Code/User/settings.json` (backup alongside it:
+   `settings.json.bak-2026-08-16-gitdoc`). Nothing commits itself in this repository any
+   more, and rule 3 is finally true as written.
+
+   **Invoking *GitDoc: Disable* was not enough, and that is worth knowing.** It was run,
+   and GitDoc carried on committing — `e42b78e` and `f06808d` landed after it. The
+   command did not persist to the settings file; only editing `gitdoc.enabled` did.
+   **Verify it by watching for a new timestamp commit while editing a file, not by
+   watching an idle window** — an idle repo looks identical to a disabled extension, and
+   that false negative was briefly recorded here as success.
+
+   **What it cost, so the trade is on the record.** It made 21 commits, all attributed
+   to Erica, all with a timestamp for a message. It never LOST anything — audited
+   2026-08-16 across all 13 branches holding those commits, every file they touched is
+   present in `origin/main` (`absent: 0`). The damage was legibility: it committed
+   mid-edit, split single changes across two timestamp commits, and put changes on
+   whichever branch happened to be checked out. That is what made "is our work safe?"
+   a question that took an hour to answer instead of a minute.
+
+   **Beware of two false alarms it causes**, because both will recur while reading old
+   history: squash-merging destroys BOTH commit ancestry and patch-id, so
+   `git merge-base --is-ancestor` and `git cherry` each report merged work as missing.
+   Neither is evidence. Compare file CONTENT against `origin/main` instead.
+
+   To turn it back on: `gitdoc.enabled: true`. It is a per-machine editor setting, not
+   a repo setting, so nothing in this repository can prevent it. A commit here with a
+   timestamp for a message was written by the editor, not by a person or by Claude.
 4. **`bypassPermissions` is off** in her Claude settings.
 
 ### THE ONLY ROUTE TO THE LIVE SITE (2026-08-11)
@@ -2711,6 +2743,119 @@ one that passes.
 - **87 visits have no evidence, and 84 of those are fine** — a trail's evidence lives on its
   sections. Only non-containers count. That distinction is the difference between a real
   finding and a scary number.
+
+## 7d. 2026-08-16 — the day nothing was broken and nothing was live
+
+Erica: *"the map style has not changed when I looked at it."* She was right, and every
+finding below came out of asking why one true-looking tick was false.
+
+### THE DEPLOY HAD BEEN FROZEN FOR A DAY, AND EVERY TICK STILL READ GREEN
+
+Production sat at `546ff11`, **16 commits behind `main`**, since 2026-08-15 16:21 UTC.
+Not a bug: **GitHub Actions was blocked on billing** from 17:47 UTC that day — every run
+failed in 5–8 seconds with *"recent account payments have failed or your spending limit
+needs to be increased."* CI is the only deploy authority, so merging kept working and
+shipping silently stopped. 36 PRs merged on 08-15 and 21 on 08-14; none of the last 16
+reached the browser.
+
+**The tell was available and nobody looked at it:** `/version.json` reports the deployed
+SHA. Comparing it to `origin/main` is one command and would have caught this in a day.
+
+Fixed by upgrading to GitHub Pro. **Pro does not retroactively re-run anything.**
+
+### `supabase db push --include-all` WOULD HAVE RE-RUN 42 MIGRATIONS
+
+Added in #81, never once executed (it needs a database password that was never set), and
+auditing it before arming it is the only reason this was found.
+
+**The ledger is keyed two ways**: 152 rows use this repo's `0NNN` prefix, 75 use a
+14-digit timestamp. `check:ledger` matches on NAME and reports 2 gaps.
+`supabase db push` matches on VERSION KEY and sees **42** — everything from 0153 to 0194,
+all long since applied.
+
+`--include-all` would have re-run all 42 against live data. It would have died partway:
+`0191` ends with an unguarded `alter table public.visits drop column is_trip` and that
+column is already gone. But 0153–0190 run first, each in its own transaction, and several
+backfill — `0190` recomputes place counts, `0188` rewrites `visit_profiles` and
+`activity_profiles`. **A backfill re-deriving what a person has since fixed by hand is
+this repository's most repeated failure.**
+
+Erica, 2026-08-16: *"I want to delete the risk rather than manage it."* The step is gone.
+`scripts/apply-migration.mjs` replaces it: one named file, applied and RECORDED in the
+same transaction, so the ledger cannot drift again. No database password exists.
+
+**Two tools disagreeing about the same question is worse than either being wrong**, and
+the safe-looking one was the one that was never going to run.
+
+### THE STRAVA RULE IS STILL NOT ENFORCED — 0193 BUILT THE LOCK AND FITTED IT NOWHERE
+
+`0193` added `can_see_activity()`, the `visible_activities` view and a correct
+`activities_select` policy. Of the **32 SECURITY DEFINER functions that read
+`public.activities`, exactly one uses the guard — `can_see_activity` itself.**
+
+`mileage_by_person` is `SECURITY DEFINER`, calls `assert_member()`, then selects straight
+`from public.activities` with no filter. Any signed-in member can ask for the other's
+mileage. Same for `card_view`, `wrapped_year_miles`, `race_stats`, `climbing_stats`,
+`wander_stats`, `place_days`, `visit_detail`, `activities_of_type`, `activity_lines`,
+`shared_outings` — every count, card and statistic in the app.
+
+**This file predicted it exactly**, in "THE STRAVA RULE CANNOT BE DONE WITH RLS":
+*"A policy on the table would look correct in psql and change nothing in the app."*
+The warning was written, and then the migration walked into it anyway. **Writing a trap
+down does not disarm it.** Phase 7's legal precondition is NOT met. Still to do.
+
+### A NIGHTLY JOB HAD BEEN FAILING FOR EIGHT NIGHTS, IN SILENCE
+
+`dedupe-joint-outings` succeeded every night to 2026-08-08 and failed every night from
+2026-08-09 with `not authorized`. The break is exactly when the "a machine may only
+propose" guard work landed: `group_duplicate_activities` opens with
+`is_editor_or_owner()`, and pg_cron has no `auth.uid()`.
+
+**It is the discriminator from 0157 working correctly and catching the wrong job.** The
+rule is good; applying an editor check to a function a machine is *supposed* to call is
+not. Nobody noticed because a failed cron row looks like nothing at all.
+
+Fixed in `0195`, and the job now PROPOSES into the suggestions ledger rather than writing
+`shared_group_id` itself — which is what §2 required of it all along. Erica, 2026-08-16:
+*"propose, not apply."*
+
+**Nothing checks that scheduled jobs succeeded.** The watchtower probes URLs; `cron.job_run_details` has nobody reading it. Worth a probe.
+
+### THE BACKUP WAS STALE, AND THE RESTORE WAS PART RUMOUR
+
+Freshness had drifted to **42h against a 36h limit**, because the Backup workflow is a
+GitHub Action and was blocked by the same billing failure. The gate and the thing it
+guards fail together — worth knowing when designing any other gate.
+
+Running the restore verification (`-f verify=true`, which nothing does automatically
+except the weekly run) then found a real bug: **`service_health` restored 0 of 415 rows.**
+`id` is `bigint generated always as identity`, and the loader excluded GENERATED columns
+by testing `is_generated`, which describes `GENERATED ALWAYS AS (expr) STORED` — an
+IDENTITY column reads `is_generated='NEVER'`. It sailed through and the insert died.
+
+It was the first identity column in 194 migrations, so it had never been exercised. Fixed
+generally via `is_identity` + `OVERRIDING SYSTEM VALUE`, not special-cased. **No table
+holding real data was affected** — 35 of 36 restored with matching counts.
+
+*"A backup nobody has restored is a rumour"* — and the weekly restore is the only thing
+that could have caught this. Do not let it become monthly.
+
+### THE TRAIL CARD DISAGREED WITH ITSELF
+
+A trail's visit list came from an effect keyed on `place.id`; its mileage came from one
+keyed on `allPlaces`. The section list is derived from `allPlaces`, which starts empty and
+arrives async. So the miles recomputed across the sections and **the visit list beside
+them did not** — the same card, two different answers about which sections it covers.
+
+This is a regression of the exact complaint 0136 was written for: *"the card showed the 32
+logged on the trail row and hid the 30 logged on its six sections."* A `react-hooks/exhaustive-deps`
+warning had been pointing at it the whole time. **The one lint warning in the codebase was
+a real bug**, which is the argument for not carrying warnings.
+
+Both effects now key on the section list itself — correct, consistent, and it stops
+refetching every trail whenever any unrelated place is edited.
+
+---
 
 ## 8. Facts that must not be relearned
 
