@@ -449,7 +449,25 @@ export default function PlacePanel({
     return () => {
       active = false;
     };
-  }, [place.id]);
+    // `loadVisits`, not just `place.id`. A TRAIL asks for its own visits PLUS its
+    // sections', and the section list comes from `allPlaces`, which starts empty and
+    // arrives asynchronously — and is replaced again whenever a place is edited.
+    //
+    // Keyed on `place.id` alone, this effect computed the section list ONCE and never
+    // looked again, so the card could keep showing only the visits logged on the trail
+    // row itself. That is the exact complaint 0136 and the comment above the
+    // `sectionIds` definition were written for: "the card showed the 32 logged on the
+    // trail row and hid the 30 logged on its six sections."
+    //
+    // It also made the card disagree with ITSELF: the mileage effect below already
+    // depends on `allPlaces`, so a trail's miles recomputed across its sections while
+    // the visit list beside them did not. One number covered the sections and the other
+    // did not, on the same card.
+    //
+    // `loadVisits` is memoised on [place.id, sectionIdKey], so this now re-runs exactly
+    // when the place changes or its section list does — and not on unrelated edits to
+    // other places.
+  }, [place.id, loadVisits]);
 
   // Trail places group their runs/hikes by trailhead; load the place's activities
   // and the total mileage-by-type across the trail + its trailhead members.
@@ -463,10 +481,9 @@ export default function PlacePanel({
       .then((rows) => active && setTrailActs(rows))
       .catch(() => active && setTrailActs([]));
     if (place.is_trail) {
-      const memberIds = allPlaces
-        .filter((p) => (p.part_of ?? []).includes(place.id))
-        .map((p) => p.id);
-      fetchMileageForPlaces([place.id, ...memberIds])
+      // The SAME section list the visit query uses, from the same place, so the two
+      // halves of a trail card cannot describe different sets of sections.
+      fetchMileageForPlaces([place.id, ...sectionIds])
         .then((m) => active && setTrailMiles(m))
         .catch(() => undefined);
     } else {
@@ -475,8 +492,13 @@ export default function PlacePanel({
     return () => {
       active = false;
     };
+    // `sectionIdKey`, not `allPlaces`. Depending on the whole array meant this refetched
+    // a trail's activities and mileage every time ANY place anywhere was edited — the
+    // array identity changes on every `setPlaces`, whether or not this trail's sections
+    // did. Keyed on the section list itself it re-runs when that list actually changes,
+    // which is both correct and quieter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [place.id, place.is_trail, allPlaces]);
+  }, [place.id, place.is_trail, sectionIdKey]);
 
   // A trip groups its member places by CITY (with a separate Activities group);
   // everything else groups them by category alongside its entry-notes.
@@ -1636,7 +1658,7 @@ export default function PlacePanel({
                   >
                     {/* Not "Together" — Erica asked for that word out of the
                                   Visits section entirely; it now means tagging someone
-                                  in a flok. This control only says who was here, and
+                                  in a shared group. This control only says who was here, and
                                   "Both" is the word the app already uses for it. */}
                     <option value="">{everyoneLabel(people)}</option>
                     {people.map((p) => (

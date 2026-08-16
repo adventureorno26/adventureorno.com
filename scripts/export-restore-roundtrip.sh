@@ -23,7 +23,11 @@ insert into public.visits (id,place_id,start_date,end_date,manual)
 insert into public.activities (id,type,distance,lat,lng,place_id,start_date)
   values ('c1c1c1c1-0000-0000-0000-000000000001','Hike',1609.344,10,20,'a1a1a1a1-0000-0000-0000-000000000001','2026-06-01T10:00:00Z')
   on conflict (id) do nothing;
-update public.visits set is_trip = true
+-- `trip_marked`, not `is_trip`. 0191 dropped the column, and this fixture kept setting
+-- it — so this whole round trip has been failing since 0191 merged, unnoticed, because
+-- CI was blocked on billing from 2026-08-15 and never ran it. The two facts are the
+-- same fact: a gate nobody runs is a gate that is already broken.
+update public.visits set trip_marked = true
   where id = 'b1b1b1b1-0000-0000-0000-000000000001';
 
 -- WHO WAS THERE. Until 2026-08-15 this fixture had no participants at all, so a

@@ -8,7 +8,24 @@ CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` �
 are recoverable from git history if a decision needs looking up. Do not recreate them:
 plans go HERE.
 
-Last updated: 2026-08-14.
+Last updated: 2026-08-16.
+
+**HOW TO READ A ✅ IN THIS FILE (new 2026-08-16).** A tick used to mean "somebody
+finished it", and that turned out to cover five different states — which is how this
+document came to say Phase 4 was DONE while the live site still drew a Mapbox map.
+Every claim of doneness now names which of these it means, and they are not
+interchangeable:
+
+| Status | Means |
+| ------ | ----- |
+| **Built** | the code exists on a branch |
+| **Merged** | it is in `origin/main` |
+| **DB-applied** | its migration is applied to production AND recorded in the ledger |
+| **Deployed** | it is in the bundle `/version.json` reports |
+| **Live-verified** | Erica opened it in the real app and it was right |
+
+Only **Live-verified** is what §5 means by "it works when Erica drives it". Merged is
+not deployed; deployed is not verified.
 
 ## NOW — the order of work (locked 2026-08-14)
 
@@ -42,10 +59,15 @@ Do not begin a new feature lane until all items below are true for the same comm
 
 - [X] Production migration `0177_the_card_answers_in_one_call` is applied and recorded.
   Verified 2026-08-14: all 177 migrations are in the ledger, `videos.visit_id` exists,
-  and production `card_view` is version 2.
-- [X] A current recoverable backup exists before that migration. Verified 2026-08-14:
-  encrypted database backup from today, five generations retained, and 362 media objects
-  mirrored.
+  and production `card_view` was version 2. **It is version 3 as of 0188** — the card
+  reads participants from rows rather than a nullable `solo_profile`.
+- [X] A current recoverable backup exists. Re-verified 2026-08-16 after it had gone
+  **stale at 42h against a 36h limit** — the nightly Backup workflow could not run while
+  GitHub Actions was blocked on billing, so the freshness gate and the thing it guards
+  failed together. Fresh encrypted backup taken 2026-08-16, seven generations, 362 media
+  objects. **The restore itself is only partly proven**: 35 of 36 tables restore with
+  matching row counts; `service_health` restored 0 of 415 rows until the identity-column
+  fix below. No table holding real data was affected.
 - [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
   saved result.
 - [ ] Josh can sign in and perform every action allowed to the editor role without seeing
@@ -272,7 +294,7 @@ The honest rule is about membership, not arithmetic: **a visit is shared when ev
 member was on it** (`public.is_shared_visit`). Two members gives exactly the 101 that
 `solo_profile IS NULL` gave; one gives that person's visits; three gives what all three
 shared. Nothing hardcodes 2 — which matters, because adding a third person is the entire
-point of the flok work.
+point of the shared-group work.
 
 The same mistake was in the WRITER trigger and was fixed there too: `NULL` means "not
 solo", so it now populates every real member when the household is small enough for that
@@ -1071,6 +1093,15 @@ CONTRADICTS something written here. Otherwise keep working (see
    conflict between the two documents, not just a bug.
 5. ~~**Three doors to Add**~~ — fixed 2026-08-10: `/add` is the one door.
 6. **Transient UI is not transient** (upload box, "finish importing").
+   6b. **THE STRAVA RULE IS NOT ENFORCED IN THE APP** (found 2026-08-16). `0193` built
+   `can_see_activity()` and a correct RLS policy, but **31 of the 32 SECURITY DEFINER
+   readers of `public.activities` ignore both**, and SECURITY DEFINER bypasses RLS. Every
+   count, card and statistic still shows each person the other's Strava-origin activities.
+   Josh's personal approval settles it between him and Erica; it does not settle Strava's
+   terms, so this is a hard precondition for Phase 7 and for charging anyone. See §7d.
+   6c. **Nothing watches whether scheduled jobs SUCCEEDED** (found 2026-08-16).
+   `dedupe-joint-outings` failed silently for eight consecutive nights. The watchtower
+   probes URLs; `cron.job_run_details` has no reader.
 7. **Sorting photos cannot edit the location** — removed 2026-07-26, see §7.
 
 ---
@@ -1355,7 +1386,24 @@ one can miss it.
    Mapbox raster with no code change. Phase 4 requires the old dependency to be
    disableable without blanking the app; the reverse has to hold too, or it is a cliff.
 
-**Phase 4 is therefore done**: MapTiler can be switched off without blanking the app.
+**Phase 4 is MERGED, not Live-verified** (corrected 2026-08-16). Steps 1–6 above are all
+true of `origin/main` and of the Worker, and the Worker half is genuinely live: a z6 tile
+over Virginia returns 38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range
+76,044 bytes, both styles serve (12 layers dark, 15 light — the 3 extra are road casings),
+an unknown theme falls back to dark, and `/basemap/health` reports the 137.3 GB planet.
+
+**But the app that consumes it never deployed.** Erica, 2026-08-16: *"the map style has
+not changed when I looked at it."* She was right. The deployed bundle at `546ff11` still
+contains `api.mapbox.com/styles/v1/mapbox/dark-v11` and the frozen `basemapOptions`
+object, because #86, #87 and #88 merged AFTER the last successful deploy and CI was
+blocked on billing from 2026-08-15 17:47 UTC.
+
+Phase 4's own definition of done requires "the production map and route overlays work for
+both accounts" and "third-party basemap calls are absent". Production makes a Mapbox call
+for every tile. **It is done when the deploy lands and she says the map looks different.**
+
+The lesson is the one this file keeps relearning in new clothes: *deployed* is a separate
+fact from *merged*, and only one of them is visible from a browser.
 
 #### The style is OURS, not `protomaps-themes-base`
 
@@ -1527,10 +1575,16 @@ self-hosted.
 
 **Nothing here is built.** No dependency has been added and no bytes copied.
 
-### Erica's screen rules, 2026-08-15  *(FIX BEFORE ANYTHING ELSE)*
+### Erica's screen rules, 2026-08-15  *(all four MERGED in #94 — not yet Deployed)*
 
-Four things she asked for after using the app. Their state was CHECKED in the code, not
-assumed:
+**Status, corrected 2026-08-16.** All four were fixed in #94 and are in `origin/main`:
+`PlacesList` no longer renders `<StatsBar>` (which takes the gear with it), and
+`Timeline.tsx` gained 154 lines for the year level. **They are not on the live site** —
+#94 merged after the last successful deploy, so on adventureorno.com all four are still
+wrong. That is the deploy freeze, not unfinished work.
+
+The table below records the state WHEN SHE ASKED, and is kept because the diagnosis in
+the last row is the reusable part.
 
 | Rule | State when asked |
 | ---- | ---------------- |
@@ -1566,7 +1620,7 @@ activities. `original_source` must exist first — `activities.source` records H
 ('strava', 'file'), not where it came from, and a file imported via intervals.icu that
 began life on Strava is exactly the case the rule is about.
 
-### Phase 6 — What we own  *(APPROVED 2026-08-15; nothing built)*
+### Phase 6 — What we own  *(APPROVED 2026-08-15; nothing built EXCEPT §6b, which is live)*
 
 Phase 4 made the MAP ours. This makes the things around it ours: geocoding, routing,
 elevation, terrain, points of interest, and recording an activity. Approved by Erica
@@ -1903,7 +1957,7 @@ that person**. It is not something the app works out and applies.
 
 - You tag someone on a place, trail, activity, photo — **anything a user can edit**.
 - **They are asked to verify it before it is added.** Until they accept, it is not Together.
-- If two people in the same flok were at the same place at the same time, that produces a
+- If two people in the same shared group were at the same place at the same time, that produces a
   **suggestion** — *"add this ___?"* — never an automatic label.
 - Everyone's own imported data is **"just me"** by default.
 
@@ -2003,9 +2057,13 @@ make it VISIBLE — she has been told twice that her work is safe and twice it w
 card that says *"Saved — automation will not change this"* with the date is the honest
 version of the promise, and a way to hand a field back to automation if she ever wants it.
 
-### FLOK — what the research settled (2026-08-11, two rounds: research then refutation)
+### THE COMMERCIAL PRODUCT — what the research settled (2026-08-11, two rounds: research then refutation)
 
-**1. STRAVA CANNOT BE PART OF A PAID FLOK.** The risk recorded as UNVERIFIED is now
+*(Renamed 2026-08-16. This section was headed "FLOK"; the name is NOT decided — see the
+top of this file — and a working title left in a heading is how it becomes the name by
+accident.)*
+
+**1. STRAVA CANNOT BE PART OF A PAID SHARED GROUP.** The risk recorded as UNVERIFIED is now
 VERIFIED against the live policy (https://www.strava.com/legal/api_policy, effective
 1 June 2026) and survived an adversarial re-check. Four clauses each independently kill it:
 
@@ -2088,7 +2146,7 @@ This is the only door between the two halves, and a human walks through it.
 **Who can edit it.** Planning is the reason the social graph exists — it is the same
 tagging-and-approval model, only pointed forward:
 
-- The planner invites people from their flok. An invite is **accepted, declined, or
+- The planner invites people from their shared group. An invite is **accepted, declined, or
   maybe** — nobody is added to your trip without saying yes, exactly as with Together.
 - Everyone accepted can add ideas, dates and notes. Only the planner can set the trip's
   final dates, and only the planner can answer "Did you go?" — one hand on the record.
@@ -2221,11 +2279,34 @@ Five mechanisms, all evidenced:
 
 ---
 
-### The repository is PUBLIC, and that is a decision, not an oversight (2026-08-11)
+### The repository is PRIVATE again (corrected 2026-08-16 — it says PUBLIC below, and that is wrong)
 
-`github.com/adventureorno26/adventureorno.com` is public. Erica made it public for free
+**As of 2026-08-16 the repository is PRIVATE.** `gh repo view` reports
+`"visibility":"PRIVATE"`, and fetching the old snapshot anonymously from
+`raw.githubusercontent.com` returns **404**, as does the repository page.
+
+This correction matters more than a stale fact usually would, for two reasons:
+
+1. **It explains the outage.** The passage below records that the repo was made public
+   *for free Actions minutes*. A private repo meters those minutes against the free tier
+   and then bills them — and on 2026-08-15 at 17:47 UTC every workflow began failing in
+   5–8 seconds with *"recent account payments have failed or your spending limit needs to
+   be increased."* CI is the only deploy authority, so **production froze at `546ff11`
+   for 16 commits** and the nightly Backup stopped too. Resolved 2026-08-16 by upgrading
+   to GitHub Pro. **GitHub Pro does not retroactively re-run anything** — the blocked
+   runs stay failed and the work has to be re-triggered.
+2. **The instruction below — "do not fix this" — would send the next session the wrong
+   way**, because the thing it says not to fix is no longer the state.
+
+The good news: the data listed below is **no longer publicly readable**.
+
+The original passage is kept because the exposure history is still true, and because
+anything pushed while it WAS public should be assumed to have been seen.
+
+#### The original entry, 2026-08-11 — accurate then, not now
+
+`github.com/adventureorno26/adventureorno.com` was public. Erica made it public for free
 Actions minutes, was shown exactly what that exposes, and chose to leave it public.
-**Do not re-raise this every session, and do not "fix" it.**
 
 What is in the history, verified by fetching it anonymously from raw.githubusercontent.com:
 
@@ -2246,9 +2327,11 @@ in migrations `0057`/`0071`, and it is confirmed dead — the API answers
 *"Legacy API keys are disabled."* It was already rotated; **never ask her to rotate it
 again.**
 
-**What this means going forward:** anything committed here is public the moment it is
-pushed. No data dumps, no `.env` anything, no tokens, no photo coordinates in fixtures
-or test data — ever.
+**What this means going forward:** the rule does not relax now that the repository is
+private again. No data dumps, no `.env` anything, no tokens, no photo coordinates in
+fixtures or test data — ever. Visibility is one setting away from changing back, the
+history is permanent, and a commit made under the assumption of privacy is exactly what
+becomes a leak the day it flips.
 
 ### HOW PRODUCTION DEPLOYS NOW (changed 2026-08-11, at Erica's instruction)
 
@@ -2325,11 +2408,34 @@ is at `~/.claude/settings.json.bak-2026-08-11`. The auto-push hook is what resur
    failing code — but it decides *when* and *what*, which is exactly what rule 3 says
    nothing should.
 
-   **To turn it off:** in VS Code, `gitdoc.enabled: false` (or the *GitDoc: Disable*
-   command). It is a per-machine editor setting, not a repo setting, so nothing in
-   this repository can prevent it. **Erica's call** — left on until she says
-   otherwise. Until then, a commit here with a timestamp for a message was written by
-   the editor, not by a person or by Claude.
+   **TURNED OFF 2026-08-16**, by setting `"gitdoc.enabled": false` in
+   `~/Library/Application Support/Code/User/settings.json` (backup alongside it:
+   `settings.json.bak-2026-08-16-gitdoc`). Nothing commits itself in this repository any
+   more, and rule 3 is finally true as written.
+
+   **Invoking *GitDoc: Disable* was not enough, and that is worth knowing.** It was run,
+   and GitDoc carried on committing — `e42b78e` and `f06808d` landed after it. The
+   command did not persist to the settings file; only editing `gitdoc.enabled` did.
+   **Verify it by watching for a new timestamp commit while editing a file, not by
+   watching an idle window** — an idle repo looks identical to a disabled extension, and
+   that false negative was briefly recorded here as success.
+
+   **What it cost, so the trade is on the record.** It made 21 commits, all attributed
+   to Erica, all with a timestamp for a message. It never LOST anything — audited
+   2026-08-16 across all 13 branches holding those commits, every file they touched is
+   present in `origin/main` (`absent: 0`). The damage was legibility: it committed
+   mid-edit, split single changes across two timestamp commits, and put changes on
+   whichever branch happened to be checked out. That is what made "is our work safe?"
+   a question that took an hour to answer instead of a minute.
+
+   **Beware of two false alarms it causes**, because both will recur while reading old
+   history: squash-merging destroys BOTH commit ancestry and patch-id, so
+   `git merge-base --is-ancestor` and `git cherry` each report merged work as missing.
+   Neither is evidence. Compare file CONTENT against `origin/main` instead.
+
+   To turn it back on: `gitdoc.enabled: true`. It is a per-machine editor setting, not
+   a repo setting, so nothing in this repository can prevent it. A commit here with a
+   timestamp for a message was written by the editor, not by a person or by Claude.
 4. **`bypassPermissions` is off** in her Claude settings.
 
 ### THE ONLY ROUTE TO THE LIVE SITE (2026-08-11)
@@ -2601,8 +2707,12 @@ at its `workers.dev` address: `tiles.json` reports zoom 0–15, a z6 tile over V
 returns 38,148 bytes of `application/vnd.mapbox-vector-tile`, a glyph range 76,044 bytes,
 and MapLibre renders Loudoun County with **zero errors**. Preview sent 2026-08-15.
 
-Still to do, and both are Erica's call: register `adventureorno.com/basemap/*`, then point
-`basemap.ts` at `/basemap/style.json`.
+~~Still to do, and both are Erica's call: register `adventureorno.com/basemap/*`, then
+point `basemap.ts` at `/basemap/style.json`.~~ **Both were done later the same day** —
+the route through the API (wrangler cannot manage it, see Phase 4b step 4) and
+`basemap.ts` in #88. Superseded; Phase 4b is authoritative. What was NOT done is
+deploying the bundle that contains #88, which is why the map still looked unchanged on
+2026-08-16.
 
 ### Two mistakes of the same shape, worth naming
 
@@ -2633,6 +2743,119 @@ one that passes.
 - **87 visits have no evidence, and 84 of those are fine** — a trail's evidence lives on its
   sections. Only non-containers count. That distinction is the difference between a real
   finding and a scary number.
+
+## 7d. 2026-08-16 — the day nothing was broken and nothing was live
+
+Erica: *"the map style has not changed when I looked at it."* She was right, and every
+finding below came out of asking why one true-looking tick was false.
+
+### THE DEPLOY HAD BEEN FROZEN FOR A DAY, AND EVERY TICK STILL READ GREEN
+
+Production sat at `546ff11`, **16 commits behind `main`**, since 2026-08-15 16:21 UTC.
+Not a bug: **GitHub Actions was blocked on billing** from 17:47 UTC that day — every run
+failed in 5–8 seconds with *"recent account payments have failed or your spending limit
+needs to be increased."* CI is the only deploy authority, so merging kept working and
+shipping silently stopped. 36 PRs merged on 08-15 and 21 on 08-14; none of the last 16
+reached the browser.
+
+**The tell was available and nobody looked at it:** `/version.json` reports the deployed
+SHA. Comparing it to `origin/main` is one command and would have caught this in a day.
+
+Fixed by upgrading to GitHub Pro. **Pro does not retroactively re-run anything.**
+
+### `supabase db push --include-all` WOULD HAVE RE-RUN 42 MIGRATIONS
+
+Added in #81, never once executed (it needs a database password that was never set), and
+auditing it before arming it is the only reason this was found.
+
+**The ledger is keyed two ways**: 152 rows use this repo's `0NNN` prefix, 75 use a
+14-digit timestamp. `check:ledger` matches on NAME and reports 2 gaps.
+`supabase db push` matches on VERSION KEY and sees **42** — everything from 0153 to 0194,
+all long since applied.
+
+`--include-all` would have re-run all 42 against live data. It would have died partway:
+`0191` ends with an unguarded `alter table public.visits drop column is_trip` and that
+column is already gone. But 0153–0190 run first, each in its own transaction, and several
+backfill — `0190` recomputes place counts, `0188` rewrites `visit_profiles` and
+`activity_profiles`. **A backfill re-deriving what a person has since fixed by hand is
+this repository's most repeated failure.**
+
+Erica, 2026-08-16: *"I want to delete the risk rather than manage it."* The step is gone.
+`scripts/apply-migration.mjs` replaces it: one named file, applied and RECORDED in the
+same transaction, so the ledger cannot drift again. No database password exists.
+
+**Two tools disagreeing about the same question is worse than either being wrong**, and
+the safe-looking one was the one that was never going to run.
+
+### THE STRAVA RULE IS STILL NOT ENFORCED — 0193 BUILT THE LOCK AND FITTED IT NOWHERE
+
+`0193` added `can_see_activity()`, the `visible_activities` view and a correct
+`activities_select` policy. Of the **32 SECURITY DEFINER functions that read
+`public.activities`, exactly one uses the guard — `can_see_activity` itself.**
+
+`mileage_by_person` is `SECURITY DEFINER`, calls `assert_member()`, then selects straight
+`from public.activities` with no filter. Any signed-in member can ask for the other's
+mileage. Same for `card_view`, `wrapped_year_miles`, `race_stats`, `climbing_stats`,
+`wander_stats`, `place_days`, `visit_detail`, `activities_of_type`, `activity_lines`,
+`shared_outings` — every count, card and statistic in the app.
+
+**This file predicted it exactly**, in "THE STRAVA RULE CANNOT BE DONE WITH RLS":
+*"A policy on the table would look correct in psql and change nothing in the app."*
+The warning was written, and then the migration walked into it anyway. **Writing a trap
+down does not disarm it.** Phase 7's legal precondition is NOT met. Still to do.
+
+### A NIGHTLY JOB HAD BEEN FAILING FOR EIGHT NIGHTS, IN SILENCE
+
+`dedupe-joint-outings` succeeded every night to 2026-08-08 and failed every night from
+2026-08-09 with `not authorized`. The break is exactly when the "a machine may only
+propose" guard work landed: `group_duplicate_activities` opens with
+`is_editor_or_owner()`, and pg_cron has no `auth.uid()`.
+
+**It is the discriminator from 0157 working correctly and catching the wrong job.** The
+rule is good; applying an editor check to a function a machine is *supposed* to call is
+not. Nobody noticed because a failed cron row looks like nothing at all.
+
+Fixed in `0195`, and the job now PROPOSES into the suggestions ledger rather than writing
+`shared_group_id` itself — which is what §2 required of it all along. Erica, 2026-08-16:
+*"propose, not apply."*
+
+**Nothing checks that scheduled jobs succeeded.** The watchtower probes URLs; `cron.job_run_details` has nobody reading it. Worth a probe.
+
+### THE BACKUP WAS STALE, AND THE RESTORE WAS PART RUMOUR
+
+Freshness had drifted to **42h against a 36h limit**, because the Backup workflow is a
+GitHub Action and was blocked by the same billing failure. The gate and the thing it
+guards fail together — worth knowing when designing any other gate.
+
+Running the restore verification (`-f verify=true`, which nothing does automatically
+except the weekly run) then found a real bug: **`service_health` restored 0 of 415 rows.**
+`id` is `bigint generated always as identity`, and the loader excluded GENERATED columns
+by testing `is_generated`, which describes `GENERATED ALWAYS AS (expr) STORED` — an
+IDENTITY column reads `is_generated='NEVER'`. It sailed through and the insert died.
+
+It was the first identity column in 194 migrations, so it had never been exercised. Fixed
+generally via `is_identity` + `OVERRIDING SYSTEM VALUE`, not special-cased. **No table
+holding real data was affected** — 35 of 36 restored with matching counts.
+
+*"A backup nobody has restored is a rumour"* — and the weekly restore is the only thing
+that could have caught this. Do not let it become monthly.
+
+### THE TRAIL CARD DISAGREED WITH ITSELF
+
+A trail's visit list came from an effect keyed on `place.id`; its mileage came from one
+keyed on `allPlaces`. The section list is derived from `allPlaces`, which starts empty and
+arrives async. So the miles recomputed across the sections and **the visit list beside
+them did not** — the same card, two different answers about which sections it covers.
+
+This is a regression of the exact complaint 0136 was written for: *"the card showed the 32
+logged on the trail row and hid the 30 logged on its six sections."* A `react-hooks/exhaustive-deps`
+warning had been pointing at it the whole time. **The one lint warning in the codebase was
+a real bug**, which is the argument for not carrying warnings.
+
+Both effects now key on the section list itself — correct, consistent, and it stops
+refetching every trail whenever any unrelated place is edited.
+
+---
 
 ## 8. Facts that must not be relearned
 

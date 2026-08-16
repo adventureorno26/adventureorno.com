@@ -5,7 +5,7 @@
 // id behind it as `people.find(p => p.id !== meId)` — "the other person". With exactly
 // two members that works. With three it picks an arbitrary member and labels them
 // "Josh", so the control names the wrong person and the save writes the wrong
-// attribution. The whole point of the flok work is that a third person can join.
+// attribution. The whole point of the participants work is that a third person can join.
 //
 // The keys are deliberately profile ids rather than nicknames, so a choice cannot drift
 // from the person it means. `both` and `mine` stay as words because they are roles in
