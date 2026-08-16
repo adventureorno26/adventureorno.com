@@ -267,9 +267,38 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
 
 #### Step 3 — Close the three traps 08-16 opened and did not finish
 
-- **Nothing reads `cron.job_run_details`.** Verified: zero references anywhere in the
-  repository. `dedupe-joint-outings` failed eight consecutive nights in silence and only a
-  manual look found it. A failed cron row must be able to raise its hand.
+- ✅ **`cron.job_run_details` has a reader — `0197` + the watchtower.** It had none:
+  verified as zero references anywhere in the repository. `dedupe-joint-outings` failed
+  eight consecutive nights in silence, and the reason nobody noticed is that **a failed
+  cron row breaks no page, 500s no request and produces no complaint — it looks like
+  nothing at all.** The watchtower was probing five URLs every fifteen minutes throughout
+  and had no idea the database was running anything.
+
+  `cron_health()` answers for the jobs and the existing Worker records the answers into
+  `service_health`, so both halves show on one screen. It is the same lesson as 0194 one
+  layer down: *0194 — a 200 from the wrong server looks like success, so ask what came
+  back; 0197 — a scheduled job looks like a working job, so ask whether its last run
+  succeeded.*
+
+  **Staleness is measured, not parsed.** A job can fail by not running at all, and pg_cron
+  has no `next_run`; parsing five-field cron expressions in SQL to compute one is a bug
+  generator. The job's OWN history sets the expectation — the median gap between its
+  recent runs, doubled — so a daily job tolerates ~48h and a quarter-hourly one ~30m with
+  nothing needing to know which is which. Proved against production read-only before it
+  was written down: it returns `ok=false … not authorized` for `dedupe-joint-outings` and
+  `ok=true` for the other two, and with the tolerance forced to one second all three
+  correctly read *"overdue for a job that normally runs every 24h"*.
+
+  **A job whose last run SUCCEEDED can still be broken** — that is the case the ok flag
+  exists for, and the one a status-only check would call healthy.
+
+  ⚠️ **`0197` IS NOT APPLIED YET.** Applying it was declined by this session's permission
+  gate, so it is merged-but-unapplied and **the production deploy gate will refuse the
+  next deploy until it is applied** — correctly, and exactly as it refused `a57a928`
+  earlier today. Apply with `npm run db:apply 0197_the_jobs_are_watched`, then deploy the
+  Worker with `cd workers/watchtower && npx wrangler deploy`. The Worker is harmless until
+  then: an unreachable `cron_health()` records one honest `cron` failure row rather than
+  blaming a job.
 - **A test that keeps the Strava rule enforced.** 17 functions still read
   `public.activities` directly. Checked one by one, that is *correct* — they are writers
   and machine jobs, which #100 deliberately kept on the table because the view filters on
@@ -3042,7 +3071,7 @@ Fixed in `0195`, and the job now PROPOSES into the suggestions ledger rather tha
 `shared_group_id` itself — which is what §2 required of it all along. Erica, 2026-08-16:
 *"propose, not apply."*
 
-**Nothing checks that scheduled jobs succeeded.** The watchtower probes URLs; `cron.job_run_details` has nobody reading it. Worth a probe.
+**Nothing checks that scheduled jobs succeeded.** The watchtower probes URLs; `cron.job_run_details` has nobody reading it. Worth a probe. — **BUILT 2026-08-16 as `0197` + the watchtower's cron sweep; see Step 3 under NOW.**
 
 ### THE BACKUP WAS STALE, AND THE RESTORE WAS PART RUMOUR
 

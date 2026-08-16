@@ -12,6 +12,14 @@
 // row is older than half an hour, because a probe that has stopped running leaves a green
 // row behind that reads exactly like a healthy one.
 //
+// AND IT WATCHES THE SCHEDULED JOBS, since 2026-08-16. `dedupe-joint-outings` failed
+// every night from 08-09 to 08-16 with `not authorized` and nobody knew, because a failed
+// cron row breaks no page, 500s no request and produces no complaint — it looks like
+// nothing at all. This file probed five URLs every fifteen minutes throughout and had no
+// idea the database was running anything. `cron_health()` (0197) answers for them; the
+// results land in the same ledger as everything else, so one screen tells the truth about
+// both halves.
+//
 // Phase 6 adds three always-on servers (Photon, Valhalla, Open Topo Data). They are in
 // the list below already, commented, so wiring them up is deleting a comment rather than
 // remembering that this file exists.
@@ -113,6 +121,100 @@ async function probe(base: string, p: Probe): Promise<Result> {
   }
 }
 
+/** One row per active pg_cron job, shaped like any other probe so it lands in the same
+ *  ledger and shows up on the same screen. A job is a service; its last run is what
+ *  "came back". */
+interface CronRow {
+  jobname: string;
+  schedule: string;
+  last_start: string | null;
+  last_status: string | null;
+  failures_24h: number;
+  ok: boolean | null;
+  detail: string | null;
+}
+
+export async function probeCronJobs(env: Env): Promise<Result[]> {
+  const started = Date.now();
+  const url = `${env.SUPABASE_URL}/rest/v1/rpc/cron_health`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    const ms = Date.now() - started;
+    if (!res.ok) {
+      // The ASKING failed, which is not the same as a job failing — and reporting it as
+      // one job's outage would blame whichever job happened to be listed first.
+      return [
+        {
+          service: 'cron',
+          url,
+          ok: false,
+          status: res.status,
+          content_type: res.headers.get('content-type'),
+          bytes: null,
+          ms,
+          detail: `cron_health() unreachable: HTTP ${res.status}`,
+        },
+      ];
+    }
+    const jobs = (await res.json()) as CronRow[];
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+      // pg_cron with nothing scheduled is itself suspicious: three jobs are expected.
+      return [
+        {
+          service: 'cron',
+          url,
+          ok: false,
+          status: res.status,
+          content_type: 'application/json',
+          bytes: null,
+          ms,
+          detail: 'no active cron jobs at all — something unscheduled them',
+        },
+      ];
+    }
+    return jobs.map((j) => ({
+      service: `cron:${j.jobname}`,
+      url,
+      ok: j.ok === true,
+      status: null,
+      content_type: j.last_status,
+      bytes: j.failures_24h,
+      ms,
+      detail: j.detail,
+    }));
+  } catch (err) {
+    return [
+      {
+        service: 'cron',
+        url,
+        ok: false,
+        status: null,
+        content_type: null,
+        bytes: null,
+        ms: Date.now() - started,
+        detail: err instanceof Error ? err.message : 'cron_health() call failed',
+      },
+    ];
+  }
+}
+
+/** Every probe this Worker runs: the URLs, and the scheduled jobs. */
+async function sweep(env: Env): Promise<Result[]> {
+  const [urls, jobs] = await Promise.all([
+    Promise.all(PROBES.map((p) => probe(env.SITE, p))),
+    probeCronJobs(env),
+  ]);
+  return [...urls, ...jobs];
+}
+
 async function record(env: Env, rows: Result[]): Promise<void> {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/service_health`, {
     method: 'POST',
@@ -135,7 +237,7 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       (async () => {
-        const results = await Promise.all(PROBES.map((p) => probe(env.SITE, p)));
+        const results = await sweep(env);
         await record(env, results);
       })(),
     );
@@ -146,7 +248,7 @@ export default {
     if (new URL(req.url).pathname !== '/watchtower/run') {
       return new Response('not found', { status: 404 });
     }
-    const results = await Promise.all(PROBES.map((p) => probe(env.SITE, p)));
+    const results = await sweep(env);
     await record(env, results);
     return new Response(JSON.stringify({ checked: results.length, results }, null, 2), {
       headers: { 'content-type': 'application/json' },
