@@ -209,11 +209,13 @@ with the card, whose accessible name is **"New place"**. The locator failed befo
 ran, so the test reported a locator error rather than two violations. *A guard pointed at
 something that no longer exists says nothing about what replaced it.*
 
-**`AddSheet` is dead code.** Nothing imports it, and `lockedCard.test.ts` asserts MapView
-does not render it — #94 removed the chooser and left the component behind. Three e2e
-tests were still describing its "What are you adding?" screen and its three choices.
-Rewritten against the card. **The file is left in place deliberately** — deleting it is a
-removal, and removals get asked about first.
+**`AddSheet` is GONE.** Nothing imported it, and `lockedCard.test.ts` already asserted
+MapView does not render it — #94 removed the chooser and left the component behind. Three
+e2e tests were still describing its "What are you adding?" screen and its three choices;
+they now describe the card. **Erica, 2026-08-16, asked: delete it.** So the component and
+its 866 characters of orphaned CSS (`.add-sheet`, `.add-choices`, `.add-note` — used by
+nothing else) are removed together. Dead CSS outlives dead components because nobody
+greps stylesheets.
 
 The through-line for all six: **a test that only runs nightly is only as good as the
 nightly.** #94 merged on 08-15, the nightly died on billing that afternoon, and every one
