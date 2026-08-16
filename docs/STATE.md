@@ -294,7 +294,7 @@ The honest rule is about membership, not arithmetic: **a visit is shared when ev
 member was on it** (`public.is_shared_visit`). Two members gives exactly the 101 that
 `solo_profile IS NULL` gave; one gives that person's visits; three gives what all three
 shared. Nothing hardcodes 2 — which matters, because adding a third person is the entire
-point of the flok work.
+point of the shared-group work.
 
 The same mistake was in the WRITER trigger and was fixed there too: `NULL` means "not
 solo", so it now populates every real member when the household is small enough for that
@@ -1566,10 +1566,16 @@ self-hosted.
 
 **Nothing here is built.** No dependency has been added and no bytes copied.
 
-### Erica's screen rules, 2026-08-15  *(FIX BEFORE ANYTHING ELSE)*
+### Erica's screen rules, 2026-08-15  *(all four MERGED in #94 — not yet Deployed)*
 
-Four things she asked for after using the app. Their state was CHECKED in the code, not
-assumed:
+**Status, corrected 2026-08-16.** All four were fixed in #94 and are in `origin/main`:
+`PlacesList` no longer renders `<StatsBar>` (which takes the gear with it), and
+`Timeline.tsx` gained 154 lines for the year level. **They are not on the live site** —
+#94 merged after the last successful deploy, so on adventureorno.com all four are still
+wrong. That is the deploy freeze, not unfinished work.
+
+The table below records the state WHEN SHE ASKED, and is kept because the diagnosis in
+the last row is the reusable part.
 
 | Rule | State when asked |
 | ---- | ---------------- |
@@ -1605,7 +1611,7 @@ activities. `original_source` must exist first — `activities.source` records H
 ('strava', 'file'), not where it came from, and a file imported via intervals.icu that
 began life on Strava is exactly the case the rule is about.
 
-### Phase 6 — What we own  *(APPROVED 2026-08-15; nothing built)*
+### Phase 6 — What we own  *(APPROVED 2026-08-15; nothing built EXCEPT §6b, which is live)*
 
 Phase 4 made the MAP ours. This makes the things around it ours: geocoding, routing,
 elevation, terrain, points of interest, and recording an activity. Approved by Erica
@@ -1942,7 +1948,7 @@ that person**. It is not something the app works out and applies.
 
 - You tag someone on a place, trail, activity, photo — **anything a user can edit**.
 - **They are asked to verify it before it is added.** Until they accept, it is not Together.
-- If two people in the same flok were at the same place at the same time, that produces a
+- If two people in the same shared group were at the same place at the same time, that produces a
   **suggestion** — *"add this ___?"* — never an automatic label.
 - Everyone's own imported data is **"just me"** by default.
 
@@ -2042,9 +2048,13 @@ make it VISIBLE — she has been told twice that her work is safe and twice it w
 card that says *"Saved — automation will not change this"* with the date is the honest
 version of the promise, and a way to hand a field back to automation if she ever wants it.
 
-### FLOK — what the research settled (2026-08-11, two rounds: research then refutation)
+### THE COMMERCIAL PRODUCT — what the research settled (2026-08-11, two rounds: research then refutation)
 
-**1. STRAVA CANNOT BE PART OF A PAID FLOK.** The risk recorded as UNVERIFIED is now
+*(Renamed 2026-08-16. This section was headed "FLOK"; the name is NOT decided — see the
+top of this file — and a working title left in a heading is how it becomes the name by
+accident.)*
+
+**1. STRAVA CANNOT BE PART OF A PAID SHARED GROUP.** The risk recorded as UNVERIFIED is now
 VERIFIED against the live policy (https://www.strava.com/legal/api_policy, effective
 1 June 2026) and survived an adversarial re-check. Four clauses each independently kill it:
 
@@ -2127,7 +2137,7 @@ This is the only door between the two halves, and a human walks through it.
 **Who can edit it.** Planning is the reason the social graph exists — it is the same
 tagging-and-approval model, only pointed forward:
 
-- The planner invites people from their flok. An invite is **accepted, declined, or
+- The planner invites people from their shared group. An invite is **accepted, declined, or
   maybe** — nobody is added to your trip without saying yes, exactly as with Together.
 - Everyone accepted can add ideas, dates and notes. Only the planner can set the trip's
   final dates, and only the planner can answer "Did you go?" — one hand on the record.
