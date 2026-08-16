@@ -40,8 +40,12 @@ begin
     values ('P0196 Ridge', 39.2, -77.6, true, array['hiking'])
     returning id into p;
 
-  insert into public.visits (place_id, start_date, end_date, status, manual)
-    values (p, '2026-05-02', '2026-05-02', 'taken', true) returning id into v;
+  -- `accepted_at` matters: `accepted_visits` is `status='taken' and accepted_at is not
+  -- null`, and card_view reads that view. A fixture without it produces an EMPTY card,
+  -- which passes every "does it leak?" check for the wrong reason — the first draft of
+  -- this test did exactly that.
+  insert into public.visits (place_id, start_date, end_date, status, manual, accepted_at)
+    values (p, '2026-05-02', '2026-05-02', 'taken', true, now()) returning id into v;
   insert into public.visit_profiles (visit_id, profile_id) values (v, e_id), (v, j_id)
   on conflict do nothing;
 
