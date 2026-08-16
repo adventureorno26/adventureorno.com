@@ -178,6 +178,47 @@ nightly is only as good as the nightly**, and the pill assertion is now exact �
 not `/^Add( \d+)?$/` — because a prefix match would let the count creep back without
 failing anything.
 
+#### WHAT RUNNING THE NIGHTLY SUITE FOUND — 2026-08-16, and it was not the pill
+
+Rather than assume the pill change was safe, the `Full browser matrix` was dispatched by
+hand — the first time it has completed since the billing freeze. **211 passed, 24 failed.**
+The 24 are 6 tests across 4 browsers, and **not one of them was caused by the pill.** They
+were all already broken, waiting for a suite that could run.
+
+**Two REAL critical accessibility violations, on the card Erica asked for.** On `/?add=1`:
+
+    critical label       — Form elements must have labels — input[type="date"]
+    critical select-name — Select element must have an accessible name — select
+
+§4 of this file says *"zero WCAG A/AA violations across the authed routes, nothing
+allowlisted."* That has been **false since #94**, on the newest and most prominent screen
+in the app. The cause is a pattern worth recognising: rows are written
+`<div class="npd-row"><span>Visit date</span><input/></div>` — the words are on the screen,
+next to the control, attached to nothing. The **Name** row three fields above was already
+`<label className="npd-row">` and was always fine, so the correct shape was in the same
+file the whole time. Fixed by making the rows `<label>`; the CSS is class-based, so it is
+byte-identical on screen. The tag picker cannot be a wrapping label — its row holds chips
+*and* a select — so it takes an explicit `aria-label`.
+
+The trail select had the same defect and axe never saw it: the run had no trails, so the
+row did not render. **One condition away from being invisible** is not the same as fixed.
+
+**The guard that should have caught it was aimed at the wrong element.** The a11y test for
+this screen opens `getByRole('dialog', { name: 'Add' })` — but #94 replaced the chooser
+with the card, whose accessible name is **"New place"**. The locator failed before axe ever
+ran, so the test reported a locator error rather than two violations. *A guard pointed at
+something that no longer exists says nothing about what replaced it.*
+
+**`AddSheet` is dead code.** Nothing imports it, and `lockedCard.test.ts` asserts MapView
+does not render it — #94 removed the chooser and left the component behind. Three e2e
+tests were still describing its "What are you adding?" screen and its three choices.
+Rewritten against the card. **The file is left in place deliberately** — deleting it is a
+removal, and removals get asked about first.
+
+The through-line for all six: **a test that only runs nightly is only as good as the
+nightly.** #94 merged on 08-15, the nightly died on billing that afternoon, and every one
+of these has been sitting in `main` — and since 21:05 today, in production — unseen.
+
 #### Step 1 (cont.) — the rest of what landed, still to look at
 
 These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
@@ -1205,6 +1246,10 @@ CONTRADICTS something written here. Otherwise keep working (see
 - Offline mode (service worker, network-first HTML, immutable assets cached).
 - The authz matrix, and anon holding no table grants.
 - Accessibility: zero WCAG A/AA violations across the authed routes, nothing allowlisted.
+  ⚠️ **This was FALSE from #94 (08-15) to 08-16** — the new-place card shipped an
+  unlabelled date input and an unlabelled select, both critical. Found the first time the
+  nightly browser suite could run again; fixed the same day. The claim is only ever as
+  current as the last suite that actually ran, so read it with the nightly's status.
 
 ### Broken or wrong right now
 

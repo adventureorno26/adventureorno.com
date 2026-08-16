@@ -407,12 +407,15 @@ export default function NewPlaceDraft({
         </div>
 
         {!wanted && (
-          <div className="npd-row">
+          // A <label>, not a <div>, so the visible text is the input's accessible name —
+          // the same shape the Name row above already uses. As a div this was a critical
+          // axe `label` violation: the words were on screen and attached to nothing.
+          <label className="npd-row">
             {/* A trail can exist before you have walked any of it, so its date is
                 genuinely optional: with no date, no visit is logged. */}
             <span>{isTrail ? 'Date you walked it (optional)' : 'Visit date'}</span>
             <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
-          </div>
+          </label>
         )}
 
         {isTrail && (
@@ -452,7 +455,11 @@ export default function NewPlaceDraft({
             ))}
           </div>
           {avail.length > 0 && (
+            // This row holds chips AND this select, so it cannot be one wrapping <label>
+            // the way the rows above are — a label names a single control. Hence an
+            // explicit aria-label: "What is it?" belongs to the row, not to the picker.
             <select
+              aria-label="Add a tag"
               value=""
               onChange={(e) => e.target.value && setTags((t) => [...t, e.target.value])}
             >
@@ -470,7 +477,9 @@ export default function NewPlaceDraft({
             boundary, so they are never asked. Hidden entirely when no trail exists
             — an empty question is still a question. */}
         {trails.length > 0 && !tags.includes('trail') && (
-          <div className="npd-row">
+          // Also a <label>. It escaped axe only because the run had no trails to offer,
+          // so the row never rendered — the same bug, one condition away from being seen.
+          <label className="npd-row">
             <span>Part of a trail?</span>
             <select value={partOf} onChange={(e) => setPartOf(e.target.value)}>
               <option value="">Nothing</option>
@@ -480,7 +489,7 @@ export default function NewPlaceDraft({
                 </option>
               ))}
             </select>
-          </div>
+          </label>
         )}
 
         {!wanted && (
