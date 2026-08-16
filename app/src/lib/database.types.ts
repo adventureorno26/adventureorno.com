@@ -1721,6 +1721,45 @@ export type Database = {
         }
         Relationships: []
       }
+      service_health: {
+        Row: {
+          bytes: number | null
+          checked_at: string
+          content_type: string | null
+          detail: string | null
+          id: number
+          ms: number | null
+          ok: boolean
+          service: string
+          status: number | null
+          url: string
+        }
+        Insert: {
+          bytes?: number | null
+          checked_at?: string
+          content_type?: string | null
+          detail?: string | null
+          id?: never
+          ms?: number | null
+          ok: boolean
+          service: string
+          status?: number | null
+          url: string
+        }
+        Update: {
+          bytes?: number | null
+          checked_at?: string
+          content_type?: string | null
+          detail?: string | null
+          id?: never
+          ms?: number | null
+          ok?: boolean
+          service?: string
+          status?: number | null
+          url?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           key: string
@@ -3686,6 +3725,7 @@ export type Database = {
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
       propose_photos: { Args: { p_limit?: number }; Returns: Json }
+      prune_service_health: { Args: never; Returns: undefined }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
       race_stats: {
@@ -3770,6 +3810,19 @@ export type Database = {
           place_id: string
           place_name: string
           taken_at: string
+        }[]
+      }
+      service_status: {
+        Args: never
+        Returns: {
+          checked_at: string
+          content_type: string
+          detail: string
+          ms: number
+          ok: boolean
+          service: string
+          stale: boolean
+          status: number
         }[]
       }
       set_activity_race: {
