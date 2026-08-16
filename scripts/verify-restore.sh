@@ -99,6 +99,24 @@ for t in sorted(manifest['tables']):
     if not table_cols:
         continue
 
+    # AN IDENTITY COLUMN IS NOT A GENERATED COLUMN, and the filter above only catches
+    # the second kind. `is_generated` describes GENERATED ALWAYS AS (expr) STORED —
+    # places.geom. A GENERATED ALWAYS AS IDENTITY column reads is_generated='NEVER'
+    # and is_identity='YES', so it sailed through and the insert died with the same
+    # message the comment above is about: "cannot insert a non-DEFAULT value".
+    #
+    # Found 2026-08-16 by the weekly restore, which is the only thing that could have
+    # found it: service_health restored 0 of 415 rows and nothing else noticed.
+    # service_health was the first such column in 194 migrations; it will not be the
+    # last, so this is fixed generally rather than special-cased.
+    #
+    # OVERRIDING SYSTEM VALUE, not exclusion: a restore should reproduce the ids that
+    # were there, not mint new ones.
+    identity_cols = set(psql_read(
+        "select column_name from information_schema.columns "
+        f"where table_schema='public' and table_name='{t}' "
+        "and is_identity='YES' and identity_generation='ALWAYS'"))
+
     # ONLY THE COLUMNS THE DUMP ACTUALLY HAS.
     #
     # jsonb_populate_record leaves a key that is absent from the JSON as NULL — it does
@@ -122,12 +140,15 @@ for t in sorted(manifest['tables']):
         continue
     collist = ', '.join(f'"{c}"' for c in cols)
     sel = ', '.join(f'(rec)."{c}"' for c in cols)
+    # Only legal when the insert actually names an identity column; unconditional use
+    # is itself an error, so it is emitted per table rather than globally.
+    overriding = ' overriding system value' if (set(cols) & identity_cols) else ''
     # \copy, not COPY: Supabase's `postgres` role is not a superuser, so server-side
     # COPY FROM a file is "permission denied". \copy streams through the client.
     stmts.append(
         f'create temp table _l (j jsonb);\n'
         f"\\copy _l (j) from '/tmp/aon-restore/{t}.jsonl' with (format csv, quote E'\\x01', delimiter E'\\x02')\n"
-        f'insert into public."{t}" ({collist}) '
+        f'insert into public."{t}" ({collist}){overriding} '
         f'select {sel} from (select jsonb_populate_record(null::public."{t}", j) as rec from _l) s '
         f'on conflict do nothing;\n'
         f'drop table _l;\n'

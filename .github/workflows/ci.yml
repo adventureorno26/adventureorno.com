@@ -534,46 +534,34 @@ jobs:
           CLOUDFLARE_API_TOKEN_MASTER: ${{ secrets.CLOUDFLARE_API_TOKEN_MASTER }}
         run: npm run backup:check
 
-      # APPLY THE MIGRATIONS BEFORE THE BUNDLE THAT NEEDS THEM.
+      # THERE IS NO `supabase db push` STEP HERE, AND THAT IS DELIBERATE.
       #
-      # Erica, 2026-08-15: "From now on, add the supabase db push."
+      # It was added 2026-08-15 (#81) and never ran once, because it needs a database
+      # password that was never set. Auditing it on 2026-08-16 showed what would have
+      # happened the moment somebody added one, and it is worth writing down.
       #
-      # Until now a migration reached production because a person ran it by hand, and
-      # the step below refused to deploy until they had. That is the right ORDER —
-      # schema first, then the frontend that compiles against it, which is the lesson
-      # of 0177 — but it made every database change a manual gate, and a forgotten one
-      # blocked the whole pipeline rather than just its own change.
+      # THE LEDGER IS KEYED TWO WAYS. 152 rows use this repo's `0NNN` prefix and 75
+      # use a 14-digit timestamp. `check:ledger` matches on the migration NAME, so it
+      # sees 2 gaps. `supabase db push` matches on the VERSION key, so it sees 42 —
+      # every migration from 0153 to 0194, all of them long since applied.
       #
-      # `supabase db push` is the official tool and, unlike the Management API's query
-      # endpoint, it RECORDS what it applied in supabase_migrations.schema_migrations.
-      # That matters: eight migrations were once applied without being recorded, and a
-      # restore rebuilds from the ledger, so an unrecorded migration is silently absent
-      # from the restored database.
+      # `--include-all` would therefore have re-run 42 migrations against live data.
+      # It would not have survived them: 0191 ends with an unguarded
+      # `alter table public.visits drop column is_trip`, and that column is already
+      # gone. But 0153..0190 run first, each in its own transaction, and several of
+      # them backfill — 0190 recomputes place counts, 0188 rewrites visit_profiles and
+      # activity_profiles. A backfill re-deriving something a person has since fixed
+      # by hand is exactly the failure this repository keeps having.
       #
-      # It needs the database password, which the access token is not. If the secret is
-      # absent this step says so and does nothing — the ledger check below then fails
-      # the deploy exactly as it does today, so nothing regresses while the secret is
-      # being added.
-      - name: Apply repository migrations to production
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          PROJECT_REF: aanfyhsjbtnqzphuoiem
-        run: |
-          if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
-            echo "::notice::SUPABASE_DB_PASSWORD is not set — migrations are not being pushed."
-            echo "::notice::Add it in Settings > Secrets, then this step applies them automatically."
-            echo "Until then the ledger check below still refuses to deploy ahead of the schema."
-            exit 0
-          fi
-          supabase link --project-ref "$PROJECT_REF"
-          # --include-all: apply everything the ledger has not recorded, rather than
-          # only what sorts after the newest recorded version. Migrations merged out of
-          # numeric order are otherwise skipped in silence.
-          supabase db push --include-all
+      # Erica, 2026-08-16: "I want to delete the risk rather than manage it."
+      #
+      # So the schema is applied BEFORE the deploy, by `scripts/apply-migration.mjs`,
+      # which applies one named file and records it in the ledger in the SAME
+      # transaction — either both happen or neither, so the ledger cannot drift again.
+      # It authenticates with SUPABASE_ACCESS_TOKEN, so no database password needs to
+      # exist at all. The check below is what enforces the order.
 
-      # The belt to that braces: whether a person or the step above applied them, no
-      # bundle is uploaded until production actually has every migration in this repo.
+      # No bundle is uploaded until production actually has every migration in this repo.
       # A frontend can compile against an RPC the live database does not expose — that
       # happened with 0177, which deployed a card the database could not answer.
       - name: Require every repository migration in production
