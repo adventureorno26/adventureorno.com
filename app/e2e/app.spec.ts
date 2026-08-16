@@ -48,7 +48,9 @@ test.describe('authenticated app (non-destructive)', () => {
     await addTab.click();
 
     await expect(page).toHaveURL(/[?&]add=1/);
-    await expect(page.getByRole('dialog', { name: 'Add' })).toBeVisible();
+    // "New place" — the card's own accessible name. The chooser it replaced was named
+    // "Add", which is why every test still looking for that name failed on the locator.
+    await expect(page.getByRole('dialog', { name: 'New place' })).toBeVisible();
   });
 
   test('/add still renders, with its review queue', async ({ page }) => {
@@ -57,20 +59,22 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
   });
 
-  test('the add sheet still opens over the map, because picking a spot needs the map', async ({
+  // THE CHOOSER IS GONE, and this test was the last thing describing it. #94 replaced
+  // AddSheet ("What are you adding?" plus three choices) with the blank fillable card,
+  // because a chooser is the exact thing STATE.md said Add must not be. AddSheet is now
+  // dead code — nothing imports it, and lockedCard.test.ts asserts MapView does not
+  // render it — so every assertion below the first described a component that can no
+  // longer reach the screen.
+  test('the card still opens over the map, because picking a spot needs the map', async ({
     page,
   }) => {
     await page.goto('/add');
     await page.getByRole('button', { name: /Add a place, visit or activity/ }).click();
 
-    const sheet = page.getByRole('dialog', { name: 'Add' });
-    await expect(sheet).toBeVisible();
-    await expect(sheet.getByText('What are you adding?')).toBeVisible();
-    for (const choice of ['Photos', 'A place I\u2019ve been', 'Somewhere to go later']) {
-      await expect(sheet.getByRole('button', { name: choice, exact: true })).toBeVisible();
-    }
-    // Three choices and a close button — nothing else to wade through.
-    await expect(sheet.locator('.add-choices button')).toHaveCount(3);
+    const card = page.getByRole('dialog', { name: 'New place' });
+    await expect(card).toBeVisible();
+    // It opens FILLABLE, centred on wherever the map is — no question asked first.
+    await expect(card.getByRole('textbox').first()).toBeVisible();
   });
 
   // Nothing is orphaned: the retired Inbox tab's URL still works.
@@ -80,20 +84,26 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
   });
 
-  test('Photos is the one home for both device and Google Photos imports', async ({ page }) => {
+  // Same story as the chooser test above: this drove Photos -> "From this device" ->
+  // Back -> the choice list, and none of those steps exist now. On the card, choosing
+  // photos is a ROW, not a branch you navigate into and back out of.
+  test('the card offers photos from this device, on the card itself', async ({ page }) => {
     await page.goto('/?add=1');
-    const sheet = page.getByRole('dialog', { name: 'Add' });
-    await sheet.getByRole('button', { name: 'Photos', exact: true }).click();
-    // "From this device" is always there; the Google option depends on the client
+    const card = page.getByRole('dialog', { name: 'New place' });
+    await expect(card).toBeVisible();
+    // "Choose photos" is always there; the Google Photos button depends on the client
     // id being configured, which it is not in the e2e environment.
-    await expect(sheet.getByRole('button', { name: 'From this device' })).toBeVisible();
-    await sheet.getByRole('button', { name: /Back/ }).click();
-    await expect(sheet.getByRole('button', { name: 'A place I’ve been' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Choose photos' })).toBeVisible();
   });
 
-  test('the add sheet has no critical accessibility violations', async ({ page }) => {
+  // THE GUARD THAT WOULD HAVE CAUGHT THE TWO CRITICAL VIOLATIONS #94 SHIPPED: an
+  // unlabelled <input type="date"> and an unlabelled <select>. It could not, because it
+  // was looking for a dialog named "Add" and the card is named "New place", so it failed
+  // on the locator before axe ever ran. A guard aimed at the wrong element reports
+  // nothing about the right one.
+  test('the new-place card has no critical accessibility violations', async ({ page }) => {
     await page.goto('/?add=1');
-    await expect(page.getByRole('dialog', { name: 'Add' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'New place' })).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations.filter((v) => v.impact === 'critical').map((v) => v.id)).toEqual([]);
   });
