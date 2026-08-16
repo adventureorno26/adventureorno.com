@@ -219,6 +219,15 @@ The through-line for all six: **a test that only runs nightly is only as good as
 nightly.** #94 merged on 08-15, the nightly died on billing that afternoon, and every one
 of these has been sitting in `main` — and since 21:05 today, in production — unseen.
 
+**Proved, not assumed** — the matrix was re-run on the fix branch:
+
+| Run | Result |
+| --- | ------ |
+| `main`, 21:23 | 211 passed, **24 failed**, 1 skipped |
+| `fix/the-card-has-labels`, 21:47 | **235 passed, 0 failed**, 1 skipped |
+
+211 + 24 = 235, so every failure is accounted for and none was traded for a new one.
+
 #### Step 1 (cont.) — the rest of what landed, still to look at
 
 These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
