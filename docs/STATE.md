@@ -106,36 +106,41 @@ narrative is in §7e where the other days live.
 **The order is unchanged from 08-14** — stabilize the private core, then the web feature
 set, then native. What changed is that the top of the list is no longer maintenance.
 
-#### 1. MAKE `verify:live` TRUE AGAIN — first, and it is not a test chore
+#### 1. ✅ `verify:live` IS TRUE AGAIN — one red check left, and it is a question for Erica
 
-`e2e/erica-asked-for.spec.ts` is the file that decides whether Erica got what she asked
-for. Its own rules say a request is done when its check is green **on the live site**, and
-that a changed instruction gets its check **rewritten, with the old one noted** — never
-deleted.
+`e2e/erica-asked-for.spec.ts` decides whether Erica got what she asked for: a request is
+done when its check is green **on the live site**, and a changed instruction gets its check
+**rewritten, with the old one noted** — never deleted. That rewriting had never happened,
+so the list was failing against an app that was correctly obeying her newer decisions.
 
-**Five checks are red, and at least three are red for the wrong reason.** Measured against
-production 2026-08-17:
+**Five red became one, 2026-08-17. Four of the five were the list's fault, not the app's:**
 
-| Check | Why it is red | What it needs |
-| ----- | ------------- | ------------- |
-| `:233` *"stats moved to the top of places"* | Asserts a stats bar ON Places — which she told us on 08-15 to **remove**, and #94 removed | **Rewrite to the newer instruction.** The check is enforcing a superseded request |
-| `:243` *"clicking Trips pulls up a list"* | Waits on `.stat-open` on Places; same removal | **Rewrite** — the Trips list moved with Stats to Settings |
-| `:95` *sections are Visits, Photos, Routes, categories, Notes* | Demands a `Routes` heading on a place that has no routes; the section is conditional by design | **Fix the check** — assert order over the sections that exist, or pick a place with routes |
-| `:175` *Routes holds the map AND the list* | Same conditional section | **Fix the check** the same way |
-| `:145` *"Remove the words tap a date and Trip and together from the visit section"* | The visit section still reads `Together / Just Erica / Just Josh` | **ERICA'S CALL** — see below |
+| Check | What was actually wrong | Fix |
+| ----- | ----------------------- | --- |
+| *"stats moved to the top of places"* | Asserted a stats bar **on** Places — the exact thing she told us on 08-15 to remove, and #94 did. Two instructions in direct opposition | **Rewritten to the newer instruction** per rule 4, with the old wording recorded in the test. Now asserts no stats bar and no gear on Places, and that Stats is on Settings where she moved it |
+| *"clicking Trips pulls up a list"* | **Not a missing feature.** `openStats()` clicked the FIRST of /settings' four `stats-dropdown` summaries, and only if none was open — so whenever another was open it clicked nothing, Stats stayed shut, and the Trips button read "not visible" | Helper now finds the **Stats** card by its summary text |
+| *sections are Visits, Photos, Routes, …* | Demanded a Routes heading unconditionally; `PlacePanel` renders it only when the place has activities | Asserts the ORDER of the sections that exist; Routes is checked where it belongs |
+| *Routes holds the map AND the list* | Same, on one hard-coded card | Walks Places until it finds a place that HAS routes, then asserts map + list |
 
-**Why this is first.** A verification system that cries wolf gets ignored, which is the
-argument written into `playwright.live.config.ts` itself. Right now four of its five
-failures are noise, so the one that might be real is buried. Nothing else on this list can
-be trusted as "done" while the thing that decides doneness is wrong.
+**A correction to what this section said an hour ago**: it claimed the Trips check was red
+from "the same removal" as the stats bar. That was wrong — it never touched Places. The
+cause was the helper above, and the difference matters because one reading says a feature
+is missing and the other says a test is.
 
-**The one genuine question in it (`:145`).** §0.1 relaxed the blanket ban on the word
-"Trip" *inside an edit control* — "the visit editor may say **Count this as a trip**" —
-while keeping passive badges banned. `Together / Just Erica / Just Josh` in the visit
-section is an edit control of exactly that kind, so the newer rule probably permits it and
-the check probably needs rewriting. **Probably is not good enough for a rule she wrote**,
-so it is a question, not an assumption: *does "no together in the visit section" still
-stand now that the participant picker is an edit control?*
+**The one still red — `:145`/`:162`, and it needs her answer.** The visit section reads
+`Together / Just Erica / Just Josh`. §0.1 relaxed the blanket ban on the word "Trip"
+*inside an edit control* — "the visit editor may say **Count this as a trip**" — while
+keeping passive badges banned. The participant picker is an edit control of exactly that
+kind, so the newer rule probably permits "Together" and the check probably wants
+rewriting. **Probably is not good enough for a rule she wrote:**
+
+> *Does "no together in the visit section" still stand, now that the words sit on a control
+> you press rather than a badge that just asserts something?*
+
+Two of the fixes above were bugs in the replacement code, found by running it against
+production rather than assuming: counting place links before the list had loaded (0 links
+on an account with 151), and matching `.our-stats` where /settings has six of them. Both
+are the same mistake this file keeps naming — reading the DOM before the thing exists.
 
 #### 2. THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION
 

@@ -51,10 +51,20 @@ async function ready(page: import('@playwright/test').Page, path: string) {
 /** Settings' Stats card is a <details>; its contents are hidden until it is open —
  *  the same disclosure pattern as the Visits section on a card. */
 async function openStats(page: import('@playwright/test').Page) {
-  const summary = page.locator('details.stats-dropdown > summary').first();
+  // TARGET THE "Stats" DROPDOWN BY NAME. /settings has FOUR `details.stats-dropdown`
+  // — Stats, Cities and states, National Parks, Peaks & climbing — and this helper used
+  // to click the FIRST summary only if NONE of the four was open. So whenever any other
+  // one was open it clicked nothing, the Stats card stayed shut, and the Trips button
+  // inside it was reported as "not visible": a missing feature, according to the file
+  // that decides what Erica has been given. It was never missing.
+  const stats = page.locator('details.stats-dropdown').filter({
+    has: page.locator('> summary', { hasText: /^Stats$/ }),
+  });
+  await expect(stats).toHaveCount(1);
+  const summary = stats.locator('> summary');
   await expect(summary).toBeVisible();
-  if ((await page.locator('details.stats-dropdown[open]').count()) === 0) await summary.click();
-  await expect(page.locator('details.stats-dropdown[open]').first()).toBeVisible();
+  if (!(await stats.evaluate((el) => (el as HTMLDetailsElement).open))) await summary.click();
+  await expect(stats.locator('.our-stats')).toBeVisible();
 }
 
 /** The Visits section is a <details>; its rows are hidden until it is open. */
@@ -94,10 +104,13 @@ it.describe('the card — what she asked for, on the live site', () => {
 
   it('the sections are Visits, Photos, Routes, the categories, then Notes', async ({ page }) => {
     await ready(page, SAN_DIEGO);
-    // Routes appears only once the place's activities have loaded, so wait for the
-    // LAST section to exist before reading the order — otherwise this reports a
-    // missing section that arrives a moment later.
-    await expect(page.locator('.panel h3', { hasText: /^Routes/ })).toBeVisible();
+    // ROUTES IS CONDITIONAL, and this check used to demand it unconditionally.
+    // PlacePanel renders it only when the place has activities — `{(trailActs ?? []).length
+    // > 0 && …}` — so on a place with none, the section correctly does not exist and this
+    // reported the ORDER as broken. The order is what she asked about; the presence of a
+    // section that depends on data is a different question, and `the Routes section holds
+    // the map AND the list` below is where it belongs.
+    await expect(page.locator('.panel h3, .panel .visits-summary').first()).toBeVisible();
     const heads = page.locator('.panel h3, .panel .visits-summary');
     const text = (await heads.allTextContents()).map((t) => t.trim());
     const visits = text.findIndex((t) => /^Visits/i.test(t));
@@ -105,9 +118,13 @@ it.describe('the card — what she asked for, on the live site', () => {
     const routes = text.findIndex((t) => /^Routes/i.test(t));
     const notes = text.findIndex((t) => /NOTES AND REVIEWS/i.test(t));
     expect(visits, `no Visits section: ${text.join(' | ')}`).toBeGreaterThanOrEqual(0);
-    expect(photos).toBeGreaterThan(visits);
-    expect(routes).toBeGreaterThan(photos);
-    expect(notes).toBeGreaterThan(routes);
+    expect(photos, `no Photos section: ${text.join(' | ')}`).toBeGreaterThan(visits);
+    expect(notes, `no Notes section: ${text.join(' | ')}`).toBeGreaterThan(photos);
+    // Routes sits between Photos and Notes WHEN THE PLACE HAS ANY.
+    if (routes >= 0) {
+      expect(routes, `Routes is out of order: ${text.join(' | ')}`).toBeGreaterThan(photos);
+      expect(notes, `Routes is out of order: ${text.join(' | ')}`).toBeGreaterThan(routes);
+    }
   });
 
   it('"Restaurant should be Restaurants" — and it is its own section', async ({ page }) => {
@@ -173,8 +190,47 @@ it.describe('the card — what she asked for, on the live site', () => {
   });
 
   it('the Routes section holds the map AND the list', async ({ page }) => {
-    await ready(page, SAN_DIEGO);
-    await expect(page.locator('.panel h3', { hasText: /^Routes/ })).toHaveCount(1);
+    // FIND A PLACE THAT HAS ROUTES rather than assuming San Diego does. This check used to
+    // open one hard-coded card and demand a Routes heading; the section is conditional on
+    // the place having activities, so the day that card had none, "the Routes section holds
+    // the map AND the list" went red while Routes was working perfectly everywhere else.
+    // Hard-coding a different place would just move the same trap.
+    await ready(page, '/places');
+    // WAIT FOR THE LIST. `ready` waits for the app to boot, not for Places' rows to arrive,
+    // so counting straight away found zero links and reported "no places to check" on an
+    // account with 151 of them. Reading the DOM the moment navigation resolves is the exact
+    // mistake `ready` exists to prevent, and this walked into it one line later.
+    // `:visible` MATTERS HERE. /places lists 132 place links, and the first in DOM order
+    // sits inside a COLLAPSED container — present, not visible — so waiting on `.first()`
+    // timed out on a page full of places. Containers hold their sections closed until
+    // opened, which is the behaviour Places was fixed to have.
+    const links = page.locator('a[href^="/place/"]:visible');
+    await expect(links.first()).toBeVisible();
+    const total = Math.min(await links.count(), 12);
+    expect(total, 'no places to check').toBeGreaterThan(0);
+
+    let found = '';
+    for (let i = 0; i < total && !found; i++) {
+      const href = await links.nth(i).getAttribute('href');
+      if (!href) continue;
+      await ready(page, href);
+      if (
+        (await page
+          .locator('.panel h3')
+          .filter({ hasText: /^Routes/ })
+          .count()) > 0
+      )
+        found = href;
+    }
+
+    expect(
+      found,
+      `none of the first ${total} places rendered a Routes section — either no place has ` +
+        `activities, or the section stopped rendering`,
+    ).not.toBe('');
+
+    // The request itself: the section is a map AND a list, not one or the other.
+    await expect(page.locator('.panel h3').filter({ hasText: /^Routes/ })).toHaveCount(1);
     await expect(page.locator('.route-mini')).toBeVisible();
     expect(await page.locator('.route-row').count(), 'Routes has no list').toBeGreaterThan(0);
   });
@@ -230,14 +286,32 @@ it.describe('the rest of the app — what she asked for', () => {
     await expect(page.getByText(/Add a cover photo/i)).toBeVisible();
   });
 
-  it('"the stats section was supposed to be moved to the top of places"', async ({ page }) => {
+  // REWRITTEN 2026-08-17, per rule 4 at the top of this file: she changed her mind, so the
+  // check follows the NEW instruction and the old one is recorded rather than deleted.
+  //
+  //   WAS (2026-08-11): "the stats section was supposed to be moved to the top of places"
+  //                     — asserted a stats bar ON /places, above the first place.
+  //   NOW (2026-08-15): "No stats bar on Places" and "No settings icon on Places". #94
+  //                     removed `<StatsBar>` from PlacesList, which takes the gear with it
+  //                     because `.gear-btn` lives inside StatsBar.
+  //
+  // The two instructions are direct opposites, and the older check kept failing against an
+  // app that was correctly obeying the newer one — which is how four of this file's five
+  // red checks came to be noise. Stats live on /settings now; that is asserted below it.
+  it('"No stats bar on Places" and no settings icon (supersedes "stats at the top")', async ({
+    page,
+  }) => {
     await ready(page, '/places');
-    const stats = page.locator('.stats-bar, .our-stats').first();
-    await expect(stats).toBeVisible();
-    const statsBox = await stats.boundingBox();
-    const firstPlace = await page.locator('a[href^="/place/"]').first().boundingBox();
-    expect(statsBox, 'no stats on Places').not.toBeNull();
-    expect(statsBox!.y, 'stats are not above the places').toBeLessThan(firstPlace!.y);
+    await expect(page.locator('.stats-bar')).toHaveCount(0);
+    await expect(page.locator('.gear-btn')).toHaveCount(0);
+    // And they did not simply vanish: Stats is on Settings, where she moved it.
+    //
+    // Assert the TRIPS STAT, not `.our-stats` — /settings has six of those (people, stats,
+    // states, parks, peaks, categories) and a bare class selector is a strict-mode
+    // violation waiting to happen. `openStats` has already opened the Stats card by name.
+    await ready(page, '/settings');
+    await openStats(page);
+    await expect(page.locator('.stat-open')).toBeVisible();
   });
 
   it('"clicking on the Trips should pull up a list of trips that I can edit and also has an add a trip button"', async ({
