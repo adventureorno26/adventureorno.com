@@ -142,7 +142,23 @@ production rather than assuming: counting place links before the list had loaded
 on an account with 151), and matching `.our-stats` where /settings has six of them. Both
 are the same mistake this file keeps naming — reading the DOM before the thing exists.
 
-#### 2. THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION
+#### 2. THE STRAVA LEAK, THEN THE IMPORT SYSTEM — Erica's order, 2026-08-17
+
+She set the sequence: *close the cross-visibility first*, then build the import workflow
+with a provenance ledger, then cross-source de-duplication, then backfill Josh's Strava.
+The whole design is **Phase 7a**, written against the live database rather than the repo.
+
+**The one number that says why it is first:** acting as Josh, the real reader
+`mileage_by_person(josh)` returns 124 activities and 992.5 miles — of which **46
+activities and 356.1 miles are Erica's Strava runs**. His stats screen is showing him her
+mileage today.
+
+The cause is not the guard (#100 works — 15 readers go through `visible_activities`) and
+not the ingest path (the `default_participants` trigger credits only the athlete whose
+token fetched it). It is `0039`, which asserted by date that everything Erica recorded
+after 2025-12-21 was also Josh's. **44 of the 46 still carry that migration's fingerprint.**
+
+#### 3. THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION
 
 Measured on the live site with her data: `Celebrate Virginia`, `Mill Mountain Trail`,
 `Red Spring Gap`. A list overflows its collapsed container by 2,566px and paints under the
@@ -151,7 +167,7 @@ floating nav, so no amount of page padding reaches it. Full diagnosis in §7e.
 **Needs a decision before code**: should a long category list inside a stats dropdown get
 its own scroll, a max height, or not be nested in that grid at all? Then it is a small fix.
 
-#### 3. WAITING ON ERICA — none of it blocks the rest
+#### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
   `contents:read`). Until then the deploy probe honestly reports that it cannot check.
@@ -163,7 +179,7 @@ its own scroll, a max height, or not be nested in that grid at all? Then it is a
 - **Her manual smoke pass** — the last unticked box in the stabilization gate. The
   automated acceptance flows cover the same ground but do not replace her driving it once.
 
-#### 4. THEN THE QUEUED LANES, in the order locked on 08-14
+#### 5. THEN THE QUEUED LANES, in the order locked on 08-14
 
 Nothing here starts while §1 is red.
 
@@ -179,7 +195,7 @@ Nothing here starts while §1 is red.
 have no consumers. `AddSheet` was the same and she said delete it, so these are probably
 the same answer — but removals get asked about first.
 
-#### 5. THE STANDING RULES THIS WEEK EARNED
+#### 6. THE STANDING RULES THIS WEEK EARNED
 
 Not process for its own sake — each one is a specific thing that went wrong:
 
@@ -1990,6 +2006,179 @@ trust. Android needs a foreground service with a persistent notification, not
 `react-native-background-geolocation` only if drift demands it. Write the finished workout
 back to HealthKit / Health Connect. A 1 Hz recording costs ~5–10%/hour, comparable to
 Strava. OSS to read, not import: OpenTracks, FitoTrack, OutRun.
+
+### Phase 7a — THE IMPORT SYSTEM: one outing, many sources  *(APPROVED 2026-08-17)*
+
+Erica, 2026-08-17: *"we need to build that system and then backfill his Strava information…
+create a plan to build an import workflow that also keeps a ledger of who adds what from
+what source — we also must be able to de-dupe activities uploaded from different methods
+that record the same run… the activity should only be counted once."*
+
+**This phase exists because the current importer is wrong in three separate ways, and the
+audit that found them is in §7f.** It is written before any code so the shape is agreed
+first, and it replaces `import_file_activity` rather than patching it.
+
+**CHECKED AGAINST PRODUCTION, NOT THE REPO** (Erica asked, 2026-08-17, and it changed two
+claims in this plan). Every function below was read from `pg_proc` on the live database,
+and the leak was measured by setting `request.jwt.claims` to Josh's id in a read-only
+transaction and calling the real readers.
+
+#### What is broken today, measured
+
+| | |
+| --- | --- |
+| **Co-attribution is a date, not evidence** | `0039` did a blanket `UPDATE`: *"Post-Dec-21-2025 activities Erica recorded were joint → also Josh's."* 46 activities carry Josh's name, **all** dated ≥ 2025-12-21, and **19 of them are dated after his last import** — nothing of his could possibly have matched them |
+| **That defeats the Strava rule** | `visible_activities` treats an `activity_profiles` row as "this is yours too". **Measured live, acting as Josh: he sees 46 of Erica's 180 Strava activities.** Asking the real reader — `mileage_by_person(josh)` — returns **124 activities and 992.5 miles, of which 46 activities and 356.1 miles are Erica's Strava runs.** His own stats screen is showing him her mileage |
+| **The importer silently destroys the second recording** | `import_file_activity` finds a match and `return v_id` **without inserting**. The file Josh uploaded is not stored, not linked, not recorded anywhere. It is simply gone |
+| **`original_source` is a transport, not an origin** | `0193` backfilled it as `coalesce(original_source, source)`, so all 265 file rows say `'file'`. §6f requires *"where it came from originally, through however many hubs"*. A Garmin FIT, an AllTrails GPX and an Apple Health export are all `'file'` today |
+| **No provenance at all** | `source_id` is NULL on every one of the 265 file rows. `ingest_runs` logs only the OSM suggester. Nothing records who imported what, from which file, when |
+
+#### The one idea the whole design rests on
+
+**An activity is an OUTING. A source is EVIDENCE of that outing.** They are different things
+and the schema has been conflating them.
+
+That single separation answers all three of Erica's requirements at once:
+
+- *"the activity should only be counted once"* — counting reads `activities`; a run
+  recorded by Strava, AllTrails and Apple Health is **one** row with **three** evidence
+  rows, so it cannot be counted three times by construction rather than by a dedup job
+  that has to keep winning.
+- *"a ledger of who adds what from what source"* — the evidence row IS the ledger entry.
+- **And the joint-outing bug disappears**, because the two cases stop looking alike:
+
+      SAME PERSON, two apps, one run     → ONE activity, TWO sources
+      TWO PEOPLE,  one run together      → TWO activities, one per person, linked
+
+  The current importer collapses the second case into the first. That is the actual root
+  of the 46, and no amount of better matching fixes it while one outing can only have one
+  owner.
+
+#### 7a-1. FIRST: close the leak *(before anything else is built — Erica's order)*
+
+Two changes, and they are independent of everything below.
+
+1. **Strava visibility follows the STRAVA ACCOUNT, not the tag.** `can_see_activity` asks
+   whether the caller has an `activity_profiles` row, which anyone can acquire by being
+   tagged. It must instead ask whether the caller is the athlete the data came from:
+   `activities.athlete_id → strava_accounts.athlete_id → profile_id`. A tag must never be
+   able to unlock Strava-origin data, because tagging is exactly what went wrong.
+2. **Retire the blanket co-attribution.** Clear `also_profiles` and the derived
+   `activity_profiles` rows that exist only because of `0039`'s date rule.
+
+   **The live data distinguishes 44 of the 46, which the first draft of this plan said was
+   impossible.** Checking rather than assuming: 44 carry a non-empty `also_profiles`, the
+   fingerprint of `0039`'s blanket `UPDATE`. The other **2 are recent live-webhook
+   activities** (1 Aug, 9 Aug 2026) with `also_profiles` empty — almost certainly Erica
+   pressing **Together** on the participant control, which is the legitimate mechanism §A
+   describes.
+
+   **Both still have to lose Strava visibility, and that is the point of fix 1.** Strava's
+   terms are about *whose account the data came from*, not about who was present. A
+   truthful "Josh was there too" tag is a fact about the outing; it is not permission to
+   show him Strava's copy of it. Getting that distinction right is what makes the tag safe
+   to keep.
+
+   **Nothing is deleted.** The co-attribution moves to a `co_attribution_removed` table
+   with its evidence, so it is recoverable and auditable, and Josh's genuine joint outings
+   return the honest way — from his own data, once he re-imports (7a-4).
+
+**What is already right, and must not be re-done:** `#100` worked — **15 SECURITY DEFINER
+readers now go through `visible_activities`**, confirmed on the live database, and the
+`default_participants` trigger is correct too: it credits *only* the athlete whose token
+fetched the activity, with the comment *"the only attribution Strava's terms allow"*. New
+Strava activities are not being co-attributed at ingest. **The leak is historical data plus
+tagging, not the ingest path** — so this fix is narrow.
+
+**Definition of done, stated as a measurement:** acting as Josh, `mileage_by_person(josh)`
+returns **0 activities owned by Erica with `original_source='strava'`** — today it returns
+46 and 356.1 miles — and a test asserts it that fails if a tag can unlock one again.
+
+#### 7a-2. The provenance ledger — nothing enters without it
+
+Two new tables. Neither is optional, and nothing may write `activities` around them.
+
+```text
+imports            one row per human action
+  id, profile_id (WHO — auth.uid(), never a parameter), method, started_at,
+  finished_at, status, file_name, file_sha256, byte_size, raw_object_key,
+  counts {created, attached, proposed, rejected}, notes
+
+activity_sources   one row per piece of evidence for an outing
+  id, activity_id, import_id, source, origin, external_key, recorded_by,
+  is_primary, confidence, raw_object_key, created_at
+```
+
+- `method` is how the human did it: `strava-oauth`, `file-upload`, `apple-health`,
+  `alltrails-export`, `email-in`, `recorder`.
+- `source` is the system it came through; **`origin` is where it began** — the field §6f
+  actually asked for. A Garmin watch that synced to Strava has `source='strava'`,
+  `origin='garmin'`. `activities.original_source` becomes DERIVED from the sources, not a
+  copy of the transport.
+- **`raw_object_key` keeps the original file in R2.** The current importer's worst
+  property is that it discards what it could not use; re-derivation is impossible and the
+  evidence is gone. Keep the bytes.
+
+#### 7a-3. De-duplication: identity first, then proposal
+
+**There is no universal activity id across sources — that is the whole difficulty**, so the
+system is tiered by how certain the match is, and the tiers are treated differently.
+
+**Tier 1 — EXACT. A shared identifier. Auto-attach, no question asked.**
+
+| Source | The key that is actually stable |
+| --- | --- |
+| Garmin/ANT **FIT** | the `file_id` message — `manufacturer + product + serial_number + time_created` is specified as globally unique for the file |
+| **Strava** | `external_id` (e.g. `garmin_push_12345…`, which often *names the origin device*) and `upload_id`; `strava_id` for the activity itself |
+| **Apple Health** | `HKMetadataKeyExternalUUID`, and `HKMetadataKeySyncIdentifier` + `SyncVersion`, which is Apple's own de-dup mechanism |
+| our recorder | the id we minted |
+
+Stored as a namespaced `external_key` (`fit:garmin:3949:2026-07-04T11:02:03Z`) with a
+UNIQUE index. Same key = same outing, full stop. **This is the tier that makes
+Strava↔Garmin↔Apple Health collapse correctly**, because Strava's `external_id` frequently
+carries the Garmin identity that the FIT file also carries.
+
+**Tier 2 — STRONG. No shared id, but the physics agree.** All four must hold, for the
+SAME PERSON:
+
+    start time      within ±90 s
+    moving time     within ±60 s or 2%
+    distance        within 1.5%
+    start point     within 150 m
+
+Auto-attached, with the comparison stored on the `activity_sources` row so the decision can
+be read back and reversed.
+
+**Tier 3 — WEAK. Anything less → a SUGGESTION, never a merge.** §2's rule holds: a machine
+may propose; only an accepted write changes history. The `suggestions` ledger already
+exists and `dedupe_joint_outings` already proposes into it (0195) — this uses the same road.
+
+**Three rules that are not negotiable:**
+
+1. **Never silently drop.** A file that matches becomes another SOURCE. The bytes are kept.
+   The current `return v_id` with no insert is the behaviour being deleted.
+2. **De-dup is WITHIN one person.** Two people recording one outing is a *joint outing* —
+   two activities, linked by `shared_group_id`, each owned by its recorder. Collapsing
+   across people is what created the 46.
+3. **Every merge is reversible**, because a merge is a claim and claims get corrected.
+
+#### 7a-4. Then, and only then, backfill Josh
+
+His OAuth was **started and never completed** — `oauth_states` holds one row, his, created
+2026-08-10 17:35, `used_at` NULL, expired ten minutes later. He believed he had connected;
+nothing landed. **Diagnose the callback before asking him to try again** — a second failed
+attempt tells us nothing new.
+
+Then: **each person connects their own Strava**, their data is theirs, and none of it
+crosses. Once his real activities exist, genuine joint outings can be established from two
+recordings of the same outing — evidence, mutual, and per §A something the other person
+accepts — instead of from a date in a migration.
+
+#### What this phase does NOT do
+
+It does not add new providers. `intervals.icu`, Garmin Connect, Polar and the rest stay in
+Phase 7's list. **This is the rail they all arrive on**, and building it first is what stops
+the next importer repeating `import_file_activity`'s mistakes at ten times the volume.
 
 ### Phase 8 — Events, social and the privacy floor  *(APPROVED 2026-08-15; nothing built)*
 
