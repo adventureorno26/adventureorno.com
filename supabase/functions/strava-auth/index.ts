@@ -54,6 +54,47 @@ Deno.serve(async (req) => {
       { onConflict: 'athlete_id' },
     );
 
+    // REGISTER THE CONNECTION, not just the tokens.
+    //
+    // `source_connections` (0202) is what every piece of evidence points at to say WHOSE
+    // account supplied it. It was populated once, by 0202's backfill, from the accounts that
+    // existed that day — and nothing has ever written to it since. So when Josh connected
+    // his Strava on 2026-08-17 his 90 activities all landed with connection_id NULL, and the
+    // question "whose account did this come from?" had no answer in the data even though the
+    // tokens were sitting right there. A registry only a migration can write to is a
+    // registry that is wrong the moment anybody new arrives.
+    // NOT an upsert. `source_connections_identity` is an EXPRESSION index —
+    // (provider, coalesce(external_id,''), owner_profile) — and Postgres cannot infer an
+    // expression index from a column list, so `onConflict` here would fail 42P10 every
+    // single time. That is not hypothetical: the identical mistake in recordStravaSource()
+    // silently dropped the provenance of 25 activities until 2026-08-17. Match, then write.
+    const { data: existingConn, error: connFindErr } = await admin
+      .from('source_connections')
+      .select('id')
+      .eq('provider', 'strava')
+      .eq('external_id', String(athleteId))
+      .eq('owner_profile', profileId)
+      .maybeSingle();
+
+    const { error: connErr } = connFindErr
+      ? { error: connFindErr }
+      : existingConn
+        ? await admin
+            .from('source_connections')
+            .update({ disconnected_at: null, label: 'Strava' })
+            .eq('id', existingConn.id)
+        : await admin.from('source_connections').insert({
+            provider: 'strava',
+            external_id: String(athleteId),
+            owner_profile: profileId,
+            label: 'Strava',
+            connected_at: new Date().toISOString(),
+          });
+    // Not fatal — the tokens are stored and the person IS connected, so failing the whole
+    // callback would be worse than a missing registry row. Logged loudly instead, because a
+    // silent miss here is exactly what produced 90 activities with no connection.
+    if (connErr) console.error('source_connections write failed', connErr.message);
+
     return Response.redirect(`${SITE}/settings?strava=connected`, 302);
   } catch (e) {
     console.error('strava-auth error', String(e));

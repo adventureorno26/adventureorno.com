@@ -113,6 +113,25 @@ const CHECKS = [
            order by v.start_date`,
   },
   {
+    name: 'an imported activity that cannot say where it came from',
+    why:
+      'every activity from a connected account should carry an activity_sources row — that ' +
+      'row IS the provenance the whole import system exists to keep. On 2026-08-17, 25 of ' +
+      "Josh's 90 Strava activities had none: recordStravaSource() upserted with " +
+      "onConflict on plain columns while 0202's uniqueness is an EXPRESSION index, so every " +
+      'write failed 42P10 and the result was never checked. 0208 had backfilled the older ' +
+      'rows by hand, which is exactly what hid it. Nothing looked wrong on screen.',
+    sql: `select a.id::text,
+                 a.name,
+                 a.start_date::date::text as on_date,
+                 a.athlete_id::text
+            from public.activities a
+           where a.athlete_id is not null
+             and not exists (select 1 from public.activity_sources s where s.activity_id = a.id)
+           order by a.start_date desc
+           limit 50`,
+  },
+  {
     name: 'a place whose stored count disagrees with its visits',
     why:
       'places.visit_count is a mirror nobody refreshes when a visit changes (0190). ' +

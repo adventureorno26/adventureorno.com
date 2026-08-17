@@ -423,19 +423,48 @@ export async function recordStravaSource(
     connectionId = (conn?.id as string) ?? null;
   }
 
-  // One row per source record. The unique index on
-  // (provider, connection, external_key) makes a re-sync a no-op rather than a duplicate.
-  await admin.from('activity_sources').upsert(
-    {
-      activity_id: row.id,
-      connection_id: connectionId,
-      provider: 'strava',
-      origin: originFor(a.external_id, a.device_name),
-      external_key: String(a.id),
-      device_name: a.device_name ?? null,
-      is_primary: true,
-      confidence: 'exact',
-    },
-    { onConflict: 'provider,connection_id,external_key', ignoreDuplicates: true },
-  );
+  // One row per source record, found by its own identity: this activity, from Strava,
+  // carrying this Strava id.
+  //
+  // NOT AN UPSERT, and the reason is a bug this code shipped with. It used
+  // `onConflict: 'provider,connection_id,external_key'`, but 0202's uniqueness lives in an
+  // EXPRESSION index — `(provider, coalesce(connection_id, '000…'), external_key)` — and
+  // Postgres cannot infer an expression index from a bare column list. Every call returned
+  // `42P10: there is no unique or exclusion constraint matching the ON CONFLICT
+  // specification`, and because the result was never inspected, every one looked like a
+  // success. It was found on 2026-08-17 when 25 of Josh's 90 Strava activities had no
+  // evidence row at all; the other 65 only had one because 0208 backfilled them by hand,
+  // which is what hid the failure.
+  //
+  // So: match, then update or insert, and CHECK THE ERROR. A re-sync now also UPGRADES the
+  // row rather than ignoring it — a later sync knows the device and the connection, where
+  // 0208's blind backfill could only write 'strava' and two nulls.
+  const { data: existingSource, error: findErr } = await admin
+    .from('activity_sources')
+    .select('id')
+    .eq('activity_id', row.id)
+    .eq('provider', 'strava')
+    .eq('external_key', String(a.id))
+    .maybeSingle();
+  if (findErr) throw new Error(`find activity source failed: ${findErr.message}`);
+
+  const evidence = {
+    connection_id: connectionId,
+    origin: originFor(a.external_id, a.device_name),
+    device_name: a.device_name ?? null,
+    is_primary: true,
+    confidence: 'exact',
+  };
+
+  const { error } = existingSource
+    ? await admin.from('activity_sources').update(evidence).eq('id', existingSource.id)
+    : await admin.from('activity_sources').insert({
+        activity_id: row.id,
+        provider: 'strava',
+        external_key: String(a.id),
+        ...evidence,
+      });
+  // Loudly. An import that cannot say where an activity came from is not a finished import,
+  // and a silent one is how 25 activities lost their provenance without anybody noticing.
+  if (error) throw new Error(`record activity source failed: ${error.message}`);
 }
