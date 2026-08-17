@@ -2079,7 +2079,7 @@ where **Codex was right about the problem and both of us were wrong about the fi
 | 7 | *Medium: label the 44 historical claims honestly* | **Right.** "44 carry the fingerprint" says how they were written, not that each outing was shared |
 | 8 | *Medium: backfill must record explicit `unknown`* | **Right**, and it matters most for the 265 file rows: `source_id` is NULL on every one, so their upstream provider is genuinely unknown and must not be guessed as Garmin |
 | 9 | *Medium: done-definition should test more than `mileage_by_person`* | **Right.** The RLS policy on `activities` uses the SAME tag predicate as the view, so route geometry, cards and detail readers need their own assertions |
-| 10 | *Doc: there is no §7a-0* | **Right.** I referenced a section I never wrote. Fixed below |
+| 10 | *Doc: the plan cites a §7f that does not exist* | **Right.** I referenced a section I never wrote; the audit it meant is the table above. Reference corrected |
 | 11 | *Josh's OAuth: check athlete capacity, not just the callback* | **Fair, unresolved.** `strava-auth` is deployed (v15, `verify_jwt=false`) and his state expired unused. Capacity is not measurable through the API, so both hypotheses stay open until the retry is instrumented |
 
 **One claim I want to record as NOT a problem**, because it looks alarming: `authenticated`
