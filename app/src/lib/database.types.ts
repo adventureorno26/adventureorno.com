@@ -230,17 +230,26 @@ export type Database = {
       activity_profiles: {
         Row: {
           activity_id: string
+          claim_status: string
           created_at: string
+          created_by: string
+          evidence: string
           profile_id: string
         }
         Insert: {
           activity_id: string
+          claim_status?: string
           created_at?: string
+          created_by?: string
+          evidence?: string
           profile_id: string
         }
         Update: {
           activity_id?: string
+          claim_status?: string
           created_at?: string
+          created_by?: string
+          evidence?: string
           profile_id?: string
         }
         Relationships: [
