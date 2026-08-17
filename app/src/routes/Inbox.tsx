@@ -17,6 +17,9 @@ import {
   evidenceLine,
   fetchImportDuplicates,
   fetchInbox,
+  fetchTagsToConfirm,
+  respondToAllTags,
+  respondToTag,
   miles,
   rejectSuggestion,
   undoApproval,
@@ -27,6 +30,7 @@ import {
   type PhotoCandidate,
   type ImportDuplicatesPending,
   type InboxCard,
+  type TagToConfirm,
   type SuggestionOption,
 } from '../lib/inbox';
 import { showSnack } from '../lib/snackbar';
@@ -94,6 +98,10 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   // At ~184 activities, reviewing them one at a time is a data-entry job rather than a
   // review — so the whole batch is offered as one press, with the count on its face.
   const [dupes, setDupes] = useState<ImportDuplicatesPending | null>(null);
+  // Outings somebody else says you were on. A tag is a claim about ANOTHER person, so it
+  // is not settled until that person answers — and until 0213 nobody could: every claim
+  // that existed was `accepted_legacy`, which the responder refused.
+  const [tags, setTags] = useState<TagToConfirm[]>([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -101,6 +109,9 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
       fetchImportDuplicates()
         .then(setDupes)
         .catch(() => setDupes(null));
+      fetchTagsToConfirm()
+        .then(setTags)
+        .catch(() => setTags([]));
       const rows = await fetchInbox();
       setCards(rows);
       // Pre-select rank 0 per field — the recommendation, not a decision.
@@ -188,6 +199,43 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  /** Yes or no to one outing somebody else says you were on. */
+  async function onAnswerTag(t: TagToConfirm, accept: boolean) {
+    setBusy(t.claim_id);
+    try {
+      await respondToTag(t.claim_id, accept);
+      setTags((ts) => ts.filter((x) => x.claim_id !== t.claim_id));
+      showSnack({
+        message: accept
+          ? 'Added to your outings.'
+          : 'Removed. Your own recording of that day, if you have one, is untouched.',
+      });
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'Could not answer that.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Answer all of them at once — still his decision, said once instead of 44 times. */
+  async function onAnswerAllTags(accept: boolean) {
+    setBusy('tags');
+    try {
+      const n = await respondToAllTags(accept);
+      setTags([]);
+      showSnack({
+        message: accept
+          ? `Added ${n} outing${n === 1 ? '' : 's'} to yours.`
+          : `Removed ${n}. Anything you recorded yourself is untouched.`,
+      });
+      await load();
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'Could not answer those.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** Say yes to every import duplicate at once, and offer to put them all back. */
   async function onLinkAllDuplicates() {
     setBusy('bulk');
@@ -238,6 +286,56 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             Suggestions from the map data. Nothing here has changed anything yet — a name is only
             written when you say so, and once you do, nothing overwrites it.
           </p>
+        </div>
+      )}
+
+      {tags.length > 0 && (
+        <div className="inbox-rule-offer">
+          <p>
+            <strong>
+              {tags[0].tagged_by ?? 'Someone'} says you were on {tags.length} outing
+              {tags.length === 1 ? '' : 's'}
+            </strong>
+            {tags[0].rule_note ? <> — {tags[0].rule_note}</> : null}. Nothing counts as yours until
+            you say so. Saying no removes you from that day and never touches anything you recorded
+            yourself.
+          </p>
+          <div className="ic-actions">
+            <button
+              className="primary"
+              disabled={busy !== null}
+              onClick={() => onAnswerAllTags(true)}
+            >
+              {busy === 'tags' ? 'Saving…' : `Yes to all ${tags.length}`}
+            </button>
+            <button
+              className="ghost"
+              disabled={busy !== null}
+              onClick={() => onAnswerAllTags(false)}
+            >
+              No to all
+            </button>
+          </div>
+          <ul className="inbox-tag-list">
+            {tags.slice(0, 12).map((t) => (
+              <li key={t.claim_id}>
+                <span>
+                  {t.start_date ? dayLabel(t.start_date) : 'Undated'} —{' '}
+                  {t.place ?? t.name ?? 'an outing'}
+                  {miles(t.distance) ? `, ${miles(t.distance)}` : ''}
+                </span>
+                <span className="ic-actions">
+                  <button disabled={busy !== null} onClick={() => onAnswerTag(t, true)}>
+                    Yes
+                  </button>
+                  <button disabled={busy !== null} onClick={() => onAnswerTag(t, false)}>
+                    No
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {tags.length > 12 && <p className="muted">…and {tags.length - 12} more.</p>}
         </div>
       )}
 

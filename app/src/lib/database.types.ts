@@ -4146,6 +4146,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      my_tags_to_confirm: { Args: { p_limit?: number }; Returns: Json }
       naming_rules_list: { Args: never; Returns: Json }
       occasion_count: { Args: { p_profile?: string }; Returns: number }
       on_this_day: {
@@ -4363,6 +4364,10 @@ export type Database = {
       rename_activities_for_place: {
         Args: { p_old_name?: string; p_place: string }
         Returns: number
+      }
+      respond_to_all_tags: {
+        Args: { p_accept: boolean; p_limit?: number }
+        Returns: Json
       }
       respond_to_tag: {
         Args: { p_accept: boolean; p_claim: string }
@@ -5288,6 +5293,7 @@ export type Database = {
         }
         Returns: string
       }
+      visible_recording_of: { Args: { p_activity: string }; Returns: string }
       visit_detail: { Args: { p_visit: string }; Returns: Json }
       visit_is_inside_trip: { Args: { p_visit: string }; Returns: boolean }
       visit_people_all: {
