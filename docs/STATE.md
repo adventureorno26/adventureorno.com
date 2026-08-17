@@ -2356,6 +2356,69 @@ report 135 miles for a 45-mile run.
 Any import rebuild is finished when this day comes out as: **one outing, two participants,
 Erica's activity carrying two sources, Josh's carrying one.**
 
+#### 7a-9. The writes that reported success and did nothing *(2026-08-17, DONE — 0209)*
+
+Erica uploaded her Garmin GPX/TCX files and got **"Done — 0 activities imported.
+Re-importing the same file is safe (duplicates are ignored)"** for files she had never
+uploaded. The ingest ledger showed two runs, **zero items**, finished in 120ms — nothing had
+reached the database, so nothing in the database was at fault. Pulling that thread found
+four faults, and **three of them were writes that returned success and wrote nothing.**
+
+| What | What it did | How it hid |
+| --- | --- | --- |
+| `recordStravaSource()` | `onConflict: 'provider,connection_id,external_key'` against 0202's **expression** index `(provider, coalesce(connection_id,'000…'), external_key)`. Postgres cannot infer an expression index from a column list, so every call returned **42P10** | the result was never inspected, and 0208's hand-backfill had already filled the rows that existed — so only the **25** imported after 0208 were bare |
+| `source_connections` | only ever written by 0202's own backfill; the OAuth callback stored tokens and stopped | Josh's **90** activities carried `connection_id` NULL while his tokens sat in `strava_accounts` |
+| `parseActivityFile()` | discarded origin, device and any de-dup key | all **265** file rows say origin `unknown`; a re-upload could only be caught by Tier 2's guess |
+| `strava-backfill` | two athletes × 100 activities × ~5 round trips per activity | timed out at 150s, then returned `WORKER_RESOURCE_LIMIT` three times, leaving **28 of Josh's 93** missing **while reporting success** |
+
+**The rule this phase adds, and it is not about Strava.** *An ON CONFLICT column list cannot
+match an expression index — and an unchecked write is indistinguishable from a successful
+one.* Both `activity_sources` and `source_connections` are guarded by expression indexes
+(`coalesce(...)`), so both are now **match-then-write with the error checked and raised**.
+`check-data-integrity.mjs` gained *"an imported activity that cannot say where it came
+from"*, which counts activities from a connected account with no evidence row — the number
+that would have shown this on day one.
+
+**Files now carry their own identity, so de-duplication stops being a guess:**
+
+- **GPX** → Garmin Connect's activity id, read from the `connect.garmin.com/modern/activity/…`
+  link it stamps into the export → `garmin-connect:<id>`.
+- **TCX** → `UnitId` + `ProductID` + `<Id>`, emitted in **exactly the FIT key shape**
+  (`fit:garmin:<product>:<serial>:<iso>`), so the watch's own `.fit` and a `.tcx` of that
+  same activity are **one source record**, not two.
+- **No serial, no key.** File imports have no connection to scope them, so the unique index
+  is global — a key of just a start time would collide two people who set off together into
+  one activity. A missed match costs a confirmation; a false one silently merges two
+  people's outings. Tier 2 proposes instead.
+
+**The GPX/TCX path had never been tested at all**, because `parseActivityFile` needs
+`DOMParser` and vitest runs `environment: 'node'`, where it does not exist — so any test
+would have thrown on its first line. That is why a format Erica actually exports could ship
+broken while the FIT path had coverage. Added **jsdom** (that one file only), 9 tests over
+real Garmin export XML, and 4 that build an actual FIT file with Garmin's own encoder and
+read it back — no mocking of the decoder, because the decoder is the part that breaks.
+
+**Verified on production, not asserted:**
+
+    Erica   184 / 184 against Strava's own count       0 missing
+    Josh     90 /  93                                  3 are 2018 gym sessions: no location,
+                                                       no distance — dropped by rule
+    activities from a connected account with no evidence      0
+    Josh's evidence, re-fetched rather than guessed    57 strava-app, 29 garmin, 4 unknown
+
+and a **rolled-back rehearsal against her real data** (`Seneca Regional Park`, 2026-08-09):
+a GPX of an outing she already has via Strava is **created and proposed**; the same GPX
+again is a **duplicate that attaches**; the TCX is proposed, not merged; **3 submissions,
+3 ledger rows**. Nothing silently merged, nothing silently dropped.
+
+**And the message that started it.** The summary dropped the `already` count entirely and
+ended with *"duplicates are ignored"* whatever happened, so "I could not read your files"
+and "you already had these" and "I did nothing" all rendered identically. It now names each
+outcome and each unreadable file with its reason — including *"not a GPX, TCX or FIT file —
+unzip Garmin's export and pick the files inside"*, because a `.zip` read as text parses to
+null and used to be reported as *"no GPS track found"*, which sends a person to look at
+their watch instead of at the zip.
+
 #### What this phase does NOT do
 
 It does not add new providers. `intervals.icu`, Garmin Connect, Polar and the rest stay in
