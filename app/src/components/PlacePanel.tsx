@@ -54,6 +54,7 @@ import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
 import RouteMiniMap from './RouteMiniMap';
+import OsmCredit from './OsmCredit';
 import { pluralLabel } from '../lib/plural';
 import { byYear, visitDates } from '../lib/visitDates';
 import { everyoneLabel } from '../lib/participants';
@@ -2113,6 +2114,12 @@ export default function PlacePanel({
           </select>
         </div>
       )}
+
+      {/* ONE credit for the card. `RouteMiniMap` draws OpenStreetMap tiles and carries no
+          attribution control of its own — a control inside a map that small would be most
+          of the map. On a phone this card COVERS the main map, so the credit down there is
+          not on screen either. This is the page-level line that covers both. */}
+      <OsmCredit />
     </aside>
   );
 }
