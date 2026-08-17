@@ -3535,6 +3535,7 @@ export type Database = {
         Args: { p_choices: Json; p_group_key: string }
         Returns: Json
       }
+      approve_import_duplicates: { Args: { p_limit?: number }; Returns: Json }
       approve_join_request: {
         Args: { p_id: string; p_role: string }
         Returns: undefined
@@ -3968,6 +3969,7 @@ export type Database = {
           reason: string
         }[]
       }
+      import_duplicates_pending: { Args: never; Returns: Json }
       import_file_activity: {
         Args: {
           p_date: string
