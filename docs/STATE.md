@@ -1454,15 +1454,20 @@ CONTRADICTS something written here. Otherwise keep working (see
    conflict between the two documents, not just a bug.
 5. ~~**Three doors to Add**~~ — fixed 2026-08-10: `/add` is the one door.
 6. **Transient UI is not transient** (upload box, "finish importing").
-   6b. **THE STRAVA RULE IS NOT ENFORCED IN THE APP** (found 2026-08-16). `0193` built
-   `can_see_activity()` and a correct RLS policy, but **31 of the 32 SECURITY DEFINER
-   readers of `public.activities` ignore both**, and SECURITY DEFINER bypasses RLS. Every
-   count, card and statistic still shows each person the other's Strava-origin activities.
-   Josh's personal approval settles it between him and Erica; it does not settle Strava's
-   terms, so this is a hard precondition for Phase 7 and for charging anyone. See §7d.
-   6c. **Nothing watches whether scheduled jobs SUCCEEDED** (found 2026-08-16).
-   `dedupe-joint-outings` failed silently for eight consecutive nights. The watchtower
-   probes URLs; `cron.job_run_details` has no reader.
+   6b. ~~**THE STRAVA RULE IS NOT ENFORCED IN THE APP**~~ **FIXED 2026-08-16/17.**
+   `0193` built `can_see_activity()` and a correct RLS policy, and **31 of the 32
+   SECURITY DEFINER readers ignored both** — SECURITY DEFINER bypasses RLS, so the lock
+   looked right in psql and changed nothing a person could see. `0196` moved fifteen
+   display readers onto `visible_activities`; the seventeen still on the table are
+   writers and machine jobs, which is correct because the view filters on `auth.uid()`
+   and pg_cron has none. `the_readers_stay_enforced.test.sql` now fails if a new display
+   reader appears. Josh's approval settles it between him and Erica; the terms question
+   for a commercial product is Phase 7's.
+   6c. ~~**Nothing watches whether scheduled jobs SUCCEEDED**~~ **FIXED 2026-08-16/17.**
+   `dedupe-joint-outings` failed eight consecutive nights in silence. `0197` added
+   `cron_health()` and the watchtower Worker now asks it every fifteen minutes, recording
+   into the same `service_health` ledger as the URL probes. Proved on 2026-08-17: the job
+   ran green at 04:20 — its first success since 08-08 — and `cron_health()` said so.
 7. **Sorting photos cannot edit the location** — removed 2026-07-26, see §7.
 
 ---
@@ -2582,7 +2587,7 @@ Nothing will be deleted until you say so.
 | C2 | `CLOUDFLARE_API_TOKEN` renamed to `…_MASTER`, but wrangler reads the un-suffixed name                                                                                  | ✅ fixed in §12b — mapped across, and`wrangler login` noted as the alternative                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | C4 | The tile meter counted only tiles. Mapbox**Search Box and Directions** are plain fetches billed per request and were invisible to it                                  | ✅**VERIFIED LIVE** on deploy `f38cc846`: typing in search moved `aon_api_budget` from nothing to 1. Four call sites metered (suggest, retrieve, forward, directions) with their own 2,000/day budget; refusing a search degrades honestly, unlike refusing a tile                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | C3 | Server-side geocoding dead since the MapTiler suspension — verified 403 on geocoding, not just tiles                                                                       | ✅**fixed, client and server.** `MAPBOX_TOKEN` is now a Supabase secret (it was absent — the app moved to Mapbox on 08-10, the functions did not). One shared `supabase/functions/_shared/geocode.ts` does Mapbox → MapTiler → nothing, and **zero `api.maptiler.com` calls remain** outside that fallback. `geocode-new-places`, `suggest`, `detect-trips`, `strava-webhook` and `strava-backfill` redeployed; all three callable ones verified BOOTING with the new module (a bad import 500s before the auth guard, and they return their own 401 instead). Client `reverseGeocode` prefers Mapbox too. **Not yet seen end-to-end**: naming a real new place needs an owner session (Erica's) or the next Strava ingest |
-| C5 | The device ingest token travels as`?token=` and is therefore in Supabase's request logs in plaintext                                                                      | ❌ not started. Needs header support + a change to her iPhone Shortcut                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| C5 | The device ingest token travels as`?token=` and is therefore in Supabase's request logs in plaintext                                                                      | ⚠️ **half of this was already done and the row never said so.** `ingest-overland` has long PREFERRED `Authorization: Bearer` and only falls back to the query string — the leak persists because Erica's iPhone Shortcut still calls the URL form, and **nothing said whether it still did.** `0198` stamps `ingest_tokens.last_query_auth_at` on every query-string acceptance, so the fallback can be retired on EVIDENCE. Deleting it blind would break phone ingest with no error anyone would see; leaving it forever keeps a credential in the request logs forever. **Remaining: send the header from the Shortcut, watch that column stop advancing, then delete the fallback.** |
 | C6 | `the ` is set nowhere, so `ai-suggest` silently answers "not configured"                                                                                                | ❌ not started — needs a key, or the UI should say it is off rather than look unbuilt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Erica's directions, 2026-08-11 — to build
@@ -3661,7 +3666,9 @@ appear on the map within ~a minute; `/settings → Strava → Backfill` pulls hi
   document on 2026-08-11 and was never folded in here. What is known about the Shortcut is
   scattered: it filters `Is Screenshot = false` and `Has GPS = true` (§11), and it carries the
   device ingest token from `.env.local` as `?token=` (C5, §7 — still in plaintext in the
-  request logs). **The Shortcut Erica runs today exists only on her phone.** Writing its
+  request logs; the endpoint accepts `Authorization: Bearer <token>` instead, and since
+  `0198` every query-string call is stamped on the token row so the switch can be
+  confirmed rather than assumed). **The Shortcut Erica runs today exists only on her phone.** Writing its
   steps down here is a real gap, not a formatting one.
 - Install **Overland** (App Store, free). In its settings:
   - **Receiver Endpoint URL:**
