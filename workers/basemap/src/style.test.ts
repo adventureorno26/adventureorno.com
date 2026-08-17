@@ -117,3 +117,35 @@ describe('two themes, and the words in both', () => {
     expect(JSON.stringify([dark, light])).not.toMatch(/"icon-/);
   });
 });
+
+// THE CREDIT IS NOT OPTIONAL, and it is now styled to be quiet — which is exactly when a
+// guard starts earning its keep.
+//
+// Erica asked for the OSM credit to be less visible (2026-08-17) and it now renders as a
+// small muted chip. That is allowed: the OSMF guideline fixes a floor — legible without
+// interaction, in a corner, with a route to the licence — and leaves size and colour to
+// us. The next step down the same slope is deleting it, and that step is NOT allowed:
+// the tiles are built from OpenStreetMap data under ODbL, so the credit is a condition of
+// using the data at all. Self-hosting changed who serves the bytes, not who owns them.
+//
+// So this test exists to fail when the string goes missing, in either theme.
+describe('the OpenStreetMap credit', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    it(`is served with the ${theme} style, and points at the licence`, () => {
+      const style = buildStyle('https://x.test', theme) as {
+        sources: Record<string, { attribution?: string }>;
+      };
+      const attribution = style.sources.basemap.attribution ?? '';
+
+      expect(attribution, 'the OSM credit is required by ODbL — it cannot be dropped').toContain(
+        'OpenStreetMap',
+      );
+      // A route to the origin and licence is part of the requirement, and it is what
+      // makes a deliberately quiet credit still honest.
+      expect(
+        attribution,
+        'the credit must link to the licence, not just name the project',
+      ).toContain('openstreetmap.org/copyright');
+    });
+  }
+});

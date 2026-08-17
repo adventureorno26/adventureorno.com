@@ -344,7 +344,10 @@ export function buildStyle(origin: string, theme: Theme = 'dark'): unknown {
         tiles: [`${origin}/basemap/tiles/{z}/{x}/{y}.mvt`],
         minzoom: 0,
         maxzoom: 15,
-        attribution: '© OpenStreetMap contributors',
+        // A LINK, not bare text. The OSMF guideline wants a route to the origin and
+        // licence; with the credit styled small and muted (Erica asked for it quieter),
+        // the link is what keeps "less visible" on the right side of the line.
+        attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
       },
     },
     layers: withoutIcons(layersFor(PALETTES[theme])),

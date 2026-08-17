@@ -152,7 +152,7 @@ export default function DayView() {
       ...basemapOptions(),
       center: [-98, 39],
       zoom: 3,
-      attributionControl: { compact: true },
+      attributionControl: { compact: false },
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');

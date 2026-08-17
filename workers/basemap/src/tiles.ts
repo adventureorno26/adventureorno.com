@@ -92,7 +92,7 @@ export async function serveTile(
       bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat],
       center: [header.centerLon, header.centerLat, header.centerZoom],
       vector_layers: (metadata as { vector_layers?: unknown }).vector_layers ?? [],
-      attribution: '© OpenStreetMap contributors',
+      attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>',
     });
   }
 
