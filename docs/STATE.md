@@ -322,16 +322,51 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
   next scheduled run is 04:20, so tomorrow morning is when `cron:dedupe-joint-outings`
   should turn green on its own. If it does not, the watchtower will now be the thing that
   says so instead of a person going to look eight days later.
-- **A test that keeps the Strava rule enforced.** 17 functions still read
-  `public.activities` directly. Checked one by one, that is *correct* — they are writers
-  and machine jobs, which #100 deliberately kept on the table because the view filters on
-  `auth.uid()` and pg_cron has none. `shared_outings` reads raw and is still right: it
-  returns only the caller's own miles plus an honest `restricted_rows` count. But nothing
-  stops the **next** display reader from selecting straight from the table. Add the test
-  that fails when one does — the lock is fitted now, and this is what keeps it fitted.
-- **A deploy-freeze detector.** §7d already named the tell and it went unused twice in two
-  days: compare `/version.json` to `origin/main`. One command. It should be a check, not a
-  thing somebody remembers.
+- ✅ **The Strava rule has a guard that survives the next author** —
+  `supabase/tests/the_readers_stay_enforced.test.sql`. 0196's test is behavioural and must
+  stay: it signs in as one person and looks for the other's Strava-origin activity in what
+  comes back. But **it can only ask about the readers it names**, and the failure this
+  repository actually had was not a reader behaving badly — it was thirty-one readers
+  nobody had thought about.
+
+  So this one is structural and deliberately annoying. Every SECURITY DEFINER function
+  reading `public.activities` directly must be named in an allowlist **with a reason**;
+  a new display reader fails the suite until it either uses `visible_activities` or is
+  justified in writing. The next reader is written by somebody who has read none of this,
+  and the test is what talks to them.
+
+  Eighteen are listed: the guard itself, seven machine jobs (the view filters on
+  `auth.uid()`, NULL under pg_cron — a rebuild reading it would silently process
+  non-Strava rows only and corrupt what it rebuilt), eight writers, and the two readers
+  0196 left alone because they were already right.
+
+  It also fails when the allowlist names a function that no longer exists — **a stale
+  entry is an exemption waiting for whoever next uses that name** — and when
+  `visible_activities` stops filtering.
+
+  **Proved in both directions**: it passes clean against production, and each of the three
+  assertions was made to fire deliberately. Its first draft asserted the view CALLS
+  `can_see_activity()`; the real view inlines the same predicate, so that draft failed
+  against a correct schema. A guard that cries wolf gets deleted, which is worse than
+  never writing it — so it now asserts the substance (`original_source` AND `auth.uid()`),
+  not the spelling.
+
+- ✅ **The deploy-freeze detector lives in the WATCHTOWER, not in CI** — and that is the
+  entire point. §7d named the tell and it went unused twice in two days: `/version.json`
+  reports the deployed SHA, and comparing it to `main` is one request. But a check inside
+  CI would not have caught the incident it exists for, **because CI was the thing that was
+  down**. A freeze detector inside the frozen system detects nothing. Cloudflare's cron
+  does not care about GitHub's billing.
+
+  The probe reports `production is on 546ff11, main is on 920e52f — merged but not
+  shipped`. Both SHAs, because "behind" without saying behind what sends the reader to two
+  dashboards.
+
+  ⚠️ **It needs one secret**, because the repo is private and an unauthenticated call to
+  GitHub gets a 404: `cd workers/watchtower && npx wrangler secret put GITHUB_TOKEN` with
+  a READ-ONLY `contents:read` token. **Until it is set the probe reports a FAILURE, not a
+  pass** — being unable to check is the same blindness that let production sit 16 commits
+  behind for a day, so it is not skipped quietly.
 
 #### Step 4 — Then the queued lanes, in the order locked on 08-14
 
