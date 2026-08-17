@@ -45,6 +45,11 @@ declare
     'rebuild_place_visits',
     'rebuild_revealed_area',
     'recompute_place_stats',
+    -- 0205. Compares one person's own recordings to find the same outing logged twice, and
+    -- writes SUGGESTIONS — it shows nobody anything. It runs as a maintenance job where
+    -- `auth.uid()` is null, so through `visible_activities` it would see no Strava rows at
+    -- all and quietly propose nothing for the very activities that need it most.
+    'propose_source_duplicates',
 
     -- WRITERS. A person naming, moving, importing or reassigning specific rows they are
     -- acting on deliberately.
