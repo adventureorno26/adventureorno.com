@@ -2188,12 +2188,34 @@ feature.
 Three rules that do not move: never silently drop a file; de-duplicate **within one
 person** only; every merge reversible.
 
-#### 7a-5. Then Josh
+#### 7a-5. Then Josh — and it was ATHLETE CAPACITY
 
-Both hypotheses stay live until instrumented: the callback/state path **and** Strava
-athlete capacity. Instrument the retry so a second failure produces a reason rather than
-another expired row. Then his data arrives through the new importer, owned by him, and
-genuine joint outings come from two recordings — not from a date.
+**Settled 2026-08-17 by his retry: `403 — too many athletes`.**
+
+Strava caps a NEW API application at **one connected athlete**. Erica is that one. Josh is
+the second, so nothing about the callback, the state lifetime or the redirect URI could
+ever have let him in. Lifting it means submitting the app through **Strava's Developer
+Program review**, which raises the cap to 999 and takes **7–10 business days** — a form,
+not a code change.
+
+**What I got wrong, recorded because the mistake is the reusable part.** A reviewer raised
+athlete capacity; I wrote it down as *"fair, unresolved — both hypotheses stay open until
+the retry is instrumented"*, which was correct. Then I ruled out the redirect URI by
+probing Strava, found the 10-minute state TTL, and reported THAT as the cause — dropping my
+own caveat and promoting an unmeasured hypothesis to an answer. The instrumentation I said
+was needed is precisely what produced `403 too many athletes` in one attempt.
+
+`0204` still stands on its own: ten minutes is too short for someone finding a password or
+clearing 2FA, and the silent-failure message is what turned this retry into a diagnosis
+instead of another week of believing it had worked. Neither was the cause. `0207` records
+that on the function itself.
+
+**Josh is not blocked, and this is what the phase was for.** §6f and Phase 7 both say
+anything depending on Strava needs a non-Strava path, and now there is one: his Garmin FIT
+files go straight through `ingest_activity`, carrying a real `file_id` Tier 1 key, owned by
+him, and his genuine joint outings with Erica come from two recordings rather than a date.
+Strava is one importer among several — which is the whole argument, arriving as a working
+example rather than a paragraph.
 
 #### 7a-6. TAGGING IS THE PRODUCT — and a correction to how this file described it
 
