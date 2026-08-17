@@ -95,238 +95,100 @@ Do not begin a new feature lane until all items below are true for the same comm
 - Record every accepted decision and its proof here. Do not create another backlog,
   decisions log or competing agent instruction file.
 
-### THE PLAN TO FINISH — sequenced 2026-08-16, evening
+### THE PLAN — revised 2026-08-17
 
-Measured against production, not against this file. Every claim below was checked live
-before it was written down; where the check disagreed with §7d, the check wins and the
-correction is stated.
+**The 08-16 plan is finished and has been moved to §7e.** It ran Steps 0–3: production
+caught up to `main`, Phase 4 went Live-verified, the restore was proved, and the three
+monitoring traps were closed. Keeping a completed plan at the top of the file is how this
+document turned into a history of itself last time, so what remains is below and the
+narrative is in §7e where the other days live.
 
-**Where production actually is, 20:55 UTC 2026-08-16:**
+**The order is unchanged from 08-14** — stabilize the private core, then the web feature
+set, then native. What changed is that the top of the list is no longer maintenance.
 
-| Fact                        | Measured                                                                          |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `/version.json`           | `920e52f` (#99)                                                                 |
-| `origin/main`             | `a57a928` (#100) — **one commit ahead**                                  |
-| Why                         | CI's`Deploy production` job FAILED on the migration-ledger gate                 |
-| Migration ledger            | **all 196 recorded** — `check:ledger` passes now                         |
-| `0196` genuinely applied? | **yes** — `visible_activities` exists and `mileage_by_person` reads it |
+#### 1. MAKE `verify:live` TRUE AGAIN — first, and it is not a test chore
 
-**CORRECTION to §7d.** It says the billing freeze is the reason nothing is live. That was
-true this morning and is not the reason now. #99 deployed at 20:42. The *current* freeze is
-one commit deep and has a different cause: the deploy gate refused `a57a928` at 20:46
-because `0196` was not yet in the ledger, `0196` was applied by hand shortly after, and
-**nobody re-ran the job**. The gate worked exactly as designed. It is a stale red tick, not
-a broken pipeline.
+`e2e/erica-asked-for.spec.ts` is the file that decides whether Erica got what she asked
+for. Its own rules say a request is done when its check is green **on the live site**, and
+that a changed instruction gets its check **rewritten, with the old one noted** — never
+deleted.
 
-#### Step 0 — Re-run the deploy. ✅ **Deployed 2026-08-16 21:05 UTC**
+**Five checks are red, and at least three are red for the wrong reason.** Measured against
+production 2026-08-17:
 
-Re-ran `Deploy production` on `a57a928`; it passed in 40s with nothing changed but the
-ledger condition being true. `/version.json` now reports `a57a928` — **production and
-`origin/main` are the same commit for the first time since 2026-08-15 16:21 UTC.**
+| Check | Why it is red | What it needs |
+| ----- | ------------- | ------------- |
+| `:233` *"stats moved to the top of places"* | Asserts a stats bar ON Places — which she told us on 08-15 to **remove**, and #94 removed | **Rewrite to the newer instruction.** The check is enforcing a superseded request |
+| `:243` *"clicking Trips pulls up a list"* | Waits on `.stat-open` on Places; same removal | **Rewrite** — the Trips list moved with Stats to Settings |
+| `:95` *sections are Visits, Photos, Routes, categories, Notes* | Demands a `Routes` heading on a place that has no routes; the section is conditional by design | **Fix the check** — assert order over the sections that exist, or pick a place with routes |
+| `:175` *Routes holds the map AND the list* | Same conditional section | **Fix the check** the same way |
+| `:145` *"Remove the words tap a date and Trip and together from the visit section"* | The visit section still reads `Together / Just Erica / Just Josh` | **ERICA'S CALL** — see below |
 
-**The self-hosted map is Live-verified as SERVING** (Erica's own look is still what makes
-Phase 4 done, per Step 1):
+**Why this is first.** A verification system that cries wolf gets ignored, which is the
+argument written into `playwright.live.config.ts` itself. Right now four of its five
+failures are noise, so the one that might be real is buried. Nothing else on this list can
+be trusted as "done" while the thing that decides doneness is wrong.
 
-| Check                      | Result                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------- |
-| Deployed`basemap` chunk  | points at`/basemap/style.json?theme=` — the frozen Mapbox style object is GONE from the bundle |
-| `style.json?theme=dark`  | `application/json`, **12 layers**                                                         |
-| `style.json?theme=light` | **15 layers** (the 3 extra are road casings)                                                |
-| A z6 tile over Virginia    | `application/vnd.mapbox-vector-tile`, **38,148 bytes**                                    |
-| `/basemap/health`        | `ok:true`, planet 137,281,886,877 bytes                                                         |
+**The one genuine question in it (`:145`).** §0.1 relaxed the blanket ban on the word
+"Trip" *inside an edit control* — "the visit editor may say **Count this as a trip**" —
+while keeping passive badges banned. `Together / Just Erica / Just Josh` in the visit
+section is an edit control of exactly that kind, so the newer rule probably permits it and
+the check probably needs rewriting. **Probably is not good enough for a rule she wrote**,
+so it is a question, not an assumption: *does "no together in the visit section" still
+stand now that the participant picker is an edit control?*
 
-Content-type was checked on every one, because §4b's worst failure was a 200 of the app's
-own HTML from the wrong server.
+#### 2. THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION
 
-**ONE THIRD-PARTY MAP CALL SURVIVES, and it is not the basemap.** The deployed chunk still
-requests `api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1.json` — **terrain**, not tiles.
-Phase 4's "third-party basemap calls are absent" is now true of the basemap and false of
-the elevation model. That is not a regression and not a surprise: replacing it is exactly
-§6a-ii (Copernicus GLO-30 → terrain-RGB PMTiles). Recorded so the next person measuring
-"are we off Mapbox yet" gets the honest answer instead of a clean grep and a wrong
-conclusion.
+Measured on the live site with her data: `Celebrate Virginia`, `Mill Mountain Trail`,
+`Red Spring Gap`. A list overflows its collapsed container by 2,566px and paints under the
+floating nav, so no amount of page padding reaches it. Full diagnosis in §7e.
 
-#### Step 1 — ✅ **PHASE 4 IS LIVE-VERIFIED, 2026-08-16**
+**Needs a decision before code**: should a long category list inside a stats dropdown get
+its own scroll, a max height, or not be nested in that grid at all? Then it is a small fix.
 
-Erica, after the deploy: ***"the map looks different."*** That is the sentence Phase 4's
-definition of done was waiting for, and **Live-verified** is the highest status in the
-table at the top of this file. The basemap is ours, rendered from our own PMTiles in our
-own colours. The terrain DEM above is the one third-party map call left, and it is
-§6a-ii's job, not Phase 4's.
+#### 3. WAITING ON ERICA — none of it blocks the rest
 
-She said one more thing in the same breath: ***"It should just say Add not Add 1 on the
-pill."***
+- **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
+  `contents:read`). Until then the deploy probe honestly reports that it cannot check.
+- **The iOS Shortcut** — send `Authorization: Bearer`, and the `?token=` fallback can go.
+  Note §C5: the device path has not run since 07-29, so "where we are" is a browser tab for
+  both of them right now.
+- **The 122 photos** — one visit, one day, one place, no ambiguity, and `0157` makes the
+  attachment permanent. The 32 with fabricated `12:00:00` stamps must be proposed instead.
+- **Her manual smoke pass** — the last unticked box in the stabilization gate. The
+  automated acceptance flows cover the same ground but do not replace her driving it once.
 
-**Fixed.** The count is off the pill. It rode there because retiring the Inbox tab left the
-number homeless — but a destination is a place you are going, and a queue length is not
-part of its name; it also made the pill's width jump as the number changed. **Nothing is
-lost**: `/add` still heads its queue **"To review · N"**, which is the screen that can
-actually do something about it. It also drops a `fetchInboxCounts()` that ran on EVERY
-navigation to render one digit.
+#### 4. THEN THE QUEUED LANES, in the order locked on 08-14
 
-**And it uncovered a test that had been wrong for a day without going red.**
-`app/e2e/app.spec.ts` asserted the Add tab links to `/add` and lands on the Add page. #94
-changed that on 08-15 — the tab is `to: '/?add=1'` and opens the blank card over the map.
-The assertions were stale from that moment, and nothing caught it because **this file only
-runs in the nightly `Full browser matrix`, and the nightly was failing in 7 seconds on
-GitHub billing.** The suite itself is sound: it sets `REQUIRE_AUTH_E2E=true`, so it cannot
-silently skip its own authenticated tests. It simply never got to run. Tonight's would
-have caught it.
+Nothing here starts while §1 is red.
 
-Two lessons, both already in this file wearing other clothes: **a test that only runs
-nightly is only as good as the nightly**, and the pill assertion is now exact — `/^Add$/`,
-not `/^Add( \d+)?$/` — because a prefix match would let the count creep back without
-failing anything.
+| Lane | State | Next concrete step |
+| ---- | ----- | ------------------ |
+| Phase 3 — the one page | not started | Needs her preview approval FIRST: `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
+| Phase 4d — geocoding we own | nothing built | Overture → PMTiles; Mapbox stays the fallback |
+| Phase 6 — what we own | nothing built | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question |
+| Phase 7 — fitness ingest | nothing built | intervals.icu first; email-in is the best effort-to-coverage item |
+| Phase 8 — events, social, privacy floor | nothing built | Much of it gated on the LLC and the native shell |
 
-#### WHAT RUNNING THE NIGHTLY SUITE FOUND — 2026-08-16, and it was not the pill
+**Two dead components are named and unremoved**: `BucketMiniMap` and `TrailSectionsMap`
+have no consumers. `AddSheet` was the same and she said delete it, so these are probably
+the same answer — but removals get asked about first.
 
-Rather than assume the pill change was safe, the `Full browser matrix` was dispatched by
-hand — the first time it has completed since the billing freeze. **211 passed, 24 failed.**
-The 24 are 6 tests across 4 browsers, and **not one of them was caused by the pill.** They
-were all already broken, waiting for a suite that could run.
+#### 5. THE STANDING RULES THIS WEEK EARNED
 
-**Two REAL critical accessibility violations, on the card Erica asked for.** On `/?add=1`:
+Not process for its own sake — each one is a specific thing that went wrong:
 
-    critical label       — Form elements must have labels — input[type="date"]
-    critical select-name — Select element must have an accessible name — select
-
-§4 of this file says *"zero WCAG A/AA violations across the authed routes, nothing
-allowlisted."* That has been **false since #94**, on the newest and most prominent screen
-in the app. The cause is a pattern worth recognising: rows are written
-`<div class="npd-row"><span>Visit date</span><input/></div>` — the words are on the screen,
-next to the control, attached to nothing. The **Name** row three fields above was already
-`<label className="npd-row">` and was always fine, so the correct shape was in the same
-file the whole time. Fixed by making the rows `<label>`; the CSS is class-based, so it is
-byte-identical on screen. The tag picker cannot be a wrapping label — its row holds chips
-*and* a select — so it takes an explicit `aria-label`.
-
-The trail select had the same defect and axe never saw it: the run had no trails, so the
-row did not render. **One condition away from being invisible** is not the same as fixed.
-
-**The guard that should have caught it was aimed at the wrong element.** The a11y test for
-this screen opens `getByRole('dialog', { name: 'Add' })` — but #94 replaced the chooser
-with the card, whose accessible name is **"New place"**. The locator failed before axe ever
-ran, so the test reported a locator error rather than two violations. *A guard pointed at
-something that no longer exists says nothing about what replaced it.*
-
-**`AddSheet` is GONE.** Nothing imported it, and `lockedCard.test.ts` already asserted
-MapView does not render it — #94 removed the chooser and left the component behind. Three
-e2e tests were still describing its "What are you adding?" screen and its three choices;
-they now describe the card. **Erica, 2026-08-16, asked: delete it.** So the component and
-its 866 characters of orphaned CSS (`.add-sheet`, `.add-choices`, `.add-note` — used by
-nothing else) are removed together. Dead CSS outlives dead components because nobody
-greps stylesheets.
-
-The through-line for all six: **a test that only runs nightly is only as good as the
-nightly.** #94 merged on 08-15, the nightly died on billing that afternoon, and every one
-of these has been sitting in `main` — and since 21:05 today, in production — unseen.
-
-**Proved, not assumed** — the matrix was re-run on the fix branch:
-
-| Run                                | Result                                    |
-| ---------------------------------- | ----------------------------------------- |
-| `main`, 21:23                    | 211 passed,**24 failed**, 1 skipped |
-| `fix/the-card-has-labels`, 21:47 | **235 passed, 0 failed**, 1 skipped |
-
-211 + 24 = 235, so every failure is accounted for and none was traded for a new one.
-
-#### Step 1 (cont.) — the rest of what landed, still to look at
-
-These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
-
-| From        | What she should see                                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| #86 #87 #88 | The map is OURS — Ink (dark) / Daylight 2 (light), Settings → Map appearance,**no Mapbox call in the network panel** |
-| #94         | Timeline drills YEAR → months → days;`/add` opens the blank card; no gear and no stats bar on Places                     |
-| #96         | Mileage is her own; "just me" is the default                                                                                 |
-| #97         | The watchtower checks WHAT came back, not just that something did                                                            |
-| #100        | Each person's Strava-origin activities are their own, in every count and card                                                |
-
-Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Worker.
-
-#### Step 2 — Close the six open boxes in the stabilization gate
-
-1. ✅ **The restore is proved — 2026-08-16 21:11 UTC.** The identity-column fix landed in
-   #99 at 20:38, **after** the 18:08 verify run that failed with *"cannot insert a
-   non-DEFAULT value into column id"*, so it had never once been watched working. Ran it:
-
-   |               | 18:08 (before)                             | 21:11 (after)                                      |
-   | ------------- | ------------------------------------------ | -------------------------------------------------- |
-   | Tables loaded | 35,**errors: 1**                     | 35,**errors: 0**                             |
-   | Row counts    | `ROWS LOST`, `service_health` 0 of 415 | **all 45 tables match exactly, 21,143 rows** |
-
-   The gate in the stabilization list at the top of this file can now be ticked without the
-   "only partly proven" caveat it has carried since this morning.
-2. Erica: sign in → open a place card → edit and save a visit → reload → it is still there.
-3. Josh: every editor action, with no unexplained permission or save failure.
-4. Manual smoke on the deployed SHA: map, place card, visit page, Add/import, photos,
-   stats, logout.
-5. Confirm both hard gates on a real run — ledger (already proven; it is what blocked
-   `a57a928`) and backup freshness.
-6. ✅ GitHub CLI is healthy — `adventureorno26` is the active account.
-
-#### Step 3 — Close the three traps 08-16 opened and did not finish
-
-- ✅ **`cron.job_run_details` has a reader — `0197` + the watchtower.** It had none:
-  verified as zero references anywhere in the repository. `dedupe-joint-outings` failed
-  eight consecutive nights in silence, and the reason nobody noticed is that **a failed
-  cron row breaks no page, 500s no request and produces no complaint — it looks like
-  nothing at all.** The watchtower was probing five URLs every fifteen minutes throughout
-  and had no idea the database was running anything.
-
-  `cron_health()` answers for the jobs and the existing Worker records the answers into
-  `service_health`, so both halves show on one screen. It is the same lesson as 0194 one
-  layer down: *0194 — a 200 from the wrong server looks like success, so ask what came
-  back; 0197 — a scheduled job looks like a working job, so ask whether its last run
-  succeeded.*
-
-  **Staleness is measured, not parsed.** A job can fail by not running at all, and pg_cron
-  has no `next_run`; parsing five-field cron expressions in SQL to compute one is a bug
-  generator. The job's OWN history sets the expectation — the median gap between its
-  recent runs, doubled — so a daily job tolerates ~48h and a quarter-hourly one ~30m with
-  nothing needing to know which is which. Proved against production read-only before it
-  was written down: it returns `ok=false … not authorized` for `dedupe-joint-outings` and
-  `ok=true` for the other two, and with the tolerance forced to one second all three
-  correctly read *"overdue for a job that normally runs every 24h"*.
-
-  **A job whose last run SUCCEEDED can still be broken** — that is the case the ok flag
-  exists for, and the one a status-only check would call healthy.
-
-  ⚠️ **`0197` IS NOT APPLIED YET.** Applying it was declined by this session's permission
-  gate, so it is merged-but-unapplied and **the production deploy gate will refuse the
-  next deploy until it is applied** — correctly, and exactly as it refused `a57a928`
-  earlier today. Apply with `npm run db:apply 0197_the_jobs_are_watched`, then deploy the
-  Worker with `cd workers/watchtower && npx wrangler deploy`. The Worker is harmless until
-  then: an unreachable `cron_health()` records one honest `cron` failure row rather than
-  blaming a job.
-- **A test that keeps the Strava rule enforced.** 17 functions still read
-  `public.activities` directly. Checked one by one, that is *correct* — they are writers
-  and machine jobs, which #100 deliberately kept on the table because the view filters on
-  `auth.uid()` and pg_cron has none. `shared_outings` reads raw and is still right: it
-  returns only the caller's own miles plus an honest `restricted_rows` count. But nothing
-  stops the **next** display reader from selecting straight from the table. Add the test
-  that fails when one does — the lock is fitted now, and this is what keeps it fitted.
-- **A deploy-freeze detector.** §7d already named the tell and it went unused twice in two
-  days: compare `/version.json` to `origin/main`. One command. It should be a check, not a
-  thing somebody remembers.
-
-#### Step 4 — Then the queued lanes, in the order locked on 08-14
-
-Nothing here starts until Steps 0–3 are true for the same commit.
-
-| Lane                                     | State         | Note                                                                                                                                                                                          |
-| ---------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 1 remainder                        | nearly closed | Steps 2–3 above ARE the remainder                                                                                                                                                            |
-| Phase 3 — the one page                  | not started   | `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
-| Phase 4d — geocoding we own             | nothing built | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                |
-| Phase 6 — what we own                   | nothing built | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED                                                                                                            |
-| Phase 7 — fitness ingest                | nothing built | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                             |
-| Phase 8 — events, social, privacy floor | nothing built | Much of it is gated on the LLC and the native shell                                                                                                                                           |
-
-**Two things are waiting on Erica and block nothing else** (§"Open, awaiting Erica's
-decision"): whether to attach the **122 photos** that match exactly one visit on one day
-at one place — unambiguous, and 0157 now makes the attachment permanent — and the 32 with
-fabricated `12:00:00` timestamps, which must be proposed rather than written.
+1. **Measure the thing, not a proxy for it, and check what you pointed at.** Three
+   findings this week came from measuring and one from inferring; the inferred one was
+   wrong, and the retraction of it was *also* wrong because it measured a login page by
+   mistake.
+2. **A guard that cannot see the failure is not a guard.** The a11y check aimed at a
+   dialog that no longer existed. The obstruction check never looked at /settings. The
+   nightly suite could not run at all.
+3. **Apply the migration BEFORE merging.** It is why #103 deployed and #100 did not, and
+   regenerate the types in the same commit.
+4. **A null is not a fact.** `solo_profile IS NULL`, a quiet cron row, an empty
+   `last_query_auth_at` — absence of evidence keeps getting read as evidence of absence.
 
 ---
 
@@ -3107,6 +2969,260 @@ a real bug**, which is the argument for not carrying warnings.
 
 Both effects now key on the section list itself — correct, consistent, and it stops
 refetching every trail whenever any unrelated place is edited.
+
+---
+
+## 7e. 2026-08-16/17 — the plan that ran, and what measuring badly cost
+
+Everything below happened under the 08-16 plan, which is finished. It is here rather than
+at the top of the file because a completed plan left in the NOW section is how this
+document became a history of itself the first time.
+
+**What closed:** production caught up to `main` (three times), Phase 4 went
+**Live-verified** on Erica's own words, the restore was proved after the identity-column
+fix, the Strava rule reached the readers and got a guard, the cron jobs got a watcher, the
+deploy freeze got a detector, and two stabilization-gate items were closed by asking the
+screen instead of the database.
+
+**What it cost to find out** is the more useful record, and it is all here: the stale red
+tick, the a11y violations shipped on a brand-new card, the guard aimed at a dialog that no
+longer existed, the test that was wrong for a day without going red, the cleanup that
+deleted other tests' fixtures, and the confident retraction that measured a login page.
+
+---
+
+### The 08-16 plan, as it ran
+
+Measured against production, not against this file. Every claim below was checked live
+before it was written down; where the check disagreed with §7d, the check wins and the
+correction is stated.
+
+**Where production actually is, 20:55 UTC 2026-08-16:**
+
+| Fact                        | Measured                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `/version.json`           | `920e52f` (#99)                                                                 |
+| `origin/main`             | `a57a928` (#100) — **one commit ahead**                                  |
+| Why                         | CI's`Deploy production` job FAILED on the migration-ledger gate                 |
+| Migration ledger            | **all 196 recorded** — `check:ledger` passes now                         |
+| `0196` genuinely applied? | **yes** — `visible_activities` exists and `mileage_by_person` reads it |
+
+**CORRECTION to §7d.** It says the billing freeze is the reason nothing is live. That was
+true this morning and is not the reason now. #99 deployed at 20:42. The *current* freeze is
+one commit deep and has a different cause: the deploy gate refused `a57a928` at 20:46
+because `0196` was not yet in the ledger, `0196` was applied by hand shortly after, and
+**nobody re-ran the job**. The gate worked exactly as designed. It is a stale red tick, not
+a broken pipeline.
+
+#### Step 0 — Re-run the deploy. ✅ **Deployed 2026-08-16 21:05 UTC**
+
+Re-ran `Deploy production` on `a57a928`; it passed in 40s with nothing changed but the
+ledger condition being true. `/version.json` now reports `a57a928` — **production and
+`origin/main` are the same commit for the first time since 2026-08-15 16:21 UTC.**
+
+**The self-hosted map is Live-verified as SERVING** (Erica's own look is still what makes
+Phase 4 done, per Step 1):
+
+| Check                      | Result                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Deployed`basemap` chunk  | points at`/basemap/style.json?theme=` — the frozen Mapbox style object is GONE from the bundle |
+| `style.json?theme=dark`  | `application/json`, **12 layers**                                                         |
+| `style.json?theme=light` | **15 layers** (the 3 extra are road casings)                                                |
+| A z6 tile over Virginia    | `application/vnd.mapbox-vector-tile`, **38,148 bytes**                                    |
+| `/basemap/health`        | `ok:true`, planet 137,281,886,877 bytes                                                         |
+
+Content-type was checked on every one, because §4b's worst failure was a 200 of the app's
+own HTML from the wrong server.
+
+**ONE THIRD-PARTY MAP CALL SURVIVES, and it is not the basemap.** The deployed chunk still
+requests `api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1.json` — **terrain**, not tiles.
+Phase 4's "third-party basemap calls are absent" is now true of the basemap and false of
+the elevation model. That is not a regression and not a surprise: replacing it is exactly
+§6a-ii (Copernicus GLO-30 → terrain-RGB PMTiles). Recorded so the next person measuring
+"are we off Mapbox yet" gets the honest answer instead of a clean grep and a wrong
+conclusion.
+
+#### Step 1 — ✅ **PHASE 4 IS LIVE-VERIFIED, 2026-08-16**
+
+Erica, after the deploy: ***"the map looks different."*** That is the sentence Phase 4's
+definition of done was waiting for, and **Live-verified** is the highest status in the
+table at the top of this file. The basemap is ours, rendered from our own PMTiles in our
+own colours. The terrain DEM above is the one third-party map call left, and it is
+§6a-ii's job, not Phase 4's.
+
+She said one more thing in the same breath: ***"It should just say Add not Add 1 on the
+pill."***
+
+**Fixed.** The count is off the pill. It rode there because retiring the Inbox tab left the
+number homeless — but a destination is a place you are going, and a queue length is not
+part of its name; it also made the pill's width jump as the number changed. **Nothing is
+lost**: `/add` still heads its queue **"To review · N"**, which is the screen that can
+actually do something about it. It also drops a `fetchInboxCounts()` that ran on EVERY
+navigation to render one digit.
+
+**And it uncovered a test that had been wrong for a day without going red.**
+`app/e2e/app.spec.ts` asserted the Add tab links to `/add` and lands on the Add page. #94
+changed that on 08-15 — the tab is `to: '/?add=1'` and opens the blank card over the map.
+The assertions were stale from that moment, and nothing caught it because **this file only
+runs in the nightly `Full browser matrix`, and the nightly was failing in 7 seconds on
+GitHub billing.** The suite itself is sound: it sets `REQUIRE_AUTH_E2E=true`, so it cannot
+silently skip its own authenticated tests. It simply never got to run. Tonight's would
+have caught it.
+
+Two lessons, both already in this file wearing other clothes: **a test that only runs
+nightly is only as good as the nightly**, and the pill assertion is now exact — `/^Add$/`,
+not `/^Add( \d+)?$/` — because a prefix match would let the count creep back without
+failing anything.
+
+#### WHAT RUNNING THE NIGHTLY SUITE FOUND — 2026-08-16, and it was not the pill
+
+Rather than assume the pill change was safe, the `Full browser matrix` was dispatched by
+hand — the first time it has completed since the billing freeze. **211 passed, 24 failed.**
+The 24 are 6 tests across 4 browsers, and **not one of them was caused by the pill.** They
+were all already broken, waiting for a suite that could run.
+
+**Two REAL critical accessibility violations, on the card Erica asked for.** On `/?add=1`:
+
+    critical label       — Form elements must have labels — input[type="date"]
+    critical select-name — Select element must have an accessible name — select
+
+§4 of this file says *"zero WCAG A/AA violations across the authed routes, nothing
+allowlisted."* That has been **false since #94**, on the newest and most prominent screen
+in the app. The cause is a pattern worth recognising: rows are written
+`<div class="npd-row"><span>Visit date</span><input/></div>` — the words are on the screen,
+next to the control, attached to nothing. The **Name** row three fields above was already
+`<label className="npd-row">` and was always fine, so the correct shape was in the same
+file the whole time. Fixed by making the rows `<label>`; the CSS is class-based, so it is
+byte-identical on screen. The tag picker cannot be a wrapping label — its row holds chips
+*and* a select — so it takes an explicit `aria-label`.
+
+The trail select had the same defect and axe never saw it: the run had no trails, so the
+row did not render. **One condition away from being invisible** is not the same as fixed.
+
+**The guard that should have caught it was aimed at the wrong element.** The a11y test for
+this screen opens `getByRole('dialog', { name: 'Add' })` — but #94 replaced the chooser
+with the card, whose accessible name is **"New place"**. The locator failed before axe ever
+ran, so the test reported a locator error rather than two violations. *A guard pointed at
+something that no longer exists says nothing about what replaced it.*
+
+**`AddSheet` is GONE.** Nothing imported it, and `lockedCard.test.ts` already asserted
+MapView does not render it — #94 removed the chooser and left the component behind. Three
+e2e tests were still describing its "What are you adding?" screen and its three choices;
+they now describe the card. **Erica, 2026-08-16, asked: delete it.** So the component and
+its 866 characters of orphaned CSS (`.add-sheet`, `.add-choices`, `.add-note` — used by
+nothing else) are removed together. Dead CSS outlives dead components because nobody
+greps stylesheets.
+
+The through-line for all six: **a test that only runs nightly is only as good as the
+nightly.** #94 merged on 08-15, the nightly died on billing that afternoon, and every one
+of these has been sitting in `main` — and since 21:05 today, in production — unseen.
+
+**Proved, not assumed** — the matrix was re-run on the fix branch:
+
+| Run                                | Result                                    |
+| ---------------------------------- | ----------------------------------------- |
+| `main`, 21:23                    | 211 passed,**24 failed**, 1 skipped |
+| `fix/the-card-has-labels`, 21:47 | **235 passed, 0 failed**, 1 skipped |
+
+211 + 24 = 235, so every failure is accounted for and none was traded for a new one.
+
+#### Step 1 (cont.) — the rest of what landed, still to look at
+
+These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
+
+| From        | What she should see                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| #86 #87 #88 | The map is OURS — Ink (dark) / Daylight 2 (light), Settings → Map appearance,**no Mapbox call in the network panel** |
+| #94         | Timeline drills YEAR → months → days;`/add` opens the blank card; no gear and no stats bar on Places                     |
+| #96         | Mileage is her own; "just me" is the default                                                                                 |
+| #97         | The watchtower checks WHAT came back, not just that something did                                                            |
+| #100        | Each person's Strava-origin activities are their own, in every count and card                                                |
+
+Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Worker.
+
+#### Step 2 — Close the six open boxes in the stabilization gate
+
+1. ✅ **The restore is proved — 2026-08-16 21:11 UTC.** The identity-column fix landed in
+   #99 at 20:38, **after** the 18:08 verify run that failed with *"cannot insert a
+   non-DEFAULT value into column id"*, so it had never once been watched working. Ran it:
+
+   |               | 18:08 (before)                             | 21:11 (after)                                      |
+   | ------------- | ------------------------------------------ | -------------------------------------------------- |
+   | Tables loaded | 35,**errors: 1**                     | 35,**errors: 0**                             |
+   | Row counts    | `ROWS LOST`, `service_health` 0 of 415 | **all 45 tables match exactly, 21,143 rows** |
+
+   The gate in the stabilization list at the top of this file can now be ticked without the
+   "only partly proven" caveat it has carried since this morning.
+2. Erica: sign in → open a place card → edit and save a visit → reload → it is still there.
+3. Josh: every editor action, with no unexplained permission or save failure.
+4. Manual smoke on the deployed SHA: map, place card, visit page, Add/import, photos,
+   stats, logout.
+5. Confirm both hard gates on a real run — ledger (already proven; it is what blocked
+   `a57a928`) and backup freshness.
+6. ✅ GitHub CLI is healthy — `adventureorno26` is the active account.
+
+#### Step 3 — Close the three traps 08-16 opened and did not finish
+
+- ✅ **`cron.job_run_details` has a reader — `0197` + the watchtower.** It had none:
+  verified as zero references anywhere in the repository. `dedupe-joint-outings` failed
+  eight consecutive nights in silence, and the reason nobody noticed is that **a failed
+  cron row breaks no page, 500s no request and produces no complaint — it looks like
+  nothing at all.** The watchtower was probing five URLs every fifteen minutes throughout
+  and had no idea the database was running anything.
+
+  `cron_health()` answers for the jobs and the existing Worker records the answers into
+  `service_health`, so both halves show on one screen. It is the same lesson as 0194 one
+  layer down: *0194 — a 200 from the wrong server looks like success, so ask what came
+  back; 0197 — a scheduled job looks like a working job, so ask whether its last run
+  succeeded.*
+
+  **Staleness is measured, not parsed.** A job can fail by not running at all, and pg_cron
+  has no `next_run`; parsing five-field cron expressions in SQL to compute one is a bug
+  generator. The job's OWN history sets the expectation — the median gap between its
+  recent runs, doubled — so a daily job tolerates ~48h and a quarter-hourly one ~30m with
+  nothing needing to know which is which. Proved against production read-only before it
+  was written down: it returns `ok=false … not authorized` for `dedupe-joint-outings` and
+  `ok=true` for the other two, and with the tolerance forced to one second all three
+  correctly read *"overdue for a job that normally runs every 24h"*.
+
+  **A job whose last run SUCCEEDED can still be broken** — that is the case the ok flag
+  exists for, and the one a status-only check would call healthy.
+
+  ⚠️ **`0197` IS NOT APPLIED YET.** Applying it was declined by this session's permission
+  gate, so it is merged-but-unapplied and **the production deploy gate will refuse the
+  next deploy until it is applied** — correctly, and exactly as it refused `a57a928`
+  earlier today. Apply with `npm run db:apply 0197_the_jobs_are_watched`, then deploy the
+  Worker with `cd workers/watchtower && npx wrangler deploy`. The Worker is harmless until
+  then: an unreachable `cron_health()` records one honest `cron` failure row rather than
+  blaming a job.
+- **A test that keeps the Strava rule enforced.** 17 functions still read
+  `public.activities` directly. Checked one by one, that is *correct* — they are writers
+  and machine jobs, which #100 deliberately kept on the table because the view filters on
+  `auth.uid()` and pg_cron has none. `shared_outings` reads raw and is still right: it
+  returns only the caller's own miles plus an honest `restricted_rows` count. But nothing
+  stops the **next** display reader from selecting straight from the table. Add the test
+  that fails when one does — the lock is fitted now, and this is what keeps it fitted.
+- **A deploy-freeze detector.** §7d already named the tell and it went unused twice in two
+  days: compare `/version.json` to `origin/main`. One command. It should be a check, not a
+  thing somebody remembers.
+
+#### Step 4 — Then the queued lanes, in the order locked on 08-14
+
+Nothing here starts until Steps 0–3 are true for the same commit.
+
+| Lane                                     | State         | Note                                                                                                                                                                                          |
+| ---------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1 remainder                        | nearly closed | Steps 2–3 above ARE the remainder                                                                                                                                                            |
+| Phase 3 — the one page                  | not started   | `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
+| Phase 4d — geocoding we own             | nothing built | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                |
+| Phase 6 — what we own                   | nothing built | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED                                                                                                            |
+| Phase 7 — fitness ingest                | nothing built | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                             |
+| Phase 8 — events, social, privacy floor | nothing built | Much of it is gated on the LLC and the native shell                                                                                                                                           |
+
+**Two things are waiting on Erica and block nothing else** (§"Open, awaiting Erica's
+decision"): whether to attach the **122 photos** that match exactly one visit on one day
+at one place — unambiguous, and 0157 now makes the attachment permanent — and the 32 with
+fabricated `12:00:00` timestamps, which must be proposed rather than written.
 
 ---
 
