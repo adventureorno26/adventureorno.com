@@ -3846,6 +3846,15 @@ export type Database = {
         Returns: undefined
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      file_content_key: {
+        Args: {
+          p_date: string
+          p_distance: number
+          p_owner: string
+          p_type: string
+        }
+        Returns: string
+      }
       finish_ingest_run: { Args: { p_run: string }; Returns: undefined }
       forget_rule: { Args: { p_id: string }; Returns: Json }
       geo_coverage: {

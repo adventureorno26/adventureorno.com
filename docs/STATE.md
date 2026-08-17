@@ -2586,6 +2586,51 @@ wasn't.
 recording at all. They become answerable as she uploads her Garmin files — which is 7a-8,
 now with the mechanism that makes it actually arrive.
 
+#### 7a-13. A file that says nothing still identifies itself *(2026-08-17, DONE — 0216/0217)*
+
+**It happened to her while this was being written.** Erica imported one Garmin GPX at
+21:50 and the same file again at 22:01. Both said `proposed`. She now has two identical
+*Loudoun County Walking* rows for 2024-09-26 — and she is about to upload ~184 files.
+
+Measured first, as the reason:
+
+    file-sourced activities in production        267
+    of those with a de-dup key                     0
+
+Not one. Her GPX carries no `connect.garmin.com/.../activity/…` link, so 0209's Tier 1 key
+could not be built and Tier 2 could only guess. Nothing in the system could recognise a
+file it had already seen.
+
+**So when the file will not say who it is, the recording does:**
+
+    file-content:<owner>:<start to the second>:<distance in whole metres>:<type>
+
+**This is not a similarity guess, and that distinction is the entire justification for
+letting Tier 1 attach on it silently.** Tier 2 asks *"could these be the same outing?"* and
+must only propose, because the answer is a judgement — her two recordings of one run start
+11 minutes 21 seconds apart (7a-4). This key asks *"is this the same RECORDING?"* One person
+cannot start two activities of the same type in the same **second** covering the same whole
+number of metres. There is no pair of distinct outings it can merge, and the test proves
+both halves: a different outing at the same place on the same day is still its own activity,
+and **another person's identical recording stays theirs** — the owner is inside the key
+because file imports have no `connection_id`, so the unique index is global and two people
+setting off together would otherwise collide into one activity.
+
+**264 of the 267 backfilled.** One has no key possible (no distance). Two collided — which
+IS her duplicate pair.
+
+**0217 corrects 0216's handling of that collision, and the mistake is worth recording.**
+0216 skipped colliding rows on the ground that a real duplicate is a person's decision, not
+a migration's. Right about the merge, wrong about the key: leaving *both* unkeyed means a
+third upload of that file matches neither and creates a **third** row. The skip meant to
+avoid deciding for her instead guaranteed the problem would repeat. Now the earliest of each
+group keeps the key, later copies stay unkeyed, and nothing is merged or deleted — her
+duplicate stays visible with its card, and the next upload of that file attaches to the
+original.
+
+**Her two rows are still there on purpose.** They carry a pending card that will make the
+day count once; removing one is hers to decide.
+
 #### What this phase does NOT do
 
 It does not add new providers. `intervals.icu`, Garmin Connect, Polar and the rest stay in
