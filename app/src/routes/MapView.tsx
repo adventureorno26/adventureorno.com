@@ -449,7 +449,7 @@ export default function MapView() {
         [-66.5, 49.5],
       ],
       fitBoundsOptions: { padding: 24 },
-      attributionControl: { compact: true },
+      attributionControl: { compact: false },
       // v5: antialias moved here from the top-level map option (smooth globe edges).
       canvasContextAttributes: { antialias: true },
     });

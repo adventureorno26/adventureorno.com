@@ -43,7 +43,7 @@ export default function BucketMap({ places, onAdded }: { places: Place[]; onAdde
       center: bounds.isEmpty() ? [-98, 39] : undefined,
       zoom: bounds.isEmpty() ? 3 : undefined,
       fitBoundsOptions: { padding: 40, maxZoom: 9 },
-      attributionControl: { compact: true },
+      attributionControl: { compact: false },
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');

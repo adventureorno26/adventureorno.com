@@ -6686,6 +6686,59 @@ button.mi-row:hover {
   flex-wrap: wrap;
   margin-top: 4px;
 }
+/* THE MAP CREDIT — quiet, but never hidden.
+   Erica, 2026-08-17: "alter the OSM info to be less visible."
+
+   IT CANNOT BE REMOVED, and self-hosting did not change that. The tiles are built from
+   OpenStreetMap, which is ODbL: the credit is a condition of using the DATA, not a fee
+   for the bytes, and owning the bytes is all Phase 4 changed. What self-hosting DID
+   delete is the Mapbox wordmark those raster tiles required on top of this.
+
+   The OSMF guideline sets the floor and it is narrow: the credit must be legible WITHOUT
+   INTERACTION — not behind a tap, not faded out — in a corner of the map or beside it,
+   with a route to the licence. Everything above that floor is ours: size, colour, weight
+   and corner. So this is small and muted rather than absent.
+
+   MapLibre's default is a WHITE PILL with black text and an ⓘ button, which is why it
+   read as a logo on a dark map. The button is gone too — `compact: false` on every map
+   means the text is always shown, so a toggle would be a second control doing nothing,
+   and it was an ICON, which this app does not use.
+
+   OPAQUE BACKDROP ON PURPOSE, AND NO `opacity` ON THE CHIP. The first version of this
+   set `opacity: .72` on the container to make it recede, which quietly undid the whole
+   point: `opacity` composites the BACKDROP too, so over Daylight 2's near-white ground
+   the text lands at 2.3:1 — an AA failure, and unreadable exactly where a map is
+   brightest. Solid --bg-2 with --muted text measures 7.68:1 and stays there over every
+   theme. Quiet is bought with SIZE and COLOUR, never with alpha over live content. */
+.maplibregl-ctrl-attrib.maplibregl-ctrl {
+  background: var(--bg-2);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin: 0 8px 8px 0;
+  box-shadow: none;
+}
+.maplibregl-ctrl-attrib-inner,
+.maplibregl-ctrl-attrib-inner a {
+  font-size: 10px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  text-decoration: none;
+}
+.maplibregl-ctrl-attrib-inner a:hover {
+  text-decoration: underline;
+}
+/* The ⓘ toggle. `compact: false` already stops it appearing; this is belt and braces for
+   any map that gets added with the default, and it is safe ONLY because the text beside
+   it is always visible — hiding the button on a COLLAPSED control would hide the credit
+   itself, which is the one thing that must not happen. */
+.maplibregl-ctrl-attrib-button {
+  display: none;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner {
+  display: block;
+}
+
 /* Required wherever OpenStreetMap data is shown, and visible without interaction. */
 .osm-credit {
   margin: 18px 0 0;
