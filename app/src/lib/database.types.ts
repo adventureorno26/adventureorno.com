@@ -3158,6 +3158,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cron_health: {
+        Args: never
+        Returns: {
+          detail: string
+          failures_24h: number
+          jobname: string
+          last_message: string
+          last_start: string
+          last_status: string
+          ok: boolean
+          schedule: string
+        }[]
+      }
       current_app_role: { Args: never; Returns: string }
       data_health: { Args: never; Returns: Json }
       date_night_pick: {

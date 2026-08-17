@@ -7,6 +7,20 @@
 #
 # Secrets (npx wrangler secret put NAME):
 #   SUPABASE_SERVICE_ROLE_KEY   writes the ledger; RLS forbids anon and authenticated
+#   GITHUB_TOKEN                READ-ONLY, `contents:read` on this repo only. Lets the
+#                               deploy probe ask what `main` is, so "merged but not
+#                               shipped" is visible. The repo is private, so an
+#                               unauthenticated call gets a 404.
+#
+#                               WITHOUT IT the deploy probe reports a FAILURE, not a pass.
+#                               Being unable to check is the same blindness that let
+#                               production sit 16 commits behind for a day on 2026-08-15,
+#                               so it is not something to skip quietly.
+#
+#                               This check lives HERE and not in CI on purpose: CI was the
+#                               thing that was down. A freeze detector inside the frozen
+#                               system detects nothing. Cloudflare's cron does not care
+#                               about GitHub's billing.
 name = "adventureorno-watchtower"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"

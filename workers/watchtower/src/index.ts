@@ -28,6 +28,10 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   SITE: string;
+  /** Read-only, `contents:read` on this repo. Without it the deploy probe cannot ask
+   *  what `main` is, and says so rather than passing. */
+  GITHUB_TOKEN?: string;
+  GITHUB_REPO?: string;
 }
 
 interface Probe {
@@ -206,13 +210,101 @@ export async function probeCronJobs(env: Env): Promise<Result[]> {
   }
 }
 
-/** Every probe this Worker runs: the URLs, and the scheduled jobs. */
+/** IS WHAT IS DEPLOYED WHAT WE MERGED?
+ *
+ *  On 2026-08-15 production sat 16 commits behind `main` for a day. GitHub Actions was
+ *  blocked on billing, so every run failed in 5–8 seconds; merging kept working and
+ *  shipping silently stopped. Erica found it by looking at the map and saying it had not
+ *  changed. Every automated tick read green throughout.
+ *
+ *  `/version.json` reports the deployed SHA, and comparing it to `main` is one request.
+ *  THE COMPARISON HAS TO LIVE HERE rather than in CI, and that is the whole point: CI was
+ *  the thing that was down. A freeze detector inside the frozen system detects nothing.
+ *  This Worker runs on Cloudflare's cron, which does not care about GitHub's billing. */
+export async function probeDeployedSha(env: Env): Promise<Result> {
+  const started = Date.now();
+  const repo = env.GITHUB_REPO ?? 'adventureorno26/adventureorno.com';
+  const url = `${env.SITE}/version.json`;
+
+  const fail = (detail: string, status: number | null = null): Result => ({
+    service: 'deploy',
+    url,
+    ok: false,
+    status,
+    content_type: null,
+    bytes: null,
+    ms: Date.now() - started,
+    detail,
+  });
+
+  if (!env.GITHUB_TOKEN) {
+    // NOT a silent skip. Not being able to check is the same blindness that let the
+    // freeze last a day, so it is reported as one.
+    return fail('no GITHUB_TOKEN — cannot compare the deployed SHA against main');
+  }
+
+  try {
+    const [depRes, mainRes] = await Promise.all([
+      fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; adventureorno-watchtower)' },
+        cf: { cacheTtl: 0, cacheEverything: false },
+      }),
+      fetch(`https://api.github.com/repos/${repo}/commits/main`, {
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'adventureorno-watchtower',
+        },
+      }),
+    ]);
+
+    if (!depRes.ok) return fail(`/version.json returned HTTP ${depRes.status}`, depRes.status);
+    if (!mainRes.ok) {
+      return fail(`GitHub returned HTTP ${mainRes.status} for ${repo} main`, mainRes.status);
+    }
+
+    const deployed = ((await depRes.json()) as { sha?: string }).sha ?? '';
+    const head = ((await mainRes.json()) as { sha?: string }).sha ?? '';
+    const ms = Date.now() - started;
+
+    if (!deployed || !head) return fail('could not read a SHA from one of the two answers');
+
+    if (deployed !== head) {
+      return {
+        service: 'deploy',
+        url,
+        ok: false,
+        status: 200,
+        content_type: deployed.slice(0, 7),
+        bytes: null,
+        ms,
+        detail: `production is on ${deployed.slice(0, 7)}, main is on ${head.slice(0, 7)} — merged but not shipped`,
+      };
+    }
+
+    return {
+      service: 'deploy',
+      url,
+      ok: true,
+      status: 200,
+      content_type: deployed.slice(0, 7),
+      bytes: null,
+      ms,
+      detail: null,
+    };
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : 'deploy check failed');
+  }
+}
+
+/** Every probe this Worker runs: the URLs, the scheduled jobs, and what is deployed. */
 async function sweep(env: Env): Promise<Result[]> {
-  const [urls, jobs] = await Promise.all([
+  const [urls, jobs, deploy] = await Promise.all([
     Promise.all(PROBES.map((p) => probe(env.SITE, p))),
     probeCronJobs(env),
+    probeDeployedSha(env),
   ]);
-  return [...urls, ...jobs];
+  return [...urls, ...jobs, deploy];
 }
 
 async function record(env: Env, rows: Result[]): Promise<void> {
