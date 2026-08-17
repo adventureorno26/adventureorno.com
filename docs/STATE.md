@@ -69,16 +69,34 @@ Do not begin a new feature lane until all items below are true for the same comm
   identity-column fix, all 45 tables restore with row counts matching the manifest
   exactly — 21,143 rows, zero load errors. It had failed earlier the same day with
   `service_health` at 0 of 415; no table holding real data was ever affected.
-- [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
-  saved result.
-- [ ] Josh can sign in and perform every action allowed to the editor role without seeing
-  an unexplained permission or save failure.
+- [X] Erica can sign in, open a place card, edit and save a visit, reload, and see the
+  saved result. **Automated 2026-08-17** in `app/e2e/acceptance.spec.ts`, and it is a
+  BROWSER test on purpose. `mutating.spec.ts` covers owner/editor/viewer thoroughly and
+  does it at the API boundary — correctly, since RLS is what enforces authorization — but
+  seven of its eight mutating tests use `{ request }` and its only `{ page }` test is
+  about signing out. **Nothing anywhere asserted that a person typing into the app gets
+  their words back after a reload**, which is precisely what this gate item asks and
+  precisely the shape of 2026-08-16: true in the database, not true on the screen,
+  believed because the database was asked.
+- [X] Josh can sign in and perform every action allowed to the editor role without seeing
+  an unexplained permission or save failure. Same file: every flow runs for **owner and
+  editor**, and "no unexplained failure" is asserted rather than assumed — no
+  *"That did not save."* snack, no permission text on screen, and no `42501` in the
+  console.
 - [ ] Map, place card, visit page, Add/import, photos, stats and logout pass a short manual
-  smoke test on the production commit recorded in `/version.json`.
-- [ ] Required CI is green on Node 22; production deploys only the exact gated SHA.
-- [ ] Backup freshness and migration-ledger checks are hard production-deploy gates.
-- [ ] GitHub CLI authentication is healthy for the repository owner, so commits, checks,
-  PRs and deploy evidence can be inspected instead of guessed.
+  smoke test on the production commit recorded in `/version.json`. *(Erica's own pass; the
+  automated coverage above does not replace her driving it once.)*
+- [X] Required CI is green on Node 22; production deploys only the exact gated SHA.
+  Verified 2026-08-16: `NODE_VERSION: "22"` is the single source for every job, and the
+  deploy smokes `/version.json` against `EXPECTED_SHA: ${{ github.sha }}` — the exact
+  commit it built, not "latest".
+- [X] Backup freshness and migration-ledger checks are hard production-deploy gates.
+  Both **proved by failing**, which is the only proof worth having: `check:ledger` under
+  `STRICT=1` refused `a57a928` on 2026-08-16 until `0196` was applied, and
+  `backup-freshness.mjs` exits 1 past `MAX_AGE_HOURS` (36). Currently covered, 8
+  generations retained.
+- [X] GitHub CLI authentication is healthy for the repository owner — `adventureorno26`
+  is the active account.
 
 ### How to move faster without repeating work
 
@@ -391,6 +409,29 @@ The through-line, and it is the one worth keeping: **a check placed inside the s
 watches cannot report that system being down.** CI could not report CI. A URL prober could
 not report the database's jobs. A behavioural test could not report readers nobody had
 written yet.
+
+#### FOUND WHILE CLOSING THE GATE — /settings still pads by hand
+
+`nav-obstruction.spec.ts` exists because the floating nav silently covered interactive
+elements on five routes, and its own comment records the cause: *"All of them repeated the
+same inline page-wrapper style with zero bottom padding; they now share `.page`, which
+carries `--pnav-clearance`."*
+
+**`/settings` is the last route that did not get that treatment.** It sets
+`style={{ ... padding: '0 20px 96px' }}` inline — a hardcoded 96px instead of the shared
+`--pnav-clearance: calc(env(safe-area-inset-bottom, 0px) + 78px)`. On a device with a
+home-indicator inset the token grows and the literal does not.
+
+**It went unnoticed because the guard had nothing to trip over.** The obstruction test
+only ever ran against a nearly empty disposable dataset, so /settings never had enough
+rows to reach the bottom of the screen. Adding a handful of acceptance fixtures put one
+`visit-row` under the nav on mobile-android immediately. *A guard that runs against a
+fixture too small to exercise it is a guard that reports nothing* — the same shape as the
+a11y check aimed at a dialog that no longer existed.
+
+Not fixed here, because it is a visual change on a screen Erica has opinions about, and
+because the acceptance work should not smuggle one in. **Recorded as the next small
+thing**: swap the inline literal for the token the other four routes already use.
 
 #### Step 4 — Then the queued lanes, in the order locked on 08-14
 
