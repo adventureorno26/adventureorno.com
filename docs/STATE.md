@@ -16,13 +16,13 @@ document came to say Phase 4 was DONE while the live site still drew a Mapbox ma
 Every claim of doneness now names which of these it means, and they are not
 interchangeable:
 
-| Status | Means |
-| ------ | ----- |
-| **Built** | the code exists on a branch |
-| **Merged** | it is in `origin/main` |
-| **DB-applied** | its migration is applied to production AND recorded in the ledger |
-| **Deployed** | it is in the bundle `/version.json` reports |
-| **Live-verified** | Erica opened it in the real app and it was right |
+| Status                  | Means                                                             |
+| ----------------------- | ----------------------------------------------------------------- |
+| **Built**         | the code exists on a branch                                       |
+| **Merged**        | it is in`origin/main`                                           |
+| **DB-applied**    | its migration is applied to production AND recorded in the ledger |
+| **Deployed**      | it is in the bundle`/version.json` reports                      |
+| **Live-verified** | Erica opened it in the real app and it was right                  |
 
 Only **Live-verified** is what §5 means by "it works when Erica drives it". Merged is
 not deployed; deployed is not verified.
@@ -69,262 +69,16 @@ Do not begin a new feature lane until all items below are true for the same comm
   identity-column fix, all 45 tables restore with row counts matching the manifest
   exactly — 21,143 rows, zero load errors. It had failed earlier the same day with
   `service_health` at 0 of 415; no table holding real data was ever affected.
-- [X] Erica can sign in, open a place card, edit and save a visit, reload, and see the
-  saved result. **Automated 2026-08-17** in `app/e2e/acceptance.spec.ts`, and it is a
-  BROWSER test on purpose. `mutating.spec.ts` covers owner/editor/viewer thoroughly and
-  does it at the API boundary — correctly, since RLS is what enforces authorization — but
-  seven of its eight mutating tests use `{ request }` and its only `{ page }` test is
-  about signing out. **Nothing anywhere asserted that a person typing into the app gets
-  their words back after a reload**, which is precisely what this gate item asks and
-  precisely the shape of 2026-08-16: true in the database, not true on the screen,
-  believed because the database was asked.
-- [X] Josh can sign in and perform every action allowed to the editor role without seeing
-  an unexplained permission or save failure. Same file: every flow runs for **owner and
-  editor**, and "no unexplained failure" is asserted rather than assumed — no
-  *"That did not save."* snack, no permission text on screen, and no `42501` in the
-  console.
+- [ ] Erica can sign in, open a place card, edit and save a visit, reload, and see the
+  saved result.
+- [ ] Josh can sign in and perform every action allowed to the editor role without seeing
+  an unexplained permission or save failure.
 - [ ] Map, place card, visit page, Add/import, photos, stats and logout pass a short manual
-  smoke test on the production commit recorded in `/version.json`. *(Erica's own pass; the
-  automated coverage above does not replace her driving it once.)*
-- [X] Required CI is green on Node 22; production deploys only the exact gated SHA.
-  Verified 2026-08-16: `NODE_VERSION: "22"` is the single source for every job, and the
-  deploy smokes `/version.json` against `EXPECTED_SHA: ${{ github.sha }}` — the exact
-  commit it built, not "latest".
-- [X] Backup freshness and migration-ledger checks are hard production-deploy gates.
-  Both **proved by failing**, which is the only proof worth having: `check:ledger` under
-  `STRICT=1` refused `a57a928` on 2026-08-16 until `0196` was applied, and
-  `backup-freshness.mjs` exits 1 past `MAX_AGE_HOURS` (36). Currently covered, 8
-  generations retained.
-- [X] GitHub CLI authentication is healthy for the repository owner — `adventureorno26`
-  is the active account.
-- [ ] **Just me / Together / Just Josh is one proven scope contract.** Together contains
-  only participation the named people accepted; the default is Just me; map pins, visit
-  badges, activity lines, cards and every statistic agree; another athlete's restricted
-  Strava rows never cross accounts. The 2026-08-17 audit and repair plan are below.
-
-### JUST ME / TOGETHER / JUST JOSH — authoritative repair plan (2026-08-17)
-
-This section is the current plan for person scope and participant approval. It supersedes
-older code comments and passages that still say `null = Both`, `set_*_solo(null) = everyone`,
-or that adding every member row proves Together. Those were compatibility rules, not the
-product rule Erica approved on 2026-08-11: imported data starts as Just me, and another
-person is Together only after that person accepts.
-
-#### What the three views mean
-
-| View | Exact meaning |
-| ---- | ------------- |
-| **Just me** | Every confirmed visit/activity the signed-in person participated in, including ones also confirmed Together. This is the initial view after the profile loads. |
-| **Together** | The intersection: occurrences for which every selected member has an accepted participant claim. In the current two-person household that means Erica AND Josh, never Erica OR Josh and never “the current viewer's visible rows.” |
-| **Just Josh** | Every confirmed occurrence Josh participated in, including Together. Household-owned visit/place facts may be shown; Strava-owned route details and mileage remain visible only to the athlete whose Strava account supplied them. |
-
-The model must also work for three or more members. “Together with Josh and Sam” means all
-named people were there; other people may have been there too. It does not mean every member
-of the account, and it cannot be represented by a nullable profile id.
-
-Participation, evidence ownership and visibility are three different facts:
-
-1. `visit_profiles` / `activity_profiles` answer **who was there / who did it**, after acceptance.
-2. A source-owner field answers **whose imported evidence this is**. Tagging someone as a
-   participant must never transfer ownership of a Strava row or make it visible to them.
-3. The active view answers **which accepted occurrences match the selected people**. Activity
-   evidence is displayed inside those occurrences only when the viewer may see that evidence.
-
-A Together visit can therefore be shown once while Erica sees her own route and Josh sees his.
-If restricted evidence exists, show an honest count such as “1 route is private,” not the
-other athlete's route and not a silently misleading zero.
-
-#### What is in place now — and why it is wrong
-
-Read-only production audit, 2026-08-17; no coordinates, notes, activity names or identifiers
-were read or reproduced:
-
-| Measure | Production |
-| ------- | ---------- |
-| Accepted taken visits | **487** |
-| Visits currently labelled Together | **98** |
-| One-person visits | **389** |
-| Activities | **445** |
-| Activities currently labelled Together | **56** |
-| One-person activities | **389** |
-| “Together” activities by source owner | **46 owner Strava, 10 editor file imports** |
-| “Together” activities in a deduplicated shared-outing group | **8 rows across 7 groups** |
-| “Together” activities attached to a one-person visit | **9** |
-| “Together” activities on an unconfirmed (`solo_override=false`) shared visit | **45** |
-| “Together” activities on a manually overridden shared visit | **2** |
-
-All 56 shared activity participant sets were created on **2026-08-14**, the day the legacy
-participant backfill ran. This reproduces Erica's report: Together is dominated by her own
-Strava activities that inherited an all-members participant set. It is not evidence that Josh
-did those activities. The nine activity/visit disagreements prove the readers cannot repair
-this by choosing one table over the other.
-
-The implementation has five separate defects:
-
-1. `MapView` initializes `personFilter` to `null`. Every RPC interprets null as the shared
-   view, although migration `0193` says Just me is the default.
-2. `set_visit_solo(null)` and `set_activity_solo(null)` immediately delete and recreate rows
-   for every member. There is no request, acceptance, rejection, provenance or audit trail.
-3. `is_shared_visit` / `is_shared_activity` mean “all real account members,” so a future
-   three-person account cannot ask for Erica + Josh without Sam.
-4. `visible_activities` uses membership in `activity_profiles` as the Strava visibility gate.
-   Once a legacy or manual Together tag adds Josh, that tag can grant Josh visibility to an
-   Erica-owned Strava row. Source ownership must be a separate immutable check.
-5. The map, visit counts and place stats scope by visits, while activity lines and mileage
-   scope independently by activity participants. A visit can be Together while its evidence
-   is one-person, or vice versa, so the screen can describe two different worlds at once.
-
-`shared_outings(p_with uuid[])` is the closest existing reader to the target: it takes a set,
-matches visits containing all named people, returns only the caller's miles, and reports
-restricted rows. It is not wired into the main map/filter pipeline, and the current single-null
-filter cannot express its contract.
-
-#### Target data contract
-
-Keep canonical accepted participant rows, but make pending consent explicit and typed:
-
-```text
-visit_participant_claims(
-  id, visit_id, profile_id,
-  status pending|accepted|rejected|revoked,
-  proposed_by, proposal_source manual|machine|legacy,
-  evidence, created_at, responded_at, responded_by
-)
-
-activity_participant_claims(
-  id, activity_id, profile_id,
-  status pending|accepted|rejected|revoked,
-  proposed_by, proposal_source manual|machine|legacy,
-  evidence, created_at, responded_at, responded_by
-)
-```
-
-Use real foreign keys rather than one polymorphic subject id. `visit_profiles` and
-`activity_profiles` contain **accepted claims only** and remain the fast canonical rows used by
-readers. Pending/rejected claims never enter Together. Record who accepted each additional
-participant and preserve rejection so the same weak machine suggestion is not recreated.
-
-Self-attribution is the only automatic acceptance:
-
-- a person-created visit accepts its creator;
-- a Strava import accepts the profile mapped from its athlete/source account;
-- a manual/file import accepts the importing profile when known;
-- a machine with no attributable owner creates a review item instead of guessing;
-- tagging another member creates a pending claim addressed to that member;
-- the tagged member accepts or rejects it; an owner/editor cannot accept for them;
-- removing yourself is immediate; removing another accepted participant is a reviewable
-  correction with an audit record, not an unaudited destructive rewrite.
-
-Audit the existing `owner_profile` contract. If it reliably identifies the evidence source,
-make it immutable for imported rows and use it for Strava visibility. If it mixes source and
-business attribution, add and backfill an immutable `source_profile_id` first. In either case,
-the Strava predicate is source owner = `auth.uid()`, never “viewer appears among participants.”
-
-#### One scope API, no null convention
-
-Replace nullable `p_profile` scope arguments with an explicit member-set contract. The exact
-SQL name can be chosen during implementation, but there must be one canonical predicate:
-
-```text
-occurrence matches [A, B, ...]
-  iff every requested profile has an accepted visit_profiles row on that visit
-```
-
-One requested profile produces that person's view; two produce Together; three produce that
-three-person intersection. Build `place_ids_for_view`, `place_visit_counts`, `wander_stats`,
-`trips_list`, settings stats, timeline and cards from that same scoped visit relation.
-
-Activities do not independently decide which places/visits are in the view. For each scoped
-visit, return viewer-visible activity evidence, deduplicated by outing, plus a restricted count.
-An activity-specific “who did this?” view may use accepted activity participant claims, but it
-must not be substituted for the occurrence scope.
-
-In TypeScript use an explicit discriminated value, not `string | null`, for example:
-
-```text
-{ kind: 'person', profileIds: [me] }
-{ kind: 'together', profileIds: [me, josh] }
-```
-
-The URL/cache key and every request carry the full selection. “Reset” returns to Just me.
-Loading must wait for `profile.id`; it must not briefly fetch Together and repaint as Just me.
-
-#### Legacy-data repair — review, never mass-approve
-
-Before changing production, take and verify a fresh encrypted backup. Then create an immutable
-audit snapshot of the current participant sets and classify every extra member row.
-
-1. Preserve the attributable source/self row as accepted when ownership is certain.
-2. Convert every additional legacy member row into `legacy/pending`, not accepted. The current
-   database has no proof that the tagged person consented, even for the four manually overridden
-   shared visits; `solo_override` records that somebody edited it, not who approved it.
-3. Turn shared-group, same-place/date and matching-route evidence into ranked suggestions only.
-   The eight grouped activity rows are good candidates, not permission to apply them.
-4. Put the nine activity/visit mismatches in a dedicated review bucket.
-5. Provide a compact review queue: occurrence, date, place, proposed people, evidence and
-   Accept/Reject. Allow an explicit batch decision only after showing exactly which rows it covers.
-6. Recompute no historical participant set from a generic backfill after a person has reviewed it.
-   Accepted/rejected provenance is permanent input, not a cache that a migration may overwrite.
-
-Until review is complete, an honest Together count may fall sharply or even reach zero. That is
-correct; unknown history must not be rendered as a positive claim.
-
-#### Implementation sequence
-
-1. **Freeze and characterize.** Add SQL fixtures reproducing the 98/56 legacy shape, the nine
-   mismatches, a true shared outing, pending/rejected claims, two source owners and a third member.
-   Save only aggregate production measurements in this file.
-2. **Additive schema.** Create the typed claim tables, provenance, immutable source-owner rule,
-   indexes and narrowly granted RPCs. Run security/performance advisors. Do not alter existing
-   participant rows yet.
-3. **New mutation API.** Add request/respond/revoke RPCs with actor checks, idempotency and audit
-   output. Deprecate `set_visit_solo`, `set_place_solo` and `set_activity_solo`; then revoke their
-   authenticated execution after every client moves.
-4. **Canonical set-scope readers.** Implement the shared visit predicate once and migrate map
-   pins, badges, stats, trips, timelines and cards. Return viewer-owned evidence plus restricted
-   counts for scoped visits. Generate TypeScript types.
-5. **UI state and language.** Default to Just me; make Together an explicit member selection;
-   separate filter controls from “who was there” editing; show Pending/Accepted/Rejected; route
-   another-person tags to that person's approval inbox.
-6. **Legacy review migration.** Snapshot, classify, convert unproved additional rows to pending,
-   and surface the review queue. Apply no bulk acceptance. Re-run aggregate audits after each batch.
-7. **Remove compatibility behavior.** Delete null-as-Together branches and the direct all-members
-   setters only after parity tests prove every caller uses the new API.
-8. **Deploy in order.** Backup → migration/ledger → generated types → frontend → CI → exact-SHA
-   deploy. Verify with Erica's account and Josh's account before closing the gate.
-
-#### Required tests and acceptance evidence
-
-- SQL matrix: A only, B only, accepted A+B, pending A+B, rejected A+B, A+B out of A+B+C,
-  one-person activity on a shared visit, shared activity on a one-person visit, and two imported
-  rows representing one shared outing.
-- Privacy matrix: Erica can never read Josh-owned Strava details and Josh can never read
-  Erica-owned Strava details, even after either is tagged as a participant. Nonrestricted
-  household facts and the restricted count remain visible as designed.
-- Authorization matrix: only the tagged person can accept/reject; anon cannot read claims;
-  viewers cannot mutate; editor/owner cannot impersonate the tagged person's consent.
-- React tests: initial selection is Just me; no Together request fires before profile load;
-  arbitrary member subsets serialize stably; reset means Just me.
-- Browser tests in both accounts: switch all three views and confirm pins, visit badges, routes,
-  cards, drill-down lists and headline stats change together. Create a Josh tag, prove it is absent
-  from Together while pending, accept as Josh, then prove it appears for both.
-- Production audit: zero accepted rows without provenance; zero activity/visit contradictions
-  left unexplained; every Together occurrence has accepted claims for the selected members; the
-  46 legacy owner-Strava rows and nine mismatches no longer enter Together merely because of the
-  2026-08-14 backfill.
-- Live verification: Erica and Josh each confirm that Just me is theirs, Together is the same set
-  of agreed occurrences, and Just Josh/Just Erica disclose no restricted provider data.
-
-#### Rollback and non-goals
-
-Keep the legacy snapshot and old participant rows until the new readers and both-account smoke
-tests pass. Rollback switches readers to the previous functions and restores participant rows from
-the snapshot; it never invents acceptance records. Do not delete source activities or merge routes
-as part of this repair.
-
-This work does not build collaborative trip planning, commercial groups or generalized social
-sharing. It establishes the participant/consent/scope contract those features require, and it
-must close before those lanes begin.
+  smoke test on the production commit recorded in `/version.json`.
+- [ ] Required CI is green on Node 22; production deploys only the exact gated SHA.
+- [ ] Backup freshness and migration-ledger checks are hard production-deploy gates.
+- [ ] GitHub CLI authentication is healthy for the repository owner, so commits, checks,
+  PRs and deploy evidence can be inspected instead of guessed.
 
 ### How to move faster without repeating work
 
@@ -349,12 +103,12 @@ correction is stated.
 
 **Where production actually is, 20:55 UTC 2026-08-16:**
 
-| Fact | Measured |
-| ---- | -------- |
-| `/version.json` | `920e52f` (#99) |
-| `origin/main` | `a57a928` (#100) — **one commit ahead** |
-| Why | CI's `Deploy production` job FAILED on the migration-ledger gate |
-| Migration ledger | **all 196 recorded** — `check:ledger` passes now |
+| Fact                        | Measured                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `/version.json`           | `920e52f` (#99)                                                                 |
+| `origin/main`             | `a57a928` (#100) — **one commit ahead**                                  |
+| Why                         | CI's`Deploy production` job FAILED on the migration-ledger gate                 |
+| Migration ledger            | **all 196 recorded** — `check:ledger` passes now                         |
 | `0196` genuinely applied? | **yes** — `visible_activities` exists and `mileage_by_person` reads it |
 
 **CORRECTION to §7d.** It says the billing freeze is the reason nothing is live. That was
@@ -373,13 +127,13 @@ ledger condition being true. `/version.json` now reports `a57a928` — **product
 **The self-hosted map is Live-verified as SERVING** (Erica's own look is still what makes
 Phase 4 done, per Step 1):
 
-| Check | Result |
-| ----- | ------ |
-| Deployed `basemap` chunk | points at `/basemap/style.json?theme=` — the frozen Mapbox style object is GONE from the bundle |
-| `style.json?theme=dark` | `application/json`, **12 layers** |
-| `style.json?theme=light` | **15 layers** (the 3 extra are road casings) |
-| A z6 tile over Virginia | `application/vnd.mapbox-vector-tile`, **38,148 bytes** |
-| `/basemap/health` | `ok:true`, planet 137,281,886,877 bytes |
+| Check                      | Result                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| Deployed`basemap` chunk  | points at`/basemap/style.json?theme=` — the frozen Mapbox style object is GONE from the bundle |
+| `style.json?theme=dark`  | `application/json`, **12 layers**                                                         |
+| `style.json?theme=light` | **15 layers** (the 3 extra are road casings)                                                |
+| A z6 tile over Virginia    | `application/vnd.mapbox-vector-tile`, **38,148 bytes**                                    |
+| `/basemap/health`        | `ok:true`, planet 137,281,886,877 bytes                                                         |
 
 Content-type was checked on every one, because §4b's worst failure was a 200 of the app's
 own HTML from the wrong server.
@@ -469,9 +223,9 @@ of these has been sitting in `main` — and since 21:05 today, in production —
 
 **Proved, not assumed** — the matrix was re-run on the fix branch:
 
-| Run | Result |
-| --- | ------ |
-| `main`, 21:23 | 211 passed, **24 failed**, 1 skipped |
+| Run                                | Result                                    |
+| ---------------------------------- | ----------------------------------------- |
+| `main`, 21:23                    | 211 passed,**24 failed**, 1 skipped |
 | `fix/the-card-has-labels`, 21:47 | **235 passed, 0 failed**, 1 skipped |
 
 211 + 24 = 235, so every failure is accounted for and none was traded for a new one.
@@ -480,13 +234,13 @@ of these has been sitting in `main` — and since 21:05 today, in production —
 
 These are all **Merged, not Deployed** today, and Step 0 makes them all visible at once:
 
-| From | What she should see |
-| ---- | ------------------- |
-| #86 #87 #88 | The map is OURS — Ink (dark) / Daylight 2 (light), Settings → Map appearance, **no Mapbox call in the network panel** |
-| #94 | Timeline drills YEAR → months → days; `/add` opens the blank card; no gear and no stats bar on Places |
-| #96 | Mileage is her own; "just me" is the default |
-| #97 | The watchtower checks WHAT came back, not just that something did |
-| #100 | Each person's Strava-origin activities are their own, in every count and card |
+| From        | What she should see                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| #86 #87 #88 | The map is OURS — Ink (dark) / Daylight 2 (light), Settings → Map appearance,**no Mapbox call in the network panel** |
+| #94         | Timeline drills YEAR → months → days;`/add` opens the blank card; no gear and no stats bar on Places                     |
+| #96         | Mileage is her own; "just me" is the default                                                                                 |
+| #97         | The watchtower checks WHAT came back, not just that something did                                                            |
+| #100        | Each person's Strava-origin activities are their own, in every count and card                                                |
 
 Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Worker.
 
@@ -496,10 +250,10 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
    #99 at 20:38, **after** the 18:08 verify run that failed with *"cannot insert a
    non-DEFAULT value into column id"*, so it had never once been watched working. Ran it:
 
-   | | 18:08 (before) | 21:11 (after) |
-   | --- | --- | --- |
-   | Tables loaded | 35, **errors: 1** | 35, **errors: 0** |
-   | Row counts | `ROWS LOST`, `service_health` 0 of 415 | **all 45 tables match exactly, 21,143 rows** |
+   |               | 18:08 (before)                             | 21:11 (after)                                      |
+   | ------------- | ------------------------------------------ | -------------------------------------------------- |
+   | Tables loaded | 35,**errors: 1**                     | 35,**errors: 0**                             |
+   | Row counts    | `ROWS LOST`, `service_health` 0 of 415 | **all 45 tables match exactly, 21,143 rows** |
 
    The gate in the stabilization list at the top of this file can now be ticked without the
    "only partly proven" caveat it has carried since this morning.
@@ -538,181 +292,36 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
   **A job whose last run SUCCEEDED can still be broken** — that is the case the ok flag
   exists for, and the one a status-only check would call healthy.
 
-  ✅ **`0197` is applied and recorded** — 2026-08-16, via `npm run db:apply`, so the schema
-  and the ledger moved in ONE transaction and cannot drift apart. `check:ledger` reports
-  all 197. Called for real against production, it answers:
-
-      dedupe-joint-outings | ok=false | failed    | fails24h=1 | failed: ERROR:  not authorized
-      purge-trash          | ok=true  | succeeded | fails24h=0 | (healthy)
-      rebuild-revealed-area| ok=true  | succeeded | fails24h=0 | (healthy)
-
-  Only `service_role` may execute it; `anon` and `authenticated` are revoked, because a
-  member sees this through `service_status()` like every other probe.
-
-  **Applying it BEFORE merging is why #103 deployed at all.** The gate that refused
-  `a57a928` this afternoon would have refused `7212eda` for the same reason, and the
-  ordering — migration first, merge second — is the whole discipline that gate exists to
-  enforce.
-
-  ✅ **The Worker is deployed and the silence is over** — 2026-08-16 23:50 UTC. The sweep
-  went from 5 services to 8, and on its very first run the thing nobody could see for
-  eight nights is on the board:
-
-      OK   app / basemap-style / basemap-tiles / basemap-tile / basemap-glyphs
-      FAIL cron:dedupe-joint-outings   failed: ERROR:  not authorized
-      OK   cron:purge-trash
-      OK   cron:rebuild-revealed-area
-
-  The rows are in `service_health`, so `service_status()` shows them beside the URL probes
-  with no screen work at all. **The job itself is still failing** — `0195` fixed it and the
-  next scheduled run is 04:20, so tomorrow morning is when `cron:dedupe-joint-outings`
-  should turn green on its own. If it does not, the watchtower will now be the thing that
-  says so instead of a person going to look eight days later.
-- ✅ **The Strava rule has a guard that survives the next author** —
-  `supabase/tests/the_readers_stay_enforced.test.sql`. 0196's test is behavioural and must
-  stay: it signs in as one person and looks for the other's Strava-origin activity in what
-  comes back. But **it can only ask about the readers it names**, and the failure this
-  repository actually had was not a reader behaving badly — it was thirty-one readers
-  nobody had thought about.
-
-  So this one is structural and deliberately annoying. Every SECURITY DEFINER function
-  reading `public.activities` directly must be named in an allowlist **with a reason**;
-  a new display reader fails the suite until it either uses `visible_activities` or is
-  justified in writing. The next reader is written by somebody who has read none of this,
-  and the test is what talks to them.
-
-  Eighteen are listed: the guard itself, seven machine jobs (the view filters on
-  `auth.uid()`, NULL under pg_cron — a rebuild reading it would silently process
-  non-Strava rows only and corrupt what it rebuilt), eight writers, and the two readers
-  0196 left alone because they were already right.
-
-  It also fails when the allowlist names a function that no longer exists — **a stale
-  entry is an exemption waiting for whoever next uses that name** — and when
-  `visible_activities` stops filtering.
-
-  **Proved in both directions**: it passes clean against production, and each of the three
-  assertions was made to fire deliberately. Its first draft asserted the view CALLS
-  `can_see_activity()`; the real view inlines the same predicate, so that draft failed
-  against a correct schema. A guard that cries wolf gets deleted, which is worse than
-  never writing it — so it now asserts the substance (`original_source` AND `auth.uid()`),
-  not the spelling.
-
-- ✅ **The deploy-freeze detector lives in the WATCHTOWER, not in CI** — and that is the
-  entire point. §7d named the tell and it went unused twice in two days: `/version.json`
-  reports the deployed SHA, and comparing it to `main` is one request. But a check inside
-  CI would not have caught the incident it exists for, **because CI was the thing that was
-  down**. A freeze detector inside the frozen system detects nothing. Cloudflare's cron
-  does not care about GitHub's billing.
-
-  The probe reports `production is on 546ff11, main is on 920e52f — merged but not
-  shipped`. Both SHAs, because "behind" without saying behind what sends the reader to two
-  dashboards.
-
-  ⚠️ **It needs one secret**, because the repo is private and an unauthenticated call to
-  GitHub gets a 404: `cd workers/watchtower && npx wrangler secret put GITHUB_TOKEN` with
-  a READ-ONLY `contents:read` token. **Until it is set the probe reports a FAILURE, not a
-  pass** — being unable to check is the same blindness that let production sit 16 commits
-  behind for a day, so it is not skipped quietly.
-
-  **Deployed 2026-08-17 00:25 UTC.** The sweep is nine probes, and it is behaving exactly
-  as designed — including the one honest red that is waiting on Erica:
-
-      OK   app · basemap-style · basemap-tiles · basemap-tile · basemap-glyphs
-      FAIL cron:dedupe-joint-outings   failed: ERROR:  not authorized
-      OK   cron:purge-trash · cron:rebuild-revealed-area
-      FAIL deploy                      no GITHUB_TOKEN — cannot compare the deployed SHA against main
-
-  Two red rows, both true. The first clears itself at 04:20 if `0195` did its job; the
-  second clears when the token is set.
-
-#### STEP 3 IS CLOSED — all three traps, 2026-08-16/17
-
-| Trap | Closed by | Where it lives, and why there |
-| ---- | --------- | ----------------------------- |
-| Nothing read `cron.job_run_details` | `0197` + watchtower | In the Worker: pg_cron's failures are invisible from every other vantage point |
-| The Strava rule could be undone by the next reader | `the_readers_stay_enforced.test.sql` | In the DB test suite: it must fail on code that does not exist yet |
-| A deploy freeze read green | watchtower `deploy` probe | **NOT in CI — CI was the thing that was down** |
-
-The through-line, and it is the one worth keeping: **a check placed inside the system it
-watches cannot report that system being down.** CI could not report CI. A URL prober could
-not report the database's jobs. A behavioural test could not report readers nobody had
-written yet.
-
-#### THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION RIGHT NOW (2026-08-17)
-
-**Confirmed against the live site with Erica's own data**, read-only, phone viewport,
-scrolled fully to the bottom:
-
-    A.visit-row "Celebrate Virginia"
-    A.visit-row "Mill Mountain Trail"
-    A.visit-row "Red Spring Gap"
-    worstDetailsOverflowPx: 2566
-
-The nav sits on top of all three. Tapping where they are hits a nav tab instead — the
-exact 2026-08-07 regression this file already has a test for, on a route that test could
-not see.
-
-**It is NOT the padding, and it is not a hardcoded literal.** `.settings-page` reserves
-96px against a 60px nav footprint; the arithmetic clears on every device including a
-notched iPhone (94px). The measured cause is different and worse: **a list is overflowing
-its collapsed container by 2,566px.** The DOM chain under a covered link reads
-
-    A.visit-row       h=32     ← covered, at y=785 in an 844px viewport
-    DIV.visit-list    h=2174   ← 2,174px of rows …
-    DETAILS.spot-cat  h=44     ← … inside a 44px box
-    DIV.stats-row     h=80     ← … inside an 80px grid row
-
-Every element in that chain computes `position: static`, so the content is in normal flow
-and still not contributing to its ancestors' height. It therefore paints BELOW the padded
-box of the page wrapper, which is why bottom padding — any amount of it — cannot help.
-Fixing it means deciding how a long category list inside a stats dropdown should behave
-(its own scroll? a max height? not nested in the grid at all?), and that is a design
-question for Erica, not a token swap.
-
-#### AND A CORRECTION, WHICH IS THE MORE USEFUL HALF
-
-**The entry that stood here for a few hours said the opposite, and it was wrong.** It
-claimed the obstruction was not real — that the 96px cleared and nothing was covered —
-"measured on the real DOM at 390×844 with 24 seeded places."
-
-That measurement was taken **against a bundle built without the local Supabase env**, so
-the app could not authenticate, redirected to `/login`, and dutifully reported that a page
-with no content had nothing under the nav. **The number was real and the page was wrong.**
-
-So the sequence was: assert a cause without measuring (wrong), measure badly and publish a
-confident retraction (also wrong), then measure properly and find the original symptom was
-real with a different cause entirely. **A measurement is only as good as the thing it was
-pointed at** — which is the same sentence as the a11y guard aimed at a dialog that no
-longer existed, and as `/basemap/*` returning 200 from the wrong server. Three days, three
-shapes, one lesson.
-
-#### WHAT IS FIXED HERE: the guard could not have seen it either way
-
-The content-independent clearance test measured exactly two elements — `.page` on /places
-and `.panel`. A route shipping its own wrapper was never measured at all. It now measures
-the scrolling wrapper on **every** route in the list, skipping viewport-pinned panes
-(`.map-root` is `position: fixed; inset: 0` — the nav floating over the map is the design,
-not an obstruction).
-
-Proved by mutation: dropping `/settings` from 96px to 8px now fails the suite, and
-**nothing would have caught that before**.
-
-It does not catch the overflow bug above — that needs content, and CI's disposable dataset
-is far smaller than Erica's. Worth knowing plainly: **the /settings obstruction test passes
-in CI while the live site is broken**, for exactly that reason.
+  ⚠️ **`0197` IS NOT APPLIED YET.** Applying it was declined by this session's permission
+  gate, so it is merged-but-unapplied and **the production deploy gate will refuse the
+  next deploy until it is applied** — correctly, and exactly as it refused `a57a928`
+  earlier today. Apply with `npm run db:apply 0197_the_jobs_are_watched`, then deploy the
+  Worker with `cd workers/watchtower && npx wrangler deploy`. The Worker is harmless until
+  then: an unreachable `cron_health()` records one honest `cron` failure row rather than
+  blaming a job.
+- **A test that keeps the Strava rule enforced.** 17 functions still read
+  `public.activities` directly. Checked one by one, that is *correct* — they are writers
+  and machine jobs, which #100 deliberately kept on the table because the view filters on
+  `auth.uid()` and pg_cron has none. `shared_outings` reads raw and is still right: it
+  returns only the caller's own miles plus an honest `restricted_rows` count. But nothing
+  stops the **next** display reader from selecting straight from the table. Add the test
+  that fails when one does — the lock is fitted now, and this is what keeps it fitted.
+- **A deploy-freeze detector.** §7d already named the tell and it went unused twice in two
+  days: compare `/version.json` to `origin/main`. One command. It should be a check, not a
+  thing somebody remembers.
 
 #### Step 4 — Then the queued lanes, in the order locked on 08-14
 
 Nothing here starts until Steps 0–3 are true for the same commit.
 
-| Lane | State | Note |
-| ---- | ----- | ---- |
-| Phase 1 remainder | nearly closed | Steps 2–3 above ARE the remainder |
-| Phase 3 — the one page | not started | `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
-| Phase 4d — geocoding we own | nothing built | Overture → PMTiles; Mapbox stays the fallback |
-| Phase 6 — what we own | nothing built | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED |
-| Phase 7 — fitness ingest | nothing built | intervals.icu first; email-in is the best effort-to-coverage item |
-| Phase 8 — events, social, privacy floor | nothing built | Much of it is gated on the LLC and the native shell |
+| Lane                                     | State         | Note                                                                                                                                                                                          |
+| ---------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1 remainder                        | nearly closed | Steps 2–3 above ARE the remainder                                                                                                                                                            |
+| Phase 3 — the one page                  | not started   | `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
+| Phase 4d — geocoding we own             | nothing built | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                |
+| Phase 6 — what we own                   | nothing built | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED                                                                                                            |
+| Phase 7 — fitness ingest                | nothing built | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                             |
+| Phase 8 — events, social, privacy floor | nothing built | Much of it is gated on the LLC and the native shell                                                                                                                                           |
 
 **Two things are waiting on Erica and block nothing else** (§"Open, awaiting Erica's
 decision"): whether to attach the **122 photos** that match exactly one visit on one day
@@ -1532,15 +1141,15 @@ Verified live on adventureorno.com, San Diego, deploy `cef831d0`:
 written 2026-08-11 and had gone stale: six of its seven items are built. Leaving it
 standing is how work gets done twice, which §0.7 exists to prevent.
 
-| Was on the list | Now |
-| --- | --- |
-| **Years as dropdowns** inside Visits | ✅ `.visit-year` details, newest open, asserted in `lockedCard.test.ts` |
-| **Ratings in two columns**, anyone on the card rates it | ✅ `.dual-rating`, one line across, mapped over every member |
-| **Category pills** show the whole palette when you can edit | ✅ the full `CATEGORIES` palette when `canEdit`, this place's tags when not |
-| The **VISIT card** carries every section, narrowed to that visit | ✅ `VisitPage`: what we did, photos and videos, notes |
-| The **TRAIL card**: no Sections list, segment on the visit | ✅ asserted in `lockedCard.test.ts` |
-| The **BLANK card** — Add opens it | ✅ `AddSheet` opens the card, asserted live in `verify:live` |
-| A **Save button that visibly freezes automation** | ✅ 2026-08-14, PR #65 — and it says what it froze |
+| Was on the list                                                       | Now                                                                            |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Years as dropdowns** inside Visits                            | ✅`.visit-year` details, newest open, asserted in `lockedCard.test.ts`     |
+| **Ratings in two columns**, anyone on the card rates it         | ✅`.dual-rating`, one line across, mapped over every member                  |
+| **Category pills** show the whole palette when you can edit     | ✅ the full`CATEGORIES` palette when `canEdit`, this place's tags when not |
+| The**VISIT card** carries every section, narrowed to that visit | ✅`VisitPage`: what we did, photos and videos, notes                         |
+| The**TRAIL card**: no Sections list, segment on the visit       | ✅ asserted in`lockedCard.test.ts`                                           |
+| The**BLANK card** — Add opens it                               | ✅`AddSheet` opens the card, asserted live in `verify:live`                |
+| A**Save button that visibly freezes automation**                | ✅ 2026-08-14, PR#65 — and it says what it froze                              |
 
 **The one thing genuinely not built:** the blank card does not ask *"Is this a trail with
 sections?"* once. Nothing in the app contains that question. A trail is set by tapping
@@ -1722,20 +1331,15 @@ CONTRADICTS something written here. Otherwise keep working (see
    conflict between the two documents, not just a bug.
 5. ~~**Three doors to Add**~~ — fixed 2026-08-10: `/add` is the one door.
 6. **Transient UI is not transient** (upload box, "finish importing").
-   6b. ~~**THE STRAVA RULE IS NOT ENFORCED IN THE APP**~~ **FIXED 2026-08-16/17.**
-   `0193` built `can_see_activity()` and a correct RLS policy, and **31 of the 32
-   SECURITY DEFINER readers ignored both** — SECURITY DEFINER bypasses RLS, so the lock
-   looked right in psql and changed nothing a person could see. `0196` moved fifteen
-   display readers onto `visible_activities`; the seventeen still on the table are
-   writers and machine jobs, which is correct because the view filters on `auth.uid()`
-   and pg_cron has none. `the_readers_stay_enforced.test.sql` now fails if a new display
-   reader appears. Josh's approval settles it between him and Erica; the terms question
-   for a commercial product is Phase 7's.
-   6c. ~~**Nothing watches whether scheduled jobs SUCCEEDED**~~ **FIXED 2026-08-16/17.**
-   `dedupe-joint-outings` failed eight consecutive nights in silence. `0197` added
-   `cron_health()` and the watchtower Worker now asks it every fifteen minutes, recording
-   into the same `service_health` ledger as the URL probes. Proved on 2026-08-17: the job
-   ran green at 04:20 — its first success since 08-08 — and `cron_health()` said so.
+   6b. **THE STRAVA RULE IS NOT ENFORCED IN THE APP** (found 2026-08-16). `0193` built
+   `can_see_activity()` and a correct RLS policy, but **31 of the 32 SECURITY DEFINER
+   readers of `public.activities` ignore both**, and SECURITY DEFINER bypasses RLS. Every
+   count, card and statistic still shows each person the other's Strava-origin activities.
+   Josh's personal approval settles it between him and Erica; it does not settle Strava's
+   terms, so this is a hard precondition for Phase 7 and for charging anyone. See §7d.
+   6c. **Nothing watches whether scheduled jobs SUCCEEDED** (found 2026-08-16).
+   `dedupe-joint-outings` failed silently for eight consecutive nights. The watchtower
+   probes URLs; `cron.job_run_details` has no reader.
 7. **Sorting photos cannot edit the location** — removed 2026-07-26, see §7.
 
 ---
@@ -1880,13 +1484,13 @@ publishes the same OpenStreetMap planet as a single file.
 
 **Cost, in R2 — flat, and the whole reason for doing it:**
 
-| Line                                                                                       | Amount                                                          |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Storage 137.3 GB × $0.015/GB-month, minus the 10 GB free tier |**≈ $1.91 / month** |                                                                 |
-| Class A (writes): ~1,400 multipart parts, one-time                                         | free (1M/month included)                                        |
-| Class B (reads): 1 per tile served; two people browsing                                    | free (10M/month included)                                       |
-| **Egress**                                                                           | **$0 — R2 never charges for it**                         |
-| **Total**                                                                            | **≈ $2 / month, flat, no matter how much we look at it** |
+| Line                                                           | Amount                                                          |
+| -------------------------------------------------------------- | --------------------------------------------------------------- |
+| Storage 137.3 GB × $0.015/GB-month, minus the 10 GB free tier | **≈ $1.91 / month**                                      |
+| Class A (writes): ~1,400 multipart parts, one-time             | free (1M/month included)                                        |
+| Class B (reads): 1 per tile served; two people browsing        | free (10M/month included)                                       |
+| **Egress**                                               | **$0 — R2 never charges for it**                         |
+| **Total**                                                | **≈ $2 / month, flat, no matter how much we look at it** |
 
 Against that, Mapbox through MapLibre bills **per tile request**, which is precisely the
 shape of the blowout that cost us MapTiler.
@@ -1956,12 +1560,12 @@ Found 2026-08-15, and it was not what the plan assumed:
 **Dark is decided: INK** — the card's own palette, so opening a card over the map is one
 surface rather than two:
 
-| | |
-| --- | --- |
-| ground | `#0e1728` (`--panel`) |
-| land | `#131f36` (`--panel-2`) |
-| water | `#16324f` |
-| roads | `#22314f` → `#33507f` → `#3f6fae` |
+|        |                                                |
+| ------ | ---------------------------------------------- |
+| ground | `#0e1728` (`--panel`)                      |
+| land   | `#131f36` (`--panel-2`)                    |
+| water  | `#16324f`                                    |
+| roads  | `#22314f` → `#33507f` → `#3f6fae`      |
 | labels | `#eaf1ff` (`--text`) on a `#080e1c` halo |
 
 **Light is decided: DAYLIGHT 2** — Google's idiom one notch richer. Ground `#f8f9fa`,
@@ -1994,12 +1598,12 @@ Our glyph server publishes **Noto Sans Regular, Medium and Italic**. Bold is NOT
 upstream — it answers 502, and asking for it puts unlabelled tiles on the map with nothing
 to say why, so a test forbids it.
 
-| | was | now |
-| --- | --- | --- |
-| Town names | Regular, +0.02 tracking, 10–17px | **Medium, −0.012 tracking, 11–19px** |
-| Water | Regular, wide tracking | **Italic** — the cartographic convention |
-| Places of interest | 11px | 10.5px |
-| Halos | 1.4–1.6px | **1–1.1px** |
+|                    | was                               | now                                             |
+| ------------------ | --------------------------------- | ----------------------------------------------- |
+| Town names         | Regular, +0.02 tracking, 10–17px | **Medium, −0.012 tracking, 11–19px**    |
+| Water              | Regular, wide tracking            | **Italic** — the cartographic convention |
+| Places of interest | 11px                              | 10.5px                                          |
+| Halos              | 1.4–1.6px                        | **1–1.1px**                              |
 
 It lives in the shared layer builder, not in a palette, so every theme has it and no future
 one can miss it.
@@ -2074,10 +1678,10 @@ and one honest caveat about the order.
 
 #### There are two different jobs, and only one of them is urgent
 
-| | What it is | Where it happens today |
-| --- | --- | --- |
-| **Reverse** | a coordinate → a name and address | the nightly geocoder, and naming a new place |
-| **Forward** | typing "Blackwater Falls" → a place | the search box on the new-place card |
+|                   | What it is                           | Where it happens today                       |
+| ----------------- | ------------------------------------ | -------------------------------------------- |
+| **Reverse** | a coordinate → a name and address   | the nightly geocoder, and naming a new place |
+| **Forward** | typing "Blackwater Falls" → a place | the search box on the new-place card         |
 
 Reverse is the one that runs UNATTENDED and burns quota; forward is human-paced and cheap.
 That difference decides the order below.
@@ -2160,11 +1764,11 @@ The intent behind the ask is right, though, and splits into two halves.
 
 #### a. The standards worth conforming to (interoperability, not pixels)
 
-| Standard | What it buys | Effort |
-| -------- | ------------ | ------ |
-| **OGC API – Tiles** | A discoverable tileset document, so QGIS and OpenLayers can consume our basemap directly instead of via our own `tiles.json` shape. OpenLayers supports it out of the box (`OGCVectorTile`). | Small — mostly an extra JSON document beside the tiles the Worker already serves |
-| **OGC API – Features** | Serving PLACES and VISITS as standard GeoJSON collections, so her own data opens in QGIS and any OGC client. | Medium; an export/interop nicety, not user-facing |
-| **OGC API – Maps / Styles** | Serving the dark/light styles as discoverable style documents. | Small, and only worth it after the styles settle |
+| Standard                           | What it buys                                                                                                                                                                                    | Effort                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **OGC API – Tiles**         | A discoverable tileset document, so QGIS and OpenLayers can consume our basemap directly instead of via our own`tiles.json` shape. OpenLayers supports it out of the box (`OGCVectorTile`). | Small — mostly an extra JSON document beside the tiles the Worker already serves |
+| **OGC API – Features**      | Serving PLACES and VISITS as standard GeoJSON collections, so her own data opens in QGIS and any OGC client.                                                                                    | Medium; an export/interop nicety, not user-facing                                 |
+| **OGC API – Maps / Styles** | Serving the dark/light styles as discoverable style documents.                                                                                                                                  | Small, and only worth it after the styles settle                                  |
 
 None of this changes what the map LOOKS like. It changes who else can read it, which
 matters for a commercial product and for getting data back out (§6b's instinct).
@@ -2234,12 +1838,12 @@ wrong. That is the deploy freeze, not unfinished work.
 The table below records the state WHEN SHE ASKED, and is kept because the diagnosis in
 the last row is the reusable part.
 
-| Rule | State when asked |
-| ---- | ---------------- |
-| **Timeline drills down: YEAR → months → days** | ❌ grouped by MONTH only. There is no year level at all |
-| **Add opens the blank card we designed** | ❌ `/add` opens `AddPage`, a hub with the review queue. `PrimaryNav`'s own comment already says "ADD opens a FILLABLE CARD — not a chooser", so the code and the decision disagreed |
-| **No settings icon on Places** | ❌ appears |
-| **No stats bar on Places** | ❌ appears (`PlacesList.tsx`) |
+| Rule                                                   | State when asked                                                                                                                                                                          |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Timeline drills down: YEAR → months → days** | ❌ grouped by MONTH only. There is no year level at all                                                                                                                                   |
+| **Add opens the blank card we designed**         | ❌`/add` opens `AddPage`, a hub with the review queue. `PrimaryNav`'s own comment already says "ADD opens a FILLABLE CARD — not a chooser", so the code and the decision disagreed |
+| **No settings icon on Places**                   | ❌ appears                                                                                                                                                                                |
+| **No stats bar on Places**                       | ❌ appears (`PlacesList.tsx`)                                                                                                                                                           |
 
 **The last two are ONE bug.** The gear lives inside `StatsBar` (`.gear-btn`), so anything
 rendering the stats bar gets the gear with it. `PlacesList` renders `<StatsBar>`; removing
@@ -2287,14 +1891,14 @@ elevation, terrain, points of interest, and recording an activity. Approved by E
 
 #### What is actually deployed (verified 2026-08-15, not from these notes)
 
-| | |
-| --- | --- |
-| `aon-basemap` | `planet.pmtiles` **137.3 GB**, plus glyph ranges for Noto Sans Regular/Medium/Italic |
-| Workers | `adventureorno-basemap` (tiles + glyphs + both styles), `adventureorno-photo-gateway` |
-| Zone routes | **exactly one** — `adventureorno.com/basemap/*`. The photo gateway is still on `workers.dev` |
-| Data | 151 places · 487 visits · **445 activities** · 17,017 location pings · 178 photos · **0 trail_routes** |
-| Activities already carry | `summary_polyline`, `elevation_gain`, `elevation_profile`, `moving_time` |
-| Still third-party | Mapbox → MapTiler geocoding; **public Nominatim called FROM THE BROWSER** (`lib/data.ts`, 2 endpoints); **public Overpass** mirrors in `suggest`; Foursquare in `geocode-new-places` |
+|                          |                                                                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `aon-basemap`          | `planet.pmtiles` **137.3 GB**, plus glyph ranges for Noto Sans Regular/Medium/Italic                                                                                                           |
+| Workers                  | `adventureorno-basemap` (tiles + glyphs + both styles), `adventureorno-photo-gateway`                                                                                                              |
+| Zone routes              | **exactly one** — `adventureorno.com/basemap/*`. The photo gateway is still on `workers.dev`                                                                                                |
+| Data                     | 151 places · 487 visits ·**445 activities** · 17,017 location pings · 178 photos · **0 trail_routes**                                                                                 |
+| Activities already carry | `summary_polyline`, `elevation_gain`, `elevation_profile`, `moving_time`                                                                                                                       |
+| Still third-party        | Mapbox → MapTiler geocoding;**public Nominatim called FROM THE BROWSER** (`lib/data.ts`, 2 endpoints); **public Overpass** mirrors in `suggest`; Foursquare in `geocode-new-places` |
 
 #### 6a. NO SERVERS. Files in our bucket, read by Workers.  *(REWRITTEN 2026-08-15)*
 
@@ -2312,12 +1916,12 @@ elevation both ask "what is at this point?", and that is answered by fetching on
 looking inside it. No process, no graph, no always-on anything — the same shape as
 `/basemap/tiles/{z}/{x}/{y}`.
 
-| Need | Was | Now |
-| ---- | --- | --- |
-| Reverse geocode | Photon on a box | **Overture → PMTiles in R2**, Worker reads the tile |
-| Elevation / hillshade / 3D | Open Topo Data on a box | **Copernicus GLO-30 → terrain-RGB PMTiles in R2** |
-| Typeahead search | Photon on a box | **Mapbox free tier** — ~100k geocodes/month, two people use a rounding error of it |
-| Routing / map-matching | Valhalla on a box | **PAUSED 2026-08-15** (see 6a-iii) |
+| Need                       | Was                     | Now                                                                                       |
+| -------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| Reverse geocode            | Photon on a box         | **Overture → PMTiles in R2**, Worker reads the tile                                |
+| Elevation / hillshade / 3D | Open Topo Data on a box | **Copernicus GLO-30 → terrain-RGB PMTiles in R2**                                  |
+| Typeahead search           | Photon on a box         | **Mapbox free tier** — ~100k geocodes/month, two people use a rounding error of it |
+| Routing / map-matching     | Valhalla on a box       | **PAUSED 2026-08-15** (see 6a-iii)                                                  |
 
 **Cost: R2 storage at ~$0.015/GB/month on top of the 137 GB already there.** Dollars, not
 a new class of spend, and R2 egress is free.
@@ -2370,12 +1974,12 @@ is deleting a comment.
 FOUR different global datasets, from four projects, and the map being global gives you
 none of the others:
 
-| Dataset | For | State |
-| ------- | --- | ----- |
-| Protomaps planet | the map you look at | ✅ **137.3 GB in R2, serving** |
-| Overture places + addresses | click a place, get its name and address | ❌ nothing yet (6a-i) |
-| Copernicus GLO-30 | elevation, hillshade, 3D | ❌ nothing yet (6a-ii) |
-| Photon index | typeahead | ❌ **not being built** — Mapbox covers it free |
+| Dataset                     | For                                     | State                                                |
+| --------------------------- | --------------------------------------- | ---------------------------------------------------- |
+| Protomaps planet            | the map you look at                     | ✅**137.3 GB in R2, serving**                  |
+| Overture places + addresses | click a place, get its name and address | ❌ nothing yet (6a-i)                                |
+| Copernicus GLO-30           | elevation, hillshade, 3D                | ❌ nothing yet (6a-ii)                               |
+| Photon index                | typeahead                               | ❌**not being built** — Mapbox covers it free |
 
 #### 6d. Recording, properly — and it is JUST ANOTHER INGEST SOURCE
 
@@ -2456,21 +2060,21 @@ Therefore: **phone health stores + free direct APIs + ingest rails we own.**
 
 #### 7a. Free direct connectors, in priority order
 
-| # | Provider | Why it is where it is |
-| - | -------- | --------------------- |
-| 1 | **intervals.icu** | The hub. Free API, OAuth, webhooks, original file download; it already pulls Garmin, Polar, Suunto, COROS, Wahoo, Zwift, Strava, Dropbox. **One button ingests a user's whole ecosystem.** Must filter Strava-origin rows before any shared surface |
-| 2 | Polar AccessLink | Free, self-serve, webhooks, GPX/TCX/FIT |
-| 3 | Suunto | Free key, self-serve, new-workout webhook, FIT |
-| 4 | Wahoo | Free, request-based approval, webhooks, FIT URLs |
-| 5 | COROS | Free, form approval — apply once the LLC exists |
-| 6 | Garmin Connect Developer | Free, business-entity application; pushes original FIT. Highest-value hub: Peloton↔Garmin, Zwift→Garmin, TrainerRoad→Garmin, Rouvy→Garmin all terminate here |
-| 7 | RideWithGPS | Free API; also where Hammerhead Karoo auto-uploads land |
-| 8 | Whoop, Oura | Free APIs + webhooks. No GPS — ingest as route-less activities/recovery |
-| 9 | Withings | Free to 5,000 users; body/sleep/steps, no routes |
-| 10 | Concept2 | Free OAuth + webhooks; rowing/skierg/bikeerg per-stroke |
-| 11 | Smashrun | Free OAuth, polyline GPS, running only |
-| 12 | Hevy | Official API (user needs Hevy Pro); strength. Also parse Strong CSV export |
-| 13 | Runalyze / FitTrackee | Free/self-hosted, niche, zero cost |
+| #  | Provider                 | Why it is where it is                                                                                                                                                                                                                                    |
+| -- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1  | **intervals.icu**  | The hub. Free API, OAuth, webhooks, original file download; it already pulls Garmin, Polar, Suunto, COROS, Wahoo, Zwift, Strava, Dropbox.**One button ingests a user's whole ecosystem.** Must filter Strava-origin rows before any shared surface |
+| 2  | Polar AccessLink         | Free, self-serve, webhooks, GPX/TCX/FIT                                                                                                                                                                                                                  |
+| 3  | Suunto                   | Free key, self-serve, new-workout webhook, FIT                                                                                                                                                                                                           |
+| 4  | Wahoo                    | Free, request-based approval, webhooks, FIT URLs                                                                                                                                                                                                         |
+| 5  | COROS                    | Free, form approval — apply once the LLC exists                                                                                                                                                                                                         |
+| 6  | Garmin Connect Developer | Free, business-entity application; pushes original FIT. Highest-value hub: Peloton↔Garmin, Zwift→Garmin, TrainerRoad→Garmin, Rouvy→Garmin all terminate here                                                                                         |
+| 7  | RideWithGPS              | Free API; also where Hammerhead Karoo auto-uploads land                                                                                                                                                                                                  |
+| 8  | Whoop, Oura              | Free APIs + webhooks. No GPS — ingest as route-less activities/recovery                                                                                                                                                                                 |
+| 9  | Withings                 | Free to 5,000 users; body/sleep/steps, no routes                                                                                                                                                                                                         |
+| 10 | Concept2                 | Free OAuth + webhooks; rowing/skierg/bikeerg per-stroke                                                                                                                                                                                                  |
+| 11 | Smashrun                 | Free OAuth, polyline GPS, running only                                                                                                                                                                                                                   |
+| 12 | Hevy                     | Official API (user needs Hevy Pro); strength. Also parse Strong CSV export                                                                                                                                                                               |
+| 13 | Runalyze / FitTrackee    | Free/self-hosted, niche, zero cost                                                                                                                                                                                                                       |
 
 **No free public API — covered indirectly by 7b, do not chase**: Zepp/Amazfit, Xiaomi,
 Samsung, Runkeeper, adidas, Nike, Peloton, Zwift, TrainerRoad, iFit, Echelon, Hydrow,
@@ -2538,7 +2142,7 @@ feed is revocable — never architect around one.
   **before 1 Jan 2027**.
 - **iCal/.ics ingest is the universal adapter** — "add a calendar by URL", recurring fetch
   + rrule expansion. Where there is no feed, read embedded schema.org/Event JSON-LD
-  (facts only; respect robots.txt; nothing behind a login).
+    (facts only; respect robots.txt; nothing behind a login).
 - **Weather**: NWS `api.weather.gov` (free, no key, US). Open-Meteo's free tier is
   NON-COMMERCIAL — its paid tier is required once we charge.
 - **Do not build**: Facebook Graph events, Meetup, Eventbrite discovery, Yelp, Bandsintown,
@@ -2715,11 +2319,11 @@ accident.)*
 VERIFIED against the live policy (https://www.strava.com/legal/api_policy, effective
 1 June 2026) and survived an adversarial re-check. Four clauses each independently kill it:
 
-| Clause | What it says                                                         | What it kills                  |
-| ------ | -------------------------------------------------------------------- | ------------------------------ |
-| §5.7  | may not "aggregate, cache, or store geographic location information" | the whole map                  |
-| §6.2  | may not retain Strava data "longer than seven (7) days"              | every history we hold          |
-| §2.3  | data "may be displayed or disclosed … only to that user"            | showing Josh's outing to Erica |
+| Clause | What it says                                                         | What it kills                   |
+| ------ | -------------------------------------------------------------------- | ------------------------------- |
+| §5.7  | may not "aggregate, cache, or store geographic location information" | the whole map                   |
+| §6.2  | may not retain Strava data "longer than seven (7) days"              | every history we hold           |
+| §2.3  | data "may be displayed or disclosed … only to that user"            | showing Josh's outing to Erica  |
 | §5.8  | "**may not charge end users, in any manner**"                  | charging for the product at all |
 
 Also: §5.10 forbids it *even with the user's consent*; §5.4 forbids aggregation/analytics;
@@ -2855,7 +2459,7 @@ Nothing will be deleted until you say so.
 | C2 | `CLOUDFLARE_API_TOKEN` renamed to `…_MASTER`, but wrangler reads the un-suffixed name                                                                                  | ✅ fixed in §12b — mapped across, and`wrangler login` noted as the alternative                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | C4 | The tile meter counted only tiles. Mapbox**Search Box and Directions** are plain fetches billed per request and were invisible to it                                  | ✅**VERIFIED LIVE** on deploy `f38cc846`: typing in search moved `aon_api_budget` from nothing to 1. Four call sites metered (suggest, retrieve, forward, directions) with their own 2,000/day budget; refusing a search degrades honestly, unlike refusing a tile                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | C3 | Server-side geocoding dead since the MapTiler suspension — verified 403 on geocoding, not just tiles                                                                       | ✅**fixed, client and server.** `MAPBOX_TOKEN` is now a Supabase secret (it was absent — the app moved to Mapbox on 08-10, the functions did not). One shared `supabase/functions/_shared/geocode.ts` does Mapbox → MapTiler → nothing, and **zero `api.maptiler.com` calls remain** outside that fallback. `geocode-new-places`, `suggest`, `detect-trips`, `strava-webhook` and `strava-backfill` redeployed; all three callable ones verified BOOTING with the new module (a bad import 500s before the auth guard, and they return their own 401 instead). Client `reverseGeocode` prefers Mapbox too. **Not yet seen end-to-end**: naming a real new place needs an owner session (Erica's) or the next Strava ingest |
-| C5 | The device ingest token travels as`?token=` and is therefore in Supabase's request logs in plaintext                                                                      | ⚠️ **half of this was already done and the row never said so.** `ingest-overland` has long PREFERRED `Authorization: Bearer` and only falls back to the query string. `0198` stamps `ingest_tokens.last_query_auth_at` on every query-string acceptance so the fallback can be retired on evidence. **BUT READ IT WITH `last_used_at`, NEVER ALONE** (`0199`): checking the live data showed the device path has not run since **2026-07-29** — every ping for twelve days carries `source='app'`, the web app's own geolocation. So the column will read NULL because the Shortcut is DORMANT, not because it moved to the header, and deleting the fallback on that would break it the day she next runs it. **Remaining: get the Shortcut running again sending the header, confirm `last_used_at` advances while `last_query_auth_at` does not, then delete the fallback.** |
+| C5 | The device ingest token travels as`?token=` and is therefore in Supabase's request logs in plaintext                                                                      | ❌ not started. Needs header support + a change to her iPhone Shortcut                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | C6 | `the ` is set nowhere, so `ai-suggest` silently answers "not configured"                                                                                                | ❌ not started — needs a key, or the UI should say it is off rather than look unbuilt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### Erica's directions, 2026-08-11 — to build
@@ -2911,12 +2515,6 @@ Nothing will be deleted until you say so.
 - The people markers collide with a place cluster when someone is standing on one.
 - **Josh's last-seen is 30 hours old** because a web app gets no background location on
   iOS. Giving him the same iOS Shortcut ingest Erica has would make "where we are" real.
-  **Worse than recorded, measured 2026-08-17:** ERICA'S device ingest is dormant too. The
-  `ingest-overland` endpoint has not been called since **2026-07-29**, and every location
-  ping for the last twelve days carries `source = 'app'` — the web app's own geolocation,
-  written only while the site is open. "Where we are" is currently a browser tab for both
-  of them, not a phone. The token rows say it plainly: the daily Shortcut's `last_used_at`
-  is three weeks old and "Erica iPhone — photos" reads `never`.
 - **MapLibre 6 is blocked** (§8) until a GeoJSON layer is proven to draw on it.
 
 ## 6. Why work kept getting erased — and what now prevents it
@@ -3305,11 +2903,11 @@ Fourteen pull requests (#69–#83). The parts worth remembering are not the feat
 
 ### Applied to production
 
-| what | evidence |
-| ---- | -------- |
-| **0190** `place_visit_totals()` + backfill | Appalachian Trail `visit_count` 39 → 31, W&OD 46 → 44 |
-| **Washington, DC** `first_visit` `0202-06-19` → `2017-03-29` | its own earliest visit; earliest photo 2017-03-30 00:03 UTC is the same evening locally |
-| **Two visits dated 2026-12-25 deleted** | Appalachian Trail and Maryland Heights, via `delete_visit`; both returned `evidence: []` |
+| what                                                                      | evidence                                                                                    |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **0190** `place_visit_totals()` + backfill                        | Appalachian Trail`visit_count` 39 → 31, W&OD 46 → 44                                    |
+| **Washington, DC** `first_visit` `0202-06-19` → `2017-03-29` | its own earliest visit; earliest photo 2017-03-30 00:03 UTC is the same evening locally     |
+| **Two visits dated 2026-12-25 deleted**                             | Appalachian Trail and Maryland Heights, via`delete_visit`; both returned `evidence: []` |
 
 The two Christmas visits claimed `source='evidence'` and **nothing in the database carried
 that date** — no photo, no ping, no activity. Undo snapshots were captured from
@@ -3382,6 +2980,7 @@ Both look identical from the outside: a narrow check that passes reads exactly l
 one that passes.
 
 ### Also
+
 - **`CLOUDFLARE_API_TOKEN` does not exist in `.env.local`** — it is `CLOUDFLARE_API_TOKEN_MASTER`
   (account-scoped) and `CLOUDFLARE_ZONE_ACCESS` (zone-scoped). Do not verify an account token
   with `/user/tokens/verify`; it returns 401 for account tokens even when they are valid. Use
@@ -3940,9 +3539,7 @@ appear on the map within ~a minute; `/settings → Strava → Backfill` pulls hi
   document on 2026-08-11 and was never folded in here. What is known about the Shortcut is
   scattered: it filters `Is Screenshot = false` and `Has GPS = true` (§11), and it carries the
   device ingest token from `.env.local` as `?token=` (C5, §7 — still in plaintext in the
-  request logs; the endpoint accepts `Authorization: Bearer <token>` instead, and since
-  `0198` every query-string call is stamped on the token row so the switch can be
-  confirmed rather than assumed). **The Shortcut Erica runs today exists only on her phone.** Writing its
+  request logs). **The Shortcut Erica runs today exists only on her phone.** Writing its
   steps down here is a real gap, not a formatting one.
 - Install **Overland** (App Store, free). In its settings:
   - **Receiver Endpoint URL:**

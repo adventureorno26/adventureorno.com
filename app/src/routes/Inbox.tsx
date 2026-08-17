@@ -29,6 +29,7 @@ import {
 import { showSnack } from '../lib/snackbar';
 import AuthedImg from '../components/AuthedImg';
 import { useAuth } from '../auth/AuthProvider';
+import OsmCredit from '../components/OsmCredit';
 
 const CUSTOM = '__custom__';
 
@@ -379,12 +380,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
 
       {/* Required by the OpenStreetMap licence wherever its data is shown, and it is
           shown on every card above. Visible without interaction — not behind a menu. */}
-      <p className="osm-credit">
-        Place and trail names from{' '}
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
-          © OpenStreetMap contributors
-        </a>
-      </p>
+      <OsmCredit />
     </div>
   );
 }

@@ -6739,12 +6739,21 @@ button.mi-row:hover {
   display: block;
 }
 
-/* Required wherever OpenStreetMap data is shown, and visible without interaction. */
+/* ONE credit per page, wherever OpenStreetMap data is shown (components/OsmCredit.tsx).
+   Visible without interaction — that is the requirement, not a preference. Quiet like the
+   map's own chip: small, muted, and the link is what carries the route to the licence. */
 .osm-credit {
   margin: 18px 0 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   text-align: center;
+}
+.osm-credit a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.osm-credit a:hover {
+  text-decoration: underline;
 }
 
 /* "Always call routes here X?" — offered only after the same answer three times. */

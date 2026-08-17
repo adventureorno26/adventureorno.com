@@ -271,4 +271,39 @@ it.describe('the rest of the app — what she asked for', () => {
     await openStats(page);
     await expect(page.locator('.stat-open')).toContainText(/Trips/);
   });
+
+  // Erica, 2026-08-17: "if we own the map can we remove the openstreet logo" — no, and
+  // then "alter the OSM info to be less visible" — done. This check is the line between
+  // the two: the credit may be as small and muted as she likes, and it may not vanish.
+  //
+  // Owning the tiles changed who serves the bytes; the DATA is OpenStreetMap's under ODbL,
+  // so the credit is a condition of using it. The OSMF guideline requires it LEGIBLE
+  // WITHOUT INTERACTION, with a route to the licence. Checked here rather than in the
+  // local suite because the credit is supplied by the basemap style, and only the live
+  // site serves the real one.
+  it('"alter the OSM info to be less visible" — quieter, still legible, still linked', async ({
+    page,
+  }) => {
+    await ready(page, '/');
+
+    const credit = page.locator('.maplibregl-ctrl-attrib-inner');
+    await expect(credit).toBeVisible();
+    await expect(credit).toContainText('OpenStreetMap');
+
+    // A route to the origin and licence. Naming the project is not stating the licence.
+    await expect(
+      page.locator('.maplibregl-ctrl-attrib-inner a[href*="openstreetmap.org/copyright"]'),
+    ).toHaveCount(1);
+
+    // NO ⓘ TOGGLE. It was an icon, against her standing preference, and redundant once
+    // the text is always shown — but it may only go while the text stays visible above.
+    await expect(page.locator('.maplibregl-ctrl-attrib-button')).toBeHidden();
+
+    // Quiet is the request, so quiet is asserted: small type, and no white pill.
+    const size = await credit.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(
+      size,
+      'the credit should be small — it was 12px+ in MapLibre default dress',
+    ).toBeLessThanOrEqual(11);
+  });
 });
