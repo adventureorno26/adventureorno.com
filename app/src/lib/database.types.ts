@@ -705,6 +705,7 @@ export type Database = {
           created_at: string
           id: string
           label: string | null
+          last_query_auth_at: string | null
           last_used_at: string | null
           profile_id: string
           revoked_at: string | null
@@ -714,6 +715,7 @@ export type Database = {
           created_at?: string
           id?: string
           label?: string | null
+          last_query_auth_at?: string | null
           last_used_at?: string | null
           profile_id: string
           revoked_at?: string | null
@@ -723,6 +725,7 @@ export type Database = {
           created_at?: string
           id?: string
           label?: string | null
+          last_query_auth_at?: string | null
           last_used_at?: string | null
           profile_id?: string
           revoked_at?: string | null

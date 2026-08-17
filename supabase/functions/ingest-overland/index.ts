@@ -3,6 +3,10 @@
 // either as `Authorization: Bearer <token>` or `?token=<token>` (Overland can
 // append query params but not custom headers on every build).
 //
+// PREFER THE HEADER. The query form puts the credential in Supabase's request logs in
+// plaintext (§C5). Every query-string acceptance stamps `ingest_tokens.last_query_auth_at`
+// (0198) so the fallback can be retired on evidence rather than guessed at.
+//
 // Rules: drop points with horizontal accuracy > 200 m; return Overland's expected
 // {"result":"ok"} so the app clears its queue.
 //
@@ -41,8 +45,15 @@ Deno.serve(async (req) => {
   if (req.method === 'GET') return json({ result: 'ok' });
   if (req.method !== 'POST') return json({ result: 'error', error: 'method' }, 405);
 
+  // THE HEADER IS PREFERRED AND THE QUERY STRING IS RECORDED (§C5). A token in the URL
+  // lands in Supabase's request logs in plaintext; the header does not. The fallback
+  // stays because Overland cannot always set custom headers and Erica's Shortcut may
+  // still use it — but every use is now stamped on the token row, so the fallback can be
+  // deleted when the evidence says nothing depends on it, rather than deleted blind and
+  // breaking phone ingest with no error anyone would see.
   const auth = req.headers.get('Authorization') ?? '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : url.searchParams.get('token');
+  const fromHeader = auth.startsWith('Bearer ');
+  const token = fromHeader ? auth.slice(7).trim() : url.searchParams.get('token');
   if (!token) return json({ result: 'error', error: 'no token' }, 401);
 
   const tokenHash = await sha256Hex(token);
@@ -56,9 +67,10 @@ Deno.serve(async (req) => {
   // Attribution comes from the TOKEN, never the request body — a device can't forge
   // whose pings these are.
   const profileId = tok.profile_id as string | null;
+  const now = new Date().toISOString();
   await admin
     .from('ingest_tokens')
-    .update({ last_used_at: new Date().toISOString() })
+    .update(fromHeader ? { last_used_at: now } : { last_used_at: now, last_query_auth_at: now })
     .eq('id', tok.id);
 
   // Accepts BOTH Overland ({locations:[Feature]}) and OwnTracks
