@@ -4308,6 +4308,7 @@ export type Database = {
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
       propose_photos: { Args: { p_limit?: number }; Returns: Json }
+      propose_source_duplicates: { Args: { p_days?: number }; Returns: number }
       propose_tagging_rule: {
         Args: {
           p_except?: string[]

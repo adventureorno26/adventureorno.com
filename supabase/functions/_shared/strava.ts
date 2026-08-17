@@ -103,6 +103,14 @@ export async function getValidAccessToken(admin: SupabaseClient): Promise<string
 
 export interface StravaActivity {
   id: number;
+  /** Strava's dedup key for the upload, and — usefully — a NAME FOR THE ORIGIN.
+   *  Real values from Erica's account: `garmin_ping_610945955935` for the watch,
+   *  `<UUID>-activity` for the phone. This is how `origin` gets filled in with a fact
+   *  instead of a guess (0202). */
+  external_id?: string | null;
+  /** e.g. "Garmin fēnix 6S" / "Strava App". */
+  device_name?: string | null;
+  upload_id?: number | null;
   name?: string;
   type?: string;
   sport_type?: string;
@@ -348,5 +356,86 @@ export async function ingestActivity(
     await admin.rpc('recompute_place_stats', { p_place: placeId });
     await admin.rpc('rebuild_place_visits', { p_place: placeId });
   }
+
+  await recordStravaSource(admin, a, athleteId);
   return 'stored';
+}
+
+/** Where a recording actually began.
+ *
+ *  DEVICE FIRST, and that order was decided by the data rather than by reasoning. The first
+ *  version keyed off `external_id` alone with `startsWith('garmin')`, and checking it
+ *  against all 184 of Erica's real Strava activities mislabelled 106 of them: her ids are
+ *  mostly `stripped_garmin_ping_487372186814` and
+ *  `stripped_accepted_tag_from_19935636459.fit`, so the prefix never matched and Garmin
+ *  rides landed in a generic bucket.
+ *
+ *  `device_name` says it plainly — "Garmin fēnix 6S Pro", "Garmin Forerunner 35",
+ *  "Strava App" — and classifies the same 184 as 155 garmin / 28 strava-app / 1 unknown.
+ *  The one left over is an indoor track run typed in by hand, which HAS no device and
+ *  should stay unknown rather than be guessed at.
+ *
+ *  `external_id` remains the fallback and is still the de-dup key; it is just a poor
+ *  witness to origin. */
+export function originFor(externalId?: string | null, device?: string | null): string {
+  const dev = (device ?? '').toLowerCase();
+  for (const p of ['garmin', 'wahoo', 'polar', 'suunto', 'coros']) {
+    if (dev.includes(p)) return p;
+  }
+  if (dev.includes('strava')) return 'strava-app';
+
+  // `stripped_` is Strava's own prefix on re-processed uploads, not part of the origin.
+  const s = (externalId ?? '').toLowerCase().replace('stripped_', '');
+  for (const p of ['garmin', 'wahoo', 'polar', 'suunto', 'coros']) {
+    if (s.startsWith(p)) return p;
+  }
+  if (s.includes('-activity')) return 'strava-app';
+  return 'unknown';
+}
+
+/** Provenance for a Strava activity: which connection supplied it, and what made it.
+ *
+ *  Additive on purpose. The upsert above is careful about place assignment, indoor
+ *  activities and not clobbering renamed rows, and rewriting it to go through
+ *  `ingest_activity` would put all of that at risk for no gain — Strava is already
+ *  de-duplicated by `strava_id`. What was missing was the EVIDENCE row, so nothing recorded
+ *  that an activity came from Strava, through whose connection, off which device. */
+export async function recordStravaSource(
+  admin: SupabaseClient,
+  a: StravaActivity,
+  athleteId?: number,
+): Promise<void> {
+  const { data: row } = await admin
+    .from('activities')
+    .select('id')
+    .eq('strava_id', a.id)
+    .maybeSingle();
+  if (!row) return;
+
+  let connectionId: string | null = null;
+  if (athleteId != null) {
+    const { data: conn } = await admin
+      .from('source_connections')
+      .select('id')
+      .eq('provider', 'strava')
+      .eq('external_id', String(athleteId))
+      .maybeSingle();
+    connectionId = (conn?.id as string) ?? null;
+  }
+
+  // One row per source record. The unique index on
+  // (provider, connection, external_key) makes a re-sync a no-op rather than a duplicate.
+  await admin.from('activity_sources').upsert(
+    {
+      activity_id: row.id,
+      connection_id: connectionId,
+      provider: 'strava',
+      origin: originFor(a.external_id, a.device_name),
+      external_key: String(a.id),
+      device_name: a.device_name ?? null,
+      is_primary: true,
+      confidence: 'exact',
+    },
+    { onConflict: 'provider,connection_id,external_key', ignoreDuplicates: true },
+  );
 }
