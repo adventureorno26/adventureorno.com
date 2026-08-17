@@ -61,6 +61,12 @@ declare
     -- recordings of one run would count twice. Linking exposes nothing: it writes a
     -- shared_group_id and reads no attributes back to the caller.
     'ingest_activity',
+    -- 0211. Accepts the caller's OWN pending import-duplicate proposals in one press. It
+    -- reads the table only to enforce `owner_profile = auth.uid()` — a scope strictly
+    -- NARROWER than `visible_activities`, which would also return other people's
+    -- non-Strava rows. Reading the view here would widen what a bulk "accept all" can
+    -- reach, which is the opposite of what this function needs.
+    'approve_import_duplicates',
     'add_activity_to_visit',
     'apply_naming_rule',
     'assign_activity_to_race',
@@ -78,6 +84,12 @@ declare
     --                   "there are N more here we may not show you" rather than a
     --                   silently short number. It is the model the others now follow.
     'data_health',
+    -- 0211. Returns a COUNT and a date range for the banner that offers to link them all,
+    -- over the caller's own activities only (`owner_profile = auth.uid()`). It shows no
+    -- attribute of anybody else's activity, and the same narrower-than-the-view argument
+    -- as `approve_import_duplicates` applies: the pair must agree about what "all" means,
+    -- or she is told one number and a different set is acted on.
+    'import_duplicates_pending',
     'shared_outings'
   ];
   unexpected text;
