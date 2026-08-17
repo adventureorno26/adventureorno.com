@@ -2,9 +2,27 @@
 // invocation so the SPA can show progress and pace itself under Strava's rate
 // limit (100 req / 15 min). Every activity with a start point is ingested.
 //
-// verify_jwt = true — owner only. Body: { after?: unix, before?: unix, page?: 1 }.
-// Response: { processed, stored, skipped, page, hasMore }.
+// verify_jwt = true — owner only.
+// Body: { after?: unix, before?: unix, page?: 1, athlete?: number, perPage?: 1..100 }.
+// Response: { processed, stored, skipped, page, hasMore, failed }.
 // Deploy: supabase functions deploy strava-backfill
+//
+// WHY THE BATCH IS SMALL AND SCOPEABLE, decided by a measurement rather than by taste.
+// Josh's first backfill fetched a 100-activity page for EVERY connected athlete in one
+// invocation. Each activity costs ~5 round trips (place_for_activity, the naming reads,
+// recompute_place_stats, rebuild_place_visits, recordStravaSource), so two athletes was
+// ~1,000 sequential calls in one function — it timed out at 150s on page 1, and re-running
+// it later returned WORKER_RESOURCE_LIMIT three times in a row. 28 of his 93 activities
+// were missing as a result, and the pager reported success.
+//
+//   `athlete`  scopes a run to one connected athlete. Paging across several at once was
+//              never meaningful anyway: page 3 of a 93-activity athlete and page 3 of a
+//              184-activity one are unrelated, so one athlete's end forced the other's.
+//   `perPage`  bounds the work per invocation. 50 is the default because it halves the
+//              round trips while still finishing a full history in a handful of calls.
+//
+// A page that cannot finish is worse than a page that is small, because the caller cannot
+// tell a timeout from an empty result.
 
 import {
   adminClient,
@@ -18,7 +36,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY =
   Deno.env.get('AON_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
-const PER_PAGE = 100;
+const DEFAULT_PER_PAGE = 50;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -66,17 +84,30 @@ Deno.serve(async (req) => {
     if (prof?.role !== 'owner') return json({ error: 'owner required' }, 403);
   }
 
-  let body: { after?: number; before?: number; page?: number };
+  let body: {
+    after?: number;
+    before?: number;
+    page?: number;
+    athlete?: number;
+    perPage?: number;
+  };
   try {
     body = await req.json();
   } catch {
     body = {};
   }
   const page = Math.max(1, body.page ?? 1);
+  const perPage = Math.min(100, Math.max(1, Math.trunc(body.perPage ?? DEFAULT_PER_PAGE)));
 
   try {
-    const accounts = await getAllAccounts(admin);
+    let accounts = await getAllAccounts(admin);
     if (accounts.length === 0) return json({ error: 'no connected Strava account' }, 400);
+    if (body.athlete != null) {
+      accounts = accounts.filter((a) => a.athlete_id === body.athlete);
+      // Say so rather than returning an empty success — an unknown athlete id that
+      // silently processes nothing reads exactly like "there was nothing to fetch".
+      if (accounts.length === 0) return json({ error: 'athlete not connected' }, 404);
+    }
 
     // Backfill the same page for EVERY connected athlete (Erica + Josh), tagging
     // each activity with whose it is. hasMore is true if any account has more.
@@ -90,7 +121,7 @@ Deno.serve(async (req) => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     for (const acct of accounts) {
-      const params = new URLSearchParams({ per_page: String(PER_PAGE), page: String(page) });
+      const params = new URLSearchParams({ per_page: String(perPage), page: String(page) });
       if (body.after) params.set('after', String(body.after));
       if (body.before) params.set('before', String(body.before));
 
@@ -117,7 +148,7 @@ Deno.serve(async (req) => {
       }
       const activities = (await res.json()) as StravaActivity[];
       processed += activities.length;
-      if (activities.length === PER_PAGE) hasMore = true;
+      if (activities.length === perPage) hasMore = true;
       for (const a of activities) {
         const outcome = await ingestActivity(admin, a, acct.athlete_id);
         if (outcome === 'stored') stored++;
