@@ -97,6 +97,234 @@ Do not begin a new feature lane until all items below are true for the same comm
   generations retained.
 - [X] GitHub CLI authentication is healthy for the repository owner — `adventureorno26`
   is the active account.
+- [ ] **Just me / Together / Just Josh is one proven scope contract.** Together contains
+  only participation the named people accepted; the default is Just me; map pins, visit
+  badges, activity lines, cards and every statistic agree; another athlete's restricted
+  Strava rows never cross accounts. The 2026-08-17 audit and repair plan are below.
+
+### JUST ME / TOGETHER / JUST JOSH — authoritative repair plan (2026-08-17)
+
+This section is the current plan for person scope and participant approval. It supersedes
+older code comments and passages that still say `null = Both`, `set_*_solo(null) = everyone`,
+or that adding every member row proves Together. Those were compatibility rules, not the
+product rule Erica approved on 2026-08-11: imported data starts as Just me, and another
+person is Together only after that person accepts.
+
+#### What the three views mean
+
+| View | Exact meaning |
+| ---- | ------------- |
+| **Just me** | Every confirmed visit/activity the signed-in person participated in, including ones also confirmed Together. This is the initial view after the profile loads. |
+| **Together** | The intersection: occurrences for which every selected member has an accepted participant claim. In the current two-person household that means Erica AND Josh, never Erica OR Josh and never “the current viewer's visible rows.” |
+| **Just Josh** | Every confirmed occurrence Josh participated in, including Together. Household-owned visit/place facts may be shown; Strava-owned route details and mileage remain visible only to the athlete whose Strava account supplied them. |
+
+The model must also work for three or more members. “Together with Josh and Sam” means all
+named people were there; other people may have been there too. It does not mean every member
+of the account, and it cannot be represented by a nullable profile id.
+
+Participation, evidence ownership and visibility are three different facts:
+
+1. `visit_profiles` / `activity_profiles` answer **who was there / who did it**, after acceptance.
+2. A source-owner field answers **whose imported evidence this is**. Tagging someone as a
+   participant must never transfer ownership of a Strava row or make it visible to them.
+3. The active view answers **which accepted occurrences match the selected people**. Activity
+   evidence is displayed inside those occurrences only when the viewer may see that evidence.
+
+A Together visit can therefore be shown once while Erica sees her own route and Josh sees his.
+If restricted evidence exists, show an honest count such as “1 route is private,” not the
+other athlete's route and not a silently misleading zero.
+
+#### What is in place now — and why it is wrong
+
+Read-only production audit, 2026-08-17; no coordinates, notes, activity names or identifiers
+were read or reproduced:
+
+| Measure | Production |
+| ------- | ---------- |
+| Accepted taken visits | **487** |
+| Visits currently labelled Together | **98** |
+| One-person visits | **389** |
+| Activities | **445** |
+| Activities currently labelled Together | **56** |
+| One-person activities | **389** |
+| “Together” activities by source owner | **46 owner Strava, 10 editor file imports** |
+| “Together” activities in a deduplicated shared-outing group | **8 rows across 7 groups** |
+| “Together” activities attached to a one-person visit | **9** |
+| “Together” activities on an unconfirmed (`solo_override=false`) shared visit | **45** |
+| “Together” activities on a manually overridden shared visit | **2** |
+
+All 56 shared activity participant sets were created on **2026-08-14**, the day the legacy
+participant backfill ran. This reproduces Erica's report: Together is dominated by her own
+Strava activities that inherited an all-members participant set. It is not evidence that Josh
+did those activities. The nine activity/visit disagreements prove the readers cannot repair
+this by choosing one table over the other.
+
+The implementation has five separate defects:
+
+1. `MapView` initializes `personFilter` to `null`. Every RPC interprets null as the shared
+   view, although migration `0193` says Just me is the default.
+2. `set_visit_solo(null)` and `set_activity_solo(null)` immediately delete and recreate rows
+   for every member. There is no request, acceptance, rejection, provenance or audit trail.
+3. `is_shared_visit` / `is_shared_activity` mean “all real account members,” so a future
+   three-person account cannot ask for Erica + Josh without Sam.
+4. `visible_activities` uses membership in `activity_profiles` as the Strava visibility gate.
+   Once a legacy or manual Together tag adds Josh, that tag can grant Josh visibility to an
+   Erica-owned Strava row. Source ownership must be a separate immutable check.
+5. The map, visit counts and place stats scope by visits, while activity lines and mileage
+   scope independently by activity participants. A visit can be Together while its evidence
+   is one-person, or vice versa, so the screen can describe two different worlds at once.
+
+`shared_outings(p_with uuid[])` is the closest existing reader to the target: it takes a set,
+matches visits containing all named people, returns only the caller's miles, and reports
+restricted rows. It is not wired into the main map/filter pipeline, and the current single-null
+filter cannot express its contract.
+
+#### Target data contract
+
+Keep canonical accepted participant rows, but make pending consent explicit and typed:
+
+```text
+visit_participant_claims(
+  id, visit_id, profile_id,
+  status pending|accepted|rejected|revoked,
+  proposed_by, proposal_source manual|machine|legacy,
+  evidence, created_at, responded_at, responded_by
+)
+
+activity_participant_claims(
+  id, activity_id, profile_id,
+  status pending|accepted|rejected|revoked,
+  proposed_by, proposal_source manual|machine|legacy,
+  evidence, created_at, responded_at, responded_by
+)
+```
+
+Use real foreign keys rather than one polymorphic subject id. `visit_profiles` and
+`activity_profiles` contain **accepted claims only** and remain the fast canonical rows used by
+readers. Pending/rejected claims never enter Together. Record who accepted each additional
+participant and preserve rejection so the same weak machine suggestion is not recreated.
+
+Self-attribution is the only automatic acceptance:
+
+- a person-created visit accepts its creator;
+- a Strava import accepts the profile mapped from its athlete/source account;
+- a manual/file import accepts the importing profile when known;
+- a machine with no attributable owner creates a review item instead of guessing;
+- tagging another member creates a pending claim addressed to that member;
+- the tagged member accepts or rejects it; an owner/editor cannot accept for them;
+- removing yourself is immediate; removing another accepted participant is a reviewable
+  correction with an audit record, not an unaudited destructive rewrite.
+
+Audit the existing `owner_profile` contract. If it reliably identifies the evidence source,
+make it immutable for imported rows and use it for Strava visibility. If it mixes source and
+business attribution, add and backfill an immutable `source_profile_id` first. In either case,
+the Strava predicate is source owner = `auth.uid()`, never “viewer appears among participants.”
+
+#### One scope API, no null convention
+
+Replace nullable `p_profile` scope arguments with an explicit member-set contract. The exact
+SQL name can be chosen during implementation, but there must be one canonical predicate:
+
+```text
+occurrence matches [A, B, ...]
+  iff every requested profile has an accepted visit_profiles row on that visit
+```
+
+One requested profile produces that person's view; two produce Together; three produce that
+three-person intersection. Build `place_ids_for_view`, `place_visit_counts`, `wander_stats`,
+`trips_list`, settings stats, timeline and cards from that same scoped visit relation.
+
+Activities do not independently decide which places/visits are in the view. For each scoped
+visit, return viewer-visible activity evidence, deduplicated by outing, plus a restricted count.
+An activity-specific “who did this?” view may use accepted activity participant claims, but it
+must not be substituted for the occurrence scope.
+
+In TypeScript use an explicit discriminated value, not `string | null`, for example:
+
+```text
+{ kind: 'person', profileIds: [me] }
+{ kind: 'together', profileIds: [me, josh] }
+```
+
+The URL/cache key and every request carry the full selection. “Reset” returns to Just me.
+Loading must wait for `profile.id`; it must not briefly fetch Together and repaint as Just me.
+
+#### Legacy-data repair — review, never mass-approve
+
+Before changing production, take and verify a fresh encrypted backup. Then create an immutable
+audit snapshot of the current participant sets and classify every extra member row.
+
+1. Preserve the attributable source/self row as accepted when ownership is certain.
+2. Convert every additional legacy member row into `legacy/pending`, not accepted. The current
+   database has no proof that the tagged person consented, even for the four manually overridden
+   shared visits; `solo_override` records that somebody edited it, not who approved it.
+3. Turn shared-group, same-place/date and matching-route evidence into ranked suggestions only.
+   The eight grouped activity rows are good candidates, not permission to apply them.
+4. Put the nine activity/visit mismatches in a dedicated review bucket.
+5. Provide a compact review queue: occurrence, date, place, proposed people, evidence and
+   Accept/Reject. Allow an explicit batch decision only after showing exactly which rows it covers.
+6. Recompute no historical participant set from a generic backfill after a person has reviewed it.
+   Accepted/rejected provenance is permanent input, not a cache that a migration may overwrite.
+
+Until review is complete, an honest Together count may fall sharply or even reach zero. That is
+correct; unknown history must not be rendered as a positive claim.
+
+#### Implementation sequence
+
+1. **Freeze and characterize.** Add SQL fixtures reproducing the 98/56 legacy shape, the nine
+   mismatches, a true shared outing, pending/rejected claims, two source owners and a third member.
+   Save only aggregate production measurements in this file.
+2. **Additive schema.** Create the typed claim tables, provenance, immutable source-owner rule,
+   indexes and narrowly granted RPCs. Run security/performance advisors. Do not alter existing
+   participant rows yet.
+3. **New mutation API.** Add request/respond/revoke RPCs with actor checks, idempotency and audit
+   output. Deprecate `set_visit_solo`, `set_place_solo` and `set_activity_solo`; then revoke their
+   authenticated execution after every client moves.
+4. **Canonical set-scope readers.** Implement the shared visit predicate once and migrate map
+   pins, badges, stats, trips, timelines and cards. Return viewer-owned evidence plus restricted
+   counts for scoped visits. Generate TypeScript types.
+5. **UI state and language.** Default to Just me; make Together an explicit member selection;
+   separate filter controls from “who was there” editing; show Pending/Accepted/Rejected; route
+   another-person tags to that person's approval inbox.
+6. **Legacy review migration.** Snapshot, classify, convert unproved additional rows to pending,
+   and surface the review queue. Apply no bulk acceptance. Re-run aggregate audits after each batch.
+7. **Remove compatibility behavior.** Delete null-as-Together branches and the direct all-members
+   setters only after parity tests prove every caller uses the new API.
+8. **Deploy in order.** Backup → migration/ledger → generated types → frontend → CI → exact-SHA
+   deploy. Verify with Erica's account and Josh's account before closing the gate.
+
+#### Required tests and acceptance evidence
+
+- SQL matrix: A only, B only, accepted A+B, pending A+B, rejected A+B, A+B out of A+B+C,
+  one-person activity on a shared visit, shared activity on a one-person visit, and two imported
+  rows representing one shared outing.
+- Privacy matrix: Erica can never read Josh-owned Strava details and Josh can never read
+  Erica-owned Strava details, even after either is tagged as a participant. Nonrestricted
+  household facts and the restricted count remain visible as designed.
+- Authorization matrix: only the tagged person can accept/reject; anon cannot read claims;
+  viewers cannot mutate; editor/owner cannot impersonate the tagged person's consent.
+- React tests: initial selection is Just me; no Together request fires before profile load;
+  arbitrary member subsets serialize stably; reset means Just me.
+- Browser tests in both accounts: switch all three views and confirm pins, visit badges, routes,
+  cards, drill-down lists and headline stats change together. Create a Josh tag, prove it is absent
+  from Together while pending, accept as Josh, then prove it appears for both.
+- Production audit: zero accepted rows without provenance; zero activity/visit contradictions
+  left unexplained; every Together occurrence has accepted claims for the selected members; the
+  46 legacy owner-Strava rows and nine mismatches no longer enter Together merely because of the
+  2026-08-14 backfill.
+- Live verification: Erica and Josh each confirm that Just me is theirs, Together is the same set
+  of agreed occurrences, and Just Josh/Just Erica disclose no restricted provider data.
+
+#### Rollback and non-goals
+
+Keep the legacy snapshot and old participant rows until the new readers and both-account smoke
+tests pass. Rollback switches readers to the previous functions and restores participant rows from
+the snapshot; it never invents acceptance records. Do not delete source activities or merge routes
+as part of this repair.
+
+This work does not build collaborative trip planning, commercial groups or generalized social
+sharing. It establishes the participant/consent/scope contract those features require, and it
+must close before those lanes begin.
 
 ### How to move faster without repeating work
 
@@ -410,28 +638,68 @@ watches cannot report that system being down.** CI could not report CI. A URL pr
 not report the database's jobs. A behavioural test could not report readers nobody had
 written yet.
 
-#### FOUND WHILE CLOSING THE GATE — /settings still pads by hand
+#### THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION RIGHT NOW (2026-08-17)
 
-`nav-obstruction.spec.ts` exists because the floating nav silently covered interactive
-elements on five routes, and its own comment records the cause: *"All of them repeated the
-same inline page-wrapper style with zero bottom padding; they now share `.page`, which
-carries `--pnav-clearance`."*
+**Confirmed against the live site with Erica's own data**, read-only, phone viewport,
+scrolled fully to the bottom:
 
-**`/settings` is the last route that did not get that treatment.** It sets
-`style={{ ... padding: '0 20px 96px' }}` inline — a hardcoded 96px instead of the shared
-`--pnav-clearance: calc(env(safe-area-inset-bottom, 0px) + 78px)`. On a device with a
-home-indicator inset the token grows and the literal does not.
+    A.visit-row "Celebrate Virginia"
+    A.visit-row "Mill Mountain Trail"
+    A.visit-row "Red Spring Gap"
+    worstDetailsOverflowPx: 2566
 
-**It went unnoticed because the guard had nothing to trip over.** The obstruction test
-only ever ran against a nearly empty disposable dataset, so /settings never had enough
-rows to reach the bottom of the screen. Adding a handful of acceptance fixtures put one
-`visit-row` under the nav on mobile-android immediately. *A guard that runs against a
-fixture too small to exercise it is a guard that reports nothing* — the same shape as the
-a11y check aimed at a dialog that no longer existed.
+The nav sits on top of all three. Tapping where they are hits a nav tab instead — the
+exact 2026-08-07 regression this file already has a test for, on a route that test could
+not see.
 
-Not fixed here, because it is a visual change on a screen Erica has opinions about, and
-because the acceptance work should not smuggle one in. **Recorded as the next small
-thing**: swap the inline literal for the token the other four routes already use.
+**It is NOT the padding, and it is not a hardcoded literal.** `.settings-page` reserves
+96px against a 60px nav footprint; the arithmetic clears on every device including a
+notched iPhone (94px). The measured cause is different and worse: **a list is overflowing
+its collapsed container by 2,566px.** The DOM chain under a covered link reads
+
+    A.visit-row       h=32     ← covered, at y=785 in an 844px viewport
+    DIV.visit-list    h=2174   ← 2,174px of rows …
+    DETAILS.spot-cat  h=44     ← … inside a 44px box
+    DIV.stats-row     h=80     ← … inside an 80px grid row
+
+Every element in that chain computes `position: static`, so the content is in normal flow
+and still not contributing to its ancestors' height. It therefore paints BELOW the padded
+box of the page wrapper, which is why bottom padding — any amount of it — cannot help.
+Fixing it means deciding how a long category list inside a stats dropdown should behave
+(its own scroll? a max height? not nested in the grid at all?), and that is a design
+question for Erica, not a token swap.
+
+#### AND A CORRECTION, WHICH IS THE MORE USEFUL HALF
+
+**The entry that stood here for a few hours said the opposite, and it was wrong.** It
+claimed the obstruction was not real — that the 96px cleared and nothing was covered —
+"measured on the real DOM at 390×844 with 24 seeded places."
+
+That measurement was taken **against a bundle built without the local Supabase env**, so
+the app could not authenticate, redirected to `/login`, and dutifully reported that a page
+with no content had nothing under the nav. **The number was real and the page was wrong.**
+
+So the sequence was: assert a cause without measuring (wrong), measure badly and publish a
+confident retraction (also wrong), then measure properly and find the original symptom was
+real with a different cause entirely. **A measurement is only as good as the thing it was
+pointed at** — which is the same sentence as the a11y guard aimed at a dialog that no
+longer existed, and as `/basemap/*` returning 200 from the wrong server. Three days, three
+shapes, one lesson.
+
+#### WHAT IS FIXED HERE: the guard could not have seen it either way
+
+The content-independent clearance test measured exactly two elements — `.page` on /places
+and `.panel`. A route shipping its own wrapper was never measured at all. It now measures
+the scrolling wrapper on **every** route in the list, skipping viewport-pinned panes
+(`.map-root` is `position: fixed; inset: 0` — the nav floating over the map is the design,
+not an obstruction).
+
+Proved by mutation: dropping `/settings` from 96px to 8px now fails the suite, and
+**nothing would have caught that before**.
+
+It does not catch the overflow bug above — that needs content, and CI's disposable dataset
+is far smaller than Erica's. Worth knowing plainly: **the /settings obstruction test passes
+in CI while the live site is broken**, for exactly that reason.
 
 #### Step 4 — Then the queued lanes, in the order locked on 08-14
 

@@ -153,6 +153,74 @@ test.describe('bottom nav must not obstruct interactive elements', () => {
     }
   });
 
+  // EVERY ROUTE'S OWN WRAPPER, not just `.page`.
+  //
+  // The test above is the load-bearing one and it measured exactly two elements: `.page`
+  // on /places, and `.panel`. That is a real hole — a route that ships its own scrolling
+  // wrapper was never measured AT ALL, and the routes above are only checked by the
+  // content-dependent test, which needs enough rows to reach the bottom of the screen
+  // before it can see anything.
+  //
+  // Found while chasing a red run on /settings, which turned out NOT to be a padding bug
+  // (its inline 96px clears the 60px footprint, and 94px even on a notched phone). The
+  // bug was the guard: it could not have told us either way, because it never looked.
+  //
+  // Content-independent on purpose, so it fails on an empty disposable database exactly
+  // as it would on Erica's real data.
+  for (const route of ROUTES) {
+    test(`the scrolling wrapper on ${route} reserves the nav height`, async ({ page }) => {
+      await page.setViewportSize(PHONE);
+      await page.goto(route);
+      await page.waitForTimeout(1200);
+
+      const result = await page.evaluate(() => {
+        const nav = document.querySelector('nav.primary-nav');
+        if (!nav) return { footprint: -1, worst: null as null | { sel: string; pad: number } };
+        const footprint = Math.ceil(innerHeight - nav.getBoundingClientRect().top);
+
+        // The element that ENDS the page: the last block-level container holding the
+        // route's content. Measuring every candidate wrapper and taking the smallest
+        // reserve is what stops a route hiding behind a well-padded sibling.
+        const candidates = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            'main > div, main > section, .page, .settings-page',
+          ),
+        ).filter((el) => {
+          if (el.getBoundingClientRect().height <= innerHeight / 2) return false;
+          const cs = getComputedStyle(el);
+          // A VIEWPORT-PINNED PANE IS NOT A SCROLLING PAGE. `.map-root` is
+          // `position: fixed; inset: 0` — the nav floating over the map is the design,
+          // not an obstruction, and demanding bottom padding there would be demanding a
+          // gap at the bottom of the map. The rule this file states is about SCROLL
+          // VIEWS whose last element is interactive; this keeps it to those.
+          if (cs.position === 'fixed' || cs.position === 'absolute') return false;
+          // A pane that clips its own overflow cannot strand content under the nav
+          // either — whatever is down there is unreachable for a different reason.
+          if (cs.overflowY === 'hidden') return false;
+          return true;
+        });
+
+        let worst: { sel: string; pad: number } | null = null;
+        for (const el of candidates) {
+          const pad = Math.floor(parseFloat(getComputedStyle(el).paddingBottom) || 0);
+          const sel = el.className ? `.${String(el.className).split(' ')[0]}` : el.tagName;
+          if (!worst || pad < worst.pad) worst = { sel, pad };
+        }
+        return { footprint, worst };
+      });
+
+      expect(result.footprint, 'nav.primary-nav not found').toBeGreaterThan(0);
+      // A route may legitimately have no tall wrapper (a short page scrolls nowhere).
+      if (!result.worst) return;
+
+      expect(
+        result.worst.pad,
+        `${route}: ${result.worst.sel} reserves ${result.worst.pad}px but the nav occupies ` +
+          `${result.footprint}px — whatever ends that container would be untappable`,
+      ).toBeGreaterThanOrEqual(result.footprint);
+    });
+  }
+
   test('an open place card keeps its primary action clear of the nav', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/places');
