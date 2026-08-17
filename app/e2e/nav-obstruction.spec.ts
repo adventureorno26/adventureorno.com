@@ -20,16 +20,24 @@ import { authedTest as test, expect } from './fixtures';
 // phone, and /trips, /bucket and /timeline each had their last entry covered.
 // All of them repeated the same inline page-wrapper style with zero bottom
 // padding; they now share `.page`, which carries `--pnav-clearance`.
-const ROUTES = [
-  '/',
-  '/places',
-  '/timeline',
-  '/settings',
-  '/health',
-  '/bucket',
-  '/trash',
-  '/albums',
-];
+// `/settings` USED TO BE ON THIS LIST and is deliberately not any more.
+//
+// Erica, 2026-08-17: *"map places add timeline should not appear on the settings page"* —
+// so `PrimaryNav` returns null there. Both tests below then assert something that is no
+// longer true (`nav.primary-nav` visible, and a footprint > 0), and a route with no nav
+// cannot be obstructed by one. Leaving it here would have failed the full browser matrix
+// for a page that is now CORRECT.
+//
+// Rewritten to the newer instruction with the old one recorded, per the rule the
+// acceptance list already follows — never silently deleted. The replacement assertion is
+// in `app.spec.ts`: the nav has count 0 on /settings and is visible on /places, so its
+// removal is still pinned, just from the other side.
+//
+// Worth stating because it is the reason this was missed: the /settings obstruction the
+// plan tracked in §3 — `Celebrate Virginia`, `Mill Mountain Trail`, `Red Spring Gap`
+// untappable — is GONE as a side effect of that change, measured on the live site with her
+// data on 2026-08-17. Nothing else on the page is covered either.
+const ROUTES = ['/', '/places', '/timeline', '/health', '/bucket', '/trash', '/albums'];
 
 // Phone viewports are where the nav overlaps; desktop puts it out of the way.
 const PHONE = { width: 390, height: 844 };

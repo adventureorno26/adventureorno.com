@@ -165,14 +165,43 @@ second being a machine job that re-asserts it on every rebuild. The visibility f
 makes keeping the history safe: a true "we were both there" tag stops being a key to
 Strava's copy of the data.
 
-#### 3. THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION
+#### 3. ✅ THE THREE UNTAPPABLE /settings LINKS ARE GONE — and no decision was needed
 
-Measured on the live site with her data: `Celebrate Virginia`, `Mill Mountain Trail`,
-`Red Spring Gap`. A list overflows its collapsed container by 2,566px and paints under the
-floating nav, so no amount of page padding reaches it. Full diagnosis in §7e.
+`Celebrate Virginia`, `Mill Mountain Trail`, `Red Spring Gap` were untappable because a
+long category list overflowed its collapsed container and painted **under the floating
+nav**. This section asked her to choose between giving that list its own scroll, a max
+height, or unnesting it.
 
-**Needs a decision before code**: should a long category list inside a stats dropdown get
-its own scroll, a max height, or not be nested in that grid at all? Then it is a small fix.
+**None of those. The nav is no longer on /settings** — her instruction of 2026-08-17,
+*"map places add timeline should not appear on the settings page"* — so the thing doing the
+covering is not there to cover anything. Re-measured on the **live site, signed in as her,
+on a 390×844 phone, with every collapsible section opened**:
+
+    interactive elements on screen                    262
+    covered by something that is not themselves         0
+    Celebrate Virginia / Mill Mountain Trail /
+    Red Spring Gap                                    all TAPPABLE
+    nav.primary-nav on /settings                      absent
+
+And the routes that still HAVE the nav were checked the way the guard defines the property —
+scrolled fully to the end, since a floating nav covering something mid-scroll is not a bug:
+`/`, `/places`, `/timeline`, `/bucket`, `/albums`, `/trash`, `/health` — **nothing trapped
+under the nav on any of them.**
+
+**A fix in one place broke a guard in another, and this is how it was found.**
+`nav-obstruction.spec.ts` listed `/settings` and asserted `nav.primary-nav` is *visible*
+there; `erica-asked-for.spec.ts` waited for the nav as its boot signal on **every** route
+including `/settings`. Both went stale the moment the nav was removed, and both live in the
+**full browser matrix, which was `skipping` on every PR this week** — so a latent red sat
+there unseen. This is §1's lesson exactly: *a request is done when its check is green, and a
+changed instruction gets its check rewritten with the old one noted, never deleted.* Both
+now carry the instruction that superseded them, and `app.spec.ts` pins the removal from the
+other side (`toHaveCount(0)` on /settings, visible on /places).
+
+**The remaining question is worth asking anyway, and it is not urgent**: a category list
+inside a stats dropdown still overflows by thousands of pixels. Nothing covers it now, so
+nothing is unreachable — but "scrolls forever inside a dropdown" is a design she may not
+want. Not a bug; a preference, for whenever she looks at that screen.
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
 

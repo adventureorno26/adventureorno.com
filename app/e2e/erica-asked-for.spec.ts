@@ -39,8 +39,19 @@ const AT = '/place/6bffaec6-00be-4626-b1d2-cf6815b849f7';
 // would make this whole file untrustworthy. Every check goes through here.
 async function ready(page: import('@playwright/test').Page, path: string) {
   await page.goto(path);
-  // The nav renders only once the app has booted and the session is accepted.
-  await expect(page.locator('nav.primary-nav a').first()).toBeVisible();
+  // The nav renders only once the app has booted and the session is accepted — so it is
+  // the boot signal everywhere it EXISTS.
+  //
+  // It does not exist on /settings any more. Erica, 2026-08-17: *"map places add timeline
+  // should not appear on the settings page"*. Waiting for it there would fail every check
+  // on that route, for a page that is now correct — the same stale-assertion trap this
+  // file was rewritten to fix, arriving in the file's own helper. /settings waits for its
+  // heading instead, which is its equivalent proof that the app has booted.
+  if (path.startsWith('/settings')) {
+    await expect(page.getByRole('heading', { name: /settings/i }).first()).toBeVisible();
+  } else {
+    await expect(page.locator('nav.primary-nav a').first()).toBeVisible();
+  }
   if (path.startsWith('/place/')) {
     await expect(page.locator('.panel')).toBeVisible();
     // …and the card's own data, not just its shell.
