@@ -2034,7 +2034,7 @@ transaction and calling the real readers.
 
 | | |
 | --- | --- |
-| **Co-attribution is a date, not evidence** | `0039` did a blanket `UPDATE`: *"Post-Dec-21-2025 activities Erica recorded were joint → also Josh's."* 46 activities carry Josh's name, **all** dated ≥ 2025-12-21, and **19 of them are dated after his last import** — nothing of his could possibly have matched them |
+| **Co-attribution was an INSTRUCTION, implemented as a date** ⚠️ *corrected — see §7a-6* | `0039` did a blanket `UPDATE`: *"Post-Dec-21-2025 activities Erica recorded were joint → also Josh's."* 46 activities carry Josh's name, **all** dated ≥ 2025-12-21, and **19 of them are dated after his last import** — nothing of his could possibly have matched them. **This was Erica's explicit request, exception included** (§7a-6), and an owner's assertion is the best evidence there is — the fault is that it was written as a hardcoded date inside a migration, where it could not be seen, amended, revoked, or told apart from a guess |
 | **That defeats the Strava rule** | `visible_activities` treats an `activity_profiles` row as "this is yours too". **Measured live, acting as Josh: he sees 46 of Erica's 180 Strava activities.** Asking the real reader — `mileage_by_person(josh)` — returns **124 activities and 992.5 miles, of which 46 activities and 356.1 miles are Erica's Strava runs.** His own stats screen is showing him her mileage |
 | **The importer silently destroys the second recording** | `import_file_activity` finds a match and `return v_id` **without inserting**. The file Josh uploaded is not stored, not linked, not recorded anywhere. It is simply gone |
 | **`original_source` is a transport, not an origin** | `0193` backfilled it as `coalesce(original_source, source)`, so all 265 file rows say `'file'`. §6f requires *"where it came from originally, through however many hubs"*. A Garmin FIT, an AllTrails GPX and an Apple Health export are all `'file'` today |
@@ -2194,6 +2194,115 @@ Both hypotheses stay live until instrumented: the callback/state path **and** St
 athlete capacity. Instrument the retry so a second failure produces a reason rather than
 another expired row. Then his data arrives through the new importer, owned by him, and
 genuine joint outings come from two recordings — not from a date.
+
+#### 7a-6. TAGGING IS THE PRODUCT — and a correction to how this file described it
+
+Erica, 2026-08-17: *"Josh and I hiked, ran, biked, and took trips and visits, etc together.
+The whole point of this app is to be able to tag and share those memories. When I
+originally uploaded my Strava I told you to add him on all activities since December 21,
+2025 except Richmond Yuengling marathon."*
+
+**That changes what the 44 rows are, and §7a-0 described them wrongly.** This file has been
+calling the co-attribution "a date, not evidence" and filing it under the same heading as
+`solo_profile IS NULL` rendering as *"both of us were there"*. It is not that.
+
+**The owner said so.** An owner's assertion about who was with her is not the absence of
+information — it is the best evidence this system will ever get, better than a GPS
+coincidence and better than any matcher. What went wrong was never the claim. It was that
+the claim was **implemented as a hardcoded date inside a migration**, where it could not be
+seen, amended, revoked, or asked about, and where nobody could tell it apart from a guess.
+
+**Checked, and her instruction WAS carried out** — including the exception:
+
+| | |
+| --- | --- |
+| The excepted race | **Yuengling Shamrock Marathon**, 2026-03-22, 26.4 mi, `is_race=true` (it is the Shamrock, in Virginia Beach — not Richmond; recorded here because the plan should name the right activity) |
+| `activity_profiles` — the record | **Erica only.** The exception was honoured |
+| `also_profiles` — the legacy array | **still says Josh.** A stale mirror of a corrected fact |
+
+That divergence is this repository's oldest recurring bug in a new place: one fact stored
+twice, and the copy left behind (§"Derived vs source"). `activity_profiles` is the record
+(0189/0192); `also_profiles` must be retired, not repaired.
+
+**How much of the tagging has a second recording behind it:**
+
+    46  Josh tagged on Erica's activities
+     8  ...where Josh has his OWN recording that day   ← evidence
+     7  ...of those linked by shared_group_id
+    38  owner-asserted only                            ← and that is FINE
+
+38 is not a failure. Josh had no Strava, and his file imports are sparse and stop on
+2026-05-18. For most of those outings her word is the only record that exists, and the
+model must treat **owner assertion as a first-class evidence type** rather than a
+second-class one.
+
+#### 7a-7. What the model has to support, taken from what she actually did
+
+Her instruction is the specification, almost word for word:
+
+> add him on **all activities since December 21, 2025** — *a rule, over a range*
+> **except** the Yuengling marathon — *with exceptions*
+> and he should be able to **see and share those memories** — *with the other person's acceptance*
+
+So the tagging model needs four things a migration cannot give it:
+
+```text
+outing_participants
+  outing_id, profile_id
+  claim_status   proposed | accepted | declined | retracted
+  evidence       owner_asserted | own_recording | matched | inferred
+  asserted_by    who said it            ← Erica, for all 44
+  decided_by     who accepted it        ← Josh, and §A requires it
+  rule_id        the bulk action it came from, if any
+
+tagging_rules            A BULK CLAIM, STORED AS DATA RATHER THAN AS A MIGRATION
+  id, created_by, created_at, note
+  subject_profile        who is being tagged
+  from_date, to_date, activity_types, places
+  status                 active | revoked
+tagging_rule_exceptions
+  rule_id, outing_id, reason      ← "except the Yuengling marathon", stored, not remembered
+```
+
+**Why this is the fix and not bookkeeping.** Every property that made the December
+instruction go wrong disappears:
+
+- it is **visible** — she can see the rule and everything it claimed;
+- the **exception lives with the rule**, so nothing depends on whoever ran the migration
+  remembering it;
+- it is **revocable** — retracting the rule retracts the claims it made, except the ones
+  Josh individually accepted, which are his now;
+- and it is **distinguishable** from a guess, so a reader never again has to infer intent
+  from a date constant.
+
+**Acceptance is the part §A already required and nothing has ever implemented.** Josh has
+never been asked about any of the 46. In a two-person household that can be one screen and
+one button — *"Erica tagged you on 46 outings since 21 Dec. Accept all / review"* — but it
+has to be recorded, because at commercial scale the tag is a claim about somebody else.
+
+#### 7a-8. Why both of you must reload, in one sentence
+
+**0200 stopped Josh seeing 46 Strava-sourced activities he is legitimately tagged on** —
+correct under Strava's terms, and directly at odds with the point of the product. The way
+out is not to weaken the rule; it is Erica's own instruction: *"have both of us reload our
+activity information with a process that works."* When an outing is evidenced by files each
+person owns, the shared memory is theirs to share, and Strava is reduced to one convenient
+importer among several rather than the thing the household's history depends on.
+
+**The canonical test case is already in the data — 2026-03-07:**
+
+    Purcellville to Arlington - Full WOD   08:10:36  45.12mi  strava  owner Erica
+    Purcellville Running                   08:10:42  44.68mi  file    owner Josh
+    Purcellville Trailhead - W&OD          08:21:57  44.93mi  file    owner Erica
+
+One run. Three records. It contains **both** problems at once: a cross-source duplicate
+(Erica's Strava copy and Erica's file copy of her own run) and a genuine joint outing
+(Josh's own recording). All three already share a `shared_group_id`, which is why
+`mileage_by_person` reports it once — and why the **ten readers that do not group** would
+report 135 miles for a 45-mile run.
+
+Any import rebuild is finished when this day comes out as: **one outing, two participants,
+Erica's activity carrying two sources, Josh's carrying one.**
 
 #### What this phase does NOT do
 
