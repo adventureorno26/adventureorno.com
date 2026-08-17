@@ -47,7 +47,13 @@ import {
   type TripRow,
 } from '../lib/strava';
 import { visitDates } from '../lib/visitDates';
-import { importFileActivity, parseActivityFile, parseFitActivity } from '../lib/importFile';
+import {
+  beginImportRun,
+  finishImportRun,
+  importActivityFile,
+  parseActivityFile,
+  parseFitActivity,
+} from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
@@ -887,7 +893,11 @@ function GarminImportCard() {
   async function onFiles(files: FileList) {
     setBusy(true);
     let added = 0;
+    let already = 0;
     const problems: string[] = [];
+    // ONE RUN for the whole selection: a run is a person's action, not a file. Every item
+    // below lands under it, so "what did that import do?" has an answer afterwards.
+    const run = await beginImportRun('file-upload');
     for (const file of Array.from(files)) {
       try {
         const parsed = /\.fit$/i.test(file.name)
@@ -897,14 +907,23 @@ function GarminImportCard() {
           problems.push(`${file.name}: no GPS track found`);
           continue;
         }
-        await importFileActivity(parsed);
-        added++;
+        const out = await importActivityFile(run, parsed);
+        // The old RPC returned an id whether it stored anything or not, so a duplicate and
+        // a new activity were indistinguishable and both counted as "Imported".
+        if (out.disposition === 'duplicate') already++;
+        else added++;
       } catch (e) {
         // Surface the real reason instead of a silent "couldn't be read".
         problems.push(`${file.name}: ${e instanceof Error ? e.message : 'upload failed'}`);
       }
-      setMsg(`Imported ${added}${problems.length ? `, ${problems.length} failed` : ''}…`);
+      setMsg(
+        `Imported ${added}` +
+          (already ? `, ${already} already had` : '') +
+          (problems.length ? `, ${problems.length} failed` : '') +
+          '…',
+      );
     }
+    await finishImportRun(run);
     setMsg(
       `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported.` +
         (problems.length ? ` Couldn't import: ${problems.join('; ')}` : '') +
@@ -965,10 +984,28 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
     }
   }
 
+  const [stravaProblem, setStravaProblem] = useState<string | null>(null);
+
   useEffect(() => {
     isMyStravaConnected().then(setConnected);
     const params = new URLSearchParams(window.location.search);
-    if (params.get('strava') === 'connected') setConnected(true);
+    const outcome = params.get('strava');
+    if (outcome === 'connected') setConnected(true);
+    // EVERY OTHER OUTCOME WAS SILENT UNTIL NOW, and that is how Josh came to believe he
+    // had connected Strava when nothing had landed. `strava-auth` has always redirected
+    // here with ?strava=invalid_state / denied / missing_code / error — and this screen
+    // only ever read 'connected', so a failed link looked exactly like a successful one.
+    else if (outcome) {
+      setStravaProblem(
+        outcome === 'invalid_state'
+          ? 'That link expired before Strava sent you back. Start it again and finish within 30 minutes — signing in to Strava first makes it quicker.'
+          : outcome === 'denied'
+            ? 'Strava did not get permission, so nothing was connected.'
+            : outcome === 'missing_code' || outcome === 'missing_state'
+              ? 'Strava sent us back without everything we needed. Please try connecting again.'
+              : 'Strava could not be connected. Nothing was changed.',
+      );
+    }
   }, []);
 
   async function runBackfill(days: number) {
@@ -1018,6 +1055,13 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
   return (
     <div className="card">
       <b>Strava</b>
+      {/* A failed link used to look exactly like a successful one — this is the whole
+          reason Josh believed his Strava was connected for a week. */}
+      {stravaProblem && (
+        <div className="banner" style={{ marginTop: 6, fontSize: 13 }} role="status">
+          {stravaProblem}
+        </div>
+      )}
       {connected === null ? (
         <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>Checking…</div>
       ) : connected ? (

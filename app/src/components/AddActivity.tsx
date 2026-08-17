@@ -177,9 +177,18 @@ export default function AddActivity({
         ? await parseFitActivity(await file.arrayBuffer(), file.name)
         : parseActivityFile(await file.text(), file.name);
       if (!parsed) throw new Error('that file did not contain a route');
-      await importFileActivity(parsed);
+      const out = await importFileActivity(parsed);
       await onAdded();
-      showSnack({ message: `Imported ${parsed.name}.` });
+      // Say what actually happened. "Imported" for a file we already had is how a person
+      // ends up importing the same run four times looking for the one that stuck.
+      showSnack({
+        message:
+          out.disposition === 'duplicate'
+            ? `You already had ${parsed.name}.`
+            : out.disposition === 'proposed'
+              ? `Imported ${parsed.name} — it looks like one you already have, so it is waiting for you to confirm.`
+              : `Imported ${parsed.name}.`,
+      });
     } catch (e) {
       showSnack({
         message:

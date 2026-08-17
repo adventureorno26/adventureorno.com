@@ -45,9 +45,22 @@ declare
     'rebuild_place_visits',
     'rebuild_revealed_area',
     'recompute_place_stats',
+    -- 0205. Compares one person's own recordings to find the same outing logged twice, and
+    -- writes SUGGESTIONS — it shows nobody anything. It runs as a maintenance job where
+    -- `auth.uid()` is null, so through `visible_activities` it would see no Strava rows at
+    -- all and quietly propose nothing for the very activities that need it most.
+    'propose_source_duplicates',
 
     -- WRITERS. A person naming, moving, importing or reassigning specific rows they are
     -- acting on deliberately.
+    --
+    -- `ingest_activity` (0203) is here for a reason worth stating: its Tier 3 step looks for
+    -- ANOTHER person's recording of the same outing so the two can be LINKED as a joint
+    -- outing. Through `visible_activities` that row is invisible — a Strava activity of
+    -- Erica's is hidden from Josh, correctly — and the link would never be made, so two
+    -- recordings of one run would count twice. Linking exposes nothing: it writes a
+    -- shared_group_id and reads no attributes back to the caller.
+    'ingest_activity',
     'add_activity_to_visit',
     'apply_naming_rule',
     'assign_activity_to_race',

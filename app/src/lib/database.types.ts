@@ -222,6 +222,13 @@ export type Database = {
             foreignKeyName: "activity_participant_review_activity_id_fkey"
             columns: ["activity_id"]
             isOneToOne: true
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
+          },
+          {
+            foreignKeyName: "activity_participant_review_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: true
             referencedRelation: "visible_activities"
             referencedColumns: ["id"]
           },
@@ -230,18 +237,39 @@ export type Database = {
       activity_profiles: {
         Row: {
           activity_id: string
+          asserted_by: string | null
+          claim_status: string
           created_at: string
+          created_by: string
+          decided_at: string | null
+          decided_by: string | null
+          evidence: string
           profile_id: string
+          rule_id: string | null
         }
         Insert: {
           activity_id: string
+          asserted_by?: string | null
+          claim_status?: string
           created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: string
           profile_id: string
+          rule_id?: string | null
         }
         Update: {
           activity_id?: string
+          asserted_by?: string | null
+          claim_status?: string
           created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: string
           profile_id?: string
+          rule_id?: string | null
         }
         Relationships: [
           {
@@ -255,7 +283,28 @@ export type Database = {
             foreignKeyName: "activity_profiles_activity_id_fkey"
             columns: ["activity_id"]
             isOneToOne: false
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
+          },
+          {
+            foreignKeyName: "activity_profiles_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
             referencedRelation: "visible_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_profiles_asserted_by_fkey"
+            columns: ["asserted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_profiles_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -263,6 +312,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_profiles_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
             referencedColumns: ["id"]
           },
         ]
@@ -301,6 +357,13 @@ export type Database = {
             foreignKeyName: "activity_reactions_activity_id_fkey"
             columns: ["activity_id"]
             isOneToOne: false
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
+          },
+          {
+            foreignKeyName: "activity_reactions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
             referencedRelation: "visible_activities"
             referencedColumns: ["id"]
           },
@@ -309,6 +372,84 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_sources: {
+        Row: {
+          activity_id: string
+          confidence: string
+          connection_id: string | null
+          created_at: string
+          device_name: string | null
+          external_key: string | null
+          id: string
+          ingest_item_id: string | null
+          is_primary: boolean
+          origin: string
+          provider: string
+        }
+        Insert: {
+          activity_id: string
+          confidence?: string
+          connection_id?: string | null
+          created_at?: string
+          device_name?: string | null
+          external_key?: string | null
+          id?: string
+          ingest_item_id?: string | null
+          is_primary?: boolean
+          origin?: string
+          provider: string
+        }
+        Update: {
+          activity_id?: string
+          confidence?: string
+          connection_id?: string | null
+          created_at?: string
+          device_name?: string | null
+          external_key?: string | null
+          id?: string
+          ingest_item_id?: string | null
+          is_primary?: boolean
+          origin?: string
+          provider?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_sources_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_sources_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
+          },
+          {
+            foreignKeyName: "activity_sources_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "visible_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_sources_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "source_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_sources_ingest_item_id_fkey"
+            columns: ["ingest_item_id"]
+            isOneToOne: false
+            referencedRelation: "ingest_items"
             referencedColumns: ["id"]
           },
         ]
@@ -339,6 +480,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "activities"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_visit_review_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: true
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
           },
           {
             foreignKeyName: "activity_visit_review_activity_id_fkey"
@@ -670,35 +818,162 @@ export type Database = {
           },
         ]
       }
+      import_artifacts: {
+        Row: {
+          byte_size: number | null
+          created_at: string
+          id: string
+          media_type: string | null
+          object_key: string | null
+          retention: string
+          sha256: string
+        }
+        Insert: {
+          byte_size?: number | null
+          created_at?: string
+          id?: string
+          media_type?: string | null
+          object_key?: string | null
+          retention?: string
+          sha256: string
+        }
+        Update: {
+          byte_size?: number | null
+          created_at?: string
+          id?: string
+          media_type?: string | null
+          object_key?: string | null
+          retention?: string
+          sha256?: string
+        }
+        Relationships: []
+      }
+      ingest_items: {
+        Row: {
+          artifact_id: string | null
+          created_at: string
+          disposition: string
+          entity_kind: string
+          event_at: string | null
+          external_key: string | null
+          id: string
+          reason: string | null
+          run_id: string
+        }
+        Insert: {
+          artifact_id?: string | null
+          created_at?: string
+          disposition: string
+          entity_kind?: string
+          event_at?: string | null
+          external_key?: string | null
+          id?: string
+          reason?: string | null
+          run_id: string
+        }
+        Update: {
+          artifact_id?: string | null
+          created_at?: string
+          disposition?: string
+          entity_kind?: string
+          event_at?: string | null
+          external_key?: string | null
+          id?: string
+          reason?: string | null
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingest_items_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "import_artifacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingest_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "ingest_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingest_runs: {
         Row: {
+          actor_kind: string
+          app_version: string | null
           failed: number
           finished_at: string | null
           id: string
+          idempotency_key: string | null
+          initiated_by: string | null
+          method: string | null
           notes: Json | null
           ok: number
           source: string
+          source_connection_id: string | null
+          source_owner_profile: string | null
           started_at: string
+          status: string
         }
         Insert: {
+          actor_kind?: string
+          app_version?: string | null
           failed?: number
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
+          initiated_by?: string | null
+          method?: string | null
           notes?: Json | null
           ok?: number
           source: string
+          source_connection_id?: string | null
+          source_owner_profile?: string | null
           started_at?: string
+          status?: string
         }
         Update: {
+          actor_kind?: string
+          app_version?: string | null
           failed?: number
           finished_at?: string | null
           id?: string
+          idempotency_key?: string | null
+          initiated_by?: string | null
+          method?: string | null
           notes?: Json | null
           ok?: number
           source?: string
+          source_connection_id?: string | null
+          source_owner_profile?: string | null
           started_at?: string
+          status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ingest_runs_initiated_by_fkey"
+            columns: ["initiated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingest_runs_source_connection_id_fkey"
+            columns: ["source_connection_id"]
+            isOneToOne: false
+            referencedRelation: "source_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingest_runs_source_owner_profile_fkey"
+            columns: ["source_owner_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ingest_tokens: {
         Row: {
@@ -1040,6 +1315,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "activities"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "peak_bags_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
           },
           {
             foreignKeyName: "peak_bags_activity_id_fkey"
@@ -1813,6 +2095,44 @@ export type Database = {
           },
         ]
       }
+      source_connections: {
+        Row: {
+          connected_at: string
+          disconnected_at: string | null
+          external_id: string | null
+          id: string
+          label: string | null
+          owner_profile: string
+          provider: string
+        }
+        Insert: {
+          connected_at?: string
+          disconnected_at?: string | null
+          external_id?: string | null
+          id?: string
+          label?: string | null
+          owner_profile: string
+          provider: string
+        }
+        Update: {
+          connected_at?: string
+          disconnected_at?: string | null
+          external_id?: string | null
+          id?: string
+          label?: string | null
+          owner_profile?: string
+          provider?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_connections_owner_profile_fkey"
+            columns: ["owner_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spatial_ref_sys: {
         Row: {
           auth_name: string | null
@@ -1937,6 +2257,163 @@ export type Database = {
           {
             foreignKeyName: "suggestions_decided_by_fkey"
             columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tag_claims: {
+        Row: {
+          asserted_by: string
+          created_at: string
+          decided_at: string | null
+          id: string
+          note: string | null
+          profile_id: string
+          rule_id: string | null
+          status: string
+          subject_id: string
+          subject_kind: string
+        }
+        Insert: {
+          asserted_by: string
+          created_at?: string
+          decided_at?: string | null
+          id?: string
+          note?: string | null
+          profile_id: string
+          rule_id?: string | null
+          status?: string
+          subject_id: string
+          subject_kind: string
+        }
+        Update: {
+          asserted_by?: string
+          created_at?: string
+          decided_at?: string | null
+          id?: string
+          note?: string | null
+          profile_id?: string
+          rule_id?: string | null
+          status?: string
+          subject_id?: string
+          subject_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_claims_asserted_by_fkey"
+            columns: ["asserted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_claims_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_claims_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tagging_rule_exceptions: {
+        Row: {
+          created_at: string
+          reason: string | null
+          rule_id: string
+          subject_id: string
+          subject_kind: string
+        }
+        Insert: {
+          created_at?: string
+          reason?: string | null
+          rule_id: string
+          subject_id: string
+          subject_kind: string
+        }
+        Update: {
+          created_at?: string
+          reason?: string | null
+          rule_id?: string
+          subject_id?: string
+          subject_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tagging_rule_exceptions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tagging_rules: {
+        Row: {
+          activity_types: string[]
+          created_at: string
+          created_by: string
+          from_date: string | null
+          id: string
+          note: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          status: string
+          subject_profile: string
+          to_date: string | null
+        }
+        Insert: {
+          activity_types?: string[]
+          created_at?: string
+          created_by: string
+          from_date?: string | null
+          id?: string
+          note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          subject_profile: string
+          to_date?: string | null
+        }
+        Update: {
+          activity_types?: string[]
+          created_at?: string
+          created_by?: string
+          from_date?: string | null
+          id?: string
+          note?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          subject_profile?: string
+          to_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tagging_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tagging_rules_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tagging_rules_subject_profile_fkey"
+            columns: ["subject_profile"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2236,26 +2713,68 @@ export type Database = {
       }
       visit_profiles: {
         Row: {
+          asserted_by: string | null
+          claim_status: string
           created_at: string
+          created_by: string
+          decided_at: string | null
+          decided_by: string | null
+          evidence: string
           profile_id: string
+          rule_id: string | null
           visit_id: string
         }
         Insert: {
+          asserted_by?: string | null
+          claim_status?: string
           created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: string
           profile_id: string
+          rule_id?: string | null
           visit_id: string
         }
         Update: {
+          asserted_by?: string | null
+          claim_status?: string
           created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          evidence?: string
           profile_id?: string
+          rule_id?: string | null
           visit_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "visit_profiles_asserted_by_fkey"
+            columns: ["asserted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_profiles_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "visit_profiles_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_profiles_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
             referencedColumns: ["id"]
           },
           {
@@ -2488,6 +3007,25 @@ export type Database = {
           type: string | null
         }
         Relationships: []
+      }
+      activity_provenance: {
+        Row: {
+          activity_id: string | null
+          has_strava_source: boolean | null
+          origins: string[] | null
+          owner_profile: string | null
+          providers: string[] | null
+          source_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_owner_profile_fkey"
+            columns: ["owner_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       geography_columns: {
         Row: {
@@ -3062,6 +3600,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      begin_ingest_run: {
+        Args: {
+          p_actor_kind?: string
+          p_connection?: string
+          p_idempotency?: string
+          p_method: string
+        }
+        Returns: string
+      }
       can_rename_place: {
         Args: { p_caller: string; p_place: string }
         Returns: boolean
@@ -3298,6 +3845,7 @@ export type Database = {
         Returns: undefined
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      finish_ingest_run: { Args: { p_run: string }; Returns: undefined }
       forget_rule: { Args: { p_id: string }; Returns: Json }
       geo_coverage: {
         Args: { p_profile?: string }
@@ -3435,6 +3983,25 @@ export type Database = {
       }
       inbox: { Args: { p_cursor?: string; p_limit?: number }; Returns: Json }
       inbox_counts: { Args: never; Returns: Json }
+      ingest_activity: {
+        Args: {
+          p_artifact?: string
+          p_date?: string
+          p_device?: string
+          p_distance?: number
+          p_external_key?: string
+          p_lat?: number
+          p_lng?: number
+          p_moving?: number
+          p_name?: string
+          p_origin?: string
+          p_polyline?: string
+          p_provider: string
+          p_run: string
+          p_type?: string
+        }
+        Returns: Json
+      }
       is_editor_or_owner: { Args: never; Returns: boolean }
       is_generic_activity_name: { Args: { p_name: string }; Returns: boolean }
       is_member: { Args: never; Returns: boolean }
@@ -3741,6 +4308,18 @@ export type Database = {
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
       propose_photos: { Args: { p_limit?: number }; Returns: Json }
+      propose_source_duplicates: { Args: { p_days?: number }; Returns: number }
+      propose_tagging_rule: {
+        Args: {
+          p_except?: string[]
+          p_from: string
+          p_note?: string
+          p_subject: string
+          p_to?: string
+          p_types?: string[]
+        }
+        Returns: string
+      }
       prune_service_health: { Args: never; Returns: undefined }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
@@ -3783,6 +4362,10 @@ export type Database = {
         Args: { p_old_name?: string; p_place: string }
         Returns: number
       }
+      respond_to_tag: {
+        Args: { p_accept: boolean; p_claim: string }
+        Returns: undefined
+      }
       restore_photo: { Args: { p_id: string }; Returns: undefined }
       restore_place: { Args: { p_id: string }; Returns: undefined }
       restore_visit: {
@@ -3815,6 +4398,7 @@ export type Database = {
         }
       }
       revealed_area_geojson: { Args: never; Returns: Json }
+      revoke_tagging_rule: { Args: { p_rule: string }; Returns: number }
       rule_offer: { Args: { p_activity: string }; Returns: Json }
       search_photos: {
         Args: { p_filter: Json }
@@ -3987,8 +4571,15 @@ export type Database = {
       set_visit_participants: {
         Args: { p_profiles: string[]; p_visit: string }
         Returns: {
+          asserted_by: string | null
+          claim_status: string
           created_at: string
+          created_by: string
+          decided_at: string | null
+          decided_by: string | null
+          evidence: string
           profile_id: string
+          rule_id: string | null
           visit_id: string
         }[]
         SetofOptions: {
