@@ -292,13 +292,36 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
   **A job whose last run SUCCEEDED can still be broken** — that is the case the ok flag
   exists for, and the one a status-only check would call healthy.
 
-  ⚠️ **`0197` IS NOT APPLIED YET.** Applying it was declined by this session's permission
-  gate, so it is merged-but-unapplied and **the production deploy gate will refuse the
-  next deploy until it is applied** — correctly, and exactly as it refused `a57a928`
-  earlier today. Apply with `npm run db:apply 0197_the_jobs_are_watched`, then deploy the
-  Worker with `cd workers/watchtower && npx wrangler deploy`. The Worker is harmless until
-  then: an unreachable `cron_health()` records one honest `cron` failure row rather than
-  blaming a job.
+  ✅ **`0197` is applied and recorded** — 2026-08-16, via `npm run db:apply`, so the schema
+  and the ledger moved in ONE transaction and cannot drift apart. `check:ledger` reports
+  all 197. Called for real against production, it answers:
+
+      dedupe-joint-outings | ok=false | failed    | fails24h=1 | failed: ERROR:  not authorized
+      purge-trash          | ok=true  | succeeded | fails24h=0 | (healthy)
+      rebuild-revealed-area| ok=true  | succeeded | fails24h=0 | (healthy)
+
+  Only `service_role` may execute it; `anon` and `authenticated` are revoked, because a
+  member sees this through `service_status()` like every other probe.
+
+  **Applying it BEFORE merging is why #103 deployed at all.** The gate that refused
+  `a57a928` this afternoon would have refused `7212eda` for the same reason, and the
+  ordering — migration first, merge second — is the whole discipline that gate exists to
+  enforce.
+
+  ✅ **The Worker is deployed and the silence is over** — 2026-08-16 23:50 UTC. The sweep
+  went from 5 services to 8, and on its very first run the thing nobody could see for
+  eight nights is on the board:
+
+      OK   app / basemap-style / basemap-tiles / basemap-tile / basemap-glyphs
+      FAIL cron:dedupe-joint-outings   failed: ERROR:  not authorized
+      OK   cron:purge-trash
+      OK   cron:rebuild-revealed-area
+
+  The rows are in `service_health`, so `service_status()` shows them beside the URL probes
+  with no screen work at all. **The job itself is still failing** — `0195` fixed it and the
+  next scheduled run is 04:20, so tomorrow morning is when `cron:dedupe-joint-outings`
+  should turn green on its own. If it does not, the watchtower will now be the thing that
+  says so instead of a person going to look eight days later.
 - **A test that keeps the Strava rule enforced.** 17 functions still read
   `public.activities` directly. Checked one by one, that is *correct* — they are writers
   and machine jobs, which #100 deliberately kept on the table because the view filters on
