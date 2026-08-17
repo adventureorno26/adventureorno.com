@@ -2471,6 +2471,56 @@ choice that could not be made. Neither was visible on screen, and both were foun
 the argument for `check-data-integrity.mjs` growing a row per invariant rather than for
 more tests of the happy path.
 
+#### 7a-11. One press for a library *(2026-08-17, DONE — 0211/0212)*
+
+**The reload does not fail on correctness, it fails on effort.** 7a-8 requires both of them
+to re-record their outings as files, because an outing evidenced only by Erica's Strava
+copy is one Josh cannot see. Measured on 2026-08-17:
+
+    Josh is tagged on                                          219 outings
+    of those, invisible to him — evidence is Erica's Strava      46
+    his tags created by a migration, never actually asked        44
+
+But her Garmin library is the *same outings* Strava already holds, so every matching file
+raises its own `shared_group_id` card (0210). Across ~184 activities that is one press per
+card: a **data-entry job wearing a review's clothes**. The predictable end is that she stops
+halfway and the remainder stay double-counted — the system correct about every single one
+and wrong overall.
+
+**This does not change who decides.** §2's rule stands: a machine may only propose. The
+cards are still hers to read, the count is on the face of the banner, and **one Undo puts
+every one of them back**. What changed is the number of times she has to say yes.
+
+**Scoped to her OWN outings in the function, not in the caller.** Tier 2 only ever matches
+same-owner recordings, so today the scope changes nothing — but a function whose job is
+"accept everything pending" is precisely the one that later gets pointed at somebody else's
+data, and the regression test's third case is the one that matters:
+
+    2 linked in one press · Josh's card untouched · both recordings kept · one undo restored both
+
+**Undo had to be fixed to survive a batch.** It restored suggestions by the undo *row's*
+single `group_key` — right for one card, silently wrong for many: every activity would
+revert while only one card returned to pending, leaving the rest approved-but-not-applied.
+Each payload element now carries its own `group_key`, with the row's as fallback, so every
+token written before today behaves exactly as it did.
+
+**0212 corrects 0211 the same day.** `approved_fields.via` is a CHECK-constrained set —
+`inbox | edit | rule | backfill` — and 0211 invented `'inbox-bulk'`, so every call raised
+`23514` and the function could never approve anything. Caught by *running* it. `'inbox'` is
+also the right answer rather than the merely permitted one: it **is** the Inbox, and that
+one press covered many cards is recorded where it belongs, in
+`approval_undo.group_key = 'bulk:import-dup'`, instead of by widening a closed vocabulary
+four other things depend on. 0211 is left exactly as applied — a migration file that changes
+after it ran no longer describes what any environment did.
+
+**Still open after this, and both are Erica's call:**
+
+- **Josh has never been asked about his 44 legacy tags.** `respond_to_tag()` exists (0201);
+  nothing calls it. In a two-person household this is one screen and one button.
+- **Her GPX exports carry no Garmin Connect activity link**, so they get no Tier 1 key and a
+  re-upload of the same file creates a second copy plus another card rather than attaching.
+  TCX carries the watch serial and does not have this problem.
+
 #### What this phase does NOT do
 
 It does not add new providers. `intervals.icu`, Garmin Connect, Polar and the rest stay in

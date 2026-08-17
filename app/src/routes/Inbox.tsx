@@ -13,7 +13,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   approveCard,
+  approveImportDuplicates,
   evidenceLine,
+  fetchImportDuplicates,
   fetchInbox,
   miles,
   rejectSuggestion,
@@ -23,6 +25,7 @@ import {
   type Choice,
   type RuleOffer,
   type PhotoCandidate,
+  type ImportDuplicatesPending,
   type InboxCard,
   type SuggestionOption,
 } from '../lib/inbox';
@@ -87,10 +90,17 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   // exists because they were taken that day in that place, and un-ticking the odd
   // wrong one is less work than ticking eight right ones.
   const [pickedPhotos, setPickedPhotos] = useState<Record<string, boolean>>({});
+  // Re-importing a Garmin library re-records outings Strava already has, one card each.
+  // At ~184 activities, reviewing them one at a time is a data-entry job rather than a
+  // review — so the whole batch is offered as one press, with the count on its face.
+  const [dupes, setDupes] = useState<ImportDuplicatesPending | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
+      fetchImportDuplicates()
+        .then(setDupes)
+        .catch(() => setDupes(null));
       const rows = await fetchInbox();
       setCards(rows);
       // Pre-select rank 0 per field — the recommendation, not a decision.
@@ -178,6 +188,37 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  /** Say yes to every import duplicate at once, and offer to put them all back. */
+  async function onLinkAllDuplicates() {
+    setBusy('bulk');
+    try {
+      const { linked, undoToken } = await approveImportDuplicates();
+      if (!linked) {
+        showSnack({ message: 'There was nothing left to link.' });
+      } else {
+        showSnack({
+          message: `Linked ${linked} outing${linked === 1 ? '' : 's'}. Both recordings are kept.`,
+          actionLabel: 'Undo',
+          onAction: async () => {
+            if (!undoToken) return;
+            try {
+              await undoApproval(undoToken);
+              showSnack({ message: 'Put them all back.' });
+              await load();
+            } catch {
+              showSnack({ message: 'Could not undo that.' });
+            }
+          },
+        });
+      }
+      await load();
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'Could not link those.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onReject(option: SuggestionOption) {
     try {
       await rejectSuggestion(option.id);
@@ -197,6 +238,30 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             Suggestions from the map data. Nothing here has changed anything yet — a name is only
             written when you say so, and once you do, nothing overwrites it.
           </p>
+        </div>
+      )}
+
+      {canDecide && (dupes?.count ?? 0) > 1 && (
+        <div className="inbox-rule-offer">
+          <p>
+            <strong>{dupes!.count} of these</strong> are outings you already had, recorded a second
+            way — from your files as well as from Strava
+            {dupes!.earliest && dupes!.latest ? (
+              <>
+                , between {dupes!.earliest} and {dupes!.latest}
+              </>
+            ) : null}
+            . Linking them means each one counts once. Both recordings are kept, and one Undo puts
+            them all back.
+          </p>
+          <div className="ic-actions">
+            <button className="primary" disabled={busy !== null} onClick={onLinkAllDuplicates}>
+              {busy === 'bulk' ? 'Linking…' : `Link all ${dupes!.count}`}
+            </button>
+            <button className="ghost" disabled={busy !== null} onClick={() => setDupes(null)}>
+              Not now — I’ll read them
+            </button>
+          </div>
         </div>
       )}
 

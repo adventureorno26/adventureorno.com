@@ -97,6 +97,40 @@ export async function approveCard(
   return (data as unknown as { undo_token: string }).undo_token;
 }
 
+/** How many of her own outings an import thinks she already had, and over what span. */
+export interface ImportDuplicatesPending {
+  count: number;
+  earliest: string | null;
+  latest: string | null;
+}
+
+export async function fetchImportDuplicates(): Promise<ImportDuplicatesPending> {
+  const { data, error } = await supabase.rpc('import_duplicates_pending');
+  if (error) throw error;
+  return (data ?? { count: 0, earliest: null, latest: null }) as unknown as ImportDuplicatesPending;
+}
+
+/**
+ * Say yes to every import duplicate at once.
+ *
+ * Reloading a Garmin library re-records outings Strava already has, and each match raises
+ * its own card. At ~184 activities that is a data-entry job, not a review, and the
+ * predictable end is that she stops halfway and the rest stay double-counted — the system
+ * right about every one of them and still wrong overall.
+ *
+ * A machine still only proposes. She sees the cards and the count and presses once, and one
+ * Undo puts every one of them back.
+ */
+export async function approveImportDuplicates(): Promise<{
+  linked: number;
+  undoToken: string | null;
+}> {
+  const { data, error } = await supabase.rpc('approve_import_duplicates', {});
+  if (error) throw error;
+  const r = data as unknown as { linked: number; undo_token: string | null };
+  return { linked: r.linked ?? 0, undoToken: r.undo_token ?? null };
+}
+
 /** Never offer this exact suggestion again. The row stays, marked rejected. */
 export async function rejectSuggestion(id: string): Promise<void> {
   const { error } = await supabase.rpc('reject_suggestion', { p_id: id });
