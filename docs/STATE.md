@@ -368,6 +368,30 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
   pass** — being unable to check is the same blindness that let production sit 16 commits
   behind for a day, so it is not skipped quietly.
 
+  **Deployed 2026-08-17 00:25 UTC.** The sweep is nine probes, and it is behaving exactly
+  as designed — including the one honest red that is waiting on Erica:
+
+      OK   app · basemap-style · basemap-tiles · basemap-tile · basemap-glyphs
+      FAIL cron:dedupe-joint-outings   failed: ERROR:  not authorized
+      OK   cron:purge-trash · cron:rebuild-revealed-area
+      FAIL deploy                      no GITHUB_TOKEN — cannot compare the deployed SHA against main
+
+  Two red rows, both true. The first clears itself at 04:20 if `0195` did its job; the
+  second clears when the token is set.
+
+#### STEP 3 IS CLOSED — all three traps, 2026-08-16/17
+
+| Trap | Closed by | Where it lives, and why there |
+| ---- | --------- | ----------------------------- |
+| Nothing read `cron.job_run_details` | `0197` + watchtower | In the Worker: pg_cron's failures are invisible from every other vantage point |
+| The Strava rule could be undone by the next reader | `the_readers_stay_enforced.test.sql` | In the DB test suite: it must fail on code that does not exist yet |
+| A deploy freeze read green | watchtower `deploy` probe | **NOT in CI — CI was the thing that was down** |
+
+The through-line, and it is the one worth keeping: **a check placed inside the system it
+watches cannot report that system being down.** CI could not report CI. A URL prober could
+not report the database's jobs. A behavioural test could not report readers nobody had
+written yet.
+
 #### Step 4 — Then the queued lanes, in the order locked on 08-14
 
 Nothing here starts until Steps 0–3 are true for the same commit.
