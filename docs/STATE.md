@@ -2419,6 +2419,58 @@ unzip Garmin's export and pick the files inside"*, because a `.zip` read as text
 null and used to be reported as *"no GPS track found"*, which sends a person to look at
 their watch instead of at the zip.
 
+#### 7a-10. A proposal nobody could accept *(2026-08-17, DONE — 0210)*
+
+Erica imported one Garmin GPX. It behaved exactly as designed right up to the last step:
+
+    Loudoun County Walking   2024-09-26 12:13:40  1225 m  file    origin garmin
+    Lake of the Red Rocks    2024-09-26 12:13:22  1254 m  strava  origin garmin
+    → "Looks like the same outing … 0 min apart, 2.3% difference in distance"
+
+Created, not swallowed. Provenance real (`origin garmin`, device *Garmin Connect*) — the
+0209 fix working. Card raised, and it **appeared in her Inbox**. Everything looked finished.
+
+**Approving it would have raised `22023: the inbox does not write activity.duplicate_of`.**
+`apply_inbox_field` has no branch for that field and never did. There was no way for a
+person to say yes, so the two recordings stay unlinked — and until they are linked, every
+reader that does not group **counts that walk twice**. A de-duplication system whose last
+step cannot be completed has not de-duplicated anything; it has queued a double-count and
+put a badge on it.
+
+**The field already existed.** 0195 routes joint-outing dedupe through `shared_group_id`,
+`apply_inbox_field` has written it since, and every mileage reader counts one row per
+`coalesce(shared_group_id, id)` (0140). `duplicate_of` was a **new name for a question
+already decided** — and inventing a field is how you end up proposing something nothing can
+accept. The importer now proposes `shared_group_id`, valued at the outing the existing
+recording already belongs to, and the three proposals already raised were rewritten in
+place rather than withdrawn and re-raised: she has seen those cards, and a card that
+vanishes and returns is indistinguishable from a bug.
+
+**Proved by accepting one, against production, rolled back:**
+
+    outings counted on 2024-09-26 BEFORE   2
+    approve_card returned                  {"ok": true, "fields": 1, "undo_token": …}
+    outings counted on 2024-09-26 AFTER    1
+    both recordings kept                   2
+
+**The test is the general rule, not the instance.** `0210_a_proposal_must_be_acceptable`
+extracts every field `ingest_activity` proposes and fails unless `apply_inbox_field` can
+write it — so it catches the next invented field too. Checked both ways: it finds
+`shared_group_id` (not a vacuous loop), and mutating the source back to `duplicate_of`
+makes it fail.
+
+**Also fixed: `ok` counted only `inserted` and `attached`,** so the run that imported her
+walk recorded `ok=0 failed=0` for one activity created and one proposal raised. The UI said
+"1 imported" while the ledger said nothing happened — and the ledger is what anybody reads
+later. Anything not `failed` is now an item the run handled, and existing runs were
+recounted.
+
+**The pattern across 7a-9 and 7a-10.** Writes that reported success and did nothing; a
+choice that could not be made. Neither was visible on screen, and both were found only by
+**counting something** — 25 rows with no evidence, one day counting as two outings. That is
+the argument for `check-data-integrity.mjs` growing a row per invariant rather than for
+more tests of the happy path.
+
 #### What this phase does NOT do
 
 It does not add new providers. `intervals.icu`, Garmin Connect, Polar and the rest stay in
