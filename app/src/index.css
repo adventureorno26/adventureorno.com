@@ -7175,3 +7175,25 @@ button.mi-row:hover {
 .tl-year .tl-month {
   margin-left: 6px;
 }
+
+/* The list of outings somebody else says you were on (0213/0214). Text controls only —
+   no icons — and each row answerable on its own, because "yes to all" is a convenience
+   and never the only way to answer a claim about you. */
+.inbox-tag-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inbox-tag-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+}

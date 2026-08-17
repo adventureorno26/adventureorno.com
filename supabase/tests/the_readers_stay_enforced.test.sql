@@ -75,6 +75,23 @@ declare
     'move_visit_to_place',
     'reassign_activity',
     'set_activity_solo',
+    -- Exposed by widening the regex above, not by any change to them. Each writes rows a
+    -- person has named — merging two places or two visits, renaming what happened at a
+    -- place, marking a race, editing one activity — and none returns activity attributes
+    -- to a caller who could not already see them.
+    'merge_places',
+    'merge_places_auto',
+    'merge_visits',
+    'rename_activities_for_place',
+    'set_activity_race',
+    'update_activity',
+    -- 0213/0214. The tagged person answering a tag. On DECLINE it removes his membership
+    -- from every recording of that one outing, which means reading `activities` to find
+    -- the siblings — including the hidden one, because "I was not there" is about the day
+    -- and not about which file it came out of. It shows him nothing; `my_tags_to_confirm`
+    -- is the reader, and that one goes through the view.
+    'respond_to_tag',
+    'respond_to_all_tags',
 
     -- DELIBERATE READERS, unchanged by 0196 because both were already correct.
     --   data_health   — row COUNTS for diagnostics. A total is not an athlete's data, and
@@ -84,6 +101,13 @@ declare
     --                   "there are N more here we may not show you" rather than a
     --                   silently short number. It is the model the others now follow.
     'data_health',
+    -- 0214. Returns an ID, never an attribute. It must read the CLAIMED row's
+    -- shared_group_id even when that row is hidden — that is the whole job: find the
+    -- recording of the same outing that the caller IS allowed to see. Every id it can
+    -- return comes out of `visible_activities`, so nothing about a hidden recording
+    -- reaches anybody. 44 of Josh's tags name a recording he may not see, and without
+    -- this they are unanswerable.
+    'visible_recording_of',
     -- 0211. Returns a COUNT and a date range for the banner that offers to link them all,
     -- over the caller's own activities only (`owner_profile = auth.uid()`). It shows no
     -- attribute of anybody else's activity, and the same narrower-than-the-view argument
@@ -103,7 +127,15 @@ begin
    where n.nspname = 'public'
      and p.prokind = 'f'
      and p.prosecdef
-     and pg_get_functiondef(p.oid) ~* '(from|join)[[:space:]]+(public\.)?activities'
+     -- `from|join` ALONE MISSED SEVEN FUNCTIONS. 0214 added a `delete … using
+     --  public.activities`, and the guard said nothing: a DELETE…USING and an UPDATE read
+     --  the table exactly as a SELECT does. Widening it exposed six more that had been
+     --  reading it unnamed since long before — merge_places, merge_places_auto,
+     --  merge_visits, rename_activities_for_place, set_activity_race, update_activity.
+     --  None is a leak (every one is a writer acting on rows a person named), but "not
+     --  named because the regex could not see it" is not an exemption, and the next one
+     --  might not be a writer.
+     and pg_get_functiondef(p.oid) ~* '(from|join|using|update)[[:space:]]+(public\.)?activities'
      and not (p.proname = any(allowed));
 
   if unexpected is not null then

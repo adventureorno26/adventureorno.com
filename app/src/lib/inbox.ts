@@ -200,3 +200,46 @@ export async function learnRule(activityId: string, name?: string): Promise<void
   });
   if (error) throw error;
 }
+
+// --- Tags somebody else made about you (0201/0213/0214) ----------------------
+// "Erica tagged you on 44 outings since 21 Dec." A tag is a claim about ANOTHER person,
+// so it is not true until that person says so — the part §A required and nothing
+// implemented until now.
+
+export interface TagToConfirm {
+  claim_id: string;
+  status: string;
+  activity_id: string;
+  /** True when the outing reaches you through a different recording of the same day. */
+  via_another_recording: boolean;
+  name: string | null;
+  type: string | null;
+  distance: number | null;
+  start_date: string | null;
+  place: string | null;
+  tagged_by: string | null;
+  rule_note: string | null;
+}
+
+export async function fetchTagsToConfirm(): Promise<TagToConfirm[]> {
+  const { data, error } = await supabase.rpc('my_tags_to_confirm', {});
+  if (error) throw error;
+  return (data ?? []) as unknown as TagToConfirm[];
+}
+
+/** Yes or no to one tag. Declining removes you from that outing; it never touches
+ *  a membership that came from your own recording. */
+export async function respondToTag(claimId: string, accept: boolean): Promise<void> {
+  const { error } = await supabase.rpc('respond_to_tag', {
+    p_claim: claimId,
+    p_accept: accept,
+  });
+  if (error) throw error;
+}
+
+/** Answer all of them at once. Still his decision — just once instead of 44 times. */
+export async function respondToAllTags(accept: boolean): Promise<number> {
+  const { data, error } = await supabase.rpc('respond_to_all_tags', { p_accept: accept });
+  if (error) throw error;
+  return (data as unknown as { answered: number }).answered ?? 0;
+}

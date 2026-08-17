@@ -2521,6 +2521,71 @@ after it ran no longer describes what any environment did.
   re-upload of the same file creates a second copy plus another card rather than attaching.
   TCX carries the watch serial and does not have this problem.
 
+#### 7a-12. Josh gets asked, and a tag follows the OUTING *(2026-08-17, DONE — 0213/0214/0215)*
+
+7a-7 called acceptance *"the part §A already required and nothing has ever implemented."*
+0201 built `tag_claims` and `respond_to_tag()`. Running them found **three faults stacked on
+each other**, each only visible once the one above it was fixed:
+
+1. **`respond_to_tag` refused any claim that was not `proposed`.** All 44 of Josh's are
+   `accepted_legacy`. So the one function built to ask him **could not be called for a
+   single claim that existed.** He had never been asked and, as built, never could be.
+2. **On DECLINE it marked the claim and stopped.** Right for a `proposed` claim — no
+   participation row was ever written. For a legacy one the row is *already there*, put
+   there by 0039's date rule, so "no" left him credited with the outing he had just said he
+   was not on. A **no that changes nothing** is 0210's proposal-nobody-could-accept, one
+   layer up.
+3. **Then the list came back empty: 0 of 44.** Every claim names Erica's *Strava recording*,
+   which he correctly may not see.
+
+**Fault 3 is the one that mattered, because 7a-8's answer does not fix it.** Her Garmin
+file becomes a **second activity row**, linked by `shared_group_id`. The claim still points
+at the first. After a complete reload he would still see nothing: the outing became
+visible and the tag did not follow.
+
+That is §"Derived vs source" one level up. `activity_profiles` is per-activity because a
+membership is evidence about a *recording* — but **a tag is a statement about a day that
+happened**. Erica did not say "you were on my Garmin file"; she said *"you were with me"*.
+Binding that to whichever row imported first makes the claim as fragile as the recording.
+
+**So a claim resolves through its outing** (`visible_recording_of`): if the claimed
+recording is hidden but another recording of the same outing is visible, he is asked about
+*that* one, and accepting credits him there — where it shows up for him and counts once.
+Declining removes him from **every** recording of that outing, because "I was not there" is
+about the day, not about which file it came out of.
+
+**Measured immediately, and it changed the number before anyone uploaded anything:**
+
+    asked about, before any reload      0  →  20 of 44
+                                              (Josh's OWN recordings already share
+                                               an outing with hers)
+    after one file upload + link              21
+
+**What is protected, and tested.** His 219 memberships split cleanly — 44 carry the rule's
+`rule_id`, 175 are his own with `rule_id` null. A tag answer can only ever reach a row
+carrying *that claim's rule*, so declining "you were on Erica's copy" can never quietly
+remove him from his own recording of the same day. The test asserts it, and asserts that
+**the person who made the claim may not answer it**.
+
+**The Strava guard missed a function, and widening it exposed six more.** 0214's decline
+uses `DELETE … USING public.activities`, which `the_readers_stay_enforced` did not detect —
+its pattern only looked for `from|join`. A `DELETE…USING` and an `UPDATE` read the table
+exactly as a `SELECT` does. Widening it named six writers that had been reading `activities`
+unlisted since long before this week: `merge_places`, `merge_places_auto`, `merge_visits`,
+`rename_activities_for_place`, `set_activity_race`, `update_activity`. **None is a leak** —
+every one writes rows a person named — but *"not named because the regex could not see it"*
+is not an exemption, and the next one might not be a writer.
+
+**0215 moves the reader onto the view.** `my_tags_to_confirm` joined `activities` directly;
+its ids already came from a filtered function, so it was not a leak — but *"not a leak
+because of what the other function does"* is exactly the argument that guard exists to
+refuse. It was true of the fifteen readers 0196 had to move, right up until one of them
+wasn't.
+
+**Still open, and it is Erica's:** the 24 remaining claims are on outings with no visible
+recording at all. They become answerable as she uploads her Garmin files — which is 7a-8,
+now with the mechanism that makes it actually arrive.
+
 #### What this phase does NOT do
 
 It does not add new providers. `intervals.icu`, Garmin Connect, Polar and the rest stay in
