@@ -908,7 +908,9 @@ function GarminImportCard() {
         if (!/\.(fit|gpx|tcx)$/i.test(file.name)) {
           problems.push(
             `${file.name}: not a GPX, TCX or FIT file` +
-              (/\.zip$/i.test(file.name) ? ' — unzip Garmin’s export and pick the files inside' : ''),
+              (/\.zip$/i.test(file.name)
+                ? ' — unzip Garmin’s export and pick the files inside'
+                : ''),
           );
           continue;
         }

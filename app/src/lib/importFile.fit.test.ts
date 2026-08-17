@@ -27,7 +27,8 @@ function buildFitFile(opts: { withFileId?: boolean } = {}): ArrayBuffer {
   const { withFileId = true } = opts;
   const start = new Date('2026-08-16T13:04:00.000Z');
   const encoder = new Encoder();
-  const write = (m: FitMesg) => (encoder as unknown as { writeMesg(m: FitMesg): void }).writeMesg(m);
+  const write = (m: FitMesg) =>
+    (encoder as unknown as { writeMesg(m: FitMesg): void }).writeMesg(m);
 
   if (withFileId) {
     write({
