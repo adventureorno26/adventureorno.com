@@ -153,10 +153,17 @@ The whole design is **Phase 7a**, written against the live database rather than 
 activities and 356.1 miles are Erica's Strava runs**. His stats screen is showing him her
 mileage today.
 
-The cause is not the guard (#100 works — 15 readers go through `visible_activities`) and
-not the ingest path (the `default_participants` trigger credits only the athlete whose
-token fetched it). It is `0039`, which asserted by date that everything Erica recorded
-after 2025-12-21 was also Josh's. **44 of the 46 still carry that migration's fingerprint.**
+The cause is not the guard — #100 works, 15 readers go through `visible_activities` — and
+not the Strava trigger, which credits only the athlete whose token fetched the activity. It
+is `0039`, which asserted **by date** that everything Erica recorded after 2025-12-21 was
+also Josh's. 44 of the 46 still carry that migration's fingerprint.
+
+**That backfill was deliberate and stays** (Erica, 2026-08-17: it *"was just meant for the
+specific timeline when I initially added activities"*). What goes is the rule's future
+tense, which survives in `import_file_activity` **and in `rebuild_place_visits`** — the
+second being a machine job that re-asserts it on every rebuild. The visibility fix is what
+makes keeping the history safe: a true "we were both there" tag stops being a key to
+Strava's copy of the data.
 
 #### 3. THREE LINKS ON /settings ARE UNTAPPABLE ON PRODUCTION
 
@@ -2063,8 +2070,31 @@ Two changes, and they are independent of everything below.
    tagged. It must instead ask whether the caller is the athlete the data came from:
    `activities.athlete_id → strava_accounts.athlete_id → profile_id`. A tag must never be
    able to unlock Strava-origin data, because tagging is exactly what went wrong.
-2. **Retire the blanket co-attribution.** Clear `also_profiles` and the derived
-   `activity_profiles` rows that exist only because of `0039`'s date rule.
+2. **Stop the blanket rule applying to FUTURE ingests — and keep the history it already
+   wrote.** Erica, 2026-08-17: *"the blanket rule should not apply to future ingests, it
+   was just meant for the specific timeline when I initially added activities."*
+
+   So the 44 historical co-attributions **stay**. They were a deliberate one-time backfill
+   of a period she knows they were out together, and deleting them would be throwing away
+   a true thing because a later rule was wrong. This plan's first draft proposed clearing
+   them; that was wrong and is withdrawn.
+
+   **What must go is the rule's future tense, and it lives in TWO places, both found on
+   the live database:**
+
+   | Function | What it does on or after the cutoff | Runs when |
+   | --- | --- | --- |
+   | `import_file_activity` | credits the activity to **every** owner/editor | every file import |
+   | `rebuild_place_visits` | infers no single person, then falls through to `array(select id from profiles where role in ('owner','editor'))` — **every** member as a visit participant | **every place rebuild**, continuously |
+
+   The second is the worse of the two and was nearly missed: it is a machine job, so it
+   re-asserts "both of you were there" on new visits forever, and cleaning up the data
+   without changing it would simply let it grow back.
+
+   **The correct fallback when nobody can be inferred is NOBODY** — leave it undecided, or
+   propose it, per §2 and §A. Falling through to "everyone" is the same disease as
+   `solo_profile IS NULL` rendering as *"both of us were there"* (§A(i)): absence of
+   information written down as a positive claim.
 
    **The live data distinguishes 44 of the 46, which the first draft of this plan said was
    impossible.** Checking rather than assuming: 44 carry a non-empty `also_profiles`, the
@@ -2079,9 +2109,10 @@ Two changes, and they are independent of everything below.
    show him Strava's copy of it. Getting that distinction right is what makes the tag safe
    to keep.
 
-   **Nothing is deleted.** The co-attribution moves to a `co_attribution_removed` table
-   with its evidence, so it is recoverable and auditable, and Josh's genuine joint outings
-   return the honest way — from his own data, once he re-imports (7a-4).
+   **Nothing is deleted**, and after Erica's clarification nothing needs to be: the
+   historical co-attribution is intentional and stays, the forward-looking rule is removed,
+   and Josh's *future* joint outings are established from his own data (7a-4) rather than
+   from a date.
 
 **What is already right, and must not be re-done:** `#100` worked — **15 SECURITY DEFINER
 readers now go through `visible_activities`**, confirmed on the live database, and the
