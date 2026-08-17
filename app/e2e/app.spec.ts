@@ -108,6 +108,18 @@ test.describe('authenticated app (non-destructive)', () => {
     expect(results.violations.filter((v) => v.impact === 'critical').map((v) => v.id)).toEqual([]);
   });
 
+  // The bottom nav does not follow you into Settings (Erica, 2026-08-17). Settings is
+  // entered from the gear and leaves by its own back-bar; a destination bar under it is an
+  // invitation to abandon a screen you are still reading.
+  test('the bottom nav is not on Settings', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: /settings/i }).first()).toBeVisible();
+    await expect(page.locator('nav.primary-nav')).toHaveCount(0);
+    // …and it is still there where it belongs.
+    await page.goto('/places');
+    await expect(page.locator('nav.primary-nav')).toBeVisible();
+  });
+
   // Settings is ONE continuous page since 2026-08-11 — no tabs to click through.
   // Erica: "everything from account, connections, privacy, data, and advanced
   // should [be] extracted and added to one page... make it look like a seamless page."

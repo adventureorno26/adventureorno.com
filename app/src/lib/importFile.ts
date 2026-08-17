@@ -49,6 +49,39 @@ function text(el: Element | null | undefined): string | null {
   return el?.textContent?.trim() || null;
 }
 
+/** Where a recording BEGAN, read off whatever the file says made it.
+ *
+ *  Mirrors `originFor` in supabase/functions/_shared/strava.ts deliberately: the same word
+ *  has to come out whether an outing arrives through Strava's API or as a file, or the two
+ *  copies of one run disagree about their own origin. */
+function originFromMaker(maker: string | null | undefined): string {
+  const m = (maker ?? '').toLowerCase();
+  if (!m) return 'unknown';
+  for (const p of ['garmin', 'wahoo', 'polar', 'suunto', 'coros']) {
+    if (m.includes(p)) return p;
+  }
+  if (m.includes('strava')) return 'strava-app';
+  if (m.includes('alltrails')) return 'alltrails';
+  if (m.includes('apple') || m.includes('healthkit')) return 'apple-health';
+  return 'unknown';
+}
+
+/** Garmin Connect's own activity id, taken from the link it stamps into an export.
+ *
+ *  `<link href="https://connect.garmin.com/modern/activity/12345678">` appears in the GPX
+ *  metadata (and sometimes on the <trk>). It is the id of the activity in Garmin's system,
+ *  so it is a genuine Tier 1 key: the same activity exported twice, or exported after
+ *  already being imported, attaches instead of arriving again. */
+function garminConnectId(doc: Document): string | null {
+  const links = doc.getElementsByTagName('link');
+  for (let i = 0; i < links.length; i++) {
+    const href = links[i].getAttribute('href') ?? text(links[i].getElementsByTagName('href')[0]);
+    const m = href?.match(/connect\.garmin\.com\/(?:modern\/)?activity\/(\d+)/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 /** Parse a GPX or TCX file's text into a ParsedActivity (or null if no track). */
 /**
  * The name to send for an imported activity — or '' to let the server name it.
@@ -90,11 +123,43 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
   let type = 'Workout';
   let name = filename.replace(/\.[^.]+$/, '');
   let distanceMeters = 0;
+  // Provenance, which GPX and TCX carried all along and this parser used to throw away.
+  // Until now every file import landed as origin 'unknown' with NO Tier 1 key, so a
+  // re-uploaded export could only ever be caught by Tier 2's guess — see 7a-below.
+  let device: string | undefined;
+  let origin = 'unknown';
+  let externalKey: string | undefined;
 
   if (isTcx) {
     const act = doc.getElementsByTagName('Activity')[0];
     const sport = act?.getAttribute('Sport');
     if (sport) type = mapType(sport);
+
+    // <Creator xsi:type="Device_t"> is the WATCH; <Author> is the software that wrote the
+    // file. The watch is the origin; the author is only a fallback for exports with no
+    // device block (a phone app, a hand-entered activity).
+    const creator = act?.getElementsByTagName('Creator')[0];
+    const author = doc.getElementsByTagName('Author')[0];
+    device = text(creator?.getElementsByTagName('Name')[0]) ?? undefined;
+    origin = originFromMaker(device ?? text(author?.getElementsByTagName('Name')[0]));
+
+    // THE SAME KEY SHAPE AS A FIT FILE, on purpose. TCX gives UnitId (the device serial),
+    // ProductID and <Id> (the activity's start instant) — the same three things the FIT
+    // file_id message gives. Emitting an identical key means the watch's own .fit and a
+    // .tcx export of that same activity are ONE source record rather than two.
+    //
+    // ONLY when UnitId is present. A key of just the start time would be global across
+    // every user (file imports have no connection to scope them), so two people starting
+    // together would collide into one activity — the exact bug 0203 exists to prevent.
+    // Without a serial there is no key, and Tier 2 proposes instead. A missed match costs
+    // a confirmation; a false one silently merges two people's outings.
+    const unitId = text(creator?.getElementsByTagName('UnitId')[0]);
+    const productId = text(creator?.getElementsByTagName('ProductID')[0]) ?? 'x';
+    const startedAt = text(act?.getElementsByTagName('Id')[0]);
+    if (unitId && startedAt) {
+      const iso = new Date(startedAt).toISOString();
+      externalKey = `fit:${originFromMaker(device) === 'garmin' ? 'garmin' : (device ?? 'device').toLowerCase()}:${productId}:${unitId}:${iso}`;
+    }
     const tps = doc.getElementsByTagName('Trackpoint');
     for (let i = 0; i < tps.length; i++) {
       const tp = tps[i];
@@ -115,6 +180,15 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
     const container = trk ?? rte;
     const t = text(container?.getElementsByTagName('type')[0]);
     if (t) type = mapType(t);
+
+    // GPX names its maker on the root element: "Garmin Connect", "StravaGPX", "AllTrails".
+    // It is not the device model, but it is what the file actually knows, and it is enough
+    // to stop 265 rows all claiming 'unknown'.
+    const maker = doc.documentElement?.getAttribute('creator');
+    device = maker ?? undefined;
+    origin = originFromMaker(maker);
+    const gcId = garminConnectId(doc);
+    if (gcId) externalKey = `garmin-connect:${gcId}`;
     const nm = text(container?.getElementsByTagName('name')[0]);
     if (nm) name = nm;
     // Recorded tracks use <trkpt>; routes/courses use <rtept>; some exports only
@@ -154,6 +228,9 @@ export function parseActivityFile(raw: string, filename: string): ParsedActivity
     lat: clean[0][0],
     lng: clean[0][1],
     date: new Date(start).toISOString(),
+    origin,
+    externalKey,
+    device,
   };
 }
 

@@ -36,6 +36,13 @@ export default function PrimaryNav() {
 
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
+  if (pathname === '/settings' || pathname.startsWith('/settings/')) return null;
+
+  // NOT ON SETTINGS (Erica, 2026-08-17: "map places add timeline should not appear on the
+  // settings page"). Settings is a place you went INTO from the gear, and it has its own
+  // back-bar out — a destination bar underneath it offers to leave a screen you are still
+  // reading, and on a phone it sits over the bottom of a long page. The same reasoning
+  // already removed the stats bar and the gear from Places.
 
   // FOUR tabs, and the Add pill says "Add" — nothing else.
   //

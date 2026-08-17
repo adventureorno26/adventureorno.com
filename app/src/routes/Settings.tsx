@@ -895,16 +895,30 @@ function GarminImportCard() {
     let added = 0;
     let already = 0;
     const problems: string[] = [];
+    const chosen = Array.from(files);
+    const total = chosen.length;
     // ONE RUN for the whole selection: a run is a person's action, not a file. Every item
     // below lands under it, so "what did that import do?" has an answer afterwards.
     const run = await beginImportRun('file-upload');
-    for (const file of Array.from(files)) {
+    for (const file of chosen) {
       try {
+        // Name the format problem as a format problem. A .zip read as text parses to null
+        // and used to be reported as "no GPS track found", which sends a person looking at
+        // their watch instead of at the zip they need to unpack.
+        if (!/\.(fit|gpx|tcx)$/i.test(file.name)) {
+          problems.push(
+            `${file.name}: not a GPX, TCX or FIT file` +
+              (/\.zip$/i.test(file.name)
+                ? ' — unzip Garmin’s export and pick the files inside'
+                : ''),
+          );
+          continue;
+        }
         const parsed = /\.fit$/i.test(file.name)
           ? await parseFitActivity(await file.arrayBuffer(), file.name)
           : parseActivityFile(await file.text(), file.name);
         if (!parsed) {
-          problems.push(`${file.name}: no GPS track found`);
+          problems.push(`${file.name}: no GPS track in the file`);
           continue;
         }
         const out = await importActivityFile(run, parsed);
@@ -924,10 +938,24 @@ function GarminImportCard() {
       );
     }
     await finishImportRun(run);
+    // SAY WHAT HAPPENED TO EVERY FILE. The previous wording dropped `already` entirely and
+    // ended with "Re-importing the same file is safe (duplicates are ignored)" no matter
+    // what — so on 2026-08-17 Erica uploaded Garmin files she had never uploaded before,
+    // got "Done — 0 activities imported. Re-importing the same file is safe (duplicates
+    // are ignored)", and reasonably read it as "we think you already had these". The ledger
+    // showed zero items: nothing had reached the database at all. A summary that cannot
+    // distinguish "you already had it" from "I could not read it" from "I did nothing"
+    // sends the person looking in the wrong place, and it sent me looking too.
+    const parts: string[] = [];
+    if (added) parts.push(`${added} imported`);
+    if (already) parts.push(`${already} you already had`);
+    if (problems.length) parts.push(`${problems.length} couldn't be read`);
     setMsg(
-      `Done — ${added} activit${added === 1 ? 'y' : 'ies'} imported.` +
-        (problems.length ? ` Couldn't import: ${problems.join('; ')}` : '') +
-        ' Re-importing the same file is safe (duplicates are ignored).',
+      (parts.length
+        ? `Done — ${parts.join(', ')}, out of ${total} file${total === 1 ? '' : 's'}.`
+        : `Nothing was imported from ${total} file${total === 1 ? '' : 's'} — the import ran but found no activities to add.`) +
+        (problems.length ? ` ${problems.join('; ')}.` : '') +
+        (added ? ' Importing the same file again is safe.' : ''),
     );
     setBusy(false);
   }
