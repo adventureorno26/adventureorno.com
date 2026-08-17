@@ -2210,12 +2210,42 @@ clearing 2FA, and the silent-failure message is what turned this retry into a di
 instead of another week of believing it had worked. Neither was the cause. `0207` records
 that on the function itself.
 
-**Josh is not blocked, and this is what the phase was for.** §6f and Phase 7 both say
-anything depending on Strava needs a non-Strava path, and now there is one: his Garmin FIT
-files go straight through `ingest_activity`, carrying a real `file_id` Tier 1 key, owned by
-him, and his genuine joint outings with Erica come from two recordings rather than a date.
-Strava is one importer among several — which is the whole argument, arriving as a working
-example rather than a paragraph.
+**AND THE RULE THIS FILE HAS BEEN STATING IS WRONG.** Erica, 2026-08-17:
+
+> *"The rule should not be everything depending on Strava needs a non-Strava path. The rule
+> is EACH USER SEES THEIR OWN STRAVA INFORMATION."*
+
+§6f and Phase 7 both read as though Strava were a liability to be escaped. It is not. It is
+a good importer with one condition attached, and that condition is per-user visibility —
+which `0200` now enforces at the helper, the view and the RLS policy. Building a non-Strava
+escape hatch for its own sake is solving a problem she does not have.
+
+**The correct statement of the rule, replacing the older wording wherever the two disagree:**
+
+> Each person connects their own Strava account. Each person sees their own Strava data and
+> nobody else's. Tagging someone on an outing is a fact about the outing and never a key to
+> Strava's copy of it.
+
+Other importers (Garmin files, Apple Health, AllTrails) remain worth having because people
+own several apps, not because Strava needs replacing.
+
+**HOW EACH PERSON CONNECTS — the plumbing is already there, verified 2026-08-17:**
+
+| Piece | State |
+| ----- | ----- |
+| `strava_accounts` | keyed by `athlete_id`, so it holds one row PER ATHLETE |
+| `strava-auth` | stores the connection against the profile from the consumed state — Josh's lands as Josh's |
+| `strava_oauth_start` | requires `is_editor_or_owner`, so an editor may connect |
+| `strava-webhook` | looks the account up by `event.owner_id` and attributes to THAT athlete |
+| `strava-backfill` | `getAllAccounts()` and loops — already every athlete, not just the owner |
+| `set_activity_owner` | resolves `owner_profile` from `athlete_id`, so each activity lands owned by its athlete |
+| `0200` | visibility follows `owner_profile`, so the separation holds automatically |
+
+**Nothing needs building. The only blocker is Strava's athlete cap**, and the fix is smaller
+than 0207 implied: a new app starts in *Single Player Mode* at **1 athlete**, and the owner
+can **self-upgrade to 10 athletes from the API settings dashboard with no review**. Review
+(7–10 business days) is only needed beyond 10, which raises it to 999. Two people need the
+self-serve upgrade and nothing else.
 
 #### 7a-6. TAGGING IS THE PRODUCT — and a correction to how this file described it
 
