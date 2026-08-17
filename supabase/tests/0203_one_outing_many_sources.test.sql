@@ -79,8 +79,14 @@ begin
 
   -- NOT SWALLOWED. The old importer returned an id and inserted nothing; this keeps the
   -- recording and asks.
+  --
+  -- The field is SHARED_GROUP_ID, not duplicate_of, and 0210 is why: this assertion used to
+  -- name a field `apply_inbox_field` cannot write, so the card it demanded was one nobody
+  -- could ever accept. The test passed and the double-count survived. What makes a proposal
+  -- real is that a person can say yes to it — see 0210_a_proposal_must_be_acceptable, which
+  -- checks that rule for every field the importer proposes rather than just this one.
   if not exists (select 1 from public.suggestions
-                  where subject_type='activity' and field='duplicate_of'
+                  where subject_type='activity' and field='shared_group_id'
                     and subject_id = (r3->>'activity_id')::uuid) then
     raise exception 'FAIL: no duplicate suggestion was raised for her second recording';
   end if;
