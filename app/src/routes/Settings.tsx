@@ -1226,11 +1226,13 @@ export default function Settings() {
                   review what needs attention, merge duplicates, and check the health of your data.
                 </p>
                 <div className="settings-tools">
-                  {/* The nav tab only appears when something is waiting, so an empty
-                      inbox needs a permanent way in. */}
-                  <Link to="/inbox">
-                    <button>Review inbox</button>
-                  </Link>
+                  {/* "Review inbox" USED TO BE A SECOND BUTTON HERE, pointing at /inbox
+                      (which redirects to /add). Erica, 2026-08-18: "Needs Attention and
+                      Review Inbox are redundant. Put anything unique in Review Inbox into
+                      needs attentions." Two screens listing what is waiting is one too
+                      many, and the cards are now the first two rows of Needs attention —
+                      which is also the first place she looked for them and did not find
+                      them. The cards themselves are unchanged and still live on /add. */}
                   <Link to="/places/edit">
                     <button className="primary">Edit all places</button>
                   </Link>
