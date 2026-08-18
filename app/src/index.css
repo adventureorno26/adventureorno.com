@@ -7221,3 +7221,50 @@ button.mi-row:hover {
 .ic-where a {
   font-weight: 600;
 }
+
+/* A duplicate proposal is a COMPARISON, not a naming question (0221). Two routes, two
+   owners, two sources, and two answers — never a radio list of uuids. */
+.ic-dup {
+  padding: 4px 0 0;
+}
+.ic-dup-pair {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.ic-dup-side {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  border-radius: 12px;
+}
+.ic-dup-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+.ic-dup-meta b {
+  font-size: 14.5px;
+}
+.ic-dup-why {
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.ic-dup-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.ic-dup-open {
+  font-size: 13.5px;
+  font-weight: 600;
+}
