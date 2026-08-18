@@ -7197,3 +7197,27 @@ button.mi-row:hover {
   padding: 6px 0;
   border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
 }
+
+/* A review card leads with WHERE, not just what it is called (0219). The thumbnail is the
+   route's own shape — no tiles, no network, and enough to recognise an outing. */
+.ic-head-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.ic-thumb {
+  flex: 0 0 auto;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  border-radius: 10px;
+  background: var(--card-bg, #fbfbfd);
+}
+.ic-head-text {
+  min-width: 0;
+}
+.ic-where {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.ic-where a {
+  font-weight: 600;
+}

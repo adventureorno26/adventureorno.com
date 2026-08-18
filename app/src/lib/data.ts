@@ -691,6 +691,12 @@ export interface Attention {
   missingDates: number;
   activitiesNoPlace: number;
   suggestedTrips: number;
+  /** 0219: the Review inbox folded in. Erica, 2026-08-18: "Needs Attention and Review
+   *  Inbox are redundant. Put anything unique in Review Inbox into needs attentions."
+   *  Two screens listing what is waiting is one screen too many — and the cards were the
+   *  half she could not find. */
+  reviewCards: number;
+  tagsToConfirm: number;
 }
 /** Counts for the "needs attention" dashboard (all RLS-scoped to what you can see). */
 export async function fetchAttention(): Promise<Attention> {
@@ -712,7 +718,22 @@ export async function fetchAttention(): Promise<Attention> {
     supabase.from('activities').select('*', { count: 'exact', head: true }).is('place_id', null),
     supabase.from('photos').select('*', { count: 'exact', head: true }).is('taken_at', null),
   ]);
+  // The review cards, counted here so ONE screen answers "what is waiting for me".
+  // Failures are swallowed to zero on purpose: a dashboard that cannot render because one
+  // count is unavailable is worse than a dashboard that is briefly short by one row.
+  // Promise.resolve() around each: the Supabase builder is a THENABLE, not a Promise, so
+  // it has .then but no .catch — chaining .catch straight onto it does not compile.
+  const [cards, tags] = await Promise.all([
+    Promise.resolve(supabase.rpc('inbox_counts'))
+      .then((r) => (r.data as unknown as { cards?: number } | null)?.cards ?? 0)
+      .catch(() => 0),
+    Promise.resolve(supabase.rpc('my_tags_to_confirm', {}))
+      .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
+      .catch(() => 0),
+  ]);
   return {
+    reviewCards: cards,
+    tagsToConfirm: tags,
     unassignedPhotos: unassigned.count ?? 0,
     photosNoDate: noDate.count ?? 0,
     unnamedPlaces,

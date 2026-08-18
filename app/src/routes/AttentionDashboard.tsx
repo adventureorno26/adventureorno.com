@@ -11,6 +11,25 @@ interface Row {
 }
 
 const ROWS: Row[] = [
+  // THE REVIEW INBOX, FOLDED IN. Erica, 2026-08-18: "Needs Attention and Review Inbox are
+  // redundant. Put anything unique in Review Inbox into needs attentions." The cards were
+  // also the half she could not find — /inbox redirects to /add, so nothing on this screen
+  // ever pointed at them. They go first because they are the only rows where a person is
+  // being ASKED something rather than told a count.
+  {
+    key: 'reviewCards',
+    label: 'Cards waiting for you to decide',
+    hint: 'Names to confirm, photos to pin, and outings that may be the same one twice',
+    to: '/add',
+    action: 'Review them',
+  },
+  {
+    key: 'tagsToConfirm',
+    label: 'Outings someone says you were on',
+    hint: 'Yours to accept or decline — nothing counts as yours until you say so',
+    to: '/add',
+    action: 'Answer them',
+  },
   {
     key: 'unassignedPhotos',
     label: 'Photos waiting to be sorted',

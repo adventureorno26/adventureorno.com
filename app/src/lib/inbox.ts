@@ -47,9 +47,19 @@ export interface InboxCard {
     distance: number | null;
     start_date: string | null;
     place: string | null;
+    /** 0219: what the card was missing — where the thing actually IS. */
+    place_id: string | null;
+    lat: number | null;
+    lng: number | null;
+    polyline: string | null;
   } | null;
   /** Present on a photo card: the visit the photos would be pinned to. */
-  visit: { place: string | null; start_date: string | null; end_date: string | null } | null;
+  visit: {
+    place: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    place_id: string | null;
+  } | null;
   fields: SuggestionOption[];
   photos: PhotoCandidate[];
 }

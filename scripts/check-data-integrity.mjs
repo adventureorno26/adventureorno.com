@@ -132,6 +132,30 @@ const CHECKS = [
            order by v.start_date`,
   },
   {
+    name: 'an activity nobody could have moved that fast',
+    why:
+      'found on 2026-08-18 while charting how close Erica and Josh came on the same day: ' +
+      '"Florida", a Run of 67.8 miles in 502 seconds — 486 mph, with a two-point line. It is ' +
+      'a flight, or a GPS jump, recorded as a run. Nothing about it looks wrong in a list: ' +
+      'it has a name, a type, a distance and a place. But it counts in her mileage, it ' +
+      'placed a visit at a place called Florida, and it single-handedly produced a ' +
+      '"831 miles apart" day in the chart. A speed check is the cheapest way to catch a ' +
+      'whole class of recording artifact, and there is exactly ONE in the database today.',
+    sql: `select a.name,
+                 a.type,
+                 a.start_date::date::text as on_date,
+                 round((a.distance / 1609.344)::numeric, 1)::text as miles,
+                 a.moving_time::text as seconds,
+                 round(((a.distance / 1609.344) / (a.moving_time / 3600.0))::numeric, 0)::text as mph
+            from public.activities a
+           where a.moving_time > 60
+             and a.distance > 1000
+             -- 30 mph is comfortably above any run, hike or ride and comfortably below a
+             -- car, a train or a plane. It is a nonsense filter, not a performance one.
+             and ((a.distance / 1609.344) / (a.moving_time / 3600.0)) > 30
+           order by 6 desc`,
+  },
+  {
     name: 'an imported activity that cannot say where it came from',
     why:
       'every activity from a connected account should carry an activity_sources row — that ' +

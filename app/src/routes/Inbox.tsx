@@ -35,6 +35,8 @@ import {
 } from '../lib/inbox';
 import { showSnack } from '../lib/snackbar';
 import AuthedImg from '../components/AuthedImg';
+import RouteThumb from '../components/RouteThumb';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import OsmCredit from '../components/OsmCredit';
 
@@ -421,12 +423,46 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
         return (
           <article className="inbox-card" key={card.group_key}>
             <header className="ic-head">
-              <h2>
-                {card.visit
-                  ? (card.visit.place ?? 'That visit')
-                  : (card.activity?.name ?? 'Something to name')}
-              </h2>
-              <p className="muted">{subtitle(card)}</p>
+              {/* SHOW WHERE IT IS, not just what it is called. A card that asks her to name
+                  an activity used to print its auto-generated name and nothing else — so
+                  answering it meant guessing. The route's shape, the place it sits in, and
+                  a link to open it are the three things that make the question answerable. */}
+              <div className="ic-head-row">
+                {card.activity?.polyline ? (
+                  <RouteThumb className="ic-thumb" encoded={card.activity.polyline} />
+                ) : null}
+                <div className="ic-head-text">
+                  <h2>
+                    {card.visit
+                      ? (card.visit.place ?? 'That visit')
+                      : (card.activity?.name ?? 'Something to name')}
+                  </h2>
+                  <p className="muted">{subtitle(card)}</p>
+                  {(() => {
+                    const placeId = card.activity?.place_id ?? card.visit?.place_id ?? null;
+                    const placeName = card.activity?.place ?? card.visit?.place ?? null;
+                    const lat = card.activity?.lat;
+                    const lng = card.activity?.lng;
+                    return (
+                      <p className="ic-where">
+                        {placeId ? (
+                          <Link to={`/place/${placeId}`}>
+                            {placeName && placeName !== 'New place' ? placeName : 'Open the place'}
+                          </Link>
+                        ) : (
+                          <span className="muted">Not attached to a place yet</span>
+                        )}
+                        {lat != null && lng != null && (
+                          <span className="muted">
+                            {' '}
+                            · {lat.toFixed(3)}, {lng.toFixed(3)}
+                          </span>
+                        )}
+                      </p>
+                    );
+                  })()}
+                </div>
+              </div>
             </header>
 
             {fields.map((field) => {
