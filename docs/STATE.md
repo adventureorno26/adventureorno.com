@@ -292,6 +292,129 @@ her call rather than a default.
 heart rate, VO2max — and it lives in the project folder beside the repo, not inside it.
 Nothing about it is committed.
 
+#### 3d. THE REVIEW QUEUE, AND CODEX'S INGEST REVIEW — CHECKED AGAINST LIVE *(2026-08-18)*
+
+Erica: *"This is all fucked up and nonsensical, and the options are redundant and make no
+sense… it should populate the Name of the activity from the source or the location of the
+source, then ask me to approve it only if there is some doubt."*
+
+**She was describing something worse than a naming problem, and the naming was not the
+problem at all.** Measured through her own session before anything was written:
+
+    every pending card                       36, all shared_group_id proposals
+    naming cards pending                      0
+    cards her queue returned                 33
+      with a visible subject                 18
+      WITH NO VISIBLE ACTIVITY AT ALL        15
+
+Two faults, stacked:
+
+1. **A duplicate proposal was rendered through the UI built for NAMING.** On screen: a
+   heading reading `shared_group_id`, one radio option whose text is a raw uuid, an evidence
+   line reading *"OpenStreetMap · 0 of 9 route points"*, a **Never** button, and a free-text
+   box offering *"Your own words"*. **The "random letters" are the uuid.** There is no answer
+   a person could give to that.
+2. **Fifteen of her cards were about Josh's Strava recordings** — correctly hidden from her
+   by 0200 — so the card had nothing to render and fell back to "Something to name" plus a
+   uuid. Pressing Save would have linked two activities, one invisible to her.
+
+Fault 2 is the one worth stating as a rule: **the guard was never wrong.** `visible_activities`
+did its job everywhere it was used. Nobody had asked whether a *suggestion about* a hidden
+row should exist as a card. **A review queue is a list of questions a person can answer**,
+and that was the property it was missing.
+
+**Fixed 2026-08-18 (0221/0222 + the card):** a duplicate card carries the counterpart in
+full — route, owner, source, time, distance — and renders two shapes side by side with two
+answers, *Same outing — link them* / *Not the same*. No radio list, no free-text, no second
+generic Save. Cards whose subject (or whose counterpart) the reader cannot see are **not
+returned**. Her queue: **33 → 18 answerable**. Josh's: 22. Nothing deleted — they are his
+recordings and his own queue still shows them. Also hers: *Looks right* → **Save**, and the
+dead *Import an activity file* button (pointing at `/import/timeline`, a route that does not
+exist) is gone.
+
+**STILL OPEN from her instruction, and it is the naming half:** *populate the name from the
+source or the location, and only ask when there is doubt.* Today `activity_display_name`
+names an activity after its place at insert; what does not exist is a rule for **when a name
+is good enough not to ask**. That is 3e below.
+
+##### Codex's ingest review, verified line by line
+
+Its **database claims are exactly right**; its **file paths are not** — it cites
+`app/src/pages/Settings.tsx` and `app/src/pages/AddPage.tsx`, and **`app/src/pages/` does not
+exist** in this repository (everything is `app/src/routes/`). Treat its line numbers as
+indicative and its measurements as sound.
+
+| Codex's claim | Verified? |
+| --- | --- |
+| Two paths write `shared_group_id` with no review — `ingest_activity` Tier 3, and `strava-backfill` calling `dedupe_shared_outings` | **TRUE** — both confirmed in source |
+| 40 shared groups: 3 singletons, 6 spanning over an hour, 1 over twelve | **TRUE, exactly** — worst span **12:12:54** |
+| 548 activity_sources, 539 with no `ingest_item_id`, only 10 ingest items | **TRUE** — and **0 import_artifacts**, 48 runs |
+| No SHA-256, no original file stored, no artifact row, failures not persisted | **TRUE** |
+| Ingest RPCs accept caller-controlled actor/run data | **TRUE** — `begin_ingest_run` takes `p_actor_kind` from the caller |
+| `setActivitySolo` (0188) deletes and recreates participants, bypassing tag claims | **TRUE** — and it is the same "tag without acceptance" 7a-12 fixed elsewhere |
+| "Import an activity file" points at a route that does not exist | **TRUE** — fixed today |
+| Needs Attention rows both link to `/add`; the real inbox is embedded there | **TRUE** — mine, from 2026-08-18 |
+| Data Health and Needs Attention overlap; export duplicated across both | **TRUE** |
+
+**Where I disagree with its ordering:** it puts "add a canonical-outings view and move every
+reader onto it" first. The 40 groups those readers would count are the ones it also says are
+unaudited — including a twelve-hour group. **Auditing the groups has to precede trusting
+them**, or a new view is a faster way to count the wrong thing.
+
+#### 3e. THE PLAN TO MAKE INGEST AND REVIEW MAKE SENSE *(2026-08-18, sequenced)*
+
+Ordered so each step is verifiable on live before the next depends on it.
+
+**Step 1 — stop making unreviewed groups, then audit the ones that exist.**
+- `ingest_activity` Tier 3 and `dedupe_shared_outings` must **propose**, never write
+  `shared_group_id`. §2's rule already says a machine may only propose; these two predate it.
+- Audit all 40: **3 singletons** (a group of one is not a group), **6 spanning over an hour**,
+  **one spanning 12:12:54**. Each is either a real joint outing or a bad merge, and until
+  reviewed no total that groups by them is trustworthy.
+- **Do not bulk-link the pending proposals** until the comparison screen and this audit are
+  done. Codex is right about that and the "Link all" button should say so.
+
+**Step 2 — naming that does not ask when it does not need to.** Her instruction, unbuilt:
+- Take the name from the SOURCE first (Strava/Garmin title where a person typed one), then
+  the place, then the geocoder.
+- Ask **only when in doubt**: no source name AND an unnamed or brand-new place, or two
+  candidates that disagree. Everything else is named silently and shows up in history, not
+  in a queue.
+- The existing `isGenericActivityName` already knows "Morning Hike" is a clock reading rather
+  than a name; that is the seed of the doubt test.
+
+**Step 3 — provenance that is actually recorded.** 539 of 548 sources have no ingest item and
+there are zero artifacts:
+- SHA-256 every uploaded file; store the original privately; write `import_artifacts`, link
+  it to the `ingest_items` row, and persist FAILURES as items too.
+- Keep the three identities separate and never conflate them: **file hash** (this exact file),
+  **provider id** (this record at Strava/Garmin), **content key** (this recording, 0216).
+- Label pre-existing rows `legacy` rather than inventing provenance for them.
+
+**Step 4 — lock the ingest RPCs.** User-facing entry points hardcode `actor_kind='user'` and
+`initiated_by=auth.uid()`, verify the run belongs to the caller and is still running, and
+webhook/scheduled imports move to separate service-only functions. Add try/finally around the
+importer so a failure cannot leave the page stuck busy.
+
+**Step 5 — one repair queue.** `/add` creates, `/attention` repairs, `/inbox` redirects to
+`/attention`, Data Health explains system condition only. The repair cards themselves move
+into Needs Attention rather than being embedded in Add.
+
+**Step 6 — finish people tagging.** `setActivitySolo` must stop deleting participant rows:
+changing your OWN participation is direct, adding another *user* creates a proposed claim,
+and declining never removes that person's own recording. Then extend tagging to visits,
+photos and places (8b-i), and Josh's **44 legacy claims** get answered.
+
+**Step 7 — one Export & Backup screen**, distinguishing a places export, an activities
+export, and a full account archive — the current copy implies a completeness it does not have.
+
+**Three decisions only Erica can make**, unchanged and not guessed at:
+1. **"Florida"** — a Run of 67.8 miles in 502 seconds (486 mph) that also created a Florida
+   place and visit. Delete, quarantine, or correct?
+2. **Leesburg 2024-10-22** and **Great Falls 2026-07-19** — visits claiming evidence with
+   nothing behind them. Real manual visits, or remove?
+3. **Josh's 44 legacy tag claims** — his to accept or decline.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
