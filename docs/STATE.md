@@ -2742,6 +2742,61 @@ definer helpers (`is_friend`, `is_blocked_either_way`), a visibility enum on eve
 shareable noun, fan-out-on-read feed with Realtime. Comments (one level, soft delete) and
 constrained reactions inherit the post's RLS. Notifications: table + Expo push + Resend.
 
+#### 8b-i. PEOPLE: a partner, and everyone else *(Erica, 2026-08-18 — decided, nothing built)*
+
+> *"Users can add friends, family, and a partner. The partner feature is going to look
+> similar to it does now with Just Me, Just Josh, Together. Friends and family won't be on
+> the main screen, they will just be tags that users can add to photos and all cards for
+> visits, activities, places, etc."*
+
+**Two tiers, and the difference is placement, not plumbing.** Both are the same claim about
+another person that 7a-12 already built — `tag_claims`, `respond_to_tag()`, the participation
+rows, and the rule that a tag follows the **outing** rather than the recording (0214). What
+separates them is how much of the screen they are allowed to take.
+
+| | **Partner** | **Friends & family** |
+| --- | --- | --- |
+| How many | exactly one, at a time | many |
+| Where it appears | **on the card itself** — the `Together / Just me / Just <partner>` picker that exists today | **never on the main screen**; a tag added from an edit affordance |
+| What it changes | every total: whose miles, whose visit, whose outing | attribution and recall — "who was there", searchable |
+| Attaches to | activities and visits, as now | photos, visits, activities, places — **all four** |
+
+**The partner control stays exactly as it is**, because it already earned its shape: it is an
+edit control rather than a passive badge, which is precisely the distinction §1 settled on
+2026-08-17 (*"Fine on a control"*). Generalising it is the work — today it is literally
+`Just me / Just Josh / Together` for a two-person household.
+
+**What has to be decided before it is built, and none of it is guesswork we should do
+silently:**
+
+- **A partner is a role, not a name.** The picker's third option must read the partner's
+  display name from the relationship, and the `v_cutoff`/`v_erica` style constants that
+  still hardcode a household of two have to go with it. `rebuild_place_visits` currently
+  looks up "the owner who is not a test account" — that is a two-person assumption sitting
+  inside a machine job.
+- **What happens when there is no partner, or the partner leaves.** The three-state control
+  has no honest fourth state; a solo user should see nothing rather than a disabled picker.
+  Ending a partnership must not retract history — the outings were still shared.
+- **A tag on a NON-USER is a label; a tag on a user is a CLAIM.** Friends and family will
+  mostly not have accounts. A label needs no acceptance and gives no access. The moment that
+  person becomes a user, the label has to be able to *become* a claim they can accept or
+  decline — and until they do, it must not grant them sight of anything (§A, and the whole
+  reason 0200 exists).
+- **Photos and places have no participant table yet.** `activity_profiles` and
+  `visit_profiles` exist; photos and places do not. Adding two more mirrors of the same
+  idea is how this repository got `also_profiles` — so the shape is one polymorphic
+  `people_tags(subject_kind, subject_id, person_id, …)` reusing `tag_claims`, decided
+  before any of it is written.
+- **"Not on the main screen" is a hard constraint, not a preference.** It is the same
+  instruction as the nav on /settings and the badges in the visit section: the card shows
+  what happened, and who-else-was-there lives one press away.
+
+**Why it waits for Phase 8 rather than jumping the queue**: friends and family are only
+useful once there is a friend graph and a privacy floor to hang them on (8b, 8c). Tagging a
+person who can then see the outing is a sharing decision, and sharing without the privacy
+floor is the one thing §8c says is not optional. The partner tier, by contrast, already
+works for the household that exists today.
+
 #### 8c. The privacy floor — NOT optional, and NOT in the UI
 
 - **Default private.** Per-item audience chosen at post time.
