@@ -201,6 +201,59 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  /** "These two are one outing." Writes the group and drops the card.
+   *
+   *  A duplicate card used to be answered through the naming UI — pick the radio whose
+   *  text is a uuid, then press Save. This is the same write with a question a person can
+   *  actually answer. */
+  async function onLinkOne(card: InboxCard) {
+    const opt = card.fields.find((f) => f.field === 'shared_group_id');
+    if (!opt) return;
+    setBusy(card.group_key);
+    try {
+      const token = await approveCard(card.group_key, {
+        shared_group_id: { suggestion_id: opt.id },
+      });
+      setCards((cs) => (cs ?? []).filter((c) => c.group_key !== card.group_key));
+      setDupes((d) => (d ? { ...d, count: Math.max(0, d.count - 1) } : d));
+      showSnack({
+        message: 'Linked. Both recordings are kept, and the outing counts once.',
+        actionLabel: 'Undo',
+        onAction: async () => {
+          try {
+            await undoApproval(token);
+            showSnack({ message: 'Put back.' });
+            await load();
+          } catch {
+            showSnack({ message: 'Could not undo that.' });
+          }
+        },
+      });
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'Could not link those.' });
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** "These are two different outings." The proposal is rejected and both stand. */
+  async function onNotTheSame(card: InboxCard) {
+    const opt = card.fields.find((f) => f.field === 'shared_group_id');
+    if (!opt) return;
+    setBusy(card.group_key);
+    try {
+      await rejectSuggestion(opt.id);
+      setCards((cs) => (cs ?? []).filter((c) => c.group_key !== card.group_key));
+      setDupes((d) => (d ? { ...d, count: Math.max(0, d.count - 1) } : d));
+      showSnack({ message: 'Kept as two separate outings.' });
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'Could not do that.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** Yes or no to one outing somebody else says you were on. */
   async function onAnswerTag(t: TagToConfirm, accept: boolean) {
     setBusy(t.claim_id);
@@ -465,66 +518,139 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
               </div>
             </header>
 
-            {fields.map((field) => {
-              const options = card.fields
-                .filter((f) => f.field === field)
-                .sort((a, b) => a.rank - b.rank);
-              const key = `${card.group_key}:${field}`;
-              return (
-                <section className="ic-field" key={field}>
-                  <h3>{field === 'name' ? 'Call it' : field}</h3>
-                  {options.map((o) => (
-                    <label className="ic-option" key={o.id}>
+            {/* A DUPLICATE PROPOSAL IS NOT A NAMING QUESTION, and rendering it through the
+                naming UI is what produced a heading reading `shared_group_id`, a radio
+                option showing a raw uuid, and a box inviting her to type her own. It gets
+                its own comparison: both routes, both owners, both sources, and two
+                answers. */}
+            {card.counterpart ? (
+              <section className="ic-dup">
+                <div className="ic-dup-pair">
+                  <div className="ic-dup-side">
+                    <RouteThumb encoded={card.activity?.polyline} width={190} height={130} />
+                    <div className="ic-dup-meta">
+                      <b>{card.activity?.name ?? 'This one'}</b>
+                      <span className="muted">
+                        {[card.mine?.owner, card.mine?.source].filter(Boolean).join(' · ')}
+                      </span>
+                      <span className="muted">{subtitle(card)}</span>
+                    </div>
+                  </div>
+                  <div className="ic-dup-side">
+                    <RouteThumb encoded={card.counterpart.polyline} width={190} height={130} />
+                    <div className="ic-dup-meta">
+                      <b>{card.counterpart.name ?? 'The other one'}</b>
+                      <span className="muted">
+                        {[card.counterpart.owner, card.counterpart.source]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                      <span className="muted">
+                        {[
+                          dayLabel(card.counterpart.start_date),
+                          card.counterpart.type,
+                          miles(card.counterpart.distance),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <p className="ic-dup-why">
+                  {card.counterpart.minutes_apart != null && (
+                    <>
+                      Started <b>{card.counterpart.minutes_apart.toFixed(1)} min</b> apart
+                    </>
+                  )}
+                  {card.counterpart.pct_diff != null && (
+                    <>
+                      , <b>{card.counterpart.pct_diff.toFixed(1)}%</b> difference in distance
+                    </>
+                  )}
+                  {card.counterpart.reason ? <> · {card.counterpart.reason}</> : null}
+                </p>
+                <div className="ic-dup-actions">
+                  <button
+                    className="primary"
+                    disabled={busy !== null}
+                    onClick={() => void onLinkOne(card)}
+                  >
+                    {busy === card.group_key ? 'Saving…' : 'Same outing — link them'}
+                  </button>
+                  <button disabled={busy !== null} onClick={() => void onNotTheSame(card)}>
+                    Not the same
+                  </button>
+                  {card.counterpart.place_id && (
+                    <Link className="ic-dup-open" to={`/place/${card.counterpart.place_id}`}>
+                      Open the other one
+                    </Link>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
+            {!card.counterpart &&
+              fields.map((field) => {
+                const options = card.fields
+                  .filter((f) => f.field === field)
+                  .sort((a, b) => a.rank - b.rank);
+                const key = `${card.group_key}:${field}`;
+                return (
+                  <section className="ic-field" key={field}>
+                    <h3>{field === 'name' ? 'Call it' : field}</h3>
+                    {options.map((o) => (
+                      <label className="ic-option" key={o.id}>
+                        <input
+                          type="radio"
+                          name={key}
+                          checked={picked[key] === o.id}
+                          onChange={() => setPicked((p) => ({ ...p, [key]: o.id }))}
+                        />
+                        <span className="ic-option-body">
+                          <span className="ic-option-name">{o.proposed}</span>
+                          <span className="ic-option-why">{evidenceLine(o)}</span>
+                        </span>
+                        {canDecide && (
+                          <button
+                            type="button"
+                            className="ic-never"
+                            onClick={() => void onReject(o)}
+                            aria-label={`Never suggest ${o.proposed} again`}
+                          >
+                            Never
+                          </button>
+                        )}
+                      </label>
+                    ))}
+
+                    <label className="ic-option">
                       <input
                         type="radio"
                         name={key}
-                        checked={picked[key] === o.id}
-                        onChange={() => setPicked((p) => ({ ...p, [key]: o.id }))}
+                        checked={picked[key] === CUSTOM}
+                        onChange={() => setPicked((p) => ({ ...p, [key]: CUSTOM }))}
                       />
                       <span className="ic-option-body">
-                        <span className="ic-option-name">{o.proposed}</span>
-                        <span className="ic-option-why">{evidenceLine(o)}</span>
+                        <span className="ic-option-name">Your own words</span>
+                        <input
+                          type="text"
+                          className="ic-custom"
+                          value={typed[key] ?? ''}
+                          placeholder={card.activity?.name ?? ''}
+                          aria-label="Your own name for this"
+                          onFocus={() => setPicked((p) => ({ ...p, [key]: CUSTOM }))}
+                          onChange={(e) => setTyped((t) => ({ ...t, [key]: e.target.value }))}
+                        />
                       </span>
-                      {canDecide && (
-                        <button
-                          type="button"
-                          className="ic-never"
-                          onClick={() => void onReject(o)}
-                          aria-label={`Never suggest ${o.proposed} again`}
-                        >
-                          Never
-                        </button>
-                      )}
                     </label>
-                  ))}
 
-                  <label className="ic-option">
-                    <input
-                      type="radio"
-                      name={key}
-                      checked={picked[key] === CUSTOM}
-                      onChange={() => setPicked((p) => ({ ...p, [key]: CUSTOM }))}
-                    />
-                    <span className="ic-option-body">
-                      <span className="ic-option-name">Your own words</span>
-                      <input
-                        type="text"
-                        className="ic-custom"
-                        value={typed[key] ?? ''}
-                        placeholder={card.activity?.name ?? ''}
-                        aria-label="Your own name for this"
-                        onFocus={() => setPicked((p) => ({ ...p, [key]: CUSTOM }))}
-                        onChange={(e) => setTyped((t) => ({ ...t, [key]: e.target.value }))}
-                      />
-                    </span>
-                  </label>
-
-                  {options[0]?.current != null && (
-                    <p className="ic-current muted">Currently called “{options[0].current}”</p>
-                  )}
-                </section>
-              );
-            })}
+                    {options[0]?.current != null && (
+                      <p className="ic-current muted">Currently called “{options[0].current}”</p>
+                    )}
+                  </section>
+                );
+              })}
 
             {(card.photos?.length ?? 0) > 0 && (
               <section className="ic-field">
@@ -558,14 +684,19 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
               </section>
             )}
 
+            {/* A duplicate card answers itself with "link them" / "not the same"; a second
+                generic Save underneath it is the redundancy she named. Skip stays on both:
+                it writes nothing and the card comes back. */}
             <footer className="ic-actions">
-              <button
-                className="btn btn-primary"
-                disabled={!canDecide || busy === card.group_key}
-                onClick={() => void onApprove(card)}
-              >
-                {busy === card.group_key ? 'Saving…' : 'Looks right'}
-              </button>
+              {!card.counterpart && (
+                <button
+                  className="btn btn-primary"
+                  disabled={!canDecide || busy === card.group_key}
+                  onClick={() => void onApprove(card)}
+                >
+                  {busy === card.group_key ? 'Saving…' : 'Save'}
+                </button>
+              )}
               <button
                 className="btn"
                 onClick={() => setSkipped((s) => new Set(s).add(card.group_key))}

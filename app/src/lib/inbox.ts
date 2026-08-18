@@ -62,6 +62,24 @@ export interface InboxCard {
   } | null;
   fields: SuggestionOption[];
   photos: PhotoCandidate[];
+  /** 0221: the OTHER outing on a duplicate proposal. Present only on those cards. */
+  counterpart: {
+    id: string;
+    name: string | null;
+    type: string | null;
+    distance: number | null;
+    start_date: string | null;
+    place: string | null;
+    place_id: string | null;
+    polyline: string | null;
+    owner: string | null;
+    source: string | null;
+    minutes_apart: number | null;
+    pct_diff: number | null;
+    reason: string | null;
+  } | null;
+  /** Whose this one is, and where it came from — so the card can say "yours, from Strava". */
+  mine: { owner: string | null; source: string | null } | null;
 }
 
 export interface InboxCounts {

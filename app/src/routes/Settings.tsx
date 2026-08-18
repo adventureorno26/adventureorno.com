@@ -1243,9 +1243,11 @@ export default function Settings() {
                   <Link to="/photos/sort">
                     <button>Import &amp; sort photos</button>
                   </Link>
-                  <Link to="/import/timeline">
-                    <button>Import an activity file</button>
-                  </Link>
+                  {/* "Import an activity file" POINTED AT A ROUTE THAT DOES NOT EXIST —
+                      /import/timeline. The router has /settings/import (Google Timeline),
+                      and the GPX/TCX/FIT importer is a card on THIS page already. So the
+                      button was a dead end AND a duplicate of something a few inches away.
+                      Removed rather than repointed: the working importer is right here. */}
                   <Link to="/attention">
                     <button>Needs attention</button>
                   </Link>
