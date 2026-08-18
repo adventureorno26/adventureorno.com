@@ -248,6 +248,50 @@ Fixed at the entry; both visits followed. **Future-dated visits: 0. Future-dated
 **Still open in that check, and still hers to decide**: two visits claiming `source=evidence`
 with nothing in the database on their dates — Leesburg 2024-10-22 and Great Falls 2026-07-19.
 
+#### 3c. THE GARMIN ACCOUNT EXPORT, REVIEWED *(2026-08-18 — 7 outings added, the rest deliberately not)*
+
+Erica downloaded her full Garmin Connect data export (45 MB, `a1646035-…_1 (1)`) and asked
+which of it belongs in the app. **Most of it does not, and the part that looked like the
+prize turned out to be almost entirely redundant.**
+
+**What is in it**
+
+| Path | What it is | Verdict |
+| --- | --- | --- |
+| `DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip` | **8,938 FIT files** | the only source of routes — see below |
+| `DI_CONNECT/DI-Connect-Fitness/…_0_summarizedActivities.json` | 391 activities with name, type, distance, device | **useful**, and it agreed with the FITs exactly |
+| `DI_CONNECT/DI-Connect-Routing/…_courses_*.json` | **4 saved courses** with geometry — Shenandoah NP Loop, Taskers Gap, Peter's Mill Run OHV, Cold Spring Bald Mountain | **plans, not visits** — bucket-list material, not activities |
+| `DI_CONNECT/DI-Connect-Wellness`, `DI-Connect-Metrics`, `DI-Connect-Aggregator` | sleep, VO2max, hydration, daily rollups | out of scope: no place, no outing |
+| `INREACH/mapdata-*.gpx/.kmz` | inReach waypoints/routes/tracks | **empty** — 315–493 byte XML shells with nothing in them |
+| `IT_GLOBAL_EVENT`, `IT_CONSENT_HISTORY`, `IT_DEVICE_AND_CONTENT`, `customer_data`, `DI_FACEIT_CLOUD`, `DI-GOLF` | events, consents, device list, account, profile images | not relevant |
+| 27 further domain folders (`ALPHA_API`, `AVIATIONCLOUD`, `NAVIONICS`, …) | **empty** | — |
+
+**The 8,938 FIT files are mostly not activities.** Classified by their `file_id` message
+rather than guessed at from size:
+
+    ~5,543  monitoringB   daily steps / heart rate / sleep
+    ~2,915  type 44       metrics
+       391  activity      ← of which 333 carry a GPS track
+        ~36  type 41
+
+**And 326 of those 333 were already in the app.** The export adds **7 outings, 38 miles**:
+one 2018 run, five 2020 walks, one 2023 hike. All seven imported, each landing on a place
+that already existed — **no new places invented** — and one was correctly PROPOSED as a
+possible duplicate rather than assumed new.
+
+**Why the whole 333 were NOT imported, tested rather than assumed.** A FIT for an activity
+already present arrives with a `fit:…` key that matches nothing, so 0216's content key never
+applies and Tier 2 creates the row and raises a card. Verified against production and rolled
+back: `disposition = proposed, activities created = 1, cards raised = 1`. Importing all of
+them would mean ~326 new rows and ~326 cards — recoverable in one press (0211), and *not
+wrong* under the model, since a second recording is evidence and the outing still counts
+once. But it doubles her activity rows to gain provenance she can already see, and that is
+her call rather than a default.
+
+**The export stays OUT of the repository.** It is 45 MB of personal health data — sleep,
+heart rate, VO2max — and it lives in the project folder beside the repo, not inside it.
+Nothing about it is committed.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
