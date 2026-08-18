@@ -106,7 +106,11 @@ narrative is in §7e where the other days live.
 **The order is unchanged from 08-14** — stabilize the private core, then the web feature
 set, then native. What changed is that the top of the list is no longer maintenance.
 
-#### 1. ✅ `verify:live` IS TRUE AGAIN — one red check left, and it is a question for Erica
+#### 1. ✅ `verify:live` IS TRUE AGAIN — and as of 2026-08-17 the last red check is green
+
+**§5's lanes are no longer gated.** This section's last open item was a question for Erica;
+she answered it, and the check now passes against her own data. Nothing in the plan is
+waiting on §1 any more.
 
 `e2e/erica-asked-for.spec.ts` decides whether Erica got what she asked for: a request is
 done when its check is green **on the live site**, and a changed instruction gets its check
@@ -127,15 +131,27 @@ from "the same removal" as the stats bar. That was wrong — it never touched Pl
 cause was the helper above, and the difference matters because one reading says a feature
 is missing and the other says a test is.
 
-**The one still red — `:145`/`:162`, and it needs her answer.** The visit section reads
-`Together / Just Erica / Just Josh`. §0.1 relaxed the blanket ban on the word "Trip"
-*inside an edit control* — "the visit editor may say **Count this as a trip**" — while
-keeping passive badges banned. The participant picker is an edit control of exactly that
-kind, so the newer rule probably permits "Together" and the check probably wants
-rewriting. **Probably is not good enough for a rule she wrote:**
+**✅ THE LAST ONE IS ANSWERED AND GREEN — 2026-08-17.** The visit section reads
+`Together / Just me / Just Josh`. §0.1 had relaxed the blanket ban on "Trip" *inside an edit
+control* — "the visit editor may say **Count this as a trip**" — while keeping passive
+badges banned, and the participant picker is a control of exactly that kind. That made the
+check red against an app obeying her newer rule. **Probably is not good enough for a rule
+she wrote**, so she was asked:
 
 > *Does "no together in the visit section" still stand, now that the words sit on a control
 > you press rather than a badge that just asserts something?*
+
+**"Fine on a control."** So the rule is now about **assertion, not vocabulary**: the words
+may live on something you press, and must not appear as text that simply announces a fact.
+The check strips every `select / option / button / input / label` from the section and
+asserts on what is left — the part of the page that *states* something at her. Her original
+wording is preserved in the test, per rule 4.
+
+**Verified where it actually matters.** This check could only ever be red against HER data:
+the browser matrix runs on a seeded disposable database where those cards have no visits, so
+the assertion had nothing to read and passed regardless. Re-run signed in as her against the
+live site, on the Appalachian Trail card (35 visits) and San Diego (1): **no passive
+"Together", no `· Trip`, no "tap a date" — and the picker still offers Together.**
 
 Two of the fixes above were bugs in the replacement code, found by running it against
 production rather than assuming: counting place links before the list had loaded (0 links
@@ -203,6 +219,35 @@ inside a stats dropdown still overflows by thousands of pixels. Nothing covers i
 nothing is unreachable — but "scrolls forever inside a dropdown" is a design she may not
 want. Not a bug; a preference, for whenever she looks at that screen.
 
+#### 3b. ✅ CHRISTMAS WAS LAST YEAR — and the typo was not where it was showing *(0218)*
+
+Two visits dated **2026-12-25**, four months in the future, counting in every total as
+though they had happened. `check-data-integrity.mjs` had flagged them since 08-14 and
+refused to guess. Asked directly, Erica said 2026 was a typo for 2025.
+
+**The first attempt corrected the visits and did not work.** The dates moved,
+`rebuild_place_visits` ran, and both came straight back — caught only because the migration
+re-checked the world instead of trusting its own UPDATE:
+
+    0218: a visit in the future survived the correction
+
+§"Derived vs source", for the fourth time in this repository. **`visits` is DERIVED.** The
+rebuild builds islands from photos, activities, pings and — the source nobody had checked —
+`public.entries`. The real typo was a journal entry, *"The Rabbit Hole"* at Maryland
+Heights, dated 2026-12-25. Correcting the copy achieved nothing, because the copy is
+rebuilt from the original.
+
+**And one bad entry made two bad visits.** Maryland Heights is `part_of` the Appalachian
+Trail, and the rebuild deliberately folds a section's evidence into its parent — *"a
+trail's evidence legitimately lives on its sections"*, as the integrity check itself says.
+So one mistyped year produced a future visit on the section AND on the trail, and anyone
+fixing "the two visits" would have been fixing two symptoms of one cause.
+
+Fixed at the entry; both visits followed. **Future-dated visits: 0. Future-dated entries: 0.**
+
+**Still open in that check, and still hers to decide**: two visits claiming `source=evidence`
+with nothing in the database on their dates — Leesburg 2024-10-22 and Great Falls 2026-07-19.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
@@ -217,7 +262,7 @@ want. Not a bug; a preference, for whenever she looks at that screen.
 
 #### 5. THEN THE QUEUED LANES, in the order locked on 08-14
 
-Nothing here starts while §1 is red.
+§1 went green on 2026-08-17, so these are startable.
 
 | Lane | State | Next concrete step |
 | ---- | ----- | ------------------ |

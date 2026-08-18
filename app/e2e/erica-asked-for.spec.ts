@@ -170,15 +170,58 @@ it.describe('the card — what she asked for, on the live site', () => {
     }
   });
 
-  it('"Remove the words tap a date and Trip and together from the visit section"', async ({
+  // HER ORIGINAL WORDING, kept because a rewritten check must never look like it was
+  // always this lenient:
+  //
+  //   "Remove the words tap a date and Trip and together from the visit section"
+  //
+  // REWRITTEN 2026-08-17, to her newer decision. §0.1 had already relaxed the blanket ban
+  // on "Trip" for the case where the word sits on a control you press — *"the visit editor
+  // may say Count this as a trip"* — while keeping passive badges banned. The visit section
+  // now carries a participant PICKER reading `Together / Just me / Just Josh`, which is an
+  // edit control of exactly that kind, so this check was red against her real data while
+  // the app was obeying the newer rule.
+  //
+  // Asked rather than assumed, because the ban was hers: *"Does 'no together in the visit
+  // section' still stand, now that the words sit on a control you press rather than a badge
+  // that just asserts something?"* — **"Fine on a control."**
+  //
+  // So the rule is now about ASSERTION, not vocabulary: the words may live on something you
+  // press, and must not appear as text that simply announces a fact about the visit.
+  //
+  // Worth stating why this went unnoticed: the full browser matrix runs against a seeded
+  // disposable database where that card has no visits, so the assertion had nothing to read
+  // and passed. It was only ever red against her own data.
+  it('the visit section states nothing passively — the words live on controls', async ({
     page,
   }) => {
     await ready(page, SAN_DIEGO);
     await openVisits(page);
     const visits = page.locator('.visits-details');
-    await expect(visits).not.toContainText(/·\s*Trip\b/);
-    await expect(visits).not.toContainText(/Together/i);
-    await expect(visits).not.toContainText(/tap a date/i);
+    await expect(visits).toBeVisible();
+
+    // The section's text with every editable control's own text removed. What is left is
+    // what the page ASSERTS at her.
+    const passive = await page.evaluate(() => {
+      const root = document.querySelector('.visits-details');
+      if (!root) return null;
+      const copy = root.cloneNode(true) as HTMLElement;
+      for (const el of Array.from(copy.querySelectorAll('select, option, button, input, label'))) {
+        el.remove();
+      }
+      return (copy.textContent || '').replace(/\s+/g, ' ');
+    });
+    expect(passive, 'the visits section did not render').not.toBeNull();
+
+    expect(passive!, 'the visit section still ASSERTS "Together" as text').not.toMatch(
+      /Together/i,
+    );
+    expect(passive!, 'the visit section still asserts a "· Trip" badge').not.toMatch(
+      /·\s*Trip\b/,
+    );
+    expect(passive!, '"tap a date" is instructional text she removed').not.toMatch(
+      /tap a date/i,
+    );
   });
 
   it('"Dates should be grouped by year" — and they drop down', async ({ page }) => {
