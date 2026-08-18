@@ -110,6 +110,25 @@ const CHECKS = [
              and not exists (select 1 from public.activities a
                               where a.place_id = v.place_id
                                 and a.start_date::date between v.start_date and v.end_date)
+             -- ENTRIES ARE EVIDENCE, and this check did not know it. 0218: a visit dated
+             -- four months in the future could not be corrected by editing the visit,
+             -- because rebuild_place_visits rebuilds visit islands from photos,
+             -- activities, pings AND public.entries -- a journal entry was the real typo.
+             -- (No backticks in here: this SQL lives in a JS template literal, and the
+             --  first draft of this comment ended the string.)
+             -- This list must name the same sources the rebuild reads or it will one day
+             -- report a perfectly well-evidenced visit as bare. Checked when it was added:
+             -- neither of the two currently flagged is explained by an entry, so this
+             -- changes no answer today — it stops a false alarm tomorrow.
+             and not exists (select 1 from public.entries e
+                              where e.place_id = v.place_id
+                                and e.date between v.start_date and v.end_date)
+             -- …including an entry on a place this one CONTAINS, which is how one entry at
+             -- Maryland Heights produced a visit on the Appalachian Trail.
+             and not exists (select 1 from public.entries e
+                              join public.places sec on sec.id = e.place_id
+                             where v.place_id = any(sec.part_of)
+                               and e.date between v.start_date and v.end_date)
            order by v.start_date`,
   },
   {
