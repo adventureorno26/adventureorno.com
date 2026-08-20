@@ -1,6 +1,4 @@
-ok ok I ready
-
-# AdventureOrNo — what this is, and what is left to build
+AdventureOrNo — what this is, and what is left to build
 
 **This is the only planning document.** If a plan is not written here, it is not the plan.
 Every competing one was DELETED on 2026-08-11 — `README.md`, `docs/archive/`, `docs/adr/`,
@@ -8,7 +6,7 @@ CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` �
 are recoverable from git history if a decision needs looking up. Do not recreate them:
 plans go HERE.
 
-Last updated: 2026-08-16.
+Last updated: 2026-08-20.
 
 **HOW TO READ A ✅ IN THIS FILE (new 2026-08-16).** A tick used to mean "somebody
 finished it", and that turned out to cover five different states — which is how this
@@ -27,13 +25,218 @@ interchangeable:
 Only **Live-verified** is what §5 means by "it works when Erica drives it". Merged is
 not deployed; deployed is not verified.
 
+## APPROVED COMMERCIAL PRODUCT + UI DIRECTIVE — PEOPLE, EVENTS AND MESSAGING
+
+**Approved by Erica, 2026-08-20. This section supersedes every older statement that makes
+Erica/Josh, Partner, `Together`, `Just me`, `Just Josh`, null-person scope, or household
+membership the permanent product model.** Those descriptions remain useful as history of
+the private prototype, but they are not the commercial design and must not drive new schema,
+statistics, routes or UI.
+
+The product is a commercial travel-memory and activity app for any user. A user can tag any
+number of people on memories, retrieve everything associated with one person or a selected
+group, create and discover events, invite named users or publish an open invitation, and
+message other users safely. Map, Places, Timeline, photos, activities and every statistic
+must use the same selected-people scope.
+
+### The people contract
+
+- There is **one people system**, not a privileged Partner system plus secondary friends.
+- A person may be a registered user or a private contact without an account.
+- A partner may be favourited as a shortcut, but `partner` is not a counting rule, scope
+  type, storage type or permanent navigation mode.
+- `Together` is a query result: memories matching the selected people. It is never a null,
+  magic value, hard-coded couple state or separate store of history.
+- Selecting several people has an explicit operator:
+  - **All selected people** — every selected person is associated with the memory.
+  - **Any selected person** — at least one selected person is associated with the memory.
+- The default meaning of “what I did with Josh + Maya” is the current user plus **all** of
+  Josh and Maya. The UI must say which operator is active.
+- Tagging is separate from account access. Inviting somebody to administer a whole space is
+  not the same action as tagging them in one memory or inviting them to one event.
+- A tag is immediately searchable in the tagger's private history. For a registered user,
+  verification controls whether it becomes that user's accepted history and sharing
+  controls what recording they can see. Declining cannot erase the tagger's private
+  recollection. A private contact tag grants no access.
+- A photo tag says who is in that photo. It does not silently assert that the person
+  participated in the entire visit or outing.
+- A place result for a person is derived from dated tagged visits, outings or photos. A
+  permanent place tag must not invent a visit or affect travel statistics.
+
+### The events contract
+
+- A user can create an event at a place, with title, description, date/time, time zone,
+  category, capacity, visibility and host controls.
+- An event audience is explicit:
+  - **Specific people** — invitations to selected registered users; optional secure invite
+    links for private contacts/non-users.
+  - **Friends/circle** — visible to an explicitly selected relationship group.
+  - **Open invitation** — discoverable to all eligible users in nearby event search and on
+    the map. The host may require approval, set capacity/waitlist and close the invitation.
+- Nearby event search uses the map and PostGIS distance with date, distance and category
+  filters. Public discovery never depends on a third-party event feed.
+- Responses are `invited | requested | going | maybe | declined | waitlisted | removed`.
+  Host removal, blocking and capacity rules are enforced below the UI.
+- Exact location visibility is host-controlled. An open event may show an approximate
+  discovery point and reveal exact meeting details only after approval/RSVP.
+- An event is a plan, not a historical visit. It never contributes to Places, Visits,
+  Trips, Miles or activity totals. After it occurs, attendees may deliberately create or
+  attach an accepted visit/outing; the event itself never auto-writes history.
+- External events (NPS, Recreation.gov, calendars, races) are optional discovery sources,
+  always labelled by source and never the foundation of the user-created event model.
+
+### Messaging and invitations contract
+
+- Every event has a conversation for the host and eligible invited/approved attendees.
+  Event updates, RSVP changes and conversation messages are distinct notification types.
+- Users can message another registered user. Existing friends/accepted event participants
+  can converse directly; other first contacts arrive as **message requests**, not an
+  unrestricted inbox entry.
+- Blocking is bidirectional and enforced in RLS for discovery, invitations, conversations,
+  messages and notifications. Blocked users cannot invite, message or discover each other's
+  restricted events.
+- Messages support text first, ordered delivery, read state, soft deletion, reporting and
+  rate limits. Attachments are deferred until moderation, storage and retention rules are
+  explicit.
+- Open invitations are invitations to discover/request attendance, not permission for every
+  user to message every attendee. Guest-list visibility and attendee-to-attendee messaging
+  are host/user privacy choices.
+
+### The storage contract to build before the new UI
+
+Commercial tenancy, people attribution, events and messaging are separate concerns:
+
+```text
+profiles / spaces / space_memberships
+    who can sign in to, administer or collaborate in a space
+
+people
+    owner_profile_id, display_name, linked_profile_id nullable, favourite, timestamps
+
+memory_subjects
+    id, kind (photo | outing | visit | place), owner_profile_id, source_record_id
+
+memory_people
+    subject_id, person_id, tagged_by, participation_status,
+    verification_status, sharing_status, timestamps
+
+events
+    host_profile_id, place/location, starts_at, ends_at, time_zone, visibility,
+    exact_location_policy, approval_mode, capacity, status, timestamps
+
+event_invites / event_attendees
+    event_id, invited_profile/contact, invited_by, response/status, decided_at
+
+conversations / conversation_members / messages
+    direct and event conversation kinds, membership/requests, sender, body,
+    delivery/read/deletion/reporting state, timestamps
+```
+
+Use an enforceable subject registry rather than an unchecked polymorphic foreign key. The
+existing `tag_claims`, `activity_profiles`, `visit_profiles`, tagging rules and legacy
+Erica/Josh rows are migration inputs, not the final commercial API. Do not add independent
+photo/place participant mirrors. Design RLS first, then migrate existing assertion and
+decision provenance intact.
+
+Statistics use one contract, everywhere:
+
+```text
+canonical outings / accepted visits
+  -> authorization
+  -> selected people + ALL/ANY
+  -> time range
+  -> category/activity filters
+  -> counts and the exact drill-down rows
+```
+
+Filter canonical outings before aggregating. Multiple Garmin, Strava, file or person-owned
+recordings still count once. Events stay outside historical totals until an accepted visit
+or outing is explicitly created.
+
+### Approved navigation and information architecture
+
+The persistent primary navigation is exactly:
+
+```text
+Map | Add | Insights | Settings
+```
+
+- **Map is the homepage.** Search covers places, activities, people and events. Map layers
+  include memories and nearby/open events without adding another primary destination. A
+  lightweight `People: Anyone` control opens a multi-select drawer.
+- **People, Events and Messages are capabilities, not extra primary tabs.** People selection
+  is reached from Map/Insights; nearby events are reached from Map search/layers; Messages
+  and Invitations are persistent utility routes reached from a text control in the app
+  header and relevant person/event screens.
+- **Add introduces information only:** place/visit, activity/file, photos, manual memory or
+  event. It may point to repairs but never hosts the repair queue.
+- **Insights has visible tabs:** `Overview | Places | Timeline`, sharing one people/time/
+  category scope. Events do not appear in historical Insights until they become history.
+- **Settings has exactly three destinations:**
+
+  ```text
+  Account | Integrations | Data & Privacy
+  ```
+
+  `Data & Privacy` is **one destination and one continuous page**, not Location/Data pills
+  or separate Data/Privacy destinations. Sections: `Location`, `Sharing`, `People and tag approvals`, `Messaging and event privacy`, `Needs attention`, `Your data`. Map Appearance
+  lives under Account. Connections/import history live under Integrations. Data Management,
+  Export & backup and Trash live under Data & Privacy.
+- **Needs Attention is the only repair inbox.** Duplicate activities/places, unresolved
+  tags, unplaced photos and other correctable records render there. Data Health diagnoses
+  system condition but does not duplicate repair actions.
+
+Target routes (old routes redirect until links and saved URLs have migrated):
+
+```text
+/                              Map
+/add                           Add/import/create event
+/people/:personId              one person's memories
+/events/nearby                 nearby/open event results
+/events/:eventId               event detail, RSVP and invitation management
+/events/:eventId/conversation  event conversation
+/invitations                   event and tag invitations/requests
+/messages                      conversations and message requests
+/messages/:conversationId      direct conversation
+/insights                      Overview
+/insights/places               Places
+/insights/timeline             Timeline
+/settings/account              Account
+/settings/integrations         Integrations
+/settings/data                 Data & Privacy (one destination)
+/settings/data/attention       Needs Attention
+/settings/data/manage          Data Management
+/settings/data/export          Export & backup
+/settings/data/trash           Trash
+```
+
+### Approved visual direction
+
+Erica approved the combined direction on 2026-08-20: People-first Atlas architecture, the
+Map sliding people drawer, and Memory Lens's open photo-led Timeline/tagging treatment.
+Preserve the current dark navy, blue/cyan accents, pale blue-grey text, photographic map
+markers and text controls. Use full-bleed map/photos, open canvas, strong typography,
+full-width rows, thin dividers and edge drawers. Avoid bento grids, stacked rounded cards,
+giant containers, decorative pills and icon-heavy navigation. The no-icons rule remains.
+
+Events use the same visual language: event map markers, an open event detail sheet and a
+chronological conversation—not a new boxy dashboard. Messaging is a quiet full-width thread
+with thin dividers and clear sender/time/read state.
+
+**Approval status:** the product model, people model, events/invitation requirements,
+messaging capability, combined visual direction, navigation labels and Settings destinations
+above are approved. Event and messaging screen previews are still required before their UI
+is implemented. Database/RLS contracts come first; then generated types/RPCs; then approved
+UI; then production verification.
+
 ## NOW — the order of work (locked 2026-08-14)
 
-The immediate product is a reliable private web app for **Erica and Josh**. The future
-commercial Apple and Android product **has no decided name** (2026-08-15 — "Flok" was a
-working title and is NOT decided; do not write it into the product, the docs or the
-repo). The two goals share a core, but
-commercial scale must not destabilize the app Erica and Josh are trying to use today.
+The deployed product must remain a reliable private web app for **Erica and Josh** while
+the shared core becomes safe for the commercial product. The commercial Apple and Android
+product **has no decided name** (2026-08-15 — "Flok" was a working title and is NOT
+decided; do not write it into the product, the docs or the repo). Commercial tenancy,
+people, events and messaging now belong in the shared core before their approved UI; they
+must be introduced without destabilizing the private deployment.
 
 The sequence is:
 
@@ -42,12 +245,12 @@ The sequence is:
    agree and work for both accounts.
 2. **Self-host the map.** Finish the MapLibre + PMTiles path in Phase 4, approve the
    visual palette, cut production over with rollback, then remove paid basemap dependence.
-3. **Build the complete web feature set.** The one-page editing flow, collaborative trip
-   planning, Together approvals, remaining importers, and the other work recorded below
-   are queued here. They are not cancelled or abandoned.
-4. **Build the native Apple and Android apps, then commercialize.** Reuse the proven domain
-   model and APIs; add tenancy, privacy boundaries, billing, legal/provider compliance,
-   support and native-only integrations only after the private core is dependable.
+3. **Build the complete web feature set.** The approved Map/Add/Insights/Settings structure,
+   universal people tagging/filtering, events, invitations, messaging, collaborative trip
+   planning and remaining importers are queued here. They are not cancelled or abandoned.
+4. **Build the native Apple and Android apps, then launch commercially.** Reuse the proven
+   commercial-safe domain model and versioned APIs; complete billing, legal/provider
+   compliance, support and native-only integrations after the private core is dependable.
 
 **“Later” means sequenced, not postponed indefinitely.** Do not delete desired features
 to make the schedule look shorter. Finish one vertical slice, deploy it, verify it in the
@@ -119,12 +322,12 @@ so the list was failing against an app that was correctly obeying her newer deci
 
 **Five red became one, 2026-08-17. Four of the five were the list's fault, not the app's:**
 
-| Check | What was actually wrong | Fix |
-| ----- | ----------------------- | --- |
-| *"stats moved to the top of places"* | Asserted a stats bar **on** Places — the exact thing she told us on 08-15 to remove, and #94 did. Two instructions in direct opposition | **Rewritten to the newer instruction** per rule 4, with the old wording recorded in the test. Now asserts no stats bar and no gear on Places, and that Stats is on Settings where she moved it |
-| *"clicking Trips pulls up a list"* | **Not a missing feature.** `openStats()` clicked the FIRST of /settings' four `stats-dropdown` summaries, and only if none was open — so whenever another was open it clicked nothing, Stats stayed shut, and the Trips button read "not visible" | Helper now finds the **Stats** card by its summary text |
-| *sections are Visits, Photos, Routes, …* | Demanded a Routes heading unconditionally; `PlacePanel` renders it only when the place has activities | Asserts the ORDER of the sections that exist; Routes is checked where it belongs |
-| *Routes holds the map AND the list* | Same, on one hard-coded card | Walks Places until it finds a place that HAS routes, then asserts map + list |
+| Check                                       | What was actually wrong                                                                                                                                                                                                                                      | Fix                                                                                                                                                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| *"stats moved to the top of places"*      | Asserted a stats bar**on** Places — the exact thing she told us on 08-15 to remove, and #94 did. Two instructions in direct opposition                                                                                                                | **Rewritten to the newer instruction** per rule 4, with the old wording recorded in the test. Now asserts no stats bar and no gear on Places, and that Stats is on Settings where she moved it |
+| *"clicking Trips pulls up a list"*        | **Not a missing feature.** `openStats()` clicked the FIRST of /settings' four `stats-dropdown` summaries, and only if none was open — so whenever another was open it clicked nothing, Stats stayed shut, and the Trips button read "not visible" | Helper now finds the**Stats** card by its summary text                                                                                                                                         |
+| *sections are Visits, Photos, Routes, …* | Demanded a Routes heading unconditionally;`PlacePanel` renders it only when the place has activities                                                                                                                                                       | Asserts the ORDER of the sections that exist; Routes is checked where it belongs                                                                                                                     |
+| *Routes holds the map AND the list*       | Same, on one hard-coded card                                                                                                                                                                                                                                 | Walks Places until it finds a place that HAS routes, then asserts map + list                                                                                                                         |
 
 **A correction to what this section said an hour ago**: it claimed the Trips check was red
 from "the same removal" as the stats bar. That was wrong — it never touched Places. The
@@ -219,524 +422,49 @@ inside a stats dropdown still overflows by thousands of pixels. Nothing covers i
 nothing is unreachable — but "scrolls forever inside a dropdown" is a design she may not
 want. Not a bug; a preference, for whenever she looks at that screen.
 
-#### 3b. ✅ CHRISTMAS WAS LAST YEAR — and the typo was not where it was showing *(0218)*
+#### 3b–3l. THE 08-18/20 RUN IS FINISHED — the narrative moved to §7f
 
-Two visits dated **2026-12-25**, four months in the future, counting in every total as
-though they had happened. `check-data-integrity.mjs` had flagged them since 08-14 and
-refused to guess. Asked directly, Erica said 2026 was a typo for 2025.
+Ten sections of completed work were sitting here, which is precisely what the top of this
+plan warns against: *"Keeping a completed plan at the top of the file is how this document
+turned into a history of itself last time."* Written on 08-17, broken by me on 08-18 through
+08-20. The account of those three days is now **§7f**, where §7e's days already live.
 
-**The first attempt corrected the visits and did not work.** The dates moved,
-`rebuild_place_visits` ran, and both came straight back — caught only because the migration
-re-checked the world instead of trusting its own UPDATE:
+**What it covered, in one line each** — Steps 1–5 of §3e, all shipped and deployed:
 
-    0218: a visit in the future survived the correction
-
-§"Derived vs source", for the fourth time in this repository. **`visits` is DERIVED.** The
-rebuild builds islands from photos, activities, pings and — the source nobody had checked —
-`public.entries`. The real typo was a journal entry, *"The Rabbit Hole"* at Maryland
-Heights, dated 2026-12-25. Correcting the copy achieved nothing, because the copy is
-rebuilt from the original.
-
-**And one bad entry made two bad visits.** Maryland Heights is `part_of` the Appalachian
-Trail, and the rebuild deliberately folds a section's evidence into its parent — *"a
-trail's evidence legitimately lives on its sections"*, as the integrity check itself says.
-So one mistyped year produced a future visit on the section AND on the trail, and anyone
-fixing "the two visits" would have been fixing two symptoms of one cause.
-
-Fixed at the entry; both visits followed. **Future-dated visits: 0. Future-dated entries: 0.**
-
-**Still open in that check, and still hers to decide**: two visits claiming `source=evidence`
-with nothing in the database on their dates — Leesburg 2024-10-22 and Great Falls 2026-07-19.
-
-#### 3c. THE GARMIN ACCOUNT EXPORT, REVIEWED *(2026-08-18 — 7 outings added, the rest deliberately not)*
-
-Erica downloaded her full Garmin Connect data export (45 MB, `a1646035-…_1 (1)`) and asked
-which of it belongs in the app. **Most of it does not, and the part that looked like the
-prize turned out to be almost entirely redundant.**
-
-**What is in it**
-
-| Path | What it is | Verdict |
-| --- | --- | --- |
-| `DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip` | **8,938 FIT files** | the only source of routes — see below |
-| `DI_CONNECT/DI-Connect-Fitness/…_0_summarizedActivities.json` | 391 activities with name, type, distance, device | **useful**, and it agreed with the FITs exactly |
-| `DI_CONNECT/DI-Connect-Routing/…_courses_*.json` | **4 saved courses** with geometry — Shenandoah NP Loop, Taskers Gap, Peter's Mill Run OHV, Cold Spring Bald Mountain | **plans, not visits** — bucket-list material, not activities |
-| `DI_CONNECT/DI-Connect-Wellness`, `DI-Connect-Metrics`, `DI-Connect-Aggregator` | sleep, VO2max, hydration, daily rollups | out of scope: no place, no outing |
-| `INREACH/mapdata-*.gpx/.kmz` | inReach waypoints/routes/tracks | **empty** — 315–493 byte XML shells with nothing in them |
-| `IT_GLOBAL_EVENT`, `IT_CONSENT_HISTORY`, `IT_DEVICE_AND_CONTENT`, `customer_data`, `DI_FACEIT_CLOUD`, `DI-GOLF` | events, consents, device list, account, profile images | not relevant |
-| 27 further domain folders (`ALPHA_API`, `AVIATIONCLOUD`, `NAVIONICS`, …) | **empty** | — |
-
-**The 8,938 FIT files are mostly not activities.** Classified by their `file_id` message
-rather than guessed at from size:
-
-    ~5,543  monitoringB   daily steps / heart rate / sleep
-    ~2,915  type 44       metrics
-       391  activity      ← of which 333 carry a GPS track
-        ~36  type 41
-
-**And 326 of those 333 were already in the app.** The export adds **7 outings, 38 miles**:
-one 2018 run, five 2020 walks, one 2023 hike. All seven imported, each landing on a place
-that already existed — **no new places invented** — and one was correctly PROPOSED as a
-possible duplicate rather than assumed new.
-
-**Why the whole 333 were NOT imported, tested rather than assumed.** A FIT for an activity
-already present arrives with a `fit:…` key that matches nothing, so 0216's content key never
-applies and Tier 2 creates the row and raises a card. Verified against production and rolled
-back: `disposition = proposed, activities created = 1, cards raised = 1`. Importing all of
-them would mean ~326 new rows and ~326 cards — recoverable in one press (0211), and *not
-wrong* under the model, since a second recording is evidence and the outing still counts
-once. But it doubles her activity rows to gain provenance she can already see, and that is
-her call rather than a default.
-
-**The export stays OUT of the repository.** It is 45 MB of personal health data — sleep,
-heart rate, VO2max — and it lives in the project folder beside the repo, not inside it.
-Nothing about it is committed.
-
-#### 3d. THE REVIEW QUEUE, AND CODEX'S INGEST REVIEW — CHECKED AGAINST LIVE *(2026-08-18)*
-
-Erica: *"This is all fucked up and nonsensical, and the options are redundant and make no
-sense… it should populate the Name of the activity from the source or the location of the
-source, then ask me to approve it only if there is some doubt."*
-
-**She was describing something worse than a naming problem, and the naming was not the
-problem at all.** Measured through her own session before anything was written:
-
-    every pending card                       36, all shared_group_id proposals
-    naming cards pending                      0
-    cards her queue returned                 33
-      with a visible subject                 18
-      WITH NO VISIBLE ACTIVITY AT ALL        15
-
-Two faults, stacked:
-
-1. **A duplicate proposal was rendered through the UI built for NAMING.** On screen: a
-   heading reading `shared_group_id`, one radio option whose text is a raw uuid, an evidence
-   line reading *"OpenStreetMap · 0 of 9 route points"*, a **Never** button, and a free-text
-   box offering *"Your own words"*. **The "random letters" are the uuid.** There is no answer
-   a person could give to that.
-2. **Fifteen of her cards were about Josh's Strava recordings** — correctly hidden from her
-   by 0200 — so the card had nothing to render and fell back to "Something to name" plus a
-   uuid. Pressing Save would have linked two activities, one invisible to her.
-
-Fault 2 is the one worth stating as a rule: **the guard was never wrong.** `visible_activities`
-did its job everywhere it was used. Nobody had asked whether a *suggestion about* a hidden
-row should exist as a card. **A review queue is a list of questions a person can answer**,
-and that was the property it was missing.
-
-**Fixed 2026-08-18 (0221/0222 + the card):** a duplicate card carries the counterpart in
-full — route, owner, source, time, distance — and renders two shapes side by side with two
-answers, *Same outing — link them* / *Not the same*. No radio list, no free-text, no second
-generic Save. Cards whose subject (or whose counterpart) the reader cannot see are **not
-returned**. Her queue: **33 → 18 answerable**. Josh's: 22. Nothing deleted — they are his
-recordings and his own queue still shows them. Also hers: *Looks right* → **Save**, and the
-dead *Import an activity file* button (pointing at `/import/timeline`, a route that does not
-exist) is gone.
-
-**STILL OPEN from her instruction, and it is the naming half:** *populate the name from the
-source or the location, and only ask when there is doubt.* Today `activity_display_name`
-names an activity after its place at insert; what does not exist is a rule for **when a name
-is good enough not to ask**. That is 3e below.
-
-##### Codex's ingest review, verified line by line
-
-Its **database claims are exactly right**; its **file paths are not** — it cites
-`app/src/pages/Settings.tsx` and `app/src/pages/AddPage.tsx`, and **`app/src/pages/` does not
-exist** in this repository (everything is `app/src/routes/`). Treat its line numbers as
-indicative and its measurements as sound.
-
-| Codex's claim | Verified? |
+| | |
 | --- | --- |
-| Two paths write `shared_group_id` with no review — `ingest_activity` Tier 3, and `strava-backfill` calling `dedupe_shared_outings` | **TRUE** — both confirmed in source |
-| 40 shared groups: 3 singletons, 6 spanning over an hour, 1 over twelve | **TRUE, exactly** — worst span **12:12:54** |
-| 548 activity_sources, 539 with no `ingest_item_id`, only 10 ingest items | **TRUE** — and **0 import_artifacts**, 48 runs |
-| No SHA-256, no original file stored, no artifact row, failures not persisted | **TRUE** |
-| Ingest RPCs accept caller-controlled actor/run data | **TRUE** — `begin_ingest_run` takes `p_actor_kind` from the caller |
-| `setActivitySolo` (0188) deletes and recreates participants, bypassing tag claims | **TRUE** — and it is the same "tag without acceptance" 7a-12 fixed elsewhere |
-| "Import an activity file" points at a route that does not exist | **TRUE** — fixed today |
-| Needs Attention rows both link to `/add`; the real inbox is embedded there | **TRUE** — mine, from 2026-08-18 |
-| Data Health and Needs Attention overlap; export duplicated across both | **TRUE** |
+| Garmin export reviewed | 8,938 files → 391 activities → **7 genuinely new**; the rest already here |
+| The review queue | 36 nonsense cards → 18 answerable; duplicates show both routes |
+| Step 1 — grouping | two paths stopped merging without asking; **six deleted days restored** |
+| Step 2 — naming | 58 renamed from source/place, **no cards raised** |
+| Step 3 — provenance | every upload hashed, stored, recorded; failures in the ledger |
+| Step 4 — authorization | three holes; one decided **whose account** data landed in |
+| Step 5 — one verb per screen | `/add` creates, `/attention` repairs, `/inbox` redirects |
+| Sharing | tagging IS sharing, owner-controlled, off by default; **a total is not a recording** |
+| CI | out of minutes → docs runs 6→2 billed minutes, matrix weekly, auto-deploy verified |
+| Data | "Florida" 486 mph run removed; Christmas typo fixed at its source |
+
+**WHAT IS LEFT of §3e, and it is the whole of what is next:**
+
+- **Step 6 — ✅ the picker stopped overwriting people (0236).** `set_activity_solo` ran
+  `delete from activity_profiles where activity_id = …` and rebuilt the rows bare, so
+  pressing **Together** erased the record that Josh had ACCEPTED a tag, added him with no
+  say, and — once 0228 existed — silently SHARED a Strava recording, which is the opposite
+  of "sharing is a choice the owner makes". Now: your own participation you may state;
+  adding anyone else PROPOSES a claim; removing them RETRACTS it; and a row evidencing
+  somebody's own recording is never the tagger's to delete. Verified against production —
+  *Together* keeps his accepted answer, *Just me* retracts, her row and his own recording
+  survive, and re-tagging proposes.
+  **Also fixed there**: 0228 gated sharing on `claim_status <> 'declined'`, and the column's
+  CHECK has no such value — it is `rejected`. The clause read like a safeguard and was a
+  no-op. Nothing had leaked, because a decline DELETES the row, but the guard was fictional.
+  **Still to do in Step 6**: extend tagging to visits, photos and places (8b-i).
+- **Step 7 — one Export & Backup screen.** Settings and Data Health both offer
+  place-oriented exports whose copy implies a complete backup; activities, visits,
+  participants, media, provenance and ingest history are not in it.
+- **Two smaller ones, same shape as Step 5**: Data Health and Needs attention still overlap
+  on photos and places, and duplicate-PLACE repair still lives at `/duplicates`.
 
-**Where I disagree with its ordering:** it puts "add a canonical-outings view and move every
-reader onto it" first. The 40 groups those readers would count are the ones it also says are
-unaudited — including a twelve-hour group. **Auditing the groups has to precede trusting
-them**, or a new view is a faster way to count the wrong thing.
-
-#### 3e. THE PLAN TO MAKE INGEST AND REVIEW MAKE SENSE *(2026-08-18, sequenced)*
-
-Ordered so each step is verifiable on live before the next depends on it.
-
-**Step 1 — stop making unreviewed groups, then audit the ones that exist.**
-- `ingest_activity` Tier 3 and `dedupe_shared_outings` must **propose**, never write
-  `shared_group_id`. §2's rule already says a machine may only propose; these two predate it.
-- Audit all 40: **3 singletons** (a group of one is not a group), **6 spanning over an hour**,
-  **one spanning 12:12:54**. Each is either a real joint outing or a bad merge, and until
-  reviewed no total that groups by them is trustworthy.
-- **Do not bulk-link the pending proposals** until the comparison screen and this audit are
-  done. Codex is right about that and the "Link all" button should say so.
-
-**Step 2 — naming that does not ask when it does not need to.** Her instruction, unbuilt:
-- Take the name from the SOURCE first (Strava/Garmin title where a person typed one), then
-  the place, then the geocoder.
-- Ask **only when in doubt**: no source name AND an unnamed or brand-new place, or two
-  candidates that disagree. Everything else is named silently and shows up in history, not
-  in a queue.
-- The existing `isGenericActivityName` already knows "Morning Hike" is a clock reading rather
-  than a name; that is the seed of the doubt test.
-
-**Step 3 — provenance that is actually recorded.** 539 of 548 sources have no ingest item and
-there are zero artifacts:
-- SHA-256 every uploaded file; store the original privately; write `import_artifacts`, link
-  it to the `ingest_items` row, and persist FAILURES as items too.
-- Keep the three identities separate and never conflate them: **file hash** (this exact file),
-  **provider id** (this record at Strava/Garmin), **content key** (this recording, 0216).
-- Label pre-existing rows `legacy` rather than inventing provenance for them.
-
-**Step 4 — lock the ingest RPCs.** User-facing entry points hardcode `actor_kind='user'` and
-`initiated_by=auth.uid()`, verify the run belongs to the caller and is still running, and
-webhook/scheduled imports move to separate service-only functions. Add try/finally around the
-importer so a failure cannot leave the page stuck busy.
-
-**Step 5 — one repair queue.** `/add` creates, `/attention` repairs, `/inbox` redirects to
-`/attention`, Data Health explains system condition only. The repair cards themselves move
-into Needs Attention rather than being embedded in Add.
-
-**Step 6 — finish people tagging.** `setActivitySolo` must stop deleting participant rows:
-changing your OWN participation is direct, adding another *user* creates a proposed claim,
-and declining never removes that person's own recording. Then extend tagging to visits,
-photos and places (8b-i), and Josh's **44 legacy claims** get answered.
-
-**Step 7 — one Export & Backup screen**, distinguishing a places export, an activities
-export, and a full account archive — the current copy implies a completeness it does not have.
-
-**Three decisions only Erica can make**, unchanged and not guessed at:
-1. **"Florida"** — a Run of 67.8 miles in 502 seconds (486 mph) that also created a Florida
-   place and visit. Delete, quarantine, or correct?
-2. **Leesburg 2024-10-22** and **Great Falls 2026-07-19** — visits claiming evidence with
-   nothing behind them. Real manual visits, or remove?
-3. **Josh's 44 legacy tag claims** — his to accept or decline.
-
-#### 3f. STEP 1 DONE — and the audit found six days that had been deleted *(0223/0224/0225)*
-
-**"Florida" is gone.** Erica, 2026-08-20: *"yes remove the Florida 486 mph run"*. The
-activity is deleted (67.8 miles in 502 seconds, a two-point line — a flight recorded as a
-run); its derived visit went with it; the place it invented is in **Trash**, restorable,
-because nothing else ever lived there. Her 2026-02-01 mileage drops from 94.9 to **27.1**.
-
-**Both unreviewed grouping paths now propose (0224).** `ingest_activity` Tier 3 and
-`dedupe_shared_outings` — the one still called at the end of every Strava backfill — wrote
-`shared_group_id` on two rows outright. §2 has forbidden that since it was written; these
-two predate the card that made it answerable and never caught up. Nothing they find is
-lost; it becomes a card with two shapes and two answers.
-
-##### The audit, and what it found
-
-Not "unreviewed". **Wrong.** All six groups spanning more than an hour were ONE PERSON
-going out twice in a day, recorded as one outing:
-
-    Josh  2023-08-02   6.04 mi 10:27  +  6.02 mi 22:39     12h 12m apart
-    Josh  2023-08-01   6.02 mi 15:29  +  6.12 mi 21:40      6h 11m
-    Erica 2022-12-04   Dickey Ridge   +  Shenandoah         2h 28m
-    Erica 2025-10-04   ride 9.80      +  ride 10.50         1h 34m
-    Josh  2023-05-30   3.89 mi        +  3.88 mi            1h 29m
-    Erica 2020-05-12   ride 6.44      +  ride 6.08          1h 28m
-
-**The cause is one column used as if it meant something else.** `dedupe_shared_outings`
-decides "two different people" with `a2.athlete_id is distinct from r.athlete_id` — but
-`athlete_id` names a **Strava account**, not an owner. A file import has `athlete_id = NULL`,
-and `null is distinct from <id>` is TRUE, so a person's own file copy read as a different
-athlete from their own Strava copy — **and from their own second run that day.**
-
-**Why this is the worst kind of bug here: linking makes an outing count ONCE.** Six wrong
-links meant **six days of hers and his were absent from every total** — not visibly, not
-recoverably by looking. Nothing on screen was wrong; the number was simply smaller than the
-truth. Unlinking them RESTORES six outings; it removes nothing.
-
-    shared groups   39 → 33      spanning over an hour   6 → 0      worst   12h12m → 50m
-    outings counted            Erica 369 of 374 activities · Josh 163 of 173
-
-0225 also fixes the matcher to compare `owner_profile`, so it can no longer propose a person
-as their own companion.
-
-##### Three left, and they are HERS to call — not auto-decided
-
-Same fault, same-person pairs, but short enough to be genuinely ambiguous:
-
-    Josh  2023-05-24   1.01 mi + 1.01 mi        50 min apart
-    Erica 2018-08-01   0.78 mi + 0.75 mi        36 min   (Leesburg, both)
-    Erica 2018-08-13   1.12 mi + 1.03 mi        22 min   (Lake of the Red Rocks / Red Rock Regional Park)
-
-Each is either two short outings close together, or one outing whose recording restarted.
-**The asymmetry argues for unlinking**: a wrong link silently erases a day, while a wrong
-unlink merely double-counts one — which is visible and trivially fixed. But that is a
-judgement about days she was there for, so it waits for her. There is no *unlink* card yet;
-the review queue can only propose linking, which is the next gap to close.
-
-#### 3g. CI RAN OUT OF MINUTES, AND THE SHAPE WAS THE PROBLEM *(2026-08-20)*
-
-Actions stopped dead on 2026-08-19: **3,000 of 3,000 minutes used, twelve days to reset.**
-Every workflow — including the nightly **Backup** — failed with *"recent account payments
-have failed or your spending limit needs to be increased"*. The two causes produce identical
-text, which is why it read as a payment problem when it was an exhausted allowance.
-
-**It was not volume, it was billing shape.** Measured before changing anything: **431 CI runs
-in 30 days**, and
-
-    a full CI run     11 billed minutes
-    a docs-only run    6 billed minutes   ← six jobs, each doing 3–9 seconds of work
-
-**GitHub rounds every JOB up to a whole minute.** This workflow fans out into six, and each
-one started, checked out, and *then* guarded every step with an `if:`. So a run with nothing
-to do still cost six minutes — and a docs-only change cost that **twice**, once for the PR
-and again for the push to `main`. 431 × ~7 ≈ 3,000. The whole allowance, about half of it
-buying nothing.
-
-**Three changes (#128):**
-- **The skip moved from the step to the job.** A skipped job bills nothing.
-- **The release gate treats `skipped` as "nothing to check."** It demanded exactly `success`
-  from all four gates, so job-level skips would have failed every docs change.
-- **Full validation is weekly, not nightly** — it carries the cross-browser matrix, ~9
-  billable minutes alone, ~450/month, re-proving what every code PR already proves.
-
-**Left alone deliberately:** the push-to-main trigger. `PRODUCTION_DEPLOY_ENABLED=true`, so
-that push **is** the deploy path — dropping it to save minutes would have silently removed
-automatic deployment. Verified afterwards: the merge of #128 ran **Deploy production
-successfully**, and `/version.json` matched `main`.
-
-##### What the first green run answered
-
-CI had not run since 08-18, so 0223–0225 went in unverified. The first run after billing was
-restored applied **all 225 migrations to a disposable database with ZERO errors** and failed
-exactly **one of 60** SQL tests — `0203`, a real consequence of 0224 rather than an artifact.
-Its assertion read *"another person's recording was swallowed as a duplicate (proposed)"*,
-conflating **not inserted** with **not stored**; those became different things the day Tier 3
-stopped linking automatically. Rewritten to prove the activity IS created, the join is
-**offered**, and nothing was linked behind anyone's back.
-
-**That also settles the seven other failures** seen when the suite was run against
-production: they are artifacts of fixture tests meeting live data, not regressions. The
-disposable run is the authority.
-
-**Running costs now, measured:** backup **4 min/night (~120/month)**; a code PR ~10; a
-docs-only PR should be ~2. Against 3,000.
-
-**One thread left open:** `supabase start` replaying migrations one-by-one fails at
-**0078** (`column "elevation_gain" does not exist`). CI never sees it because `db-bootstrap.sh`
-builds the schema differently — and that path applies all 225 cleanly. Nothing is broken
-today, but "the chain replays from zero" is the property a restore leans on.
-
-#### 3h. STEP 2 DONE — names that do not ask a question nobody has *(0226)*
-
-Erica: *"it should populate … the Name of the activity from the source or the location of
-the source, then ask me to approve it only if there is some doubt."*
-
-`activity_display_name` already had the right shape — a person's words, else the place, else
-the type. The gap was what counts as **a person's words**. Measured across all 547:
-
-    353  named after their place       ← the rule working
-    129  a real name she typed
-     58  "<X> County Running"          ← GARMIN's auto-name, counted as hers
-      7  "Morning Hike"                ← Strava's, already caught
-
-Garmin names an activity after the administrative area — *"Loudoun County Running"* **55
-times over**. That is a machine's words, and the place it actually happened (Broadlands,
-Potomac Station, Bear's Den) is strictly better. **58 renamed, no cards raised.**
-
-**The pattern is narrow, and that was measured rather than chosen.** Every name ending in a
-bare gerund is machine-made, but not all have something better:
-
-    "Bay Lake Running"     → its place is "Cake Bake Shop Restaurant"
-    "Track Meet Running"   → its place is "Sterling"
-
-So it matches only the unambiguous `<something> County|City <gerund>`. The rest keep their
-names: renaming those would be a loss, and a loss is worse than a poor name.
-
-##### The eight left over are not what they look like
-
-    5  Josh's, at a place still called "New place", WITH coordinates
-    3  Erica's, with NO coordinates — 0.06 / 0.21 / 3.08 mi, indoor
-
-The five are the **unnamed-place problem wearing an activity costume**: name the place and
-the activity names itself, and that queue already exists. The three cannot be named by
-anything but her, and a card asking her to name a 0.06-mile walk is noise rather than
-review. **So this raised no cards at all** — which is what *"only if there is some doubt"*
-means.
-
-##### And the quieter half: 411 activities were named by VALUE
-
-An activity named after its place stores a **copy** of that name. Rename the place and every
-one of them keeps the old text — §"Derived vs source" again, in a spot nobody had looked.
-`apply_inbox_field` now moves them with the place, and only them: a name she typed herself
-never moves. Tested both ways.
-
-    named after their place   353 → 411        still machine-named   65 → 8
-
-#### 3i. STEP 3 — the file is kept, and every outcome is written down *(0227)*
-
-Measured before writing anything:
-
-    activity_sources              548
-    …with no ingest_item_id       539
-    ingest_items                   10
-    import_artifacts                0      ← not one, ever
-    storage buckets                 0      ← nowhere to put a file
-
-**The provenance schema has existed since 0202 and had never been used.** An import recorded
-that an activity came from *"a file"* — not which file, not its bytes, and nothing at all
-about the ones that failed. A batch of 184 with three unreadable ones left 181 successes and
-no trace of the rest.
-
-Now, before a file is even parsed: **hashed (SHA-256), stored in a private bucket under its
-own hash, and recorded as an artifact.** Then whatever happens next — inserted, duplicate,
-proposed, or failed — lands in `ingest_items` pointing at that artifact.
-
-**Three identities, kept separate on purpose**, because conflating them is how the last two
-weeks of bugs happened:
-
-| | Says | Certainty |
-| --- | --- | --- |
-| **SHA-256** (0227) | *this exact file, again* | the same bytes — no inference |
-| **provider id** (0209) | *this record at Strava/Garmin* | exact, within that provider |
-| **content key** (0216) | *this looks like the same recording* | an inference, deliberately narrow |
-
-`file_already_imported` runs first and is the cheapest of the three: it can say *"you
-uploaded this on 17 August"* rather than quietly making a second copy.
-
-**Legacy is labelled, not invented.** The 539 rows that predate this have no artifact and
-never will — nobody kept those files, and minting a hash for one would be writing down
-provenance that does not exist. The new integrity check is **scoped by date** for that
-reason: it flags a file import made *after* 2026-08-20 with no artifact, and says nothing
-about the ones before.
-
-**Verified end to end against production, then cleaned up:** unknown file → `seen:false`;
-record → artifact id; ask again → `seen:true` with its first-seen date; record the same
-bytes → **the same artifact id, no second row**; a failure → `disposition=failed`, linked to
-the artifact, and the run reporting `ok=0 failed=1`.
-
-**Still open in Step 3/4:** the ingest RPCs still take `actor_kind` from the caller
-(§3e Step 4), and originals are stored but nothing yet re-parses them when a parser improves.
-
-#### 3j. SHARING BECAME A CHOICE, AND A TOTAL STOPPED BEING A RECORDING *(0228–0231)*
-
-Four instructions on 2026-08-20, which together are a better rule than any one of them:
-
-> *"fuck Strava — add the route and the distance for those 24 cards"* ·
-> *"use Garmin first then Strava and don't share Strava information"* ·
-> *"I want users to be able to share their activities if they want"* → *"share everything I
-> tag Josh on"* · *"I do want him to be able to see my total miles and total activities"*
-
-**Tagging someone IS the act of sharing with them** — deliberate, owner-controlled, off by
-default, revocable. `profiles.share_tagged_outings`, false for every new account, true for
-Erica because she asked.
-
-**The reversal of 0200 is narrow on purpose.** 0200 closed a genuine leak (46 of her
-activities and 356 of her miles were showing as Josh's). It also made the product's stated
-purpose unreachable. So the new rule is *a person may see the recording of an outing they
-are on* — one outing at a time, never the account. Measured after:
-
-    Josh reads          his own 90 Strava rows + the 46 of hers he is tagged on
-    Josh cannot read    her other 138          ← unchanged
-    his answerable tags 20 → 44
-
-**GARMIN FIRST.** `visible_recording_of` now prefers a non-Strava sibling: where one outing
-has both recordings, the copy with no strings attached is the one shown. Her instruction,
-and the right default for a reason beyond preference.
-
-**Nothing is copied.** Writing her polyline onto a row owned by Josh would have been the
-same data with a different label and two copies to disagree. This changes who may READ the
-single record that exists.
-
-##### A total is not a recording (0231)
-
-    the truth about her         394 rows → 375 outings, 1,968 miles
-    what Josh could see         256 activities, 1,354 miles
-
-`mileage_by_person` reads `visible_activities`, so ~799 miles simply vanished from her
-totals as he saw them — silently smaller, not hidden-with-a-note. `person_totals` returns
-**counts and miles and nothing else**: no id, no name, no route, no date, nothing joinable
-back to a recording. *"Erica has run 1,968 miles"* is a fact about Erica; the route she took
-on the 4th is a recording and stays behind 0228. The codebase had already drawn this line
-once, for `data_health`.
-
-##### The same second is the same recording (0230)
-
-*"there are 58 activities asking me to review them but they are from my garmin so clearly
-they are the same activity."* She was right, mechanically: **Strava's copy came FROM the
-Garmin file**, so both start at the same second.
-
-    25  different people                            ← a real question, left alone
-     6  same person, 0–7s apart, within 1%
-     4  same person, 0–18s apart, distance differs  ← Strava recomputes the total
-     4  same person, 5–15 min apart                 ← ambiguous, still asked
-
-0216's content key never caught them: a FIT brings a provider key, so the key path was taken,
-found nothing, and fell through to a proposal. **The test is TIME, not distance** — distance
-is recomputed by Strava, a start timestamp is copied verbatim through every hop, and one
-person cannot begin two runs a minute apart. 12 certainties linked and closed; her queue
-28, all of them real questions.
-
-#### 3k. STEP 4 — the import RPCs stop taking the caller's word *(0234/0235)*
-
-Codex called them "too trusting". Reading them found three holes, and the second decided
-**whose account data landed in**:
-
-1. **The authorization check could be skipped by asking nicely.**
-   `if p_actor_kind = 'user' and not public.is_editor_or_owner()` — the guard only ran when
-   the caller *said* they were a user. Passing `'scheduled'` skipped it entirely.
-2. **A run could be attached to somebody else's connection.** `p_connection` went through
-   unchecked, and `source_owner_profile` is read from that connection's owner — so
-   `ingest_activity` made **that person** the owner of every activity the run created.
-3. **Idempotency was global.** Reusing another person's key *joined their run*.
-
-And `ingest_activity` took nothing but a run id — which is not a secret: it is returned by
-`begin_ingest_run` and stored on every ledger row.
-
-**The rule now:** a user-facing call says only WHAT it is importing. Who is importing, on
-whose behalf, and into which run are read from the session, never from the arguments.
-Service callers (cron, migrations, the Strava webhook) have no `auth.uid()`, are trusted by
-the grant rather than by a parameter, and are unaffected.
-
-**Each hole attacked as Josh against production, and refused:**
-
-    claims actor_kind=scheduled   → "a signed-in import is a user import"
-    opens a run via her connection → "that connection is not yours"
-    writes into her run            → "that import run is not yours, or is already finished"
-    finishes her run               → "that import run is not yours"
-    her own import                 → inserted
-    finishing twice                → 204, a no-op
-
-**0235 exists because 0234's own test failed on its first run.** Scoping the *lookup* to the
-caller left the index globally unique, so a second person reusing a key no longer joined the
-run — they got a raw `23505 duplicate key` instead. Better than the hole, still wrong twice:
-an import fails for a reason nothing to do with the importer, and the error confirms someone
-else has used that key. The index is now scoped to its initiator, matching the lookup.
-
-#### 3l. STEP 5 — one verb per screen *(2026-08-20)*
-
-Erica, 2026-08-18: *"Needs Attention and Review Inbox are redundant."* They were, and the
-arrangement was worse than duplication: **Needs attention listed counts while the actual
-cards were embedded in `/add`** — the page named after *creating* — and `/inbox` redirected
-there too. That is why she had to ask where the pending cards were: they were filed under
-the wrong verb, and my first pass at merging the two only made the counts link to `/add`
-rather than moving the work.
-
-The split is by verb now, which is the one line that stays put:
-
-    /add        create and import new information
-    /attention  repair what is already there      ← the cards live here
-    /inbox      redirects to /attention
-    /health     diagnose the system, change nothing
-
-`/add` keeps a **pointer** — "12 cards are waiting for you" — because adding something is
-when a person is most likely to notice there is tidying to do. What it no longer keeps is
-the queue.
-
-Pinned with an e2e check, because an embedded queue is exactly the kind of thing that drifts
-back onto whichever page someone is working on next: `/inbox` must land on `/attention`, the
-cards must render there, and `/add` must not host them.
-
-**Not done in this step, and still true:** Data Health and Needs attention still overlap on
-photos and places (Codex's point), and the repair cards for duplicate PLACES still live at
-`/duplicates`. Both are the same move as this one and are next after tagging.
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
@@ -754,13 +482,13 @@ photos and places (Codex's point), and the repair cards for duplicate PLACES sti
 
 §1 went green on 2026-08-17, so these are startable.
 
-| Lane | State | Next concrete step |
-| ---- | ----- | ------------------ |
-| Phase 3 — the one page | not started | Needs her preview approval FIRST: `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
-| Phase 4d — geocoding we own | nothing built | Overture → PMTiles; Mapbox stays the fallback |
-| Phase 6 — what we own | nothing built | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question |
-| Phase 7 — fitness ingest | nothing built | intervals.icu first; email-in is the best effort-to-coverage item |
-| Phase 8 — events, social, privacy floor | nothing built | Much of it gated on the LLC and the native shell |
+| Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
+| ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 3 — approved app structure        | people preview approved; events/messages preview pending | Database/RLS contracts for tenancy, universal people, events and messaging first. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
+| Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
+| Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
+| Phase 8 — events, social, privacy floor | nothing built                                            | Much of it gated on the LLC and the native shell                                                                                                                                                                                      |
 
 **Two dead components are named and unremoved**: `BucketMiniMap` and `TrailSectionsMap`
 have no consumers. `AddSheet` was the same and she said delete it, so these are probably
@@ -1425,15 +1153,18 @@ not start another redesign.
 
 ## 1. What the app is
 
-A private map of everywhere Erica and Josh have been, built automatically from photos,
-phone location and Strava — so that **going somewhere is enough to have it recorded**.
-No data entry as the price of admission.
+The current deployment is Erica and Josh's private proof of the commercial product: a map
+of where a user has been, built automatically from photos, location and connected activity
+sources — so that **going somewhere is enough to have it recorded**. No data entry as the
+price of admission.
 
-It answers one question well: *where have we been, when, together or apart, and what did
-it look like.*
+The product answers: *where have I been, when, who was with me, what did we do, what did it
+look like, and what can we do next?* Users can create and discover nearby events, invite
+specific people or publish an open invitation, and communicate safely around those plans.
 
-It is invite-only, has no public pages, and it is the prototype for a commercial
-multi-tenant product ("Spaces").
+The deployed prototype remains invite-only with no public pages. The product being designed
+is commercial and multi-tenant; new work must obey the approved people/events/privacy
+directive at the top rather than extending household assumptions.
 
 ---
 
@@ -1649,27 +1380,27 @@ Two corollaries:
 
 ---
 
-## 3. What you can do — ONE place
+## 3. What you can do — ONE DOOR PER VERB
 
-The page formerly called Inbox is renamed **Edit**, and it absorbs every kind of data
-work:
+**Revised and people-preview-approved 2026-08-20.** The older “everything folds into
+Edit/Add” plan mixed creation, repair, diagnosis and account management. The approved split:
 
-| Function           | What it means                                                                                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Add**      | a place, a visit, an activity, by hand                                                                                       |
-| **Import**   | Google Photos (guess the location from the photo's own coordinates, then let her correct it), file upload, Strava, the phone |
-| **Ingest**   | what arrives automatically — proposed for approval, never written as fact                                                   |
-| **Sort**     | photos into places and visits, with the location editable**right there**                                               |
-| **Edit**     | names, locations, dates, who was there, categories, ratings                                                                  |
-| **Organize** | sections into trails, places into trips and cities, merges                                                                   |
-| **Delete**   | with undo                                                                                                                    |
-| **Fix**      | duplicates, unnamed, unplaced — anything needing attention                                                                  |
+| Destination                          | What belongs there                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| **Map**                        | Find memories, people and nearby/open events; apply people scope; open event discovery                  |
+| **Add**                        | Create/import a memory or create an event                                                               |
+| **Insights**                   | Overview, Places and Timeline using one people/time/category filter                                     |
+| **Messages / Invitations**     | Utility routes for direct/event conversations, requests, RSVPs and tag approvals                        |
+| **Settings → Account**        | Identity, preferences and Map Appearance                                                                |
+| **Settings → Integrations**   | Connected sources, connection state and import history                                                  |
+| **Settings → Data & Privacy** | Location, sharing, messaging/event privacy, Needs Attention, Data Management, Export & backup and Trash |
 
-`/photos/sort`, `/attention` and the Settings → Data grid **fold into Edit and stop
-existing separately**. `/places/edit` survives **only** as the bulk spreadsheet, because
-editing 149 rows at once is a genuinely different job.
+`/attention` remains the single repair workflow inside Data & Privacy. Duplicate activities
+and places move into it. `/health` may diagnose but never duplicate repair controls. Add may
+link to pending repairs after an import, but repair cards do not live there.
 
-Nothing gets added *beside* this page. Things get removed *into* it.
+`/places/edit` may survive as a bulk spreadsheet. Inline location correction remains part
+of photo sorting. Upload/resume UI is transient and disappears when complete.
 
 ### Marking something done (her rule, 2026-08-11)
 
@@ -1834,17 +1565,22 @@ purpose" register in §7 exists so nothing is silently lost again.
 
 (see above)
 
-### Phase 3 — The one page  *(QUEUED AFTER CORE + MAP; not cancelled)*
+### Phase 3 — The approved app structure  *(PEOPLE PREVIEW APPROVED; EVENTS/MESSAGES PREVIEW PENDING)*
 
-Inbox → **Edit**, absorbing add / import / ingest / sort / edit / organize / delete / fix
-per §3. `/add` is the door; these still exist as separate surfaces and must fold into it
-and then be REMOVED: `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash`,
-and the Settings → Data grid. Plus:
+Database and RLS contracts come before visible work:
 
-- **Inline location editing while sorting photos** — restore `PlaceQuickEdit` (§7,
-  commit `5bb5b6e`). She asked for it back.
-- **Transient UI that disappears** when it is done (the upload box, the "finish importing
-  your Google Photos" banner).
+1. Separate commercial space access from people tags, event participation and messaging.
+2. Finish canonical outings and move aggregating readers onto them.
+3. Add the universal people registry and memory relationships; migrate existing claims.
+4. Add events, audiences, invites/RSVPs, nearby search and exact-location privacy.
+5. Add direct/event conversations, message requests, blocking, reporting and notifications.
+6. Build one authorized people/time/category query for Map and Insights statistics.
+7. Implement the approved Map/Add/Insights/Settings structure and people UI; create and
+   approve dedicated event and messaging previews before implementing those visible screens.
+8. Move every repair card into Needs Attention, redirect old routes, test, deploy and verify.
+
+Still required: restore inline `PlaceQuickEdit` while sorting photos, and make upload/resume
+UI disappear when complete.
 
 ### Phase 4 — A map we own  *(THE GOAL. Mapbox is a stopgap, not the destination)*
 
@@ -2596,13 +2332,13 @@ transaction and calling the real readers.
 
 #### What is broken today, measured
 
-| | |
-| --- | --- |
+|                                                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Co-attribution was an INSTRUCTION, implemented as a date** ⚠️ *corrected — see §7a-6* | `0039` did a blanket `UPDATE`: *"Post-Dec-21-2025 activities Erica recorded were joint → also Josh's."* 46 activities carry Josh's name, **all** dated ≥ 2025-12-21, and **19 of them are dated after his last import** — nothing of his could possibly have matched them. **This was Erica's explicit request, exception included** (§7a-6), and an owner's assertion is the best evidence there is — the fault is that it was written as a hardcoded date inside a migration, where it could not be seen, amended, revoked, or told apart from a guess |
-| **That defeats the Strava rule** | `visible_activities` treats an `activity_profiles` row as "this is yours too". **Measured live, acting as Josh: he sees 46 of Erica's 180 Strava activities.** Asking the real reader — `mileage_by_person(josh)` — returns **124 activities and 992.5 miles, of which 46 activities and 356.1 miles are Erica's Strava runs.** His own stats screen is showing him her mileage |
-| **The importer silently destroys the second recording** | `import_file_activity` finds a match and `return v_id` **without inserting**. The file Josh uploaded is not stored, not linked, not recorded anywhere. It is simply gone |
-| **`original_source` is a transport, not an origin** | `0193` backfilled it as `coalesce(original_source, source)`, so all 265 file rows say `'file'`. §6f requires *"where it came from originally, through however many hubs"*. A Garmin FIT, an AllTrails GPX and an Apple Health export are all `'file'` today |
-| **No provenance at all** | `source_id` is NULL on every one of the 265 file rows. `ingest_runs` logs only the OSM suggester. Nothing records who imported what, from which file, when |
+| **That defeats the Strava rule**                                                              | `visible_activities` treats an `activity_profiles` row as "this is yours too". **Measured live, acting as Josh: he sees 46 of Erica's 180 Strava activities.** Asking the real reader — `mileage_by_person(josh)` — returns **124 activities and 992.5 miles, of which 46 activities and 356.1 miles are Erica's Strava runs.** His own stats screen is showing him her mileage                                                                                                                                                                                   |
+| **The importer silently destroys the second recording**                                       | `import_file_activity` finds a match and `return v_id` **without inserting**. The file Josh uploaded is not stored, not linked, not recorded anywhere. It is simply gone                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **`original_source` is a transport, not an origin**                                         | `0193` backfilled it as `coalesce(original_source, source)`, so all 265 file rows say `'file'`. §6f requires *"where it came from originally, through however many hubs"*. A Garmin FIT, an AllTrails GPX and an Apple Health export are all `'file'` today                                                                                                                                                                                                                                                                                                                |
+| **No provenance at all**                                                                      | `source_id` is NULL on every one of the 265 file rows. `ingest_runs` logs only the OSM suggester. Nothing records who imported what, from which file, when                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 #### The one idea the whole design rests on
 
@@ -2618,8 +2354,8 @@ That single separation answers all three of Erica's requirements at once:
 - *"a ledger of who adds what from what source"* — the evidence row IS the ledger entry.
 - **And the joint-outing bug disappears**, because the two cases stop looking alike:
 
-      SAME PERSON, two apps, one run     → ONE activity, TWO sources
-      TWO PEOPLE,  one run together      → TWO activities, one per person, linked
+  SAME PERSON, two apps, one run     → ONE activity, TWO sources
+  TWO PEOPLE,  one run together      → TWO activities, one per person, linked
 
   The current importer collapses the second case into the first. That is the actual root
   of the 46, and no amount of better matching fixes it while one outing can only have one
@@ -2632,19 +2368,19 @@ the live site, github, supabase, and cloudflare. Do not make assumptions."* Ever
 below was measured, and the checking changed the design in five places — including two
 where **Codex was right about the problem and both of us were wrong about the fix**.
 
-| # | Codex's claim | Verdict, measured |
-| - | ------------- | ----------------- |
-| 1 | *Critical: visibility must not hang off the mutable `strava_accounts` table* | **Right about the risk, and the fix is simpler than either proposal.** `strava_accounts.profile_id` is `ON DELETE SET NULL`, so it is genuinely mutable. But `owner_profile` is **already an immutable snapshot**: `set_activity_owner` resolves it at INSERT and stores it, all 180 Strava rows match their athlete's profile, none are null, and **all three functions that touch it — `set_activity_owner`, `import_file_activity`, `match_photo` — set it only on INSERT.** So no new `source_profile_id` column, and no join at read time. Use `owner_profile`, and add a guard making it formally immutable |
-| 2 | *High: "activity" means two things; readers counting rows can double-count* | **Right, and worse than stated.** 33 functions read activities; only **9** group by `shared_group_id`; **10 aggregate with `count()`/`sum()` without it** — `card_view`, `race_stats`, `place_days`, `recompute_place_stats`, `races_list`, `data_health`, `shared_outings`, `place_days`, `rule_offer`, `learn_rule`. There are **27 activities in 16 groups**, so 11 rows are double-countable today |
-| 3 | *High: the ledger only models human file actions* | **Right.** `imports.profile_id = auth.uid()` cannot represent a webhook, a scheduled backfill or a migration. And **`ingest_runs` already exists** — 41 rows, `source='suggester'` only, and **no database function references it**, so it is an edge-function-only log. Extending it beats adding a competing ledger |
-| 4 | *High: Tier 1 ids prove source-record identity, not outing identity* | **Half right, and the live data settles it.** Fetched from Strava with Erica's own token: her watch activities carry `external_id = garmin_ping_610945955935` and `device_name = "Garmin fēnix 6S"`; her phone ones carry `external_id = <UUID>-activity`, `device_name = "Strava App"`. So `external_id` **does** name the origin provider — but `garmin_ping_…` is a Garmin *ping* id, **not** the FIT `file_id`, so it cannot be joined to a FIT file. Scoped uniqueness it is |
-| 5 | *High: Tier 2 auto-attach conflicts with the machine-proposal rule* | **Right, and it contradicted this file's own §2 and `0195`.** Conceded without reservation |
-| 6 | *High: raw-file retention needs a security policy* | **Right, and it is net-new.** R2 holds exactly three buckets — `adventureorno-photos`, `aon-backups`, `aon-basemap`. There is nowhere to put raw activity files today |
-| 7 | *Medium: label the 44 historical claims honestly* | **Right.** "44 carry the fingerprint" says how they were written, not that each outing was shared |
-| 8 | *Medium: backfill must record explicit `unknown`* | **Right**, and it matters most for the 265 file rows: `source_id` is NULL on every one, so their upstream provider is genuinely unknown and must not be guessed as Garmin |
-| 9 | *Medium: done-definition should test more than `mileage_by_person`* | **Right.** The RLS policy on `activities` uses the SAME tag predicate as the view, so route geometry, cards and detail readers need their own assertions |
-| 10 | *Doc: the plan cites a §7f that does not exist* | **Right.** I referenced a section I never wrote; the audit it meant is the table above. Reference corrected |
-| 11 | *Josh's OAuth: check athlete capacity, not just the callback* | **Fair, unresolved.** `strava-auth` is deployed (v15, `verify_jwt=false`) and his state expired unused. Capacity is not measurable through the API, so both hypotheses stay open until the retry is instrumented |
+| #  | Codex's claim                                                                    | Verdict, measured                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1  | *Critical: visibility must not hang off the mutable `strava_accounts` table* | **Right about the risk, and the fix is simpler than either proposal.** `strava_accounts.profile_id` is `ON DELETE SET NULL`, so it is genuinely mutable. But `owner_profile` is **already an immutable snapshot**: `set_activity_owner` resolves it at INSERT and stores it, all 180 Strava rows match their athlete's profile, none are null, and **all three functions that touch it — `set_activity_owner`, `import_file_activity`, `match_photo` — set it only on INSERT.** So no new `source_profile_id` column, and no join at read time. Use `owner_profile`, and add a guard making it formally immutable |
+| 2  | *High: "activity" means two things; readers counting rows can double-count*    | **Right, and worse than stated.** 33 functions read activities; only **9** group by `shared_group_id`; **10 aggregate with `count()`/`sum()` without it** — `card_view`, `race_stats`, `place_days`, `recompute_place_stats`, `races_list`, `data_health`, `shared_outings`, `place_days`, `rule_offer`, `learn_rule`. There are **27 activities in 16 groups**, so 11 rows are double-countable today                                                                                                                                                                                               |
+| 3  | *High: the ledger only models human file actions*                              | **Right.** `imports.profile_id = auth.uid()` cannot represent a webhook, a scheduled backfill or a migration. And **`ingest_runs` already exists** — 41 rows, `source='suggester'` only, and **no database function references it**, so it is an edge-function-only log. Extending it beats adding a competing ledger                                                                                                                                                                                                                                                                                                          |
+| 4  | *High: Tier 1 ids prove source-record identity, not outing identity*           | **Half right, and the live data settles it.** Fetched from Strava with Erica's own token: her watch activities carry `external_id = garmin_ping_610945955935` and `device_name = "Garmin fēnix 6S"`; her phone ones carry `external_id = <UUID>-activity`, `device_name = "Strava App"`. So `external_id` **does** name the origin provider — but `garmin_ping_…` is a Garmin *ping* id, **not** the FIT `file_id`, so it cannot be joined to a FIT file. Scoped uniqueness it is                                                                                                                                  |
+| 5  | *High: Tier 2 auto-attach conflicts with the machine-proposal rule*            | **Right, and it contradicted this file's own §2 and `0195`.** Conceded without reservation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 6  | *High: raw-file retention needs a security policy*                             | **Right, and it is net-new.** R2 holds exactly three buckets — `adventureorno-photos`, `aon-backups`, `aon-basemap`. There is nowhere to put raw activity files today                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 7  | *Medium: label the 44 historical claims honestly*                              | **Right.** "44 carry the fingerprint" says how they were written, not that each outing was shared                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 8  | *Medium: backfill must record explicit `unknown`*                            | **Right**, and it matters most for the 265 file rows: `source_id` is NULL on every one, so their upstream provider is genuinely unknown and must not be guessed as Garmin                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 9  | *Medium: done-definition should test more than `mileage_by_person`*          | **Right.** The RLS policy on `activities` uses the SAME tag predicate as the view, so route geometry, cards and detail readers need their own assertions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 10 | *Doc: the plan cites a §7f that does not exist*                               | **Right.** I referenced a section I never wrote; the audit it meant is the table above. Reference corrected                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 11 | *Josh's OAuth: check athlete capacity, not just the callback*                  | **Fair, unresolved.** `strava-auth` is deployed (v15, `verify_jwt=false`) and his state expired unused. Capacity is not measurable through the API, so both hypotheses stay open until the retry is instrumented                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 **One claim I want to record as NOT a problem**, because it looks alarming: `authenticated`
 holds INSERT/UPDATE/DELETE grants on `public.activities`. It cannot use them — RLS is
@@ -2732,7 +2468,7 @@ stops a re-import creating a second row.
 The live evidence for why that is the right scope:
 
     garmin_ping_610945955935     device_name "Garmin fēnix 6S"   ← a Garmin PING id…
-    <UUID>-activity              device_name "Strava App"        ← …not a FIT file_id
+    <UUID></uuid>-activity              device_name "Strava App"        ← …not a FIT file_id
 
 `external_id` reliably names the **origin provider** — which is how `origin` gets populated
 honestly instead of guessed, and `device_name` should be captured alongside it. It does not
@@ -2795,15 +2531,15 @@ own several apps, not because Strava needs replacing.
 
 **HOW EACH PERSON CONNECTS — the plumbing is already there, verified 2026-08-17:**
 
-| Piece | State |
-| ----- | ----- |
-| `strava_accounts` | keyed by `athlete_id`, so it holds one row PER ATHLETE |
-| `strava-auth` | stores the connection against the profile from the consumed state — Josh's lands as Josh's |
-| `strava_oauth_start` | requires `is_editor_or_owner`, so an editor may connect |
-| `strava-webhook` | looks the account up by `event.owner_id` and attributes to THAT athlete |
-| `strava-backfill` | `getAllAccounts()` and loops — already every athlete, not just the owner |
-| `set_activity_owner` | resolves `owner_profile` from `athlete_id`, so each activity lands owned by its athlete |
-| `0200` | visibility follows `owner_profile`, so the separation holds automatically |
+| Piece                  | State                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `strava_accounts`    | keyed by`athlete_id`, so it holds one row PER ATHLETE                                     |
+| `strava-auth`        | stores the connection against the profile from the consumed state — Josh's lands as Josh's |
+| `strava_oauth_start` | requires`is_editor_or_owner`, so an editor may connect                                    |
+| `strava-webhook`     | looks the account up by`event.owner_id` and attributes to THAT athlete                    |
+| `strava-backfill`    | `getAllAccounts()` and loops — already every athlete, not just the owner                 |
+| `set_activity_owner` | resolves`owner_profile` from `athlete_id`, so each activity lands owned by its athlete  |
+| `0200`               | visibility follows`owner_profile`, so the separation holds automatically                  |
 
 **Nothing needs building. The only blocker is Strava's athlete cap**, and the fix is smaller
 than 0207 implied: a new app starts in *Single Player Mode* at **1 athlete**, and the owner
@@ -2830,11 +2566,11 @@ seen, amended, revoked, or asked about, and where nobody could tell it apart fro
 
 **Checked, and her instruction WAS carried out** — including the exception:
 
-| | |
-| --- | --- |
-| The excepted race | **Yuengling Shamrock Marathon**, 2026-03-22, 26.4 mi, `is_race=true` (it is the Shamrock, in Virginia Beach — not Richmond; recorded here because the plan should name the right activity) |
-| `activity_profiles` — the record | **Erica only.** The exception was honoured |
-| `also_profiles` — the legacy array | **still says Josh.** A stale mirror of a corrected fact |
+|                                       |                                                                                                                                                                                                     |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The excepted race                     | **Yuengling Shamrock Marathon**, 2026-03-22, 26.4 mi, `is_race=true` (it is the Shamrock, in Virginia Beach — not Richmond; recorded here because the plan should name the right activity) |
+| `activity_profiles` — the record   | **Erica only.** The exception was honoured                                                                                                                                                    |
+| `also_profiles` — the legacy array | **still says Josh.** A stale mirror of a corrected fact                                                                                                                                       |
 
 That divergence is this repository's oldest recurring bug in a new place: one fact stored
 twice, and the copy left behind (§"Derived vs source"). `activity_profiles` is the record
@@ -2928,12 +2664,12 @@ uploaded. The ingest ledger showed two runs, **zero items**, finished in 120ms �
 reached the database, so nothing in the database was at fault. Pulling that thread found
 four faults, and **three of them were writes that returned success and wrote nothing.**
 
-| What | What it did | How it hid |
-| --- | --- | --- |
-| `recordStravaSource()` | `onConflict: 'provider,connection_id,external_key'` against 0202's **expression** index `(provider, coalesce(connection_id,'000…'), external_key)`. Postgres cannot infer an expression index from a column list, so every call returned **42P10** | the result was never inspected, and 0208's hand-backfill had already filled the rows that existed — so only the **25** imported after 0208 were bare |
-| `source_connections` | only ever written by 0202's own backfill; the OAuth callback stored tokens and stopped | Josh's **90** activities carried `connection_id` NULL while his tokens sat in `strava_accounts` |
-| `parseActivityFile()` | discarded origin, device and any de-dup key | all **265** file rows say origin `unknown`; a re-upload could only be caught by Tier 2's guess |
-| `strava-backfill` | two athletes × 100 activities × ~5 round trips per activity | timed out at 150s, then returned `WORKER_RESOURCE_LIMIT` three times, leaving **28 of Josh's 93** missing **while reporting success** |
+| What                     | What it did                                                                                                                                                                                                                                                         | How it hid                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recordStravaSource()` | `onConflict: 'provider,connection_id,external_key'` against 0202's **expression** index `(provider, coalesce(connection_id,'000…'), external_key)`. Postgres cannot infer an expression index from a column list, so every call returned **42P10** | the result was never inspected, and 0208's hand-backfill had already filled the rows that existed — so only the**25** imported after 0208 were bare |
+| `source_connections`   | only ever written by 0202's own backfill; the OAuth callback stored tokens and stopped                                                                                                                                                                              | Josh's**90** activities carried `connection_id` NULL while his tokens sat in `strava_accounts`                                                   |
+| `parseActivityFile()`  | discarded origin, device and any de-dup key                                                                                                                                                                                                                         | all**265** file rows say origin `unknown`; a re-upload could only be caught by Tier 2's guess                                                      |
+| `strava-backfill`      | two athletes × 100 activities × ~5 round trips per activity                                                                                                                                                                                                       | timed out at 150s, then returned`WORKER_RESOURCE_LIMIT` three times, leaving **28 of Josh's 93** missing **while reporting success**         |
 
 **The rule this phase adds, and it is not about Strava.** *An ON CONFLICT column list cannot
 match an expression index — and an unchecked write is indistinguishable from a successful
@@ -3167,7 +2903,7 @@ file it had already seen.
 
 **So when the file will not say who it is, the recording does:**
 
-    file-content:<owner>:<start to the second>:<distance in whole metres>:<type>
+    file-content:<owner></owner>:<start to the second></start>:<distance in whole metres></distance>:<type></type>
 
 **This is not a similarity guess, and that distinction is the entire justification for
 letting Tier 1 attach on it silently.** Tier 2 asks *"could these be the same outing?"* and
@@ -3230,72 +2966,53 @@ feed is revocable — never architect around one.
 Friend graph + per-item privacy on Postgres RLS: canonical-ordered `friendships`, security
 definer helpers (`is_friend`, `is_blocked_either_way`), a visibility enum on every
 shareable noun, fan-out-on-read feed with Realtime. Comments (one level, soft delete) and
-constrained reactions inherit the post's RLS. Notifications: table + Expo push + Resend.
+constrained reactions inherit the post's RLS. Direct messages, message requests and event
+conversations use explicit conversation membership; blocking applies to all of them.
+Notifications: table + Expo push + Resend.
 
-#### 8b-i. PEOPLE: a partner, and everyone else *(Erica, 2026-08-18 — decided, nothing built)*
+#### 8b-i. PEOPLE: one universal system *(Erica, 2026-08-20 — approved; nothing built)*
 
-> *"Users can add friends, family, and a partner. The partner feature is going to look
-> similar to it does now with Just Me, Just Josh, Together. Friends and family won't be on
-> the main screen, they will just be tags that users can add to photos and all cards for
-> visits, activities, places, etc."*
+**This replaces the 2026-08-18 Partner/friends tier.** This is a commercial app, not an app
+permanently organized around Erica and Josh. A user can tag any person, find anyone tagged
+in their photos/memories, retrieve everything they did with one or several people, and use
+that same selection for statistics.
 
-**Two tiers, and the difference is placement, not plumbing.** Both are the same claim about
-another person that 7a-12 already built — `tag_claims`, `respond_to_tag()`, the participation
-rows, and the rule that a tag follows the **outing** rather than the recording (0214). What
-separates them is how much of the screen they are allowed to take.
+There is no privileged Partner data type. A partner may be a favourite shortcut, but query,
+participation and statistics contracts are identical for every person. Remove `Together / Just me / Just Josh` as the permanent model; Together is a people query with ALL selected.
 
-| | **Partner** | **Friends & family** |
-| --- | --- | --- |
-| How many | exactly one, at a time | many |
-| Where it appears | **on the card itself** — the `Together / Just me / Just <partner>` picker that exists today | **never on the main screen**; a tag added from an edit affordance |
-| What it changes | every total: whose miles, whose visit, whose outing | attribution and recall — "who was there", searchable |
-| Attaches to | activities and visits, as now | photos, visits, activities, places — **all four** |
+The authoritative implementation contract is at the top of this file: owner-scoped private
+contacts and registered users; account access separate from memory/event participation; one
+enforceable memory-person relationship; verification separate from sharing; photo presence
+not silently promoted to outing participation; canonical-outing filters; and one people +
+ALL/ANY + time/category contract for Map, Overview, Places, Timeline and statistics.
 
-**The partner control stays exactly as it is**, because it already earned its shape: it is an
-edit control rather than a passive badge, which is precisely the distinction §1 settled on
-2026-08-17 (*"Fine on a control"*). Generalising it is the work — today it is literally
-`Just me / Just Josh / Together` for a two-person household.
+#### 8b-ii. EVENTS, INVITATIONS AND MESSAGING *(Erica, 2026-08-20 — approved requirements; previews pending)*
 
-**What has to be decided before it is built, and none of it is guesswork we should do
-silently:**
+Users create events, search for nearby/open events, invite specific users, or publish an
+open invitation to all eligible users. Specific invitations and open discovery are audience
+modes on the same event, not different event products. Hosts control approval, capacity,
+waitlist, guest-list visibility and exact-location disclosure.
 
-- **A partner is a role, not a name.** The picker's third option must read the partner's
-  display name from the relationship, and the `v_cutoff`/`v_erica` style constants that
-  still hardcode a household of two have to go with it. `rebuild_place_visits` currently
-  looks up "the owner who is not a test account" — that is a two-person assumption sitting
-  inside a machine job.
-- **What happens when there is no partner, or the partner leaves.** The three-state control
-  has no honest fourth state; a solo user should see nothing rather than a disabled picker.
-  Ending a partnership must not retract history — the outings were still shared.
-- **A tag on a NON-USER is a label; a tag on a user is a CLAIM.** Friends and family will
-  mostly not have accounts. A label needs no acceptance and gives no access. The moment that
-  person becomes a user, the label has to be able to *become* a claim they can accept or
-  decline — and until they do, it must not grant them sight of anything (§A, and the whole
-  reason 0200 exists).
-- **Photos and places have no participant table yet.** `activity_profiles` and
-  `visit_profiles` exist; photos and places do not. Adding two more mirrors of the same
-  idea is how this repository got `also_profiles` — so the shape is one polymorphic
-  `people_tags(subject_kind, subject_id, person_id, …)` reusing `tag_claims`, decided
-  before any of it is written.
-- **"Not on the main screen" is a hard constraint, not a preference.** It is the same
-  instruction as the nav on /settings and the badges in the visit section: the card shows
-  what happened, and who-else-was-there lives one press away.
+Every event has RSVP state and an eligible-participant conversation. Users can also message
+registered users directly; non-friend/non-event first contact is a message request. Blocking,
+reporting, moderation, rate limiting and RLS apply across event discovery, invitations and
+messages. Open discovery never implies an open inbox or access to the guest list.
 
-**Why it waits for Phase 8 rather than jumping the queue**: friends and family are only
-useful once there is a friend graph and a privacy floor to hang them on (8b, 8c). Tagging a
-person who can then see the outing is a sharing decision, and sharing without the privacy
-floor is the one thing §8c says is not optional. The partner tier, by contrast, already
-works for the household that exists today.
+The Map is event discovery, Add creates an event, event detail handles RSVP/invites, and
+Messages/Invitations are utility routes rather than a fifth primary navigation item. An event
+is planned social data and contributes nothing to historical travel statistics until an
+accepted visit/outing is explicitly created after it occurs.
 
-#### 8c. The privacy floor — NOT optional, and NOT in the UI
+#### 8c. The privacy floor — NOT optional, and enforced below the UI
 
 - **Default private.** Per-item audience chosen at post time.
 - **Privacy zones**: random-offset centre, trackpoints trimmed **at the data layer before
   any shareable polyline exists**, hide first/last 200 m by default.
-- Joint-outing merges are **mutual opt-in and default off**.
+- Joint-outing merges and cross-account sharing are **mutual opt-in and default off**.
 - No aggregate heatmaps over private data.
-- **Strava-origin data is excluded from every surface another person can see, in RLS and
-  views — never in the UI** (§6f, 0193).
+- A tag or event invitation never opens an account/provider library. Sharing grants access
+  only to the accepted subject at the owner's chosen level through RLS/views. Never expose
+  unrelated recordings from the same account.
 
 #### 8d. The moderation floor — mandatory before App Store submission (Guideline 1.2)
 
@@ -3315,9 +3032,10 @@ EAS free tier is 30 builds/month.
 ### Phase 5 — Complete web features, then the native apps  *(QUEUED; not cancelled)*
 
 First finish the web features recorded in this file on top of the stable private core:
-the one-page edit flow, collaborative planning, Together approvals, remaining importers,
-and approved card/map work. Then build native Apple and Android clients (**name undecided**)
-against versioned APIs rather than forking the business rules into three implementations.
+the approved app structure, universal people tagging/filtering, events, invitations,
+messaging, collaborative planning, remaining importers and approved card/map work. Then
+build native Apple and Android clients (**name undecided**) against versioned APIs rather
+than forking the business rules into three implementations.
 
 Commercial readiness includes tenant isolation, per-tenant quotas, account deletion and
 export, billing/entitlements, privacy/terms/consent, abuse controls, observability, support,
@@ -4480,14 +4198,14 @@ Phase 4 becomes **Live-verified** on her sentence, not on a screenshot of a Work
 
 Nothing here starts until Steps 0–3 are true for the same commit.
 
-| Lane                                     | State         | Note                                                                                                                                                                                          |
-| ---------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 1 remainder                        | nearly closed | Steps 2–3 above ARE the remainder                                                                                                                                                            |
-| Phase 3 — the one page                  | not started   | `/attention`, `/photos/sort`, `/duplicates`, `/health`, `/trash` and Settings → Data fold into `/add`, then are REMOVED. Restore `PlaceQuickEdit`; make transient UI transient |
-| Phase 4d — geocoding we own             | nothing built | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                |
-| Phase 6 — what we own                   | nothing built | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED                                                                                                            |
-| Phase 7 — fitness ingest                | nothing built | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                             |
-| Phase 8 — events, social, privacy floor | nothing built | Much of it is gated on the LLC and the native shell                                                                                                                                           |
+| Lane                                     | State                                                    | Note                                                                                                                                                                                         |
+| ---------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1 remainder                        | nearly closed                                            | Steps 2–3 above ARE the remainder                                                                                                                                                           |
+| Phase 3 — approved app structure        | people preview approved; events/messages preview pending | This historical 08-16/17 plan is superseded by the top directive: commercial-safe people/events/messages contracts, then Map/Add/Insights/Settings; Add creates and Needs Attention repairs. |
+| Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                               |
+| Phase 6 — what we own                   | nothing built                                            | The tile trick: reverse geocode and elevation are tile reads. Routing stays PAUSED                                                                                                           |
+| Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                            |
+| Phase 8 — events, social, privacy floor | nothing built                                            | Much of it is gated on the LLC and the native shell                                                                                                                                          |
 
 **Two things are waiting on Erica and block nothing else** (§"Open, awaiting Erica's
 decision"): whether to attach the **122 photos** that match exactly one visit on one day
@@ -4495,6 +4213,533 @@ at one place — unambiguous, and 0157 now makes the attachment permanent — an
 fabricated `12:00:00` timestamps, which must be proposed rather than written.
 
 ---
+
+
+## 7f. 2026-08-18/20 — the ingest system, and five steps of §3e
+
+#### 3b. ✅ CHRISTMAS WAS LAST YEAR — and the typo was not where it was showing *(0218)*
+
+Two visits dated **2026-12-25**, four months in the future, counting in every total as
+though they had happened. `check-data-integrity.mjs` had flagged them since 08-14 and
+refused to guess. Asked directly, Erica said 2026 was a typo for 2025.
+
+**The first attempt corrected the visits and did not work.** The dates moved,
+`rebuild_place_visits` ran, and both came straight back — caught only because the migration
+re-checked the world instead of trusting its own UPDATE:
+
+    0218: a visit in the future survived the correction
+
+§"Derived vs source", for the fourth time in this repository. **`visits` is DERIVED.** The
+rebuild builds islands from photos, activities, pings and — the source nobody had checked —
+`public.entries`. The real typo was a journal entry, *"The Rabbit Hole"* at Maryland
+Heights, dated 2026-12-25. Correcting the copy achieved nothing, because the copy is
+rebuilt from the original.
+
+**And one bad entry made two bad visits.** Maryland Heights is `part_of` the Appalachian
+Trail, and the rebuild deliberately folds a section's evidence into its parent — *"a
+trail's evidence legitimately lives on its sections"*, as the integrity check itself says.
+So one mistyped year produced a future visit on the section AND on the trail, and anyone
+fixing "the two visits" would have been fixing two symptoms of one cause.
+
+Fixed at the entry; both visits followed. **Future-dated visits: 0. Future-dated entries: 0.**
+
+**Still open in that check, and still hers to decide**: two visits claiming `source=evidence`
+with nothing in the database on their dates — Leesburg 2024-10-22 and Great Falls 2026-07-19.
+
+#### 3c. THE GARMIN ACCOUNT EXPORT, REVIEWED *(2026-08-18 — 7 outings added, the rest deliberately not)*
+
+Erica downloaded her full Garmin Connect data export (45 MB, `a1646035-…_1 (1)`) and asked
+which of it belongs in the app. **Most of it does not, and the part that looked like the
+prize turned out to be almost entirely redundant.**
+
+**What is in it**
+
+| Path                                                                                                                        | What it is                                                                                                                  | Verdict                                                             |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip`                                                         | **8,938 FIT files**                                                                                                   | the only source of routes — see below                              |
+| `DI_CONNECT/DI-Connect-Fitness/…_0_summarizedActivities.json`                                                            | 391 activities with name, type, distance, device                                                                            | **useful**, and it agreed with the FITs exactly               |
+| `DI_CONNECT/DI-Connect-Routing/…_courses_*.json`                                                                         | **4 saved courses** with geometry — Shenandoah NP Loop, Taskers Gap, Peter's Mill Run OHV, Cold Spring Bald Mountain | **plans, not visits** — bucket-list material, not activities |
+| `DI_CONNECT/DI-Connect-Wellness`, `DI-Connect-Metrics`, `DI-Connect-Aggregator`                                       | sleep, VO2max, hydration, daily rollups                                                                                     | out of scope: no place, no outing                                   |
+| `INREACH/mapdata-*.gpx/.kmz`                                                                                              | inReach waypoints/routes/tracks                                                                                             | **empty** — 315–493 byte XML shells with nothing in them    |
+| `IT_GLOBAL_EVENT`, `IT_CONSENT_HISTORY`, `IT_DEVICE_AND_CONTENT`, `customer_data`, `DI_FACEIT_CLOUD`, `DI-GOLF` | events, consents, device list, account, profile images                                                                      | not relevant                                                        |
+| 27 further domain folders (`ALPHA_API`, `AVIATIONCLOUD`, `NAVIONICS`, …)                                             | **empty**                                                                                                             | —                                                                  |
+
+**The 8,938 FIT files are mostly not activities.** Classified by their `file_id` message
+rather than guessed at from size:
+
+    ~5,543  monitoringB   daily steps / heart rate / sleep
+    ~2,915  type 44       metrics
+       391  activity      ← of which 333 carry a GPS track
+        ~36  type 41
+
+**And 326 of those 333 were already in the app.** The export adds **7 outings, 38 miles**:
+one 2018 run, five 2020 walks, one 2023 hike. All seven imported, each landing on a place
+that already existed — **no new places invented** — and one was correctly PROPOSED as a
+possible duplicate rather than assumed new.
+
+**Why the whole 333 were NOT imported, tested rather than assumed.** A FIT for an activity
+already present arrives with a `fit:…` key that matches nothing, so 0216's content key never
+applies and Tier 2 creates the row and raises a card. Verified against production and rolled
+back: `disposition = proposed, activities created = 1, cards raised = 1`. Importing all of
+them would mean ~326 new rows and ~326 cards — recoverable in one press (0211), and *not
+wrong* under the model, since a second recording is evidence and the outing still counts
+once. But it doubles her activity rows to gain provenance she can already see, and that is
+her call rather than a default.
+
+**The export stays OUT of the repository.** It is 45 MB of personal health data — sleep,
+heart rate, VO2max — and it lives in the project folder beside the repo, not inside it.
+Nothing about it is committed.
+
+#### 3d. THE REVIEW QUEUE, AND CODEX'S INGEST REVIEW — CHECKED AGAINST LIVE *(2026-08-18)*
+
+Erica: *"This is all fucked up and nonsensical, and the options are redundant and make no
+sense… it should populate the Name of the activity from the source or the location of the
+source, then ask me to approve it only if there is some doubt."*
+
+**She was describing something worse than a naming problem, and the naming was not the
+problem at all.** Measured through her own session before anything was written:
+
+    every pending card                       36, all shared_group_id proposals
+    naming cards pending                      0
+    cards her queue returned                 33
+      with a visible subject                 18
+      WITH NO VISIBLE ACTIVITY AT ALL        15
+
+Two faults, stacked:
+
+1. **A duplicate proposal was rendered through the UI built for NAMING.** On screen: a
+   heading reading `shared_group_id`, one radio option whose text is a raw uuid, an evidence
+   line reading *"OpenStreetMap · 0 of 9 route points"*, a **Never** button, and a free-text
+   box offering *"Your own words"*. **The "random letters" are the uuid.** There is no answer
+   a person could give to that.
+2. **Fifteen of her cards were about Josh's Strava recordings** — correctly hidden from her
+   by 0200 — so the card had nothing to render and fell back to "Something to name" plus a
+   uuid. Pressing Save would have linked two activities, one invisible to her.
+
+Fault 2 is the one worth stating as a rule: **the guard was never wrong.** `visible_activities`
+did its job everywhere it was used. Nobody had asked whether a *suggestion about* a hidden
+row should exist as a card. **A review queue is a list of questions a person can answer**,
+and that was the property it was missing.
+
+**Fixed 2026-08-18 (0221/0222 + the card):** a duplicate card carries the counterpart in
+full — route, owner, source, time, distance — and renders two shapes side by side with two
+answers, *Same outing — link them* / *Not the same*. No radio list, no free-text, no second
+generic Save. Cards whose subject (or whose counterpart) the reader cannot see are **not
+returned**. Her queue: **33 → 18 answerable**. Josh's: 22. Nothing deleted — they are his
+recordings and his own queue still shows them. Also hers: *Looks right* → **Save**, and the
+dead *Import an activity file* button (pointing at `/import/timeline`, a route that does not
+exist) is gone.
+
+**STILL OPEN from her instruction, and it is the naming half:** *populate the name from the
+source or the location, and only ask when there is doubt.* Today `activity_display_name`
+names an activity after its place at insert; what does not exist is a rule for **when a name
+is good enough not to ask**. That is 3e below.
+
+##### Codex's ingest review, verified line by line
+
+Its **database claims are exactly right**; its **file paths are not** — it cites
+`app/src/pages/Settings.tsx` and `app/src/pages/AddPage.tsx`, and **`app/src/pages/` does not
+exist** in this repository (everything is `app/src/routes/`). Treat its line numbers as
+indicative and its measurements as sound.
+
+| Codex's claim                                                                                                                              | Verified?                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Two paths write`shared_group_id` with no review — `ingest_activity` Tier 3, and `strava-backfill` calling `dedupe_shared_outings` | **TRUE** — both confirmed in source                                          |
+| 40 shared groups: 3 singletons, 6 spanning over an hour, 1 over twelve                                                                     | **TRUE, exactly** — worst span **12:12:54**                            |
+| 548 activity_sources, 539 with no`ingest_item_id`, only 10 ingest items                                                                  | **TRUE** — and **0 import_artifacts**, 48 runs                         |
+| No SHA-256, no original file stored, no artifact row, failures not persisted                                                               | **TRUE**                                                                      |
+| Ingest RPCs accept caller-controlled actor/run data                                                                                        | **TRUE** — `begin_ingest_run` takes `p_actor_kind` from the caller       |
+| `setActivitySolo` (0188) deletes and recreates participants, bypassing tag claims                                                        | **TRUE** — and it is the same "tag without acceptance" 7a-12 fixed elsewhere |
+| "Import an activity file" points at a route that does not exist                                                                            | **TRUE** — fixed today                                                       |
+| Needs Attention rows both link to`/add`; the real inbox is embedded there                                                                | **TRUE** — mine, from 2026-08-18                                             |
+| Data Health and Needs Attention overlap; export duplicated across both                                                                     | **TRUE**                                                                      |
+
+**Where I disagree with its ordering:** it puts "add a canonical-outings view and move every
+reader onto it" first. The 40 groups those readers would count are the ones it also says are
+unaudited — including a twelve-hour group. **Auditing the groups has to precede trusting
+them**, or a new view is a faster way to count the wrong thing.
+
+#### 3e. THE PLAN TO MAKE INGEST AND REVIEW MAKE SENSE *(2026-08-18, sequenced)*
+
+Ordered so each step is verifiable on live before the next depends on it.
+
+**Step 1 — stop making unreviewed groups, then audit the ones that exist.**
+
+- `ingest_activity` Tier 3 and `dedupe_shared_outings` must **propose**, never write
+  `shared_group_id`. §2's rule already says a machine may only propose; these two predate it.
+- Audit all 40: **3 singletons** (a group of one is not a group), **6 spanning over an hour**,
+  **one spanning 12:12:54**. Each is either a real joint outing or a bad merge, and until
+  reviewed no total that groups by them is trustworthy.
+- **Do not bulk-link the pending proposals** until the comparison screen and this audit are
+  done. Codex is right about that and the "Link all" button should say so.
+
+**Step 2 — naming that does not ask when it does not need to.** Her instruction, unbuilt:
+
+- Take the name from the SOURCE first (Strava/Garmin title where a person typed one), then
+  the place, then the geocoder.
+- Ask **only when in doubt**: no source name AND an unnamed or brand-new place, or two
+  candidates that disagree. Everything else is named silently and shows up in history, not
+  in a queue.
+- The existing `isGenericActivityName` already knows "Morning Hike" is a clock reading rather
+  than a name; that is the seed of the doubt test.
+
+**Step 3 — provenance that is actually recorded.** 539 of 548 sources have no ingest item and
+there are zero artifacts:
+
+- SHA-256 every uploaded file; store the original privately; write `import_artifacts`, link
+  it to the `ingest_items` row, and persist FAILURES as items too.
+- Keep the three identities separate and never conflate them: **file hash** (this exact file),
+  **provider id** (this record at Strava/Garmin), **content key** (this recording, 0216).
+- Label pre-existing rows `legacy` rather than inventing provenance for them.
+
+**Step 4 — lock the ingest RPCs.** User-facing entry points hardcode `actor_kind='user'` and
+`initiated_by=auth.uid()`, verify the run belongs to the caller and is still running, and
+webhook/scheduled imports move to separate service-only functions. Add try/finally around the
+importer so a failure cannot leave the page stuck busy.
+
+**Step 5 — one repair queue.** `/add` creates, `/attention` repairs, `/inbox` redirects to
+`/attention`, Data Health explains system condition only. The repair cards themselves move
+into Needs Attention rather than being embedded in Add.
+
+**Step 6 — finish people tagging.** `setActivitySolo` must stop deleting participant rows:
+changing your OWN participation is direct, adding another *user* creates a proposed claim,
+and declining never removes that person's own recording. Then extend tagging to visits,
+photos and places (8b-i), and Josh's **44 legacy claims** get answered.
+
+**Step 7 — one Export & Backup screen**, distinguishing a places export, an activities
+export, and a full account archive — the current copy implies a completeness it does not have.
+
+**Three decisions only Erica can make**, unchanged and not guessed at:
+
+1. **"Florida"** — a Run of 67.8 miles in 502 seconds (486 mph) that also created a Florida
+   place and visit. Delete, quarantine, or correct?
+2. **Leesburg 2024-10-22** and **Great Falls 2026-07-19** — visits claiming evidence with
+   nothing behind them. Real manual visits, or remove?
+3. **Josh's 44 legacy tag claims** — his to accept or decline.
+
+#### 3f. STEP 1 DONE — and the audit found six days that had been deleted *(0223/0224/0225)*
+
+**"Florida" is gone.** Erica, 2026-08-20: *"yes remove the Florida 486 mph run"*. The
+activity is deleted (67.8 miles in 502 seconds, a two-point line — a flight recorded as a
+run); its derived visit went with it; the place it invented is in **Trash**, restorable,
+because nothing else ever lived there. Her 2026-02-01 mileage drops from 94.9 to **27.1**.
+
+**Both unreviewed grouping paths now propose (0224).** `ingest_activity` Tier 3 and
+`dedupe_shared_outings` — the one still called at the end of every Strava backfill — wrote
+`shared_group_id` on two rows outright. §2 has forbidden that since it was written; these
+two predate the card that made it answerable and never caught up. Nothing they find is
+lost; it becomes a card with two shapes and two answers.
+
+##### The audit, and what it found
+
+Not "unreviewed". **Wrong.** All six groups spanning more than an hour were ONE PERSON
+going out twice in a day, recorded as one outing:
+
+    Josh  2023-08-02   6.04 mi 10:27  +  6.02 mi 22:39     12h 12m apart
+    Josh  2023-08-01   6.02 mi 15:29  +  6.12 mi 21:40      6h 11m
+    Erica 2022-12-04   Dickey Ridge   +  Shenandoah         2h 28m
+    Erica 2025-10-04   ride 9.80      +  ride 10.50         1h 34m
+    Josh  2023-05-30   3.89 mi        +  3.88 mi            1h 29m
+    Erica 2020-05-12   ride 6.44      +  ride 6.08          1h 28m
+
+**The cause is one column used as if it meant something else.** `dedupe_shared_outings`
+decides "two different people" with `a2.athlete_id is distinct from r.athlete_id` — but
+`athlete_id` names a **Strava account**, not an owner. A file import has `athlete_id = NULL`,
+and `null is distinct from <id>` is TRUE, so a person's own file copy read as a different
+athlete from their own Strava copy — **and from their own second run that day.**
+
+**Why this is the worst kind of bug here: linking makes an outing count ONCE.** Six wrong
+links meant **six days of hers and his were absent from every total** — not visibly, not
+recoverably by looking. Nothing on screen was wrong; the number was simply smaller than the
+truth. Unlinking them RESTORES six outings; it removes nothing.
+
+    shared groups   39 → 33      spanning over an hour   6 → 0      worst   12h12m → 50m
+    outings counted            Erica 369 of 374 activities · Josh 163 of 173
+
+0225 also fixes the matcher to compare `owner_profile`, so it can no longer propose a person
+as their own companion.
+
+##### Three left, and they are HERS to call — not auto-decided
+
+Same fault, same-person pairs, but short enough to be genuinely ambiguous:
+
+    Josh  2023-05-24   1.01 mi + 1.01 mi        50 min apart
+    Erica 2018-08-01   0.78 mi + 0.75 mi        36 min   (Leesburg, both)
+    Erica 2018-08-13   1.12 mi + 1.03 mi        22 min   (Lake of the Red Rocks / Red Rock Regional Park)
+
+Each is either two short outings close together, or one outing whose recording restarted.
+**The asymmetry argues for unlinking**: a wrong link silently erases a day, while a wrong
+unlink merely double-counts one — which is visible and trivially fixed. But that is a
+judgement about days she was there for, so it waits for her. There is no *unlink* card yet;
+the review queue can only propose linking, which is the next gap to close.
+
+#### 3g. CI RAN OUT OF MINUTES, AND THE SHAPE WAS THE PROBLEM *(2026-08-20)*
+
+Actions stopped dead on 2026-08-19: **3,000 of 3,000 minutes used, twelve days to reset.**
+Every workflow — including the nightly **Backup** — failed with *"recent account payments
+have failed or your spending limit needs to be increased"*. The two causes produce identical
+text, which is why it read as a payment problem when it was an exhausted allowance.
+
+**It was not volume, it was billing shape.** Measured before changing anything: **431 CI runs
+in 30 days**, and
+
+    a full CI run     11 billed minutes
+    a docs-only run    6 billed minutes   ← six jobs, each doing 3–9 seconds of work
+
+**GitHub rounds every JOB up to a whole minute.** This workflow fans out into six, and each
+one started, checked out, and *then* guarded every step with an `if:`. So a run with nothing
+to do still cost six minutes — and a docs-only change cost that **twice**, once for the PR
+and again for the push to `main`. 431 × ~7 ≈ 3,000. The whole allowance, about half of it
+buying nothing.
+
+**Three changes (#128):**
+
+- **The skip moved from the step to the job.** A skipped job bills nothing.
+- **The release gate treats `skipped` as "nothing to check."** It demanded exactly `success`
+  from all four gates, so job-level skips would have failed every docs change.
+- **Full validation is weekly, not nightly** — it carries the cross-browser matrix, ~9
+  billable minutes alone, ~450/month, re-proving what every code PR already proves.
+
+**Left alone deliberately:** the push-to-main trigger. `PRODUCTION_DEPLOY_ENABLED=true`, so
+that push **is** the deploy path — dropping it to save minutes would have silently removed
+automatic deployment. Verified afterwards: the merge of #128 ran **Deploy production
+successfully**, and `/version.json` matched `main`.
+
+##### What the first green run answered
+
+CI had not run since 08-18, so 0223–0225 went in unverified. The first run after billing was
+restored applied **all 225 migrations to a disposable database with ZERO errors** and failed
+exactly **one of 60** SQL tests — `0203`, a real consequence of 0224 rather than an artifact.
+Its assertion read *"another person's recording was swallowed as a duplicate (proposed)"*,
+conflating **not inserted** with **not stored**; those became different things the day Tier 3
+stopped linking automatically. Rewritten to prove the activity IS created, the join is
+**offered**, and nothing was linked behind anyone's back.
+
+**That also settles the seven other failures** seen when the suite was run against
+production: they are artifacts of fixture tests meeting live data, not regressions. The
+disposable run is the authority.
+
+**Running costs now, measured:** backup **4 min/night (~120/month)**; a code PR ~10; a
+docs-only PR should be ~2. Against 3,000.
+
+**One thread left open:** `supabase start` replaying migrations one-by-one fails at
+**0078** (`column "elevation_gain" does not exist`). CI never sees it because `db-bootstrap.sh`
+builds the schema differently — and that path applies all 225 cleanly. Nothing is broken
+today, but "the chain replays from zero" is the property a restore leans on.
+
+#### 3h. STEP 2 DONE — names that do not ask a question nobody has *(0226)*
+
+Erica: *"it should populate … the Name of the activity from the source or the location of
+the source, then ask me to approve it only if there is some doubt."*
+
+`activity_display_name` already had the right shape — a person's words, else the place, else
+the type. The gap was what counts as **a person's words**. Measured across all 547:
+
+    353  named after their place       ← the rule working
+    129  a real name she typed
+     58  "<X></x> County Running"          ← GARMIN's auto-name, counted as hers
+      7  "Morning Hike"                ← Strava's, already caught
+
+Garmin names an activity after the administrative area — *"Loudoun County Running"* **55
+times over**. That is a machine's words, and the place it actually happened (Broadlands,
+Potomac Station, Bear's Den) is strictly better. **58 renamed, no cards raised.**
+
+**The pattern is narrow, and that was measured rather than chosen.** Every name ending in a
+bare gerund is machine-made, but not all have something better:
+
+    "Bay Lake Running"     → its place is "Cake Bake Shop Restaurant"
+    "Track Meet Running"   → its place is "Sterling"
+
+So it matches only the unambiguous `<something> County|City <gerund>`. The rest keep their
+names: renaming those would be a loss, and a loss is worse than a poor name.
+
+##### The eight left over are not what they look like
+
+    5  Josh's, at a place still called "New place", WITH coordinates
+    3  Erica's, with NO coordinates — 0.06 / 0.21 / 3.08 mi, indoor
+
+The five are the **unnamed-place problem wearing an activity costume**: name the place and
+the activity names itself, and that queue already exists. The three cannot be named by
+anything but her, and a card asking her to name a 0.06-mile walk is noise rather than
+review. **So this raised no cards at all** — which is what *"only if there is some doubt"*
+means.
+
+##### And the quieter half: 411 activities were named by VALUE
+
+An activity named after its place stores a **copy** of that name. Rename the place and every
+one of them keeps the old text — §"Derived vs source" again, in a spot nobody had looked.
+`apply_inbox_field` now moves them with the place, and only them: a name she typed herself
+never moves. Tested both ways.
+
+    named after their place   353 → 411        still machine-named   65 → 8
+
+#### 3i. STEP 3 — the file is kept, and every outcome is written down *(0227)*
+
+Measured before writing anything:
+
+    activity_sources              548
+    …with no ingest_item_id       539
+    ingest_items                   10
+    import_artifacts                0      ← not one, ever
+    storage buckets                 0      ← nowhere to put a file
+
+**The provenance schema has existed since 0202 and had never been used.** An import recorded
+that an activity came from *"a file"* — not which file, not its bytes, and nothing at all
+about the ones that failed. A batch of 184 with three unreadable ones left 181 successes and
+no trace of the rest.
+
+Now, before a file is even parsed: **hashed (SHA-256), stored in a private bucket under its
+own hash, and recorded as an artifact.** Then whatever happens next — inserted, duplicate,
+proposed, or failed — lands in `ingest_items` pointing at that artifact.
+
+**Three identities, kept separate on purpose**, because conflating them is how the last two
+weeks of bugs happened:
+
+|                              | Says                                   | Certainty                         |
+| ---------------------------- | -------------------------------------- | --------------------------------- |
+| **SHA-256** (0227)     | *this exact file, again*             | the same bytes — no inference    |
+| **provider id** (0209) | *this record at Strava/Garmin*       | exact, within that provider       |
+| **content key** (0216) | *this looks like the same recording* | an inference, deliberately narrow |
+
+`file_already_imported` runs first and is the cheapest of the three: it can say *"you
+uploaded this on 17 August"* rather than quietly making a second copy.
+
+**Legacy is labelled, not invented.** The 539 rows that predate this have no artifact and
+never will — nobody kept those files, and minting a hash for one would be writing down
+provenance that does not exist. The new integrity check is **scoped by date** for that
+reason: it flags a file import made *after* 2026-08-20 with no artifact, and says nothing
+about the ones before.
+
+**Verified end to end against production, then cleaned up:** unknown file → `seen:false`;
+record → artifact id; ask again → `seen:true` with its first-seen date; record the same
+bytes → **the same artifact id, no second row**; a failure → `disposition=failed`, linked to
+the artifact, and the run reporting `ok=0 failed=1`.
+
+**Still open in Step 3/4:** the ingest RPCs still take `actor_kind` from the caller
+(§3e Step 4), and originals are stored but nothing yet re-parses them when a parser improves.
+
+#### 3j. SHARING BECAME A CHOICE, AND A TOTAL STOPPED BEING A RECORDING *(0228–0231)*
+
+Four instructions on 2026-08-20, which together are a better rule than any one of them:
+
+> *"fuck Strava — add the route and the distance for those 24 cards"* ·
+> *"use Garmin first then Strava and don't share Strava information"* ·
+> *"I want users to be able to share their activities if they want"* → *"share everything I
+> tag Josh on"* · *"I do want him to be able to see my total miles and total activities"*
+
+**Tagging someone IS the act of sharing with them** — deliberate, owner-controlled, off by
+default, revocable. `profiles.share_tagged_outings`, false for every new account, true for
+Erica because she asked.
+
+**The reversal of 0200 is narrow on purpose.** 0200 closed a genuine leak (46 of her
+activities and 356 of her miles were showing as Josh's). It also made the product's stated
+purpose unreachable. So the new rule is *a person may see the recording of an outing they
+are on* — one outing at a time, never the account. Measured after:
+
+    Josh reads          his own 90 Strava rows + the 46 of hers he is tagged on
+    Josh cannot read    her other 138          ← unchanged
+    his answerable tags 20 → 44
+
+**GARMIN FIRST.** `visible_recording_of` now prefers a non-Strava sibling: where one outing
+has both recordings, the copy with no strings attached is the one shown. Her instruction,
+and the right default for a reason beyond preference.
+
+**Nothing is copied.** Writing her polyline onto a row owned by Josh would have been the
+same data with a different label and two copies to disagree. This changes who may READ the
+single record that exists.
+
+##### A total is not a recording (0231)
+
+    the truth about her         394 rows → 375 outings, 1,968 miles
+    what Josh could see         256 activities, 1,354 miles
+
+`mileage_by_person` reads `visible_activities`, so ~799 miles simply vanished from her
+totals as he saw them — silently smaller, not hidden-with-a-note. `person_totals` returns
+**counts and miles and nothing else**: no id, no name, no route, no date, nothing joinable
+back to a recording. *"Erica has run 1,968 miles"* is a fact about Erica; the route she took
+on the 4th is a recording and stays behind 0228. The codebase had already drawn this line
+once, for `data_health`.
+
+##### The same second is the same recording (0230)
+
+*"there are 58 activities asking me to review them but they are from my garmin so clearly
+they are the same activity."* She was right, mechanically: **Strava's copy came FROM the
+Garmin file**, so both start at the same second.
+
+    25  different people                            ← a real question, left alone
+     6  same person, 0–7s apart, within 1%
+     4  same person, 0–18s apart, distance differs  ← Strava recomputes the total
+     4  same person, 5–15 min apart                 ← ambiguous, still asked
+
+0216's content key never caught them: a FIT brings a provider key, so the key path was taken,
+found nothing, and fell through to a proposal. **The test is TIME, not distance** — distance
+is recomputed by Strava, a start timestamp is copied verbatim through every hop, and one
+person cannot begin two runs a minute apart. 12 certainties linked and closed; her queue
+28, all of them real questions.
+
+#### 3k. STEP 4 — the import RPCs stop taking the caller's word *(0234/0235)*
+
+Codex called them "too trusting". Reading them found three holes, and the second decided
+**whose account data landed in**:
+
+1. **The authorization check could be skipped by asking nicely.**
+   `if p_actor_kind = 'user' and not public.is_editor_or_owner()` — the guard only ran when
+   the caller *said* they were a user. Passing `'scheduled'` skipped it entirely.
+2. **A run could be attached to somebody else's connection.** `p_connection` went through
+   unchecked, and `source_owner_profile` is read from that connection's owner — so
+   `ingest_activity` made **that person** the owner of every activity the run created.
+3. **Idempotency was global.** Reusing another person's key *joined their run*.
+
+And `ingest_activity` took nothing but a run id — which is not a secret: it is returned by
+`begin_ingest_run` and stored on every ledger row.
+
+**The rule now:** a user-facing call says only WHAT it is importing. Who is importing, on
+whose behalf, and into which run are read from the session, never from the arguments.
+Service callers (cron, migrations, the Strava webhook) have no `auth.uid()`, are trusted by
+the grant rather than by a parameter, and are unaffected.
+
+**Each hole attacked as Josh against production, and refused:**
+
+    claims actor_kind=scheduled   → "a signed-in import is a user import"
+    opens a run via her connection → "that connection is not yours"
+    writes into her run            → "that import run is not yours, or is already finished"
+    finishes her run               → "that import run is not yours"
+    her own import                 → inserted
+    finishing twice                → 204, a no-op
+
+**0235 exists because 0234's own test failed on its first run.** Scoping the *lookup* to the
+caller left the index globally unique, so a second person reusing a key no longer joined the
+run — they got a raw `23505 duplicate key` instead. Better than the hole, still wrong twice:
+an import fails for a reason nothing to do with the importer, and the error confirms someone
+else has used that key. The index is now scoped to its initiator, matching the lookup.
+
+#### 3l. STEP 5 — one verb per screen *(2026-08-20)*
+
+Erica, 2026-08-18: *"Needs Attention and Review Inbox are redundant."* They were, and the
+arrangement was worse than duplication: **Needs attention listed counts while the actual
+cards were embedded in `/add`** — the page named after *creating* — and `/inbox` redirected
+there too. That is why she had to ask where the pending cards were: they were filed under
+the wrong verb, and my first pass at merging the two only made the counts link to `/add`
+rather than moving the work.
+
+The split is by verb now, which is the one line that stays put:
+
+    /add        create and import new information
+    /attention  repair what is already there      ← the cards live here
+    /inbox      redirects to /attention
+    /health     diagnose the system, change nothing
+
+`/add` keeps a **pointer** — "12 cards are waiting for you" — because adding something is
+when a person is most likely to notice there is tidying to do. What it no longer keeps is
+the queue.
+
+Pinned with an e2e check, because an embedded queue is exactly the kind of thing that drifts
+back onto whichever page someone is working on next: `/inbox` must land on `/attention`, the
+cards must render there, and `/add` must not host them.
+
+**Not done in this step, and still true:** Data Health and Needs attention still overlap on
+photos and places (Codex's point), and the repair cards for duplicate PLACES still live at
+`/duplicates`. Both are the same move as this one and are next after tagging.
 
 ## 8. Facts that must not be relearned
 
