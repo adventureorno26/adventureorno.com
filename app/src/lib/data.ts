@@ -703,6 +703,9 @@ export interface Attention {
    *  half she could not find. */
   reviewCards: number;
   tagsToConfirm: number;
+  /** Photographs somebody says you are in (0247/0248). Counted apart from the outing tags
+   *  because they are a different question — being in a photograph is not being on a run. */
+  photoTagsToConfirm: number;
 }
 /** Counts for the "needs attention" dashboard (all RLS-scoped to what you can see). */
 export async function fetchAttention(): Promise<Attention> {
@@ -737,17 +740,21 @@ export async function fetchAttention(): Promise<Attention> {
   // count is unavailable is worse than a dashboard that is briefly short by one row.
   // Promise.resolve() around each: the Supabase builder is a THENABLE, not a Promise, so
   // it has .then but no .catch — chaining .catch straight onto it does not compile.
-  const [cards, tags] = await Promise.all([
+  const [cards, tags, photoTags] = await Promise.all([
     Promise.resolve(supabase.rpc('inbox_counts'))
       .then((r) => (r.data as unknown as { cards?: number } | null)?.cards ?? 0)
       .catch(() => 0),
     Promise.resolve(supabase.rpc('my_tags_to_confirm', {}))
       .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
       .catch(() => 0),
+    Promise.resolve(supabase.rpc('my_memory_tags_to_confirm'))
+      .then((r) => (Array.isArray(r.data) ? r.data.length : 0))
+      .catch(() => 0),
   ]);
   return {
     reviewCards: cards,
     tagsToConfirm: tags,
+    photoTagsToConfirm: photoTags,
     unassignedPhotos: unassigned.count ?? 0,
     photosNoDate: noDate.count ?? 0,
     unnamedPlaces,

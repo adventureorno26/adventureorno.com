@@ -1,0 +1,111 @@
+// People you can TAG, in the model §8b-i asked for: a person is a person, not an account.
+//
+// NOT `people.ts`, which is next door and is about MEMBERSHIP — who can sign in to this
+// space, invites, roles. The two words are the same and the subjects are not: that file
+// answers "who has an account here", this one answers "who was in this". Keeping them apart
+// is the point of §8b-i's "account access separate from memory participation".
+//
+// Before 0247 a participant had to point at `profiles`, so the only people who could ever
+// appear in this app were the two who can sign in to it. A friend, a parent, a child on a
+// hike — none of them could be recorded, and 178 photos had no participants of any kind
+// because photos were never given a participant table at all.
+//
+// Everything here goes through RPCs. The tables carry SELECT for the browser and nothing
+// else (0176), and the write rules — your own presence is yours to state, somebody with an
+// account is asked, somebody without one is your statement and says so — live in the
+// database where they cannot be forgotten by a screen.
+import { supabase } from './supabase';
+
+export interface PersonContact {
+  id: string;
+  display_name: string;
+  /** Set when this person also signs in here. Null is normal, not missing data. */
+  linked_profile: string | null;
+  favourite: boolean;
+  is_me: boolean;
+}
+
+export interface PhotoPerson {
+  person_id: string;
+  display_name: string;
+  /** `proposed` means they have been asked and have not answered. */
+  participation_status: 'proposed' | 'accepted';
+  verification_status: 'unverified' | 'confirmed_by_person' | 'confirmed_by_owner';
+  linked_profile: string | null;
+}
+
+export interface TagOutcome {
+  subject: string;
+  participation: 'proposed' | 'accepted';
+  verification: string;
+  /** True when a question went to somebody, so the screen can say so rather than
+   *  showing a tag as a fact it is not yet (the 0243 lesson, applied here first). */
+  asked: boolean;
+}
+
+export async function fetchMyPeople(): Promise<PersonContact[]> {
+  const { data, error } = await supabase.rpc('my_people');
+  if (error) throw error;
+  return (data ?? []) as PersonContact[];
+}
+
+/** A person you record. No account required — that is the whole point. */
+export async function addContact(
+  displayName: string,
+  linkedProfile?: string | null,
+  favourite = false,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('add_contact', {
+    p_display_name: displayName,
+    ...(linkedProfile ? { p_linked_profile: linkedProfile } : {}),
+    p_favourite: favourite,
+  });
+  if (error) throw error;
+  return data as unknown as string;
+}
+
+export async function fetchPhotoPeople(photoId: string): Promise<PhotoPerson[]> {
+  const { data, error } = await supabase.rpc('photo_people', { p_photo: photoId });
+  if (error) throw error;
+  return (data ?? []) as PhotoPerson[];
+}
+
+export async function tagPersonOnPhoto(photoId: string, personId: string): Promise<TagOutcome> {
+  const { data, error } = await supabase.rpc('tag_person_on_photo', {
+    p_photo: photoId,
+    p_person: personId,
+  });
+  if (error) throw error;
+  return data as unknown as TagOutcome;
+}
+
+/** Retracts, never deletes — the same rule as everywhere else. */
+export async function untagPersonOnPhoto(photoId: string, personId: string): Promise<void> {
+  const { error } = await supabase.rpc('untag_person_on_photo', {
+    p_photo: photoId,
+    p_person: personId,
+  });
+  if (error) throw error;
+}
+
+export interface MemoryTagToConfirm {
+  subject_id: string;
+  kind: string;
+  photo_id: string | null;
+  tagged_by: string | null;
+  created_at: string;
+}
+
+export async function fetchMemoryTagsToConfirm(): Promise<MemoryTagToConfirm[]> {
+  const { data, error } = await supabase.rpc('my_memory_tags_to_confirm');
+  if (error) throw error;
+  return (data ?? []) as MemoryTagToConfirm[];
+}
+
+export async function respondToMemoryTag(subjectId: string, accept: boolean): Promise<void> {
+  const { error } = await supabase.rpc('respond_to_memory_tag', {
+    p_subject: subjectId,
+    p_accept: accept,
+  });
+  if (error) throw error;
+}

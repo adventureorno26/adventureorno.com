@@ -23,6 +23,7 @@ import { deleteVideo, fetchVideosForPlace, uploadVideo } from '../lib/videos';
 import { photoDay, type Photo, type Place, type Video, type Visit } from '../lib/types';
 import AuthedImg from './AuthedImg';
 import PhotoReactions from './PhotoReactions';
+import PhotoPeople from './PhotoPeople';
 import ThumbMarks from './ThumbMarks';
 import VideoTile from './VideoTile';
 import VideoPlayer from './VideoPlayer';
@@ -653,6 +654,14 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
                   canEdit={canUpload}
                   editing={capEditing}
                   onEditing={setCapEditing}
+                />
+
+                {/* WHO IS IN IT — answerable for the first time (0247/0248). A person here
+                    needs no account, which is why it is not the Together/Just me control. */}
+                <PhotoPeople
+                  key={`people-${openPhoto.id}`}
+                  photoId={openPhoto.id}
+                  canEdit={canUpload}
                 />
 
                 {/* Date + count on one line; download as a compact icon. */}

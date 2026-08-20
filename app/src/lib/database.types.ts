@@ -1172,6 +1172,168 @@ export type Database = {
           },
         ]
       }
+      memory_people: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          participation_status: string
+          person_id: string
+          sharing_status: string
+          subject_id: string
+          tagged_by: string | null
+          verification_status: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          participation_status?: string
+          person_id: string
+          sharing_status?: string
+          subject_id: string
+          tagged_by?: string | null
+          verification_status?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          participation_status?: string
+          person_id?: string
+          sharing_status?: string
+          subject_id?: string
+          tagged_by?: string | null
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_people_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "memory_subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_tagged_by_fkey"
+            columns: ["tagged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memory_subjects: {
+        Row: {
+          activity_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          owner_profile: string
+          photo_id: string | null
+          place_id: string | null
+          visit_id: string | null
+        }
+        Insert: {
+          activity_id?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          owner_profile: string
+          photo_id?: string | null
+          place_id?: string | null
+          visit_id?: string | null
+        }
+        Update: {
+          activity_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          owner_profile?: string
+          photo_id?: string | null
+          place_id?: string | null
+          visit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_subjects_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "visible_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_owner_profile_fkey"
+            columns: ["owner_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_photo_id_fkey"
+            columns: ["photo_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "place_counts"
+            referencedColumns: ["place_id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       naming_rules: {
         Row: {
           activity_type: string | null
@@ -1397,8 +1559,12 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           display_name: string
+          favourite: boolean
           id: string
           kind: string
+          linked_profile: string | null
+          owner_profile: string
+          updated_at: string
         }
         Insert: {
           birthdate?: string | null
@@ -1406,8 +1572,12 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           display_name: string
+          favourite?: boolean
           id?: string
           kind?: string
+          linked_profile?: string | null
+          owner_profile?: string
+          updated_at?: string
         }
         Update: {
           birthdate?: string | null
@@ -1415,13 +1585,31 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           display_name?: string
+          favourite?: boolean
           id?: string
           kind?: string
+          linked_profile?: string | null
+          owner_profile?: string
+          updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "people_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_linked_profile_fkey"
+            columns: ["linked_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_owner_profile_fkey"
+            columns: ["owner_profile"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -3415,6 +3603,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      add_contact: {
+        Args: {
+          p_display_name: string
+          p_favourite?: boolean
+          p_linked_profile?: string
+        }
+        Returns: string
+      }
       add_place_category: {
         Args: {
           p_color?: string
@@ -3618,6 +3814,7 @@ export type Database = {
         Returns: boolean
       }
       can_see_activity: { Args: { p_activity: string }; Returns: boolean }
+      can_see_memory_subject: { Args: { p_subject: string }; Returns: boolean }
       card_view: { Args: { p_place?: string; p_visit?: string }; Returns: Json }
       claim_invite: {
         Args: never
@@ -4173,6 +4370,26 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      my_memory_tags_to_confirm: {
+        Args: never
+        Returns: {
+          created_at: string
+          kind: string
+          photo_id: string
+          subject_id: string
+          tagged_by: string
+        }[]
+      }
+      my_people: {
+        Args: never
+        Returns: {
+          display_name: string
+          favourite: boolean
+          id: string
+          is_me: boolean
+          linked_profile: string
+        }[]
+      }
       my_tags_to_confirm: { Args: { p_limit?: number }; Returns: Json }
       naming_rules_list: { Args: never; Returns: Json }
       occasion_count: { Args: { p_profile?: string }; Returns: number }
@@ -4194,12 +4411,24 @@ export type Database = {
           place_id: string
         }[]
       }
+      person_is_mine: { Args: { p_person: string }; Returns: boolean }
+      person_on_visible_memory: { Args: { p_person: string }; Returns: boolean }
       person_totals: {
         Args: { p_profile: string }
         Returns: {
           activity_count: number
           miles: number
           type: string
+        }[]
+      }
+      photo_people: {
+        Args: { p_photo: string }
+        Returns: {
+          display_name: string
+          linked_profile: string
+          participation_status: string
+          person_id: string
+          verification_status: string
         }[]
       }
       photo_reactions_for: {
@@ -4221,6 +4450,7 @@ export type Database = {
           who: string[]
         }[]
       }
+      photo_subject: { Args: { p_photo: string }; Returns: string }
       pings_overview: {
         Args: never
         Returns: {
@@ -4421,6 +4651,10 @@ export type Database = {
       respond_to_all_tags: {
         Args: { p_accept: boolean; p_limit?: number }
         Returns: Json
+      }
+      respond_to_memory_tag: {
+        Args: { p_accept: boolean; p_subject: string }
+        Returns: undefined
       }
       respond_to_tag: {
         Args: { p_accept: boolean; p_claim: string }
@@ -5269,6 +5503,10 @@ export type Database = {
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
       strava_oauth_start: { Args: never; Returns: string }
+      tag_person_on_photo: {
+        Args: { p_person: string; p_photo: string }
+        Returns: Json
+      }
       together_since: { Args: never; Returns: string }
       toggle_activity_reaction: {
         Args: { p_activity: string; p_emoji: string }
@@ -5324,6 +5562,10 @@ export type Database = {
       }
       undo_approval: { Args: { p_token: string }; Returns: Json }
       unlockrows: { Args: { "": string }; Returns: number }
+      untag_person_on_photo: {
+        Args: { p_person: string; p_photo: string }
+        Returns: undefined
+      }
       update_activity: {
         Args: { p_id: string; p_name: string; p_type?: string }
         Returns: undefined
