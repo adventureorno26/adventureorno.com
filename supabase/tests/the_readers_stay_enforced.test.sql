@@ -101,6 +101,17 @@ declare
     --                   "there are N more here we may not show you" rather than a
     --                   silently short number. It is the model the others now follow.
     'data_health',
+    -- 0230. Returns an ID, never an attribute: "is there a recording of MINE that starts
+    -- within 60 seconds of this one?" It must read the table because the question is about
+    -- the caller's own rows, and a Strava row of theirs is one they may always see. Scoped
+    -- to a single owner passed in by the importer, which only ever passes the run's owner.
+    'same_recording_of',
+    -- 0231. Returns COUNTS AND MILES and nothing else — no id, no name, no route, no date,
+    -- nothing joinable back to a recording. It reads the table on purpose: a total that
+    -- silently omits 799 miles because the reader may not open one recording is a broken
+    -- total, which is the same argument `data_health` is listed for. "Erica has run 1,968
+    -- miles" is a fact about Erica; the route she took on the 4th stays behind 0228.
+    'person_totals',
     -- 0214. Returns an ID, never an attribute. It must read the CLAIMED row's
     -- shared_group_id even when that row is hidden — that is the whole job: find the
     -- recording of the same outing that the caller IS allowed to see. Every id it can

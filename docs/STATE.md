@@ -615,6 +615,65 @@ the artifact, and the run reporting `ok=0 failed=1`.
 **Still open in Step 3/4:** the ingest RPCs still take `actor_kind` from the caller
 (§3e Step 4), and originals are stored but nothing yet re-parses them when a parser improves.
 
+#### 3j. SHARING BECAME A CHOICE, AND A TOTAL STOPPED BEING A RECORDING *(0228–0231)*
+
+Four instructions on 2026-08-20, which together are a better rule than any one of them:
+
+> *"fuck Strava — add the route and the distance for those 24 cards"* ·
+> *"use Garmin first then Strava and don't share Strava information"* ·
+> *"I want users to be able to share their activities if they want"* → *"share everything I
+> tag Josh on"* · *"I do want him to be able to see my total miles and total activities"*
+
+**Tagging someone IS the act of sharing with them** — deliberate, owner-controlled, off by
+default, revocable. `profiles.share_tagged_outings`, false for every new account, true for
+Erica because she asked.
+
+**The reversal of 0200 is narrow on purpose.** 0200 closed a genuine leak (46 of her
+activities and 356 of her miles were showing as Josh's). It also made the product's stated
+purpose unreachable. So the new rule is *a person may see the recording of an outing they
+are on* — one outing at a time, never the account. Measured after:
+
+    Josh reads          his own 90 Strava rows + the 46 of hers he is tagged on
+    Josh cannot read    her other 138          ← unchanged
+    his answerable tags 20 → 44
+
+**GARMIN FIRST.** `visible_recording_of` now prefers a non-Strava sibling: where one outing
+has both recordings, the copy with no strings attached is the one shown. Her instruction,
+and the right default for a reason beyond preference.
+
+**Nothing is copied.** Writing her polyline onto a row owned by Josh would have been the
+same data with a different label and two copies to disagree. This changes who may READ the
+single record that exists.
+
+##### A total is not a recording (0231)
+
+    the truth about her         394 rows → 375 outings, 1,968 miles
+    what Josh could see         256 activities, 1,354 miles
+
+`mileage_by_person` reads `visible_activities`, so ~799 miles simply vanished from her
+totals as he saw them — silently smaller, not hidden-with-a-note. `person_totals` returns
+**counts and miles and nothing else**: no id, no name, no route, no date, nothing joinable
+back to a recording. *"Erica has run 1,968 miles"* is a fact about Erica; the route she took
+on the 4th is a recording and stays behind 0228. The codebase had already drawn this line
+once, for `data_health`.
+
+##### The same second is the same recording (0230)
+
+*"there are 58 activities asking me to review them but they are from my garmin so clearly
+they are the same activity."* She was right, mechanically: **Strava's copy came FROM the
+Garmin file**, so both start at the same second.
+
+    25  different people                            ← a real question, left alone
+     6  same person, 0–7s apart, within 1%
+     4  same person, 0–18s apart, distance differs  ← Strava recomputes the total
+     4  same person, 5–15 min apart                 ← ambiguous, still asked
+
+0216's content key never caught them: a FIT brings a provider key, so the key path was taken,
+found nothing, and fell through to a proposal. **The test is TIME, not distance** — distance
+is recomputed by Strava, a start timestamp is copied verbatim through every hop, and one
+person cannot begin two runs a minute apart. 12 certainties linked and closed; her queue
+28, all of them real questions.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,

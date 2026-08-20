@@ -30,6 +30,7 @@ declare
   p        uuid;
   a_strava uuid;
   a_file   uuid;
+  a_untagged uuid;
   n        int;
   ok       boolean;
 begin
@@ -57,14 +58,44 @@ begin
   insert into public.activity_profiles (activity_id, profile_id)
     values (a_file, e_id), (a_file, j_id) on conflict do nothing;
 
+  -- THE CONTROL. Another Strava activity of hers that he is NOT tagged on. Sharing what she
+  -- tags him on must never become sharing her account, and only a row like this can prove it.
+  insert into public.activities
+    (id, type, name, distance, start_date, lat, lng, source, original_source, owner_profile)
+  values (gen_random_uuid(), 'Run', 'Hers alone', 7000, '2026-03-02T13:00:00Z', 39.2, -77.6,
+          'strava', 'strava', e_id)
+  returning id into a_untagged;
+  insert into public.activity_profiles (activity_id, profile_id)
+    values (a_untagged, e_id) on conflict do nothing;
+
   -- ---- act as JOSH -------------------------------------------------------
   perform set_config('request.jwt.claims',
     json_build_object('sub', j_id, 'role', 'authenticated')::text, true);
 
-  -- 1. the helper
+  -- ORIGINAL RULE, kept because a rewritten check must never look like it was always this
+  -- permissive: a tag was NOT a key, and `can_see_activity(a_strava)` had to be false for a
+  -- tagged person.
+  --
+  -- REWRITTEN 2026-08-20 for 0228, on Erica's decision: *"share everything I tag Josh on"*.
+  -- Tagging someone is now the act of sharing with them — but only when the OWNER has
+  -- switched it on, and only for that one outing. The three assertions below are the shape
+  -- of that: off means off, on means this outing, and on never means the account.
+  --
+  -- 1. the helper — with sharing OFF, a tag is still not a key
+  update public.profiles set share_tagged_outings = false where id = e_id;
   select public.can_see_activity(a_strava) into ok;
   if ok then
-    raise exception 'FAIL: can_see_activity() lets a TAGGED person see another''s Strava activity';
+    raise exception 'FAIL: sharing is OFF and a tagged person could still see her Strava activity';
+  end if;
+
+  -- …and with sharing ON, the outing he is tagged on opens — and nothing else does
+  update public.profiles set share_tagged_outings = true where id = e_id;
+  select public.can_see_activity(a_strava) into ok;
+  if not ok then
+    raise exception 'FAIL: she shares what she tags him on, but the outing stayed hidden';
+  end if;
+  if public.can_see_activity(a_untagged) then
+    raise exception 'FAIL: sharing one outing opened a Strava activity he is NOT tagged on — that is her account, not a memory';
   end if;
   select public.can_see_activity(a_file) into ok;
   if not ok then
@@ -73,8 +104,12 @@ begin
 
   -- 2. the view every reader was moved onto in 0196
   select count(*) into n from public.visible_activities where id = a_strava;
+  if n <> 1 then
+    raise exception 'FAIL: the view hid an outing she has shared with him (% rows)', n;
+  end if;
+  select count(*) into n from public.visible_activities where id = a_untagged;
   if n <> 0 then
-    raise exception 'FAIL: visible_activities exposed another person''s Strava activity to a tag (% rows)', n;
+    raise exception 'FAIL: the view exposed a Strava activity he is not tagged on';
   end if;
   select count(*) into n from public.visible_activities where id = a_file;
   if n <> 1 then
@@ -83,10 +118,16 @@ begin
 
   -- 3. THE RLS POLICY, which carried its own copy of the predicate. Fixing the view and
   --    leaving this would make `select * from activities` disagree with every reader.
+  -- The policy must say the SAME thing as the view, or which rule applies depends on which
+  -- query a screen happens to use (0229).
   set local role authenticated;
   select count(*) into n from public.activities where id = a_strava;
+  if n <> 1 then
+    raise exception 'FAIL: the row policy disagrees with the view about a shared outing';
+  end if;
+  select count(*) into n from public.activities where id = a_untagged;
   if n <> 0 then
-    raise exception 'FAIL: the RLS policy still lets a tagged person select another''s Strava row';
+    raise exception 'FAIL: the row policy let him select a Strava row he is not tagged on';
   end if;
   reset role;
 

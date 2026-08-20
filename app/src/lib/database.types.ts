@@ -1971,6 +1971,7 @@ export type Database = {
           id: string
           role: string
           share_location: boolean
+          share_tagged_outings: boolean
         }
         Insert: {
           created_at?: string
@@ -1978,6 +1979,7 @@ export type Database = {
           id: string
           role: string
           share_location?: boolean
+          share_tagged_outings?: boolean
         }
         Update: {
           created_at?: string
@@ -1985,6 +1987,7 @@ export type Database = {
           id?: string
           role?: string
           share_location?: boolean
+          share_tagged_outings?: boolean
         }
         Relationships: []
       }
@@ -3624,6 +3627,7 @@ export type Database = {
           id: string
           role: string
           share_location: boolean
+          share_tagged_outings: boolean
         }
         SetofOptions: {
           from: "*"
@@ -4177,6 +4181,14 @@ export type Database = {
           place_id: string
         }[]
       }
+      person_totals: {
+        Args: { p_profile: string }
+        Returns: {
+          activity_count: number
+          miles: number
+          type: string
+        }[]
+      }
       photo_reactions_for: {
         Args: { p_photo: string }
         Returns: {
@@ -4435,6 +4447,15 @@ export type Database = {
       revealed_area_geojson: { Args: never; Returns: Json }
       revoke_tagging_rule: { Args: { p_rule: string }; Returns: number }
       rule_offer: { Args: { p_activity: string }; Returns: Json }
+      same_recording_of: {
+        Args: {
+          p_date: string
+          p_exclude?: string
+          p_owner: string
+          p_type: string
+        }
+        Returns: string
+      }
       search_photos: {
         Args: { p_filter: Json }
         Returns: {
