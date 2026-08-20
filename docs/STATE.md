@@ -524,6 +524,52 @@ docs-only PR should be ~2. Against 3,000.
 builds the schema differently — and that path applies all 225 cleanly. Nothing is broken
 today, but "the chain replays from zero" is the property a restore leans on.
 
+#### 3h. STEP 2 DONE — names that do not ask a question nobody has *(0226)*
+
+Erica: *"it should populate … the Name of the activity from the source or the location of
+the source, then ask me to approve it only if there is some doubt."*
+
+`activity_display_name` already had the right shape — a person's words, else the place, else
+the type. The gap was what counts as **a person's words**. Measured across all 547:
+
+    353  named after their place       ← the rule working
+    129  a real name she typed
+     58  "<X> County Running"          ← GARMIN's auto-name, counted as hers
+      7  "Morning Hike"                ← Strava's, already caught
+
+Garmin names an activity after the administrative area — *"Loudoun County Running"* **55
+times over**. That is a machine's words, and the place it actually happened (Broadlands,
+Potomac Station, Bear's Den) is strictly better. **58 renamed, no cards raised.**
+
+**The pattern is narrow, and that was measured rather than chosen.** Every name ending in a
+bare gerund is machine-made, but not all have something better:
+
+    "Bay Lake Running"     → its place is "Cake Bake Shop Restaurant"
+    "Track Meet Running"   → its place is "Sterling"
+
+So it matches only the unambiguous `<something> County|City <gerund>`. The rest keep their
+names: renaming those would be a loss, and a loss is worse than a poor name.
+
+##### The eight left over are not what they look like
+
+    5  Josh's, at a place still called "New place", WITH coordinates
+    3  Erica's, with NO coordinates — 0.06 / 0.21 / 3.08 mi, indoor
+
+The five are the **unnamed-place problem wearing an activity costume**: name the place and
+the activity names itself, and that queue already exists. The three cannot be named by
+anything but her, and a card asking her to name a 0.06-mile walk is noise rather than
+review. **So this raised no cards at all** — which is what *"only if there is some doubt"*
+means.
+
+##### And the quieter half: 411 activities were named by VALUE
+
+An activity named after its place stores a **copy** of that name. Rename the place and every
+one of them keeps the old text — §"Derived vs source" again, in a spot nobody had looked.
+`apply_inbox_field` now moves them with the place, and only them: a name she typed herself
+never moves. Tested both ways.
+
+    named after their place   353 → 411        still machine-named   65 → 8
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
