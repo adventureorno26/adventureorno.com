@@ -100,8 +100,20 @@ begin
     '2026-03-07T13:10:42Z',null) into r4;
 
   -- THE ONE THE OLD IMPORTER GOT WRONG. His recording is not a duplicate of hers.
-  if r4->>'disposition' <> 'inserted' then
-    raise exception 'FAIL: another person''s recording was swallowed as a duplicate (%) — that is the bug', r4->>'disposition';
+  --
+  -- ORIGINAL ASSERTION, kept because a rewritten check must not look like it was always
+  -- this lenient:  `if r4->>'disposition' <> 'inserted'` — "swallowed as a duplicate".
+  --
+  -- REWRITTEN 2026-08-20 for 0224. Tier 3 used to WRITE shared_group_id on both rows the
+  -- moment it decided two people had recorded one outing; it now proposes, so the
+  -- disposition is 'proposed'. That is not swallowing — the activity IS created, which the
+  -- next assertion proves. The old check conflated "not inserted" with "not stored", and
+  -- those became different things the day linking stopped being automatic.
+  if r4->>'disposition' not in ('inserted', 'proposed') then
+    raise exception 'FAIL: another person''s recording was swallowed (%) — that is the bug', r4->>'disposition';
+  end if;
+  if (r4->>'activity_id') is null then
+    raise exception 'FAIL: his recording produced no activity at all';
   end if;
   a_j := (r4->>'activity_id')::uuid;
   if a_j = a_e then
@@ -116,11 +128,24 @@ begin
     raise exception 'FAIL: his own recording is not credited to him';
   end if;
 
-  -- ---- linked, so the outing counts once ---------------------------------
-  if (select shared_group_id from public.activities where id = a_e) is null
-     or (select shared_group_id from public.activities where id = a_e)
-        is distinct from (select shared_group_id from public.activities where id = a_j) then
-    raise exception 'FAIL: the two recordings of one outing are not linked, so it counts twice';
+  -- ---- PROPOSED as one outing, so a person can make it count once ---------
+  --
+  -- This used to assert that the two rows already SHARED a group id, because the importer
+  -- linked them itself. 0224 stopped that: a wrong link silently erases a day from every
+  -- total, and six such links were found in production — one spanning twelve hours. So the
+  -- property is now that the link is OFFERED, not that it has been made.
+  if not exists (
+    select 1 from public.suggestions s
+     where s.status = 'pending'
+       and s.field = 'shared_group_id'
+       and s.subject_id = a_j
+       and (s.proposed_value #>> '{}')::uuid = coalesce(
+             (select shared_group_id from public.activities where id = a_e), a_e)) then
+    raise exception 'FAIL: nothing proposed linking his recording to hers, so the outing would count twice with no way to fix it';
+  end if;
+  -- and it must NOT have been linked behind anyone's back
+  if (select shared_group_id from public.activities where id = a_j) is not null then
+    raise exception 'FAIL: his recording was linked automatically — a machine may only propose';
   end if;
 
   -- ---- nothing was silently dropped --------------------------------------
@@ -129,7 +154,7 @@ begin
     raise exception 'FAIL: only % ledger rows for 4 submissions — something was swallowed', n;
   end if;
 
-  raise notice 'PASS: same source record deduped; her second app PROPOSED not merged; his recording kept, credited to him and linked; all 4 logged.';
+  raise notice 'PASS: same source record deduped; her second recording PROPOSED not merged; his kept, credited to him, and the join OFFERED rather than made; all 4 logged.';
 end $$;
 
 rollback;
