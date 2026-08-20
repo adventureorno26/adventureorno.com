@@ -97,8 +97,23 @@ begin
     values (p, '2026-02-03', '2026-02-03', 'taken', true) returning id into v;
   perform public.set_visit_solo(v, 'cccc0166-0000-0000-0000-000000000001');
 
-  -- reattributing replaces the rows
+  -- REATTRIBUTING REPLACES THE ROWS. Since 0240 the second half of that is a question:
+  -- she is taken off immediately, and he goes on when he agrees. The property being tested —
+  -- the rows follow the change and do not accumulate — is unchanged.
   perform public.set_visit_solo(v, 'cccc0166-0000-0000-0000-000000000002');
+  select count(*) into n from public.visit_profiles where visit_id = v;
+  if n <> 0 then
+    raise exception 'FAIL: reattributing left % row(s) behind, or wrote one nobody agreed to', n;
+  end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"cccc0166-0000-0000-0000-000000000002"}', true);
+  perform public.respond_to_tag(
+    (select id from public.tag_claims
+      where subject_kind = 'visit' and subject_id = v and status = 'proposed'), true);
+  perform set_config('request.jwt.claims',
+    '{"sub":"cccc0166-0000-0000-0000-000000000001"}', true);
+
   select count(*) into n from public.visit_profiles where visit_id = v;
   if n <> 1 then raise exception 'FAIL: expected one participant after the change, got %', n; end if;
   if not exists (select 1 from public.visit_profiles
