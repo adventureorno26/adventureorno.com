@@ -3850,6 +3850,16 @@ export type Database = {
         Returns: undefined
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      export_header: { Args: never; Returns: Json }
+      export_manifest: {
+        Args: never
+        Returns: {
+          note: string
+          rows: number
+          section: string
+        }[]
+      }
+      export_section: { Args: { p_section: string }; Returns: Json }
       file_already_imported: { Args: { p_sha256: string }; Returns: Json }
       file_content_key: {
         Args: {

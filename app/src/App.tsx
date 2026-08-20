@@ -51,6 +51,7 @@ const Timeline = lazyWithReload(() => import('./routes/Timeline'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
+const ExportPage = lazyWithReload(() => import('./routes/ExportPage'));
 // The review queue, and the recent-activities page — they are the same screen.
 // ONE door for getting things in: add, import, sort, and the review queue.
 const AddPage = lazyWithReload(() => import('./routes/AddPage'));
@@ -277,6 +278,18 @@ export default function App() {
               element={
                 <RequireAuth>
                   <DataHealth />
+                </RequireAuth>
+              }
+            />
+            {/* Export & backup. Settings and Data health each offered an "export" that
+                was 162 places and said it was everything; both now point here, where
+                the places, the outings and the whole archive are three separate things
+                that each say what they contain (§3e Step 7). */}
+            <Route
+              path="/export"
+              element={
+                <RequireAuth>
+                  <ExportPage />
                 </RequireAuth>
               }
             />

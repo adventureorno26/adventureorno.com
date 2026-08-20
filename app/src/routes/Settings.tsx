@@ -37,7 +37,6 @@ import {
 import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
 import type { Place } from '../lib/types';
-import { exportCsv, exportGpx, exportKml } from '../lib/exports';
 import { showSnack } from '../lib/snackbar';
 import {
   backfillPage,
@@ -856,31 +855,23 @@ function ProjectionCard() {
   );
 }
 
-/** Export all our places as CSV / GPX / KML (generated in the browser). */
+/** A pointer to /export, not a second export.
+ *
+ *  This card WAS the export: three buttons, "Download all 162 places", and nothing about
+ *  the 567 outings, 552 visits, 178 photos or the journal. Data health carried the same
+ *  three buttons under the words "Download everything you can take with you". Two screens,
+ *  one incomplete export, and a sentence that was not true — so both now point at one
+ *  screen that distinguishes the places, the outings and the whole archive (§3e Step 7). */
 function ExportCard() {
-  const [places, setPlaces] = useState<Place[] | null>(null);
-  useEffect(() => {
-    fetchPlaces()
-      .then(setPlaces)
-      .catch(() => setPlaces([]));
-  }, []);
-  const n = (places ?? []).filter((p) => p.saved && !p.bucket && p.name.trim()).length;
   return (
     <div className="card">
       <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
-        Download all {n} places — CSV for spreadsheets, GPX/KML for maps &amp; Google Earth.
+        The places (CSV/GPX/KML), the outings with their routes, or the whole archive as one file.
+        Each says what it contains — and what it doesn&rsquo;t — before you download it.
       </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button disabled={!places} onClick={() => places && exportCsv(places)}>
-          CSV
-        </button>
-        <button disabled={!places} onClick={() => places && exportGpx(places)}>
-          GPX
-        </button>
-        <button disabled={!places} onClick={() => places && exportKml(places)}>
-          KML
-        </button>
-      </div>
+      <Link to="/export">
+        <button>Export &amp; backup</button>
+      </Link>
     </div>
   );
 }
