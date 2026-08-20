@@ -254,12 +254,41 @@ export async function fetchArchiveManifest(): Promise<ArchiveSection[]> {
   return (data ?? []) as ArchiveSection[];
 }
 
-export async function fetchArchiveSection(section: string): Promise<unknown[]> {
-  const { data, error } = await supabase.rpc('export_section', { p_section: section });
+export async function fetchArchiveSection(
+  section: string,
+  offset?: number,
+  limit?: number,
+): Promise<unknown[]> {
+  const { data, error } = await supabase.rpc('export_section', {
+    p_section: section,
+    ...(offset == null ? {} : { p_offset: offset }),
+    ...(limit == null ? {} : { p_limit: limit }),
+  });
   if (error) throw error;
   // NULL means "not a section", which is a bug here rather than an empty answer.
   if (data == null) throw new Error(`no such section: ${section}`);
   return data as unknown[];
+}
+
+/** Sections that accept p_offset / p_limit — which is `location_pings` and nothing else.
+ *  It is the only part of the archive that grows on its own: a device recording all day
+ *  adds thousands of rows without anybody going anywhere, while places, visits and outings
+ *  grow when a person does something. At ~100,000 pings the single query would pass the
+ *  8-second statement timeout (0239). Everything else is under a thousand rows. */
+const PAGED = new Map<string, number>([['location_pings', 5000]]);
+
+async function fetchWholeSection(section: string, rows: number): Promise<unknown[]> {
+  const page = PAGED.get(section);
+  if (!page || rows <= page) return fetchArchiveSection(section);
+  const all: unknown[] = [];
+  for (let offset = 0; offset < rows; offset += page) {
+    const chunk = await fetchArchiveSection(section, offset, page);
+    all.push(...chunk);
+    // A short page means the end arrived early — rows changed under us, and stopping is
+    // right: an infinite loop here would be an export that never finishes.
+    if (chunk.length < page) break;
+  }
+  return all;
 }
 
 /** Build the whole archive, a section at a time.
@@ -281,7 +310,7 @@ export async function buildArchive(
   let done = 0;
   for (const s of manifest) {
     onProgress?.(done, manifest.length, s.section);
-    data[s.section] = await fetchArchiveSection(s.section);
+    data[s.section] = await fetchWholeSection(s.section, s.rows);
     done += 1;
   }
   onProgress?.(done, manifest.length, '');

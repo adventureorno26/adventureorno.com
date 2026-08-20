@@ -3859,7 +3859,10 @@ export type Database = {
           section: string
         }[]
       }
-      export_section: { Args: { p_section: string }; Returns: Json }
+      export_section: {
+        Args: { p_limit?: number; p_offset?: number; p_section: string }
+        Returns: Json
+      }
       file_already_imported: { Args: { p_sha256: string }; Returns: Json }
       file_content_key: {
         Args: {

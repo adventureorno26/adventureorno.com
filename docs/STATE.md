@@ -454,7 +454,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   0228's `claim_status <> 'declined'` guard was fictional too — the CHECK says `rejected` —
   and now names the value the column uses. Narrative in §7f.
   **Still to do in Step 6**: extend tagging to visits, photos and places (8b-i).
-- **Step 7 — ✅ one Export & Backup screen (0237, 0238, `/export`).** Data health said
+- **Step 7 — ✅ one Export & Backup screen (0237, 0238, 0239, `/export`).** Data health said
   *"Download everything you can take with you"* over three buttons that exported 162 places
   — no outings, no visits, no photos, no journal. Now `export_manifest` / `export_header` /
   `export_section` back one screen with three separate things and a real table of contents;
@@ -4826,6 +4826,17 @@ down; the grant its two siblings got (`ingest_runs`, `ingest_items`, both `is_me
 simply not repeated. `ingest_items` already exposed `artifact_id`, so a member could see
 that an artifact existed and not what it was: no privacy gained, provenance broken. **0238**
 gives it the same rule as its siblings.
+
+**And one section pages, because one section grows on its own** *(0239)*. Measured the day
+0237 shipped: `location_pings` was 17,128 rows and 1,270 ms server-side; every other section
+combined was under 300 ms. Roughly 6× headroom and exactly one thing that will spend it — a
+device recording all day adds thousands of pings without anybody going anywhere. At ~100,000
+the section stops returning, and it stops returning for the person with the most to lose,
+which is the failure 0237 split the function up to avoid. `p_offset`/`p_limit` therefore
+apply to `location_pings` and to nothing else, ordered `(recorded_at, id)` because pings
+share a timestamp often enough that ordering by time alone would put a row in two pages or in
+none. The test asserts the pages partition the section exactly: a ping dropped between pages
+is a place somebody went that the archive says they did not.
 
 **Four things are deliberately absent, and the screen says all four out loud**: the photo and
 video FILES (this holds their dates, places, names and hashes — bytes are what the nightly

@@ -41,6 +41,41 @@ begin
   end loop;
 end $$;
 
+-- ---- 1b. Paging a section partitions it — no row twice, none missing (0239) --------------
+-- `location_pings` is the only section that pages, and the reason it must be exact is that a
+-- ping is where somebody actually was: a row dropped between pages is a place they went that
+-- the archive says they did not.
+do $$
+declare n bigint; paged bigint; distinct_paged bigint; missing bigint;
+begin
+  select rows into n from public.export_manifest() where section = 'location_pings';
+  if n < 3 then return; end if;  -- nothing to partition on a fresh database
+
+  with pages as (
+    select e from generate_series(0, n::int, greatest((n / 3)::int, 1)) o,
+         lateral jsonb_array_elements(
+           public.export_section('location_pings', o, greatest((n / 3)::int, 1))) e),
+   whole as (select e from jsonb_array_elements(public.export_section('location_pings')) e)
+  select (select count(*) from pages),
+         (select count(distinct e->>'id') from pages),
+         (select count(*) from (select e->>'id' from whole
+                                except select e->>'id' from pages) q)
+    into paged, distinct_paged, missing;
+
+  if paged <> n then
+    raise exception 'FAIL: paging location_pings returned % rows of %', paged, n;
+  end if;
+  if distinct_paged <> n then
+    raise exception 'FAIL: paging location_pings returned a row in more than one page';
+  end if;
+  if missing <> 0 then
+    raise exception 'FAIL: % pings are in the section but in no page', missing;
+  end if;
+  if jsonb_array_length(public.export_section('location_pings', (n + 1000)::int, 10)) <> 0 then
+    raise exception 'FAIL: paging past the end of location_pings did not return nothing';
+  end if;
+end $$;
+
 -- ---- 2. A name that is not a section is NULL, not empty ---------------------------------
 do $$
 begin
