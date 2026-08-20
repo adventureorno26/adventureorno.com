@@ -1,6 +1,7 @@
 import { supabase, sqlNull } from './supabase';
 import type { Json } from './database.types';
 import { applyCategories } from './categories';
+import { duplicatePairs } from './duplicatePlaces';
 import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
 
 /** Load categories/tags from the DB into the runtime registry (call once at boot). */
@@ -691,6 +692,10 @@ export interface Attention {
   missingDates: number;
   activitiesNoPlace: number;
   suggestedTrips: number;
+  /** Places that might be the same place. Repair lived only at /duplicates, reachable from
+   *  Settings, so the repair queue never mentioned it and the only way to find out whether
+   *  anything needed merging was to go and look. */
+  duplicatePlaces: number;
   /** 0219: the Review inbox folded in. Erica, 2026-08-18: "Needs Attention and Review
    *  Inbox are redundant. Put anything unique in Review Inbox into needs attentions."
    *  Two screens listing what is waiting is one screen too many — and the cards were the
@@ -713,6 +718,14 @@ export async function fetchAttention(): Promise<Attention> {
   ).length;
   const missingDates = saved.filter((p) => !p.first_visit).length;
   const suggestedTrips = places.filter((p) => p.suggested).length;
+  // Counted with the SAME function /duplicates lists with, over the places already loaded
+  // above — so the number on the dashboard and the rows on the repair screen cannot
+  // disagree. A failed dismissal read counts every pair, which over-reports rather than
+  // hiding work: the harm of a row that turns out to be settled is a wasted click.
+  const duplicatePlaces = duplicatePairs(
+    places,
+    await fetchDismissedDupes().catch(() => new Set<string>()),
+  ).length;
   const [unassigned, actNoPlace, noDate] = await Promise.all([
     supabase.from('photos').select('*', { count: 'exact', head: true }).is('place_id', null),
     supabase.from('activities').select('*', { count: 'exact', head: true }).is('place_id', null),
@@ -741,6 +754,7 @@ export async function fetchAttention(): Promise<Attention> {
     missingDates,
     activitiesNoPlace: actNoPlace.count ?? 0,
     suggestedTrips,
+    duplicatePlaces,
   };
 }
 
@@ -1435,8 +1449,11 @@ export async function dismissDuplicate(a: string, b: string): Promise<void> {
   const { error } = await supabase.rpc('dismiss_duplicate', { p_a: a, p_b: b });
   if (error) throw error;
 }
-/** Order-independent key matching how dismissals are stored (least|greatest). */
-export const dupeKey = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
+// The duplicate rule and its key live in ./duplicatePlaces, because /attention and
+// /duplicates both need them and a count that disagrees with the list it links to is the
+// most annoying version of this codebase's recurring defect. Re-exported so every existing
+// caller is unchanged.
+export { dupeKey } from './duplicatePlaces';
 
 /** Fog of war: the revealed area (crisp 10km + soft 25km) as GeoJSON geometries. */
 export async function fetchFog(): Promise<{

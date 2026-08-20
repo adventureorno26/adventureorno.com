@@ -30,15 +30,28 @@ const SOURCES = Object.entries(RAW).filter(([path]) => !/\.test\.tsx?$/.test(pat
 // glob rather than a mistake in the lookup.
 const source = (name: string) => SOURCES.find(([p]) => p.endsWith(name))?.[1] ?? '';
 
+// COMMENTS STRIPPED, for the assertions that are about what the code DOES. Explaining why
+// `visit_count` is not the answer necessarily mentions `visit_count`, and a test that reads
+// the explanation as the offence punishes the file for being documented. */
+const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
 const DUPLICATES = source('routes/Duplicates.tsx');
+// THE RULE MOVED, AND SO DID HALF OF THIS TEST. Needs attention counts duplicate places
+// too, so the pairing rule now lives in lib/duplicatePlaces.ts and both screens call it —
+// which means the "who survives a merge" comparison is there rather than in the route.
+// What must stay true is unchanged: the survivor is decided by a COUNTED total.
+const DUPE_RULE = source('./duplicatePlaces.ts');
 const ALBUMS = source('routes/SmartAlbums.tsx');
 const DATA = source('./data.ts');
 
 describe('the screens that decide by a visit count', () => {
   it('Duplicates picks the survivor from a counted total', () => {
     expect(DUPLICATES, 'it must load the reader').toMatch(/fetchPlaceVisitTotals/);
+    // …and hand that reader to the rule, rather than letting the rule find its own number.
+    expect(DUPLICATES).toMatch(/duplicatePairs\([^)]*visitsOf/);
     // The winner is chosen through the helper, not from the row.
-    expect(DUPLICATES).toMatch(/visitsOf\(p\) >= visitsOf\(q\)/);
+    expect(DUPE_RULE).toMatch(/visitsOf\(p\) >= visitsOf\(q\)/);
+    expect(code(DUPE_RULE), 'the rule must not read the mirror').not.toMatch(/visit_count/);
   });
 
   it('Duplicates shows the counted number, not the stored one', () => {

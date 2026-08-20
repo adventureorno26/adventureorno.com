@@ -460,8 +460,17 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   `export_section` back one screen with three separate things and a real table of contents;
   0238 opened `import_artifacts`, which had RLS on and **no SELECT policy at all**, to the
   people whose uploads it records. Narrative in §7f.
-- **Two smaller ones, same shape as Step 5**: Data Health and Needs attention still overlap
-  on photos and places, and duplicate-PLACE repair still lives at `/duplicates`.
+- **✅ The two smaller ones, same shape as Step 5.** Data health's "Needs a look" block
+  carried *"Activities not attached to a place"* — a Needs attention row with a button that
+  does something about it — so the same work sat on two screens and only one could act. It
+  now lists only what is BROKEN (a reference to a row that is gone, a thumbnail never made,
+  an import with no owner, a token that stopped refreshing), each saying where the fix is,
+  under a line stating that the screen changes nothing. And **duplicate-place repair is in
+  the repair queue**: `/duplicates` was reachable only from Settings, so the only way to
+  learn whether anything needed merging was to go and look. The pairing rule moved to
+  `lib/duplicatePlaces.ts` and both screens call it, so the count on Needs attention cannot
+  disagree with the rows on `/duplicates` — the recurring one-fact-two-mechanisms defect,
+  caught before it existed rather than after.
 
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
