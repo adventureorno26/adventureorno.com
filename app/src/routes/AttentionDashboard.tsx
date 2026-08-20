@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAttention, type Attention } from '../lib/data';
+import Inbox from './Inbox';
 
 interface Row {
   key: keyof Attention;
@@ -20,14 +21,15 @@ const ROWS: Row[] = [
     key: 'reviewCards',
     label: 'Cards waiting for you to decide',
     hint: 'Names to confirm, photos to pin, and outings that may be the same one twice',
-    to: '/add',
+    // Down the page, not away to another screen: the cards are rendered below (2026-08-20).
+    to: '#cards',
     action: 'Review them',
   },
   {
     key: 'tagsToConfirm',
     label: 'Outings someone says you were on',
     hint: 'Yours to accept or decline — nothing counts as yours until you say so',
-    to: '/add',
+    to: '#cards',
     action: 'Answer them',
   },
   {
@@ -77,8 +79,15 @@ const ROWS: Row[] = [
   // visit a person marked.
 ];
 
-/** Everything that needs a human touch, in one place — so the automation is easy
- *  to trust. Each row links to where you can fix it. */
+/** Everything that needs a human touch, in ONE place.
+ *
+ *  Erica, 2026-08-18: *"Needs Attention and Review Inbox are redundant."* They were, and
+ *  worse: this screen listed counts while the actual cards were embedded in the "/add"
+ *  page — the one named after creating things. /inbox redirected there too, which is why she asked
+ *  where the cards had gone.
+ *
+ *  The split is by verb now — /add creates, this repairs, /health diagnoses and changes
+ *  nothing — so the counts and the work they describe finally sit on the same screen. */
 export default function AttentionDashboard() {
   const [a, setA] = useState<Attention | null>(null);
   useEffect(() => {
@@ -91,7 +100,7 @@ export default function AttentionDashboard() {
   const allClear = a && rows.length === 0;
 
   return (
-    <div className="page" style={{ maxWidth: 720 }}>
+    <div className="page attention-page">
       <Link className="back-bar" to="/settings">
         <span>Settings</span>
       </Link>
@@ -116,6 +125,12 @@ export default function AttentionDashboard() {
           ))}
         </div>
       )}
+
+      {/* THE CARDS THEMSELVES, not a link to them. A dashboard that only counts things is
+          another place to visit before any work can start. */}
+      <div id="cards" className="attn-cards">
+        <Inbox embedded />
+      </div>
     </div>
   );
 }

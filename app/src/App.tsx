@@ -281,7 +281,10 @@ export default function App() {
               }
             />
             {/* The review queue lives inside /add now; keep the old path working. */}
-            <Route path="/inbox" element={<Navigate to="/add" replace />} />
+            {/* /inbox redirects to the REPAIR screen. It used to land on /add, which is where
+                the cards happened to be embedded — a link named for reviewing that opened the
+                page named for creating. One verb per screen (2026-08-20). */}
+            <Route path="/inbox" element={<Navigate to="/attention" replace />} />
             {/* A visit is a thing you can open: what you did, its photos, a note,
                 and the corrections for when something landed in the wrong place. */}
             <Route

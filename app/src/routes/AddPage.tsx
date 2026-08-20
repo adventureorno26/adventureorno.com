@@ -1,17 +1,20 @@
-// /add — ONE door for getting things in and sorted.
+// /add — ONE door for getting things IN.
 //
 // Erica: "I want to add, Import, Edit, Ingest, Sort, fix, etc all in one place… One
 // click should take me to a place to add and sort photos and activities and places."
 //
-// Before this, adding was scattered: an Add tab that redirected to a sheet over the
-// map, a photo sorter buried at /photos/sort, and a review queue at /inbox that was a
-// sixth destination in the nav. This is the single place, and the Inbox tab is gone.
+// THE REVIEW QUEUE USED TO LIVE HERE and no longer does. Erica, 2026-08-18: "Needs
+// Attention and Review Inbox are redundant." Two screens listed what was waiting, and the
+// cards were on the one called Add — so a person looking for something to REPAIR went to
+// the page named after CREATING. /inbox even redirected here, which is why the cards were
+// so hard to find that she asked where they were.
 //
-// Places is the other door: this one is for getting things IN, Places is for fixing
-// what is already there.
+// The split is now by verb, which is the only line that stays put:
+//     /add        create and import new information
+//     /attention  repair what is already there   ← the cards
+//     /health     diagnose the system, change nothing
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Inbox from './Inbox';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchInboxCounts } from '../lib/inbox';
 
 export default function AddPage() {
@@ -49,15 +52,21 @@ export default function AddPage() {
             (Erica, 2026-08-11). They are not adding — they are bulk data work. */}
       </div>
 
-      <h2 className="add-section-head">
-        To review{typeof waiting === 'number' && waiting > 0 ? ` · ${waiting}` : ''}
-      </h2>
-      <p className="muted add-section-blurb">
-        Suggestions from the map data. Nothing here has changed anything yet.
-      </p>
-
-      {/* The review queue itself. It used to be its own nav tab; it belongs here. */}
-      <Inbox embedded />
+      {/* A POINTER, NOT THE QUEUE. Adding something is when a person is most likely to
+          notice there is tidying to do, so the door stays visible here — but the work
+          itself happens on the one screen that owns repairing. */}
+      {typeof waiting === 'number' && waiting > 0 && (
+        <div className="add-actions">
+          <Link className="add-action" to="/attention">
+            <b>
+              {waiting} {waiting === 1 ? 'card is' : 'cards are'} waiting for you
+            </b>
+            <span className="muted">
+              Names to confirm, photos to pin, and outings that may be the same one twice.
+            </span>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
