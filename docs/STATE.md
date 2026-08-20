@@ -415,6 +415,62 @@ export, and a full account archive — the current copy implies a completeness i
    nothing behind them. Real manual visits, or remove?
 3. **Josh's 44 legacy tag claims** — his to accept or decline.
 
+#### 3f. STEP 1 DONE — and the audit found six days that had been deleted *(0223/0224/0225)*
+
+**"Florida" is gone.** Erica, 2026-08-20: *"yes remove the Florida 486 mph run"*. The
+activity is deleted (67.8 miles in 502 seconds, a two-point line — a flight recorded as a
+run); its derived visit went with it; the place it invented is in **Trash**, restorable,
+because nothing else ever lived there. Her 2026-02-01 mileage drops from 94.9 to **27.1**.
+
+**Both unreviewed grouping paths now propose (0224).** `ingest_activity` Tier 3 and
+`dedupe_shared_outings` — the one still called at the end of every Strava backfill — wrote
+`shared_group_id` on two rows outright. §2 has forbidden that since it was written; these
+two predate the card that made it answerable and never caught up. Nothing they find is
+lost; it becomes a card with two shapes and two answers.
+
+##### The audit, and what it found
+
+Not "unreviewed". **Wrong.** All six groups spanning more than an hour were ONE PERSON
+going out twice in a day, recorded as one outing:
+
+    Josh  2023-08-02   6.04 mi 10:27  +  6.02 mi 22:39     12h 12m apart
+    Josh  2023-08-01   6.02 mi 15:29  +  6.12 mi 21:40      6h 11m
+    Erica 2022-12-04   Dickey Ridge   +  Shenandoah         2h 28m
+    Erica 2025-10-04   ride 9.80      +  ride 10.50         1h 34m
+    Josh  2023-05-30   3.89 mi        +  3.88 mi            1h 29m
+    Erica 2020-05-12   ride 6.44      +  ride 6.08          1h 28m
+
+**The cause is one column used as if it meant something else.** `dedupe_shared_outings`
+decides "two different people" with `a2.athlete_id is distinct from r.athlete_id` — but
+`athlete_id` names a **Strava account**, not an owner. A file import has `athlete_id = NULL`,
+and `null is distinct from <id>` is TRUE, so a person's own file copy read as a different
+athlete from their own Strava copy — **and from their own second run that day.**
+
+**Why this is the worst kind of bug here: linking makes an outing count ONCE.** Six wrong
+links meant **six days of hers and his were absent from every total** — not visibly, not
+recoverably by looking. Nothing on screen was wrong; the number was simply smaller than the
+truth. Unlinking them RESTORES six outings; it removes nothing.
+
+    shared groups   39 → 33      spanning over an hour   6 → 0      worst   12h12m → 50m
+    outings counted            Erica 369 of 374 activities · Josh 163 of 173
+
+0225 also fixes the matcher to compare `owner_profile`, so it can no longer propose a person
+as their own companion.
+
+##### Three left, and they are HERS to call — not auto-decided
+
+Same fault, same-person pairs, but short enough to be genuinely ambiguous:
+
+    Josh  2023-05-24   1.01 mi + 1.01 mi        50 min apart
+    Erica 2018-08-01   0.78 mi + 0.75 mi        36 min   (Leesburg, both)
+    Erica 2018-08-13   1.12 mi + 1.03 mi        22 min   (Lake of the Red Rocks / Red Rock Regional Park)
+
+Each is either two short outings close together, or one outing whose recording restarted.
+**The asymmetry argues for unlinking**: a wrong link silently erases a day, while a wrong
+unlink merely double-counts one — which is visible and trivially fixed. But that is a
+judgement about days she was there for, so it waits for her. There is no *unlink* card yet;
+the review queue can only propose linking, which is the next gap to close.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
