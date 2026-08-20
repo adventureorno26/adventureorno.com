@@ -371,9 +371,14 @@ export interface ImportOutcome {
  * Now: the file is always kept, attribution is never touched, and the caller is told what
  * actually happened so the UI can stop saying "Imported" when it means "you already had it".
  */
-export async function importActivityFile(runId: string, p: ParsedActivity): Promise<ImportOutcome> {
+export async function importActivityFile(
+  runId: string,
+  p: ParsedActivity,
+  artifactId?: string | null,
+): Promise<ImportOutcome> {
   const { data, error } = await supabase.rpc('ingest_activity', {
     p_run: runId,
+    p_artifact: artifactId ?? undefined,
     p_provider: 'file',
     p_origin: p.origin ?? 'unknown',
     p_external_key: p.externalKey ?? undefined,
@@ -400,4 +405,78 @@ export async function importFileActivity(p: ParsedActivity): Promise<ImportOutco
   } finally {
     await finishImportRun(run);
   }
+}
+
+// --- Provenance (0227) ------------------------------------------------------
+// An import used to record that an activity came from "a file" and nothing else: not which
+// file, not its bytes, not whether the others in the batch failed. 539 of 548 sources in
+// production have no ingest item and there were zero artifacts. So: hash it, keep it, and
+// write down what happened to it — including when nothing happened.
+
+/** The file's own identity: SHA-256 of its bytes, lowercase hex. */
+export async function hashFile(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export interface ArtifactRef {
+  id: string;
+  sha256: string;
+  /** What happened the last time these exact bytes arrived, if they ever did. */
+  seenBefore: { seen: boolean; first_seen?: string; items?: number; last_run_at?: string };
+}
+
+/**
+ * Keep the original, and record it.
+ *
+ * The upload is best-effort and the artifact row is not: a file we cannot store is still a
+ * file we can identify, and losing the hash because R2/Storage hiccuped would throw away the
+ * one thing that makes a re-upload recognisable. Stored under its own hash, so the same
+ * bytes never occupy two objects.
+ */
+export async function recordArtifact(file: File): Promise<ArtifactRef> {
+  const sha256 = await hashFile(file);
+  const { data: seen } = await supabase.rpc('file_already_imported', { p_sha256: sha256 });
+
+  const ext = (file.name.match(/\.([A-Za-z0-9]+)$/)?.[1] ?? 'bin').toLowerCase();
+  const objectKey = `${sha256}.${ext}`;
+  // `upsert: true` because the key IS the hash — re-uploading identical bytes is a no-op,
+  // not a conflict.
+  const { error: upErr } = await supabase.storage
+    .from('imports')
+    .upload(objectKey, file, { upsert: true, contentType: file.type || undefined });
+
+  const { data: id, error } = await supabase.rpc('record_import_artifact', {
+    p_sha256: sha256,
+    p_byte_size: file.size,
+    // `undefined`, not `null`: the generated types take undefined for an omitted argument,
+    // and PostgREST then applies the function's own DEFAULT rather than writing SQL NULL.
+    p_media_type: file.type || undefined,
+    p_object_key: upErr ? undefined : objectKey,
+  });
+  if (error) throw error;
+  return {
+    id: id as unknown as string,
+    sha256,
+    seenBefore: (seen ?? { seen: false }) as ArtifactRef['seenBefore'],
+  };
+}
+
+/** A file that could not be read is still something that happened to this import. */
+export async function recordImportFailure(
+  runId: string,
+  reason: string,
+  artifactId?: string | null,
+  label?: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('record_ingest_failure', {
+    p_run: runId,
+    p_reason: reason,
+    p_artifact: artifactId ?? undefined,
+    p_label: label ?? undefined,
+  });
+  if (error) throw error;
 }
