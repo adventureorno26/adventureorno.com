@@ -471,6 +471,59 @@ unlink merely double-counts one — which is visible and trivially fixed. But th
 judgement about days she was there for, so it waits for her. There is no *unlink* card yet;
 the review queue can only propose linking, which is the next gap to close.
 
+#### 3g. CI RAN OUT OF MINUTES, AND THE SHAPE WAS THE PROBLEM *(2026-08-20)*
+
+Actions stopped dead on 2026-08-19: **3,000 of 3,000 minutes used, twelve days to reset.**
+Every workflow — including the nightly **Backup** — failed with *"recent account payments
+have failed or your spending limit needs to be increased"*. The two causes produce identical
+text, which is why it read as a payment problem when it was an exhausted allowance.
+
+**It was not volume, it was billing shape.** Measured before changing anything: **431 CI runs
+in 30 days**, and
+
+    a full CI run     11 billed minutes
+    a docs-only run    6 billed minutes   ← six jobs, each doing 3–9 seconds of work
+
+**GitHub rounds every JOB up to a whole minute.** This workflow fans out into six, and each
+one started, checked out, and *then* guarded every step with an `if:`. So a run with nothing
+to do still cost six minutes — and a docs-only change cost that **twice**, once for the PR
+and again for the push to `main`. 431 × ~7 ≈ 3,000. The whole allowance, about half of it
+buying nothing.
+
+**Three changes (#128):**
+- **The skip moved from the step to the job.** A skipped job bills nothing.
+- **The release gate treats `skipped` as "nothing to check."** It demanded exactly `success`
+  from all four gates, so job-level skips would have failed every docs change.
+- **Full validation is weekly, not nightly** — it carries the cross-browser matrix, ~9
+  billable minutes alone, ~450/month, re-proving what every code PR already proves.
+
+**Left alone deliberately:** the push-to-main trigger. `PRODUCTION_DEPLOY_ENABLED=true`, so
+that push **is** the deploy path — dropping it to save minutes would have silently removed
+automatic deployment. Verified afterwards: the merge of #128 ran **Deploy production
+successfully**, and `/version.json` matched `main`.
+
+##### What the first green run answered
+
+CI had not run since 08-18, so 0223–0225 went in unverified. The first run after billing was
+restored applied **all 225 migrations to a disposable database with ZERO errors** and failed
+exactly **one of 60** SQL tests — `0203`, a real consequence of 0224 rather than an artifact.
+Its assertion read *"another person's recording was swallowed as a duplicate (proposed)"*,
+conflating **not inserted** with **not stored**; those became different things the day Tier 3
+stopped linking automatically. Rewritten to prove the activity IS created, the join is
+**offered**, and nothing was linked behind anyone's back.
+
+**That also settles the seven other failures** seen when the suite was run against
+production: they are artifacts of fixture tests meeting live data, not regressions. The
+disposable run is the authority.
+
+**Running costs now, measured:** backup **4 min/night (~120/month)**; a code PR ~10; a
+docs-only PR should be ~2. Against 3,000.
+
+**One thread left open:** `supabase start` replaying migrations one-by-one fails at
+**0078** (`column "elevation_gain" does not exist`). CI never sees it because `db-bootstrap.sh`
+builds the schema differently — and that path applies all 225 cleanly. Nothing is broken
+today, but "the chain replays from zero" is the property a restore leans on.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
