@@ -3846,6 +3846,7 @@ export type Database = {
         Returns: undefined
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      file_already_imported: { Args: { p_sha256: string }; Returns: Json }
       file_content_key: {
         Args: {
           p_date: string
@@ -4364,6 +4365,24 @@ export type Database = {
       record_approval: {
         Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
         Returns: undefined
+      }
+      record_import_artifact: {
+        Args: {
+          p_byte_size?: number
+          p_media_type?: string
+          p_object_key?: string
+          p_sha256: string
+        }
+        Returns: string
+      }
+      record_ingest_failure: {
+        Args: {
+          p_artifact?: string
+          p_label?: string
+          p_reason: string
+          p_run: string
+        }
+        Returns: string
       }
       reject_suggestion: { Args: { p_id: string }; Returns: Json }
       remove_from_container: {

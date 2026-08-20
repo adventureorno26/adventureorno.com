@@ -570,6 +570,51 @@ never moves. Tested both ways.
 
     named after their place   353 → 411        still machine-named   65 → 8
 
+#### 3i. STEP 3 — the file is kept, and every outcome is written down *(0227)*
+
+Measured before writing anything:
+
+    activity_sources              548
+    …with no ingest_item_id       539
+    ingest_items                   10
+    import_artifacts                0      ← not one, ever
+    storage buckets                 0      ← nowhere to put a file
+
+**The provenance schema has existed since 0202 and had never been used.** An import recorded
+that an activity came from *"a file"* — not which file, not its bytes, and nothing at all
+about the ones that failed. A batch of 184 with three unreadable ones left 181 successes and
+no trace of the rest.
+
+Now, before a file is even parsed: **hashed (SHA-256), stored in a private bucket under its
+own hash, and recorded as an artifact.** Then whatever happens next — inserted, duplicate,
+proposed, or failed — lands in `ingest_items` pointing at that artifact.
+
+**Three identities, kept separate on purpose**, because conflating them is how the last two
+weeks of bugs happened:
+
+| | Says | Certainty |
+| --- | --- | --- |
+| **SHA-256** (0227) | *this exact file, again* | the same bytes — no inference |
+| **provider id** (0209) | *this record at Strava/Garmin* | exact, within that provider |
+| **content key** (0216) | *this looks like the same recording* | an inference, deliberately narrow |
+
+`file_already_imported` runs first and is the cheapest of the three: it can say *"you
+uploaded this on 17 August"* rather than quietly making a second copy.
+
+**Legacy is labelled, not invented.** The 539 rows that predate this have no artifact and
+never will — nobody kept those files, and minting a hash for one would be writing down
+provenance that does not exist. The new integrity check is **scoped by date** for that
+reason: it flags a file import made *after* 2026-08-20 with no artifact, and says nothing
+about the ones before.
+
+**Verified end to end against production, then cleaned up:** unknown file → `seen:false`;
+record → artifact id; ask again → `seen:true` with its first-seen date; record the same
+bytes → **the same artifact id, no second row**; a failure → `disposition=failed`, linked to
+the artifact, and the run reporting `ok=0 failed=1`.
+
+**Still open in Step 3/4:** the ingest RPCs still take `actor_kind` from the caller
+(§3e Step 4), and originals are stored but nothing yet re-parses them when a parser improves.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,

@@ -132,6 +132,26 @@ const CHECKS = [
            order by v.start_date`,
   },
   {
+    name: 'a file import since 0227 with no artifact behind it',
+    why:
+      'from 2026-08-20, every uploaded file is hashed, stored and recorded before it is ' +
+      'parsed, so an import made after that date has no excuse for missing its artifact. ' +
+      'The 539 sources that predate it are LEGACY and deliberately not flagged: nobody ' +
+      'kept those files, and inventing a hash for one would be writing down provenance ' +
+      'that does not exist. This check is scoped by date for exactly that reason.',
+    sql: `select i.id::text,
+                 i.disposition,
+                 i.external_key,
+                 i.created_at::date::text as on_date
+            from public.ingest_items i
+            join public.ingest_runs r on r.id = i.run_id
+           where r.method = 'file-upload'
+             and i.artifact_id is null
+             and i.created_at > timestamptz '2026-08-20 16:00:00+00'
+           order by i.created_at desc
+           limit 50`,
+  },
+  {
     name: 'an activity nobody could have moved that fast',
     why:
       'found on 2026-08-18 while charting how close Erica and Josh came on the same day: ' +

@@ -49,6 +49,8 @@ import {
 import { visitDates } from '../lib/visitDates';
 import {
   beginImportRun,
+  recordArtifact,
+  recordImportFailure,
   finishImportRun,
   importActivityFile,
   parseActivityFile,
@@ -901,17 +903,27 @@ function GarminImportCard() {
     // below lands under it, so "what did that import do?" has an answer afterwards.
     const run = await beginImportRun('file-upload');
     for (const file of chosen) {
+      // EVERY FILE IS HASHED AND KEPT, whatever happens to it next (0227). Until now an
+      // import recorded that an activity came from "a file" — not which file, not its
+      // bytes, and nothing at all about the ones that failed. A batch of 184 with 3
+      // unreadable ones left 181 successes and no trace of the rest.
+      let artifact: Awaited<ReturnType<typeof recordArtifact>> | null = null;
+      try {
+        artifact = await recordArtifact(file);
+      } catch {
+        // Provenance is worth having; it is not worth blocking an import for.
+        artifact = null;
+      }
       try {
         // Name the format problem as a format problem. A .zip read as text parses to null
         // and used to be reported as "no GPS track found", which sends a person looking at
         // their watch instead of at the zip they need to unpack.
         if (!/\.(fit|gpx|tcx)$/i.test(file.name)) {
-          problems.push(
-            `${file.name}: not a GPX, TCX or FIT file` +
-              (/\.zip$/i.test(file.name)
-                ? ' — unzip Garmin’s export and pick the files inside'
-                : ''),
-          );
+          const why =
+            'not a GPX, TCX or FIT file' +
+            (/\.zip$/i.test(file.name) ? ' — unzip Garmin’s export and pick the files inside' : '');
+          problems.push(`${file.name}: ${why}`);
+          await recordImportFailure(run, why, artifact?.id, file.name).catch(() => {});
           continue;
         }
         const parsed = /\.fit$/i.test(file.name)
@@ -919,16 +931,22 @@ function GarminImportCard() {
           : parseActivityFile(await file.text(), file.name);
         if (!parsed) {
           problems.push(`${file.name}: no GPS track in the file`);
+          await recordImportFailure(run, 'no GPS track in the file', artifact?.id, file.name).catch(
+            () => {},
+          );
           continue;
         }
-        const out = await importActivityFile(run, parsed);
+        const out = await importActivityFile(run, parsed, artifact?.id);
         // The old RPC returned an id whether it stored anything or not, so a duplicate and
         // a new activity were indistinguishable and both counted as "Imported".
         if (out.disposition === 'duplicate') already++;
         else added++;
       } catch (e) {
-        // Surface the real reason instead of a silent "couldn't be read".
-        problems.push(`${file.name}: ${e instanceof Error ? e.message : 'upload failed'}`);
+        // Surface the real reason instead of a silent "couldn't be read" — and write it
+        // into the ledger, because a failure is a fact about this import too.
+        const why = e instanceof Error ? e.message : 'upload failed';
+        problems.push(`${file.name}: ${why}`);
+        await recordImportFailure(run, why, artifact?.id, file.name).catch(() => {});
       }
       setMsg(
         `Imported ${added}` +
