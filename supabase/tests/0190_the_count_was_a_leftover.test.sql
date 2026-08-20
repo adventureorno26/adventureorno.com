@@ -81,6 +81,17 @@ begin
   v1 := public.create_visit(p, '2026-07-01', '2026-07-01', null, array[a_id, b_id]::uuid[]);
   v2 := public.create_visit(p, '2026-07-20', '2026-07-20', null, array[b_id]::uuid[]);
 
+  -- AND B ANSWERS. Since 0240, naming somebody else ASKS them — there is no participant row
+  -- until they say yes, because nothing filters visit_profiles by claim_status and a pending
+  -- row would already be on their counts. This test is about what the two readers COUNT, so
+  -- the people have to actually be on the visits.
+  perform set_config('request.jwt.claims', json_build_object('sub', b_id)::text, true);
+  perform public.respond_to_tag(c.id, true)
+     from public.tag_claims c
+    where c.subject_kind = 'visit' and c.subject_id in (v1.id, v2.id)
+      and c.profile_id = b_id and c.status = 'proposed';
+  perform set_config('request.jwt.claims', json_build_object('sub', a_id)::text, true);
+
   select visits into total from public.place_visit_totals() where place_id = p;
   select coalesce((select visits from public.place_visit_counts(null) where place_id = p), 0)
     into shared;

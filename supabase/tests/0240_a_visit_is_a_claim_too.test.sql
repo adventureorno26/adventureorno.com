@@ -212,6 +212,51 @@ begin
   end if;
 end $$;
 
+-- ---- 10. UNDO PUTS PEOPLE BACK; IT DOES NOT ASK ABOUT THEM AGAIN (0244) -------------
+-- restore_visit ran everybody through the asking path, so pressing Undo on a deleted visit
+-- turned an ACCEPTED participation into an unanswered question and dropped that person from
+-- the visit until they answered a second time. Undo restores a record; it makes no claim.
+do $$
+declare
+  e_id  uuid := 'eeee0240-0000-0000-0000-000000000001';
+  j_id  uuid := 'eeee0240-0000-0000-0000-000000000002';
+  pl    uuid;
+  vis   uuid;
+  snap  jsonb;
+  back  public.visits;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', e_id, 'role','authenticated')::text, true);
+
+  insert into public.places (id, name, lat, lng, saved)
+  values (gen_random_uuid(), 'Undo 0240', 39.5, -77.5, true) returning id into pl;
+  vis := (public.create_visit(pl, '2026-06-01', '2026-06-01', null, array[e_id]::uuid[])).id;
+
+  -- He is on it, and he ACCEPTED being on it.
+  insert into public.visit_profiles
+    (visit_id, profile_id, claim_status, evidence, created_by, asserted_by, decided_by, decided_at)
+  values (vis, j_id, 'accepted', 'tagged_and_accepted', 'user', e_id, j_id, now())
+  on conflict (visit_id, profile_id) do update
+    set claim_status = 'accepted', evidence = 'tagged_and_accepted', decided_by = j_id;
+
+  snap := public.delete_visit(vis);
+  back := public.restore_visit(snap);
+
+  if not exists (select 1 from public.visit_profiles
+                  where visit_id = back.id and profile_id = j_id) then
+    raise exception 'FAIL: undoing a deleted visit dropped a person who had accepted being on it';
+  end if;
+  if exists (select 1 from public.visit_profiles
+              where visit_id = back.id and profile_id = j_id and claim_status <> 'accepted') then
+    raise exception 'FAIL: undo turned his accepted participation into something else';
+  end if;
+  if not exists (select 1 from public.visit_profiles
+                  where visit_id = back.id and profile_id = j_id
+                    and evidence = 'tagged_and_accepted' and decided_by = j_id) then
+    raise exception 'FAIL: undo put back the id and threw away who decided it and how';
+  end if;
+end $$;
+
 do $$ begin raise notice 'PASS 0240: a visit keeps what its people said about it, a pending tag is not a statistic, and a place is one question'; end $$;
 
 rollback;

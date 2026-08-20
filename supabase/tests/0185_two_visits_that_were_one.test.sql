@@ -34,6 +34,17 @@ begin
   april := public.create_visit(rome, '2026-04-01', '2026-04-02', null,
                                array[a_id, b_id]::uuid[]);
 
+  -- AND B SAYS YES. Since 0240 naming somebody else on a visit ASKS them; there is no
+  -- participant row until they answer, because nothing filters visit_profiles by
+  -- claim_status and a pending row would already be on their statistics. What this test is
+  -- about is that merging UNIONS the people who were there, so B has to actually be one.
+  perform set_config('request.jwt.claims', json_build_object('sub', b_id)::text, true);
+  perform public.respond_to_tag(
+    (select id from public.tag_claims
+      where subject_kind = 'visit' and subject_id = april.id and profile_id = b_id
+        and status = 'proposed'), true);
+  perform set_config('request.jwt.claims', json_build_object('sub', a_id)::text, true);
+
   -- things hanging off the half that will be absorbed
   insert into public.photos (place_id, visit_id, taken_at, r2_key, thumb_key, sha256)
     values (rome, april.id, '2026-04-01T10:00:00Z', 't185/p', 't185/t', 't185-sha');

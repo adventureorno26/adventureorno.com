@@ -453,7 +453,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   RETRACTS, and a row evidencing somebody's own recording is never the tagger's to delete.
   0228's `claim_status <> 'declined'` guard was fictional too — the CHECK says `rejected` —
   and now names the value the column uses. Narrative in §7f.
-  **And the rest of Step 6 (0240–0243)**: `set_visit_participants` had the identical defect —
+  **And the rest of Step 6 (0240–0244)**: `set_visit_participants` had the identical defect —
   655 rows of who-said-what, deleted and rebuilt bare on every press. Visits differ in one
   way that matters: **nothing filters `visit_profiles` by claim_status** (of 24 functions that
   read it, only `respond_to_tag` looks), so a pending row would already be on somebody's
@@ -4802,7 +4802,7 @@ column's CHECK permits **accepted, accepted_legacy, proposed, rejected** — the
 declining DELETES the row, but it read like a safeguard while doing nothing, which is worse
 than not having written it. Corrected in all three places that carry the predicate.
 
-### The rest of Step 6 — a visit is a claim too *(0240, 0241, 0242, 0243)*
+### The rest of Step 6 — a visit is a claim too *(0240, 0241, 0242, 0243, 0244)*
 
 `set_activity_solo` was one of three. `set_visit_participants` — which backs the same picker
 on a visit, and on a place, and in the photo sorter — ran the identical
@@ -4849,6 +4849,20 @@ untrue to the database; after, it would write the right thing and tell her the w
 return `{stated, asked, removed}` now, and the screens say *"Asked Josh. It counts for them
 once they say yes"* instead of guessing — the photo sorter merging a whole batch into one
 sentence rather than a snack per visit.
+
+**0244 — undo puts people back; it does not ask about them again.** `set_visit_participants`
+has three callers and only one of them is a person saying who was there. `restore_visit` ran
+everybody through the asking path, so pressing **Undo** on a deleted visit turned somebody
+else's ACCEPTED participation into an unanswered question and dropped them from the visit
+until they answered it a second time. Caught by `0185_two_visits_that_were_one` the moment
+0240 reached CI. `create_visit` was left alone deliberately — naming somebody while creating a
+visit is the same statement as naming them on the picker afterwards, and should ask for the
+same reason; the fixtures that broke were asserting the old behaviour and now accept the
+claim. The snapshot was also too small for its job: `delete_visit` recorded
+`jsonb_agg(vp.profile_id)`, which was enough while a participant WAS an id, and an undo that
+restores only the id throws away who asserted it, who decided it and when. It records the
+whole row now, and restore reads both shapes because an undo token issued minutes before the
+deploy still carries the old one.
 
 **A QUESTION NOBODY IS ASKED IS NOT A QUESTION.** `my_tags_to_confirm` returned ACTIVITY claims
 only. Visit claims have been storable since 0201 and `respond_to_tag` has known how to answer
