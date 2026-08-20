@@ -674,6 +674,42 @@ is recomputed by Strava, a start timestamp is copied verbatim through every hop,
 person cannot begin two runs a minute apart. 12 certainties linked and closed; her queue
 28, all of them real questions.
 
+#### 3k. STEP 4 — the import RPCs stop taking the caller's word *(0234/0235)*
+
+Codex called them "too trusting". Reading them found three holes, and the second decided
+**whose account data landed in**:
+
+1. **The authorization check could be skipped by asking nicely.**
+   `if p_actor_kind = 'user' and not public.is_editor_or_owner()` — the guard only ran when
+   the caller *said* they were a user. Passing `'scheduled'` skipped it entirely.
+2. **A run could be attached to somebody else's connection.** `p_connection` went through
+   unchecked, and `source_owner_profile` is read from that connection's owner — so
+   `ingest_activity` made **that person** the owner of every activity the run created.
+3. **Idempotency was global.** Reusing another person's key *joined their run*.
+
+And `ingest_activity` took nothing but a run id — which is not a secret: it is returned by
+`begin_ingest_run` and stored on every ledger row.
+
+**The rule now:** a user-facing call says only WHAT it is importing. Who is importing, on
+whose behalf, and into which run are read from the session, never from the arguments.
+Service callers (cron, migrations, the Strava webhook) have no `auth.uid()`, are trusted by
+the grant rather than by a parameter, and are unaffected.
+
+**Each hole attacked as Josh against production, and refused:**
+
+    claims actor_kind=scheduled   → "a signed-in import is a user import"
+    opens a run via her connection → "that connection is not yours"
+    writes into her run            → "that import run is not yours, or is already finished"
+    finishes her run               → "that import run is not yours"
+    her own import                 → inserted
+    finishing twice                → 204, a no-op
+
+**0235 exists because 0234's own test failed on its first run.** Scoping the *lookup* to the
+caller left the index globally unique, so a second person reusing a key no longer joined the
+run — they got a raw `23505 duplicate key` instead. Better than the hole, still wrong twice:
+an import fails for a reason nothing to do with the importer, and the error confirms someone
+else has used that key. The index is now scoped to its initiator, matching the lookup.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
