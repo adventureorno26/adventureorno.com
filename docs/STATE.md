@@ -453,7 +453,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   RETRACTS, and a row evidencing somebody's own recording is never the tagger's to delete.
   0228's `claim_status <> 'declined'` guard was fictional too — the CHECK says `rejected` —
   and now names the value the column uses. Narrative in §7f.
-  **And the rest of Step 6 (0240–0244)**: `set_visit_participants` had the identical defect —
+  **And the rest of Step 6 (0240–0245)**: `set_visit_participants` had the identical defect —
   655 rows of who-said-what, deleted and rebuilt bare on every press. Visits differ in one
   way that matters: **nothing filters `visit_profiles` by claim_status** (of 24 functions that
   read it, only `respond_to_tag` looks), so a pending row would already be on somebody's
@@ -4802,7 +4802,7 @@ column's CHECK permits **accepted, accepted_legacy, proposed, rejected** — the
 declining DELETES the row, but it read like a safeguard while doing nothing, which is worse
 than not having written it. Corrected in all three places that carry the predicate.
 
-### The rest of Step 6 — a visit is a claim too *(0240, 0241, 0242, 0243, 0244)*
+### The rest of Step 6 — a visit is a claim too *(0240–0245)*
 
 `set_activity_solo` was one of three. `set_visit_participants` — which backs the same picker
 on a visit, and on a place, and in the photo sorter — ran the identical
@@ -4849,6 +4849,17 @@ untrue to the database; after, it would write the right thing and tell her the w
 return `{stated, asked, removed}` now, and the screens say *"Asked Josh. It counts for them
 once they say yes"* instead of guessing — the photo sorter merging a whole batch into one
 sentence rather than a snack per visit.
+
+**0245 — and creating a visit builds a record; the picker makes a statement.** Five tests
+failed in CI, none of them about tagging: evidence routes (0166), one way to change a visit
+(0169), the trip rules (0170), merging (0185) and the counts (0190). Each had built a visit
+with two people in order to test something else and now got one. The line is not "the picker
+asks and everything else asks too" — it is **a person's word about somebody else is a
+question; a record being constructed from a list its caller already holds is not**.
+`set_visit_solo` and `set_place_solo` are the first. `create_visit` is the second, and no live
+screen calls it: `addVisit` is deprecated with zero callers and passes no participants at all.
+Its rows say `evidence = 'created_with'` rather than claiming somebody decided something, so
+if that ever stops being true it is visible in the data.
 
 **0244 — undo puts people back; it does not ask about them again.** `set_visit_participants`
 has three callers and only one of them is a person saying who was there. `restore_visit` ran

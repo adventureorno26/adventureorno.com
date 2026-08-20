@@ -28,8 +28,29 @@ begin
     values (p, '2026-02-01', '2026-02-01', 'taken', true) returning id into v_solo;
   perform public.set_visit_solo(v_solo, 'cccc0166-0000-0000-0000-000000000002');
 
+  -- THE CONTRACT CHANGED, 2026-08-20 (0240), and this is the same property said correctly.
+  -- Naming SOMEBODY ELSE is one person's word about another, so it is exactly one QUESTION
+  -- and no row: nothing filters visit_profiles by claim_status, so a pending row would
+  -- already be on their statistics. "Exactly one, and NULL does not become a guess" still
+  -- holds — it is now one claim, and one row the moment they agree.
   select count(*) into n from public.visit_profiles where visit_id = v_solo;
-  if n <> 1 then raise exception 'FAIL: a named person must be exactly one row, got %', n; end if;
+  if n <> 0 then
+    raise exception 'FAIL: naming another person put % row(s) on the visit before they agreed', n;
+  end if;
+  select count(*) into n from public.tag_claims
+   where subject_kind = 'visit' and subject_id = v_solo and status = 'proposed';
+  if n <> 1 then raise exception 'FAIL: a named person must be exactly one question, got %', n; end if;
+
+  perform set_config('request.jwt.claims',
+    '{"sub":"cccc0166-0000-0000-0000-000000000002"}', true);
+  perform public.respond_to_tag(
+    (select id from public.tag_claims
+      where subject_kind = 'visit' and subject_id = v_solo and status = 'proposed'), true);
+  perform set_config('request.jwt.claims',
+    '{"sub":"cccc0166-0000-0000-0000-000000000001"}', true);
+
+  select count(*) into n from public.visit_profiles where visit_id = v_solo;
+  if n <> 1 then raise exception 'FAIL: once he agrees he is exactly one row, got %', n; end if;
   if not exists (select 1 from public.visit_profiles
                   where visit_id = v_solo and profile_id = 'cccc0166-0000-0000-0000-000000000002') then
     raise exception 'FAIL: the wrong person was recorded'; end if;

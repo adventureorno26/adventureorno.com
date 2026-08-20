@@ -43,7 +43,13 @@ begin
   raise notice 'PASS 1: an edit is atomic; an invalid range never reaches the row';
 end $$;
 
--- 2. Participants are replaced as a set, and the legacy column follows.
+-- 2. Participants are replaced as a set — YOURS DIRECTLY, THEIRS ONCE THEY AGREE (0240).
+--
+-- This asserted that the whole set is replaced on every call. Half of that is still true and
+-- half of it was the bug 0240 fixed: naming SOMEBODY ELSE is one person's word about another,
+-- so it raises a question and writes no row until they answer — nothing filters
+-- visit_profiles by claim_status, so a pending row would already be on their statistics.
+-- Removing them still removes them, and that is the half this always meant.
 do $$
 declare p uuid; v uuid; n int; solo uuid;
 begin
@@ -54,6 +60,17 @@ begin
 
   perform public.set_visit_participants(v, array['dddd0169-0000-0000-0000-000000000001',
                                                  'dddd0169-0000-0000-0000-000000000002']::uuid[]);
+  -- The caller is …0001, so that row is hers to write; …0002 is asked.
+  select count(*) into n from public.visit_profiles where visit_id = v;
+  if n <> 1 then
+    raise exception 'FAIL: naming the other person wrote % rows before they agreed', n; end if;
+  perform set_config('request.jwt.claims',
+    '{"sub":"dddd0169-0000-0000-0000-000000000002"}', true);
+  perform public.respond_to_tag(
+    (select id from public.tag_claims
+      where subject_kind = 'visit' and subject_id = v and status = 'proposed'), true);
+  perform set_config('request.jwt.claims',
+    '{"sub":"dddd0169-0000-0000-0000-000000000001"}', true);
   select count(*) into n from public.visit_profiles where visit_id = v;
   if n <> 2 then raise exception 'FAIL: expected 2 participants, got %', n; end if;
   -- 0188 removed the solo_profile mirror; the rows ARE the attribution now, so what
@@ -123,8 +140,13 @@ begin
     if position('loop' in sqlerrm) = 0 and position('does not qualify' in sqlerrm) = 0 then raise; end if;
   end;
 
-  -- participant compatibility: someone not on the trip cannot be swallowed by it
-  perform public.set_visit_participants(child, array['dddd0169-0000-0000-0000-000000000002']::uuid[]);
+  -- participant compatibility: someone not on the trip cannot be swallowed by it.
+  -- Written directly, not through the picker: since 0240 naming somebody else raises a
+  -- question and writes no row, and what is being tested here is the grouping rule, not
+  -- tagging.
+  delete from public.visit_profiles where visit_id = child;
+  insert into public.visit_profiles (visit_id, profile_id, claim_status, evidence, created_by)
+  values (child, 'dddd0169-0000-0000-0000-000000000002', 'accepted', 'created_with', 'user');
   perform public.detach_child_visit(child);
   begin
     r := public.attach_child_visit(child, trip);
