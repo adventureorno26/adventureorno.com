@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { setPlaceSolo, updatePlace } from '../lib/data';
+import { announceWho } from '../lib/whoWasThere';
 import { showSnack } from '../lib/snackbar';
 import type { MapPerson } from '../lib/data';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
@@ -68,9 +69,12 @@ export default function PlaceQuickEdit({
     setBusy('Saving…');
     try {
       // setPlaceSolo writes every VISIT at this place; the place itself holds no
-      // attribution.
-      await setPlaceSolo(place.id, profileId ?? null);
-      setSolo(profileId ?? null);
+      // attribution. It also only STATES your own presence — naming somebody else raises
+      // one question about the place (0240/0242), so the control must not show them as
+      // being there until they have answered it.
+      const outcome = await setPlaceSolo(place.id, profileId ?? null);
+      announceWho(outcome, people);
+      if (!outcome.asked.length) setSolo(profileId ?? null);
       onUpdated(place);
     } catch (e) {
       showSnack({

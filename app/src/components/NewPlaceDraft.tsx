@@ -15,6 +15,7 @@ import { haversineMeters } from '../lib/geo';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import { whoChoices, whoProfileId } from '../lib/participants';
 import { showSnack } from '../lib/snackbar';
+import { announceWho } from '../lib/whoWasThere';
 import MapSearch from './MapSearch';
 import { useDialog } from '../lib/useDialog';
 import type { Place } from '../lib/types';
@@ -202,14 +203,16 @@ export default function NewPlaceDraft({
       if (!wanted && who !== 'both') {
         // Not swallowed: losing this silently means the place is saved and
         // attributed to the wrong people, with nothing on screen to say so.
-        await setPlaceSolo(placeId, whoProfileId(who, meId)).catch((e: unknown) => {
-          showSnack({
-            message:
-              e instanceof Error
-                ? `Saved, but could not set who was there: ${e.message}`
-                : 'Saved, but could not set who was there.',
+        await setPlaceSolo(placeId, whoProfileId(who, meId))
+          .then((outcome) => announceWho(outcome, people))
+          .catch((e: unknown) => {
+            showSnack({
+              message:
+                e instanceof Error
+                  ? `Saved, but could not set who was there: ${e.message}`
+                  : 'Saved, but could not set who was there.',
+            });
           });
-        });
       }
 
       if (files.length) {

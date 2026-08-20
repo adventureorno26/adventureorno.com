@@ -453,7 +453,19 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   RETRACTS, and a row evidencing somebody's own recording is never the tagger's to delete.
   0228's `claim_status <> 'declined'` guard was fictional too — the CHECK says `rejected` —
   and now names the value the column uses. Narrative in §7f.
-  **Still to do in Step 6**: extend tagging to visits, photos and places (8b-i).
+  **And the rest of Step 6 (0240–0245)**: `set_visit_participants` had the identical defect —
+  655 rows of who-said-what, deleted and rebuilt bare on every press. Visits differ in one
+  way that matters: **nothing filters `visit_profiles` by claim_status** (of 24 functions that
+  read it, only `respond_to_tag` looks), so a pending row would already be on somebody's
+  statistics — the 0039 harm. For a visit the CLAIM is the pending state and there is no row
+  until it is accepted. A PLACE is one question rather than one per visit (43 at Lake of the
+  Red Rocks), which withdraws the questions about its own days. Naming somebody again after
+  taking it back REOPENS the question; after they declined it does not. And all four pickers
+  now **return `{stated, asked, removed}`** — they returned `void`, so six screens reported a
+  question as a fact. Narrative in §7f.
+  **Still open**: `my_tags_to_confirm` surfaced ACTIVITY claims only until 0240 — visit claims
+  had been storable and answerable since 0201 with nobody ever asked. Photo tagging (8b-i) is
+  still not built.
 - **Step 7 — ✅ one Export & Backup screen (0237, 0238, 0239, `/export`).** Data health said
   *"Download everything you can take with you"* over three buttons that exported 162 places
   — no outings, no visits, no photos, no journal. Now `export_manifest` / `export_header` /
@@ -4789,6 +4801,90 @@ column's CHECK permits **accepted, accepted_legacy, proposed, rejected** — the
 `'declined'`, so the clause could never exclude anybody. It had leaked nothing, because
 declining DELETES the row, but it read like a safeguard while doing nothing, which is worse
 than not having written it. Corrected in all three places that carry the predicate.
+
+### The rest of Step 6 — a visit is a claim too *(0240–0245)*
+
+`set_activity_solo` was one of three. `set_visit_participants` — which backs the same picker
+on a visit, and on a place, and in the photo sorter — ran the identical
+`delete … ; insert (visit_id, profile_id)`. `visit_profiles` carries claim_status, evidence,
+created_by, asserted_by, decided_by, decided_at and rule_id; 655 rows in production, every one
+of them `accepted` / `unknown`, which is what that history looks like after enough overwrites.
+
+**ONE DIFFERENCE FROM THE ACTIVITY CASE, AND IT DECIDES THE DESIGN.** For an activity, 0236
+writes a `proposed` row straight away, because since 0228 that row is also what SHARES the
+recording. A visit has no sharing gate — and **nothing filters `visit_profiles` by
+claim_status**. Checked against production: of the 24 functions that read that table, exactly
+one (`respond_to_tag`) looks at the column. `place_visit_counts`, `settings_stats`,
+`wander_stats`, `place_ids_for_view` and `shared_outings` all treat a row as a fact. A
+`proposed` row would therefore put a place on somebody's counts before they agreed they had
+been there, which is the 0039 harm — the one that put 46 of her activities on his stats. So
+**for a visit the claim IS the pending state**, and no row exists until it is accepted.
+
+**A PLACE ASKS ONCE.** `set_place_solo` loops every visit at the place; Lake of the Red Rocks
+has 43. Answering "were you with me here" forty-three times is not a better version of never
+being asked, so `tag_claims.subject_kind` gains **'place'**: one question, and accepting it
+writes the rows for every visit there. Asking it also **withdraws the open questions about
+that place's individual days** — a place and one of its visits are a question and its own
+subset, and asking both is how the queue got to *"redundant and makes no sense"*. Not
+symmetric: naming somebody on a single day does not touch the wider question.
+
+**WHAT CANNOT BE TAKEN AWAY.** 0236 protected a row evidencing somebody's own recording; the
+visit equivalent is their own evidence for the day — a photo THEY uploaded or an activity THEY
+recorded, in `visit_evidence`. Somebody else saying "I was here alone" does not delete the
+proof that another person was too.
+
+**0241 — asking again after taking it back.** 0240's own test found it on the first run:
+`tag_claims_one_per_subject` is UNIQUE per (kind, subject, person), so the entirely ordinary
+sequence *Together → Just me → Together* retracted the claim and then crashed inserting a
+second one. Nobody could re-add a person they had removed. 0236 had avoided the crash by never
+re-asking at all, which is the opposite failure. Three closed states, three answers:
+**retracted → reopen** (she changed her mind, that is hers to do); **declined → leave it**
+("I was not there" is answered once, and re-asking on every press is nagging dressed as a data
+model); **accepted → leave it**.
+
+**0243 — and the picker says what it actually did.** All four functions returned `void`, so
+every one of the six screens that call them did `await setPlaceSolo(...)` and then showed the
+person as being there. That is worse than the bug being fixed: before, the app wrote something
+untrue to the database; after, it would write the right thing and tell her the wrong one. They
+return `{stated, asked, removed}` now, and the screens say *"Asked Josh. It counts for them
+once they say yes"* instead of guessing — the photo sorter merging a whole batch into one
+sentence rather than a snack per visit.
+
+**0245 — and creating a visit builds a record; the picker makes a statement.** Five tests
+failed in CI, none of them about tagging: evidence routes (0166), one way to change a visit
+(0169), the trip rules (0170), merging (0185) and the counts (0190). Each had built a visit
+with two people in order to test something else and now got one. The line is not "the picker
+asks and everything else asks too" — it is **a person's word about somebody else is a
+question; a record being constructed from a list its caller already holds is not**.
+`set_visit_solo` and `set_place_solo` are the first. `create_visit` is the second, and no live
+screen calls it: `addVisit` is deprecated with zero callers and passes no participants at all.
+Its rows say `evidence = 'created_with'` rather than claiming somebody decided something, so
+if that ever stops being true it is visible in the data.
+
+**0244 — undo puts people back; it does not ask about them again.** `set_visit_participants`
+has three callers and only one of them is a person saying who was there. `restore_visit` ran
+everybody through the asking path, so pressing **Undo** on a deleted visit turned somebody
+else's ACCEPTED participation into an unanswered question and dropped them from the visit
+until they answered it a second time. Caught by `0185_two_visits_that_were_one` the moment
+0240 reached CI. `create_visit` was left alone deliberately — naming somebody while creating a
+visit is the same statement as naming them on the picker afterwards, and should ask for the
+same reason; the fixtures that broke were asserting the old behaviour and now accept the
+claim. The snapshot was also too small for its job: `delete_visit` recorded
+`jsonb_agg(vp.profile_id)`, which was enough while a participant WAS an id, and an undo that
+restores only the id throws away who asserted it, who decided it and when. It records the
+whole row now, and restore reads both shapes because an undo token issued minutes before the
+deploy still carries the old one.
+
+**A QUESTION NOBODY IS ASKED IS NOT A QUESTION.** `my_tags_to_confirm` returned ACTIVITY claims
+only. Visit claims have been storable since 0201 and `respond_to_tag` has known how to answer
+them just as long — but nothing ever put one in front of the person, so a visit tag sat
+'proposed' forever. All three kinds are surfaced now.
+
+**AND TWO WORDS FOR ONE IDEA, WHICH IS NOT FIXED.** `tag_claims.status` permits **declined**;
+`activity_profiles.claim_status` permits **rejected**. Same meaning, different word, adjacent
+tables — which is exactly how 0228 came to gate sharing on a value that could never appear.
+Unifying them is a data migration and was not done here; it is written down in 0240 so the
+next person to read a `<> 'declined'` does not assume it works.
 
 ### Step 7 — an export that is actually everything *(0237, 0238)*
 

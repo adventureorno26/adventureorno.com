@@ -125,6 +125,15 @@ declare
     -- as `approve_import_duplicates` applies: the pair must agree about what "all" means,
     -- or she is told one number and a different set is acted on.
     'import_duplicates_pending',
+    -- 0240. WRITERS, and what they read the table for is a single EXISTS: "is this piece of
+    -- visit evidence an activity THAT PERSON recorded?". No column of an activity leaves
+    -- either function — the answer is whether somebody's own evidence protects their row on
+    -- a visit from being deleted by a person saying "I was here alone". It must see every
+    -- activity, not `visible_activities`: the question is about who OWNS the evidence, and
+    -- reading through a visibility view would mean that a recording the caller may not see
+    -- stops protecting its owner — the caller could delete exactly the rows they cannot see.
+    'set_place_solo',
+    'set_visit_participants',
     'shared_outings'
   ];
   unexpected text;

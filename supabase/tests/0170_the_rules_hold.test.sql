@@ -77,8 +77,15 @@ begin
   insert into public.visits (place_id, start_date, end_date, status, manual)
     values (p, '2026-03-04', '2026-03-04', 'taken', true) returning id into child;
 
-  perform public.set_visit_participants(trip,  array['eeee0170-0000-0000-0000-000000000001']::uuid[]);
-  perform public.set_visit_participants(child, array['eeee0170-0000-0000-0000-000000000002']::uuid[]);
+  -- WRITTEN DIRECTLY, not through the picker. Since 0240 naming somebody else raises a
+  -- question and writes no row, and this section is about the parent/child PARTICIPANT rules
+  -- — it needs two visits that already have different people on them, not a tagging dance.
+  perform public.set_visit_participants(trip, array['eeee0170-0000-0000-0000-000000000001']::uuid[]);
+  insert into public.visit_profiles (visit_id, profile_id, claim_status, evidence, created_by)
+  values (child, 'eeee0170-0000-0000-0000-000000000002', 'accepted', 'created_with', 'user')
+  on conflict (visit_id, profile_id) do nothing;
+  delete from public.visit_profiles
+   where visit_id = child and profile_id <> 'eeee0170-0000-0000-0000-000000000002';
 
   begin
     update public.visits set parent_visit_id = trip where id = child;
