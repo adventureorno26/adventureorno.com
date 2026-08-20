@@ -32,13 +32,36 @@ const GROUPS: { title: string; rows: { key: string; label: string }[] }[] = [
   },
 ];
 
-// Signals that mean something needs looking at (shown only when > 0).
-const ISSUES: { key: string; label: string }[] = [
-  { key: 'photos_orphaned', label: 'Photos pointing to a place that no longer exists' },
-  { key: 'videos_no_poster', label: 'Videos with no thumbnail (need re-upload)' },
-  { key: 'activities_no_place', label: 'Activities not attached to a place' },
-  { key: 'pings_unattributed', label: 'Location pings with no owner (older imports)' },
-  { key: 'strava_tokens_expired', label: 'Expired Strava tokens (a refresh may be failing)' },
+// THINGS THAT ARE BROKEN, not things waiting for a decision.
+//
+// This list used to carry "Activities not attached to a place", which is a row on Needs
+// attention with a button that does something about it — so the same work appeared on two
+// screens and only one of them could act on it. §3e Step 5 split these by verb: /attention
+// repairs, and this screen diagnoses and changes nothing. What is left here is the kind of
+// thing nobody chose: a reference pointing at a row that is gone, a thumbnail that never
+// got made, an import that recorded no owner, a token that stopped refreshing. Each says
+// where the fix is, because "something is wrong" with no next step is just worry.
+const ISSUES: { key: string; label: string; where: string }[] = [
+  {
+    key: 'photos_orphaned',
+    label: 'Photos pointing to a place that no longer exists',
+    where: 'Re-sort them under Import & sort photos',
+  },
+  {
+    key: 'videos_no_poster',
+    label: 'Videos with no thumbnail',
+    where: 'Upload the video again to regenerate one',
+  },
+  {
+    key: 'pings_unattributed',
+    label: 'Location pings with no owner (older imports)',
+    where: 'Nothing to do — they predate per-person attribution',
+  },
+  {
+    key: 'strava_tokens_expired',
+    label: 'Expired Strava tokens (a refresh may be failing)',
+    where: 'Reconnect Strava in Settings',
+  },
 ];
 
 /** Data-health center — a whole-dataset snapshot + integrity checks + one-tap
@@ -59,6 +82,12 @@ export default function DataHealth() {
         <span>Settings</span>
       </Link>
       <h1>Data health</h1>
+      {/* SAYING WHAT THIS SCREEN IS FOR, because it used to be a second Needs attention.
+          One verb per screen (§3e Step 5): this one only tells you what is true. */}
+      <p className="label" style={{ marginTop: -6 }}>
+        What is here and what is broken. Nothing on this screen changes anything — the work waiting
+        for a decision is on <Link to="/attention">Needs attention</Link>.
+      </p>
       {h === undefined ? (
         <p className="label">Loading…</p>
       ) : !h ? (
@@ -71,7 +100,10 @@ export default function DataHealth() {
               {issues.map((i) => (
                 <div key={i.key} className="dh-issue">
                   <span className="dh-issue-n">{h[i.key]}</span>
-                  <span>{i.label}</span>
+                  <span>
+                    {i.label}
+                    <span className="label"> — {i.where}</span>
+                  </span>
                 </div>
               ))}
             </div>

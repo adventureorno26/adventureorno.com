@@ -74,6 +74,18 @@ const ROWS: Row[] = [
     to: '/',
     action: 'Open map',
   },
+  // DUPLICATE PLACES, which the repair queue never mentioned. The screen existed at
+  // /duplicates and was reachable only from Settings, so the only way to find out whether
+  // anything needed merging was to go and look — on a screen listing everything that needs
+  // a decision, that is the one kind of work you had to already know about. Counted with
+  // the same function /duplicates lists with, so the number and the rows cannot disagree.
+  {
+    key: 'duplicatePlaces',
+    label: 'Places that may be the same place',
+    hint: 'Almost on top of each other, or sharing a name — merge them or keep them separate',
+    to: '/duplicates',
+    action: 'Compare them',
+  },
   // "Trips awaiting confirmation" is gone: auto-detected trip drafts were retired
   // with the trips table (0137). Nothing suggests a trip any more — a trip is a
   // visit a person marked.

@@ -8,18 +8,11 @@ import {
   fetchPlaceVisitTotals,
   mergePlaces,
 } from '../lib/data';
-import { haversineMeters } from '../lib/geo';
+// THE RULE ITSELF IS NOT HERE ANY MORE. Needs attention counts these too, and a rule
+// written twice is a count that eventually disagrees with the list it links to.
+import { duplicatePairs, type DuplicatePair as Pair } from '../lib/duplicatePlaces';
 import { showSnack } from '../lib/snackbar';
 import type { Place } from '../lib/types';
-
-interface Pair {
-  a: Place; // winner (keeps history) — the more-established of the two
-  b: Place; // loser (merged in)
-  meters: number;
-  sameName: boolean;
-}
-
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 /** Suspected duplicate places — pairs of saved places that sit within ~150 m of
  *  each other or share a name. Merge combines their photos + visit history into
@@ -36,9 +29,7 @@ export default function Duplicates() {
 
   function load() {
     fetchPlaces()
-      .then((r) =>
-        setPlaces(r.filter((p) => p.saved && !p.bucket && !p.holds_children && !p.is_trail)),
-      )
+      .then(setPlaces)
       .catch(() => setPlaces([]));
     fetchDismissedDupes()
       .then(setDismissed)
@@ -56,25 +47,10 @@ export default function Duplicates() {
     [totals],
   );
 
-  const pairs = useMemo<Pair[]>(() => {
-    const ps = places ?? [];
-    const out: Pair[] = [];
-    for (let i = 0; i < ps.length; i++) {
-      for (let j = i + 1; j < ps.length; j++) {
-        const p = ps[i];
-        const q = ps[j];
-        if (dismissed.has(dupeKey(p.id, q.id))) continue; // kept separate — hide it
-        const m = haversineMeters({ lat: p.lat, lng: p.lng }, { lat: q.lat, lng: q.lng });
-        const sameName = !!p.name && norm(p.name) === norm(q.name);
-        if (m <= 150 || (sameName && m <= 3000)) {
-          // Winner = more visits (keeps the richer history), counted now.
-          const [a, b] = visitsOf(p) >= visitsOf(q) ? [p, q] : [q, p];
-          out.push({ a, b, meters: Math.round(m), sameName });
-        }
-      }
-    }
-    return out.sort((x, y) => x.meters - y.meters);
-  }, [places, dismissed, visitsOf]);
+  const pairs = useMemo<Pair[]>(
+    () => duplicatePairs(places ?? [], dismissed, visitsOf),
+    [places, dismissed, visitsOf],
+  );
 
   async function keepSeparate(pair: Pair) {
     setBusy(pair.b.id);
