@@ -7277,3 +7277,35 @@ button.mi-row:hover {
 .attn-cards {
   margin-top: 26px;
 }
+
+/* Export & backup (/export). The table of contents is the point of the screen:
+   real row counts, read before anything is downloaded, so the file's contents are
+   a fact rather than a promise. */
+.ex-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.ex-toc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+.ex-toc-row > b {
+  flex: none;
+  min-width: 58px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ex-absent {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ex-absent li {
+  line-height: 1.45;
+}

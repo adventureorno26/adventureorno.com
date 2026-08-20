@@ -446,22 +446,20 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
 
 **WHAT IS LEFT of §3e, and it is the whole of what is next:**
 
-- **Step 6 — ✅ the picker stopped overwriting people (0236).** `set_activity_solo` ran
-  `delete from activity_profiles where activity_id = …` and rebuilt the rows bare, so
-  pressing **Together** erased the record that Josh had ACCEPTED a tag, added him with no
-  say, and — once 0228 existed — silently SHARED a Strava recording, which is the opposite
-  of "sharing is a choice the owner makes". Now: your own participation you may state;
-  adding anyone else PROPOSES a claim; removing them RETRACTS it; and a row evidencing
-  somebody's own recording is never the tagger's to delete. Verified against production —
-  *Together* keeps his accepted answer, *Just me* retracts, her row and his own recording
-  survive, and re-tagging proposes.
-  **Also fixed there**: 0228 gated sharing on `claim_status <> 'declined'`, and the column's
-  CHECK has no such value — it is `rejected`. The clause read like a safeguard and was a
-  no-op. Nothing had leaked, because a decline DELETES the row, but the guard was fictional.
+- **Step 6 — ✅ the picker stopped overwriting people (0236).** `set_activity_solo` deleted
+  every participant row and rebuilt them bare: it erased the record that Josh had ACCEPTED a
+  tag, added him with no say, and — once 0228 existed — silently SHARED a Strava recording.
+  Now your own participation you may state, adding anyone else PROPOSES, removing them
+  RETRACTS, and a row evidencing somebody's own recording is never the tagger's to delete.
+  0228's `claim_status <> 'declined'` guard was fictional too — the CHECK says `rejected` —
+  and now names the value the column uses. Narrative in §7f.
   **Still to do in Step 6**: extend tagging to visits, photos and places (8b-i).
-- **Step 7 — one Export & Backup screen.** Settings and Data Health both offer
-  place-oriented exports whose copy implies a complete backup; activities, visits,
-  participants, media, provenance and ingest history are not in it.
+- **Step 7 — ✅ one Export & Backup screen (0237, 0238, `/export`).** Data health said
+  *"Download everything you can take with you"* over three buttons that exported 162 places
+  — no outings, no visits, no photos, no journal. Now `export_manifest` / `export_header` /
+  `export_section` back one screen with three separate things and a real table of contents;
+  0238 opened `import_artifacts`, which had RLS on and **no SELECT policy at all**, to the
+  people whose uploads it records. Narrative in §7f.
 - **Two smaller ones, same shape as Step 5**: Data Health and Needs attention still overlap
   on photos and places, and duplicate-PLACE repair still lives at `/duplicates`.
 
@@ -4740,6 +4738,103 @@ cards must render there, and `/add` must not host them.
 **Not done in this step, and still true:** Data Health and Needs attention still overlap on
 photos and places (Codex's point), and the repair cards for duplicate PLACES still live at
 `/duplicates`. Both are the same move as this one and are next after tagging.
+
+
+### Step 6 — saying who was there stopped overwriting what they said about it *(0236)*
+
+`set_activity_solo` backs the `Together / Just me / Just Josh` picker, and it ran:
+
+```sql
+delete from public.activity_profiles where activity_id = p_activity;
+insert into public.activity_profiles (activity_id, profile_id) select ...
+```
+
+Every participant row wiped and replaced with a bare one. Four consequences, the last of
+which had only been true since that afternoon:
+
+1. **It erased his answer** — `claim_status`, `evidence`, `asserted_by`, `decided_by`,
+   `rule_id`. If Josh had ACCEPTED a tag, the record that he accepted it was gone, and
+   §7a-12 exists precisely to keep it.
+2. **It tagged him without asking**, around `tag_claims` entirely.
+3. Its "everyone" branch **re-added every owner and editor** — the 0039 behaviour that put
+   46 of her activities on his stats in the first place.
+4. **And it shared.** Since 0228 an `activity_profiles` row is what lets a tagged person see
+   a Strava recording, so a picker that silently writes rows silently shares.
+
+The rule now: your own participation you may state; adding anyone else **proposes** a claim
+they can accept or decline; removing them **retracts** it; and a row evidencing somebody's
+own recording is never the tagger's to delete — that is the difference between "you weren't
+with me" and "your run did not happen". Verified against production and rolled back:
+
+```
+before: his row says          accepted / tagged_and_accepted / decided by HIM
+after "Together":             accepted / tagged_and_accepted / decided by HIM
+after "Just me": he is        removed, and his claim retracted
+her own row                   survived
+his own separate recording    untouched
+re-tagging him creates        proposed
+```
+
+**A guard that was fictional.** 0228 gated sharing on `claim_status <> 'declined'`. The
+column's CHECK permits **accepted, accepted_legacy, proposed, rejected** — there is no
+`'declined'`, so the clause could never exclude anybody. It had leaked nothing, because
+declining DELETES the row, but it read like a safeguard while doing nothing, which is worse
+than not having written it. Corrected in all three places that carry the predicate.
+
+### Step 7 — an export that is actually everything *(0237, 0238)*
+
+Two screens offered an export and both overstated it:
+
+| Screen | What it said | What it produced |
+| --- | --- | --- |
+| Data health | *"Download everything you can take with you."* | 162 places |
+| Settings | *"Download all 162 places"* | the same three buttons |
+
+567 activities, 552 visits, 655 participants, 178 photos, 619 pieces of visit evidence,
+17,128 pings, 49 import runs and every journal entry were not in it. The Data health
+sentence is the one that mattered: it told her the record was safe on her own disk when
+almost none of it was, and **a backup you believe in and do not have is worse than no
+backup at all**.
+
+**One screen, `/export`, three distinct things**, each saying what it contains AND what it
+does not: the **places** (CSV/GPX/KML, for opening in a map), the **outings** (CSV with
+miles/time/climb, GPX with one track per route), and the **archive** — 31 sections, ~24,000
+rows, one JSON file — which shows its own table of contents, with real row counts read from
+the database, before anything is downloaded.
+
+**Three functions, not one, and the reason is a number:** `authenticated` carries
+`statement_timeout = 8s`, and the whole archive takes about seven seconds to assemble as
+superuser. A single `export_archive()` would have died on the timeout for the person with
+the most data — the one who most needs it. So `export_manifest()` (the contents),
+`export_header()` (the envelope), `export_section(name)` (one section), and the browser
+walks the list. `0237_the_export_is_the_whole_thing.test.sql` asserts that every section the
+manifest promises resolves AND has the count it claimed, so the contents and the table of
+contents cannot drift apart silently.
+
+**SECURITY INVOKER, deliberately**, where nearly every other function here is DEFINER. An
+export is exactly where a definer's convenience becomes a way around everything: a
+`SECURITY DEFINER export_everything()` would have handed all 567 activities to anyone who
+could call it and quietly undone 0228 and 0236. Running as the caller, the archive is
+bounded by the same policies as the app. Measured on production: Josh's manifest says
+**429 activities**, Erica's says **477**, of 567 — each seeing their own plus what the other
+has chosen to share. What you can see is what you can take.
+
+**And it found something on its first run.** `import_artifacts` (0227) — the record of every
+original file uploaded, its hash, size and object key — had RLS enabled and **no SELECT
+policy at all**, and `authenticated` was never granted SELECT. Not a decision anybody wrote
+down; the grant its two siblings got (`ingest_runs`, `ingest_items`, both `is_member()`) was
+simply not repeated. `ingest_items` already exposed `artifact_id`, so a member could see
+that an artifact existed and not what it was: no privacy gained, provenance broken. **0238**
+gives it the same rule as its siblings.
+
+**Four things are deliberately absent, and the screen says all four out loud**: the photo and
+video FILES (this holds their dates, places, names and hashes — bytes are what the nightly
+encrypted off-site backup is for); CREDENTIALS (restoring them would restore somebody's
+ability to act as her); anything the person asking cannot already see; and machine proposals
+and operational logs. Point geometries are dropped rather than written as GeoJSON — `places`,
+`activities`, `photos` and `location_pings` each carry `lat`/`lng` beside `geom`, so keeping
+both was a megabyte of the same fact twice — while real shapes are written as GeoJSON so the
+file opens in something other than this application.
 
 ## 8. Facts that must not be relearned
 

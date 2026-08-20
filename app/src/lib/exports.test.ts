@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { placesToCsv, placesToGpx, placesToKml } from './exports';
+import {
+  activitiesToCsv,
+  activitiesToGpx,
+  archiveFilename,
+  placesToCsv,
+  placesToGpx,
+  placesToKml,
+  type ExportActivity,
+} from './exports';
 import type { Place } from './types';
 
 // Minimal valid Place; override per test.
@@ -134,5 +142,120 @@ describe('well-formed documents', () => {
     );
     expect(placesToGpx([]).trimEnd().endsWith('</gpx>')).toBe(true);
     expect(placesToKml([]).trimEnd().endsWith('</kml>')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The outings, which no export included until §3e Step 7.
+// ---------------------------------------------------------------------------
+
+function activity(overrides: Partial<ExportActivity> = {}): ExportActivity {
+  return {
+    id: 'a1',
+    name: 'Morning run',
+    type: 'Run',
+    start_date: '2026-04-09T13:00:00Z',
+    local_date: '2026-04-09',
+    distance: 8046.72, // exactly 5 miles
+    moving_time: 2400,
+    elapsed_time: 2700,
+    elevation_gain: 152.4, // exactly 500 ft
+    summary_polyline: null,
+    original_source: 'garmin',
+    owner_profile: 'p1',
+    place_id: 'pl1',
+    ...overrides,
+  };
+}
+
+describe('activitiesToCsv', () => {
+  it('reports distance in MILES and climb in FEET — the units she reads', () => {
+    const [, row] = activitiesToCsv([activity()]).split('\n');
+    const cells = row.split(',');
+    expect(cells[3]).toBe('5.00');
+    expect(cells[6]).toBe('500');
+  });
+
+  it('writes times as h:mm:ss rather than a count of seconds', () => {
+    const [, row] = activitiesToCsv([activity()]).split('\n');
+    expect(row.split(',')[4]).toBe('0:40:00');
+    expect(row.split(',')[5]).toBe('0:45:00');
+  });
+
+  it('is ordered oldest first, whatever order the rows arrive in', () => {
+    const csv = activitiesToCsv([
+      activity({ id: 'b', name: 'Later', start_date: '2026-05-01T10:00:00Z' }),
+      activity({ id: 'a', name: 'Earlier', start_date: '2026-01-01T10:00:00Z' }),
+    ]);
+    const names = csv
+      .split('\n')
+      .slice(1)
+      .map((l) => l.split(',')[1]);
+    expect(names).toEqual(['Earlier', 'Later']);
+  });
+
+  it('says whether a route exists, so the GPX file is not a surprise', () => {
+    const rows = [activity({ summary_polyline: null }), activity({ summary_polyline: 'a' })];
+    const flags = activitiesToCsv(rows)
+      .split('\n')
+      .slice(1)
+      .map((l) => l.split(',').pop());
+    expect(flags).toEqual(['no', 'yes']);
+  });
+
+  it('quotes a name containing a comma instead of splitting the row', () => {
+    const csv = activitiesToCsv([activity({ name: 'Run, then coffee' })]);
+    expect(csv).toContain('"Run, then coffee"');
+    expect(csv.split('\n')[1].split(',').length).toBe(csv.split('\n')[0].split(',').length + 1);
+  });
+
+  it('leaves an empty cell where a value is missing rather than writing null', () => {
+    const csv = activitiesToCsv([
+      activity({ distance: null, moving_time: null, elapsed_time: null, elevation_gain: null }),
+    ]);
+    expect(csv).not.toContain('null');
+    expect(csv.split('\n')[1].split(',').slice(3, 7).join('|')).toBe('|||');
+  });
+});
+
+describe('activitiesToGpx', () => {
+  // A tiny real polyline: three points near Great Falls.
+  const line = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
+
+  it('omits outings with no route rather than writing an empty track', () => {
+    const gpx = activitiesToGpx([activity({ name: 'No route' })]);
+    expect(gpx).not.toContain('<trk>');
+    expect(gpx).toContain('</gpx>');
+  });
+
+  it('writes one track per outing that has one', () => {
+    const gpx = activitiesToGpx([
+      activity({ id: 'a', summary_polyline: line }),
+      activity({ id: 'b', summary_polyline: null }),
+      activity({ id: 'c', summary_polyline: line }),
+    ]);
+    expect(gpx.match(/<trk>/g)?.length).toBe(2);
+    expect(gpx).toContain('<trkpt lat=');
+  });
+
+  it('survives a polyline it cannot decode instead of failing the whole export', () => {
+    const gpx = activitiesToGpx([
+      activity({ id: 'bad', summary_polyline: '\u0000\u0001' }),
+      activity({ id: 'good', summary_polyline: line }),
+    ]);
+    expect(gpx.match(/<trk>/g)?.length).toBe(1);
+  });
+
+  it('escapes a name that would otherwise break the XML', () => {
+    const gpx = activitiesToGpx([activity({ name: 'Josh & me <fast>', summary_polyline: line })]);
+    expect(gpx).toContain('Josh &amp; me &lt;fast&gt;');
+  });
+});
+
+describe('archiveFilename', () => {
+  it('carries the day it was taken, so two archives never overwrite each other', () => {
+    expect(archiveFilename(new Date('2026-08-20T21:15:00Z'))).toBe(
+      'adventureorno-archive-2026-08-20.json',
+    );
   });
 });

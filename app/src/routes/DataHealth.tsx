@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchDataHealth, fetchPlaces, type DataHealth as Health } from '../lib/data';
-import { exportCsv, exportGpx, exportKml } from '../lib/exports';
-import type { Place } from '../lib/types';
+import { fetchDataHealth, type DataHealth as Health } from '../lib/data';
 
 const GROUPS: { title: string; rows: { key: string; label: string }[] }[] = [
   {
@@ -47,14 +45,10 @@ const ISSUES: { key: string; label: string }[] = [
  *  export, so the data is easy to trust and recover. */
 export default function DataHealth() {
   const [h, setH] = useState<Health | null | undefined>(undefined);
-  const [places, setPlaces] = useState<Place[]>([]);
   useEffect(() => {
     fetchDataHealth()
       .then(setH)
       .catch(() => setH(null));
-    fetchPlaces()
-      .then(setPlaces)
-      .catch(() => undefined);
   }, []);
 
   const issues = h ? ISSUES.filter((i) => (h[i.key] ?? 0) > 0) : [];
@@ -97,17 +91,20 @@ export default function DataHealth() {
             </div>
           ))}
 
+          {/* THIS CARD USED TO SAY "Download everything you can take with you" over three
+              buttons that exported 162 places and nothing else — no activities, no visits,
+              no photos, no journal. The sentence was the problem, not the buttons: it told
+              her the record was safe on her own disk when almost none of it was. Exporting
+              is now one screen that says what each file contains (§3e Step 7). */}
           <h2 style={{ marginTop: 24 }}>Export a copy</h2>
           <div className="card">
             <p className="label" style={{ margin: '0 0 10px' }}>
-              Download everything you can take with you. Nightly off-site backups also run
-              automatically.
+              The places, the outings, or the whole archive — each says what it contains before you
+              download it.
             </p>
-            <div className="btn-row">
-              <button onClick={() => exportGpx(places)}>GPX</button>
-              <button onClick={() => exportKml(places)}>KML</button>
-              <button onClick={() => exportCsv(places)}>CSV</button>
-            </div>
+            <Link to="/export">
+              <button>Export &amp; backup</button>
+            </Link>
           </div>
         </>
       )}
