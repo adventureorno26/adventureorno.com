@@ -81,11 +81,15 @@ $function$;
 -- The view inlines the same predicate rather than calling the helper per row — see
 -- `the_readers_stay_enforced`, which asserts the PREDICATE, not the function name.
 create or replace view public.visible_activities as
-  select a.id, a.strava_id, a.type, a.name, a.distance, a.moving_time, a.elapsed_time,
-         a.start_date, a.lat, a.lng, a.geom, a.place_id, a.created_at, a.summary_polyline,
-         a.trailhead, a.athlete_id, a.shared_group_id, a.source, a.owner_profile,
-         a.also_profiles, a.elevation_gain, a.source_id, a.is_race, a.elevation_profile,
-         a.start_date_local, a.local_date, a.visit_id, a.original_source
+  -- `select a.*`, NOT an explicit column list. The first draft listed every column, copied
+  -- from production, and CI rejected it the moment the chain was replayed onto an empty
+  -- database: "cannot change name of view column source_id to elevation_gain". A view may
+  -- change its query but not the names or positions of its columns, and a fresh build orders
+  -- the table differently from one that grew over 233 migrations. State the rule, not the
+  -- shape of the table it happens to meet. (Corrected in place before this migration had
+  -- ever run anywhere but production — see 0233, which repeats it for databases that got
+  -- the broken version.)
+  select a.*
     from public.activities a
    where lower(coalesce(a.original_source, '')) <> 'strava'
       or a.owner_profile = auth.uid()
