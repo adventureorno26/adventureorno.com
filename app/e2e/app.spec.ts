@@ -131,4 +131,29 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(page.getByRole('button', { name: 'Data health' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
+
+  // ONE VERB PER SCREEN (2026-08-20). Erica: "Needs Attention and Review Inbox are
+  // redundant" — and worse, the cards lived on /add, the page named after CREATING, with
+  // /inbox redirecting there. She asked where the pending cards were because they were
+  // filed under the wrong verb.
+  //
+  //     /add        create and import
+  //     /attention  repair            ← the cards
+  //     /inbox      redirects to /attention
+  //
+  // Pinned because it is exactly the kind of thing that drifts back: an embedded queue is
+  // easy to drop onto whichever page someone is working on next.
+  test('the review cards live on /attention, and /add only points at them', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(page).toHaveURL(/\/attention/);
+
+    // The queue itself renders here — not a link to somewhere else.
+    await expect(page.locator('.attn-cards')).toHaveCount(1);
+
+    await page.goto('/add');
+    await expect(page.getByRole('heading', { name: /^Add$/ })).toBeVisible();
+    // /add must not host the queue any more.
+    await expect(page.locator('.attn-cards')).toHaveCount(0);
+    await expect(page.locator('.inbox-card')).toHaveCount(0);
+  });
 });

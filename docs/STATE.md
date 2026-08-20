@@ -710,6 +710,34 @@ run — they got a raw `23505 duplicate key` instead. Better than the hole, stil
 an import fails for a reason nothing to do with the importer, and the error confirms someone
 else has used that key. The index is now scoped to its initiator, matching the lookup.
 
+#### 3l. STEP 5 — one verb per screen *(2026-08-20)*
+
+Erica, 2026-08-18: *"Needs Attention and Review Inbox are redundant."* They were, and the
+arrangement was worse than duplication: **Needs attention listed counts while the actual
+cards were embedded in `/add`** — the page named after *creating* — and `/inbox` redirected
+there too. That is why she had to ask where the pending cards were: they were filed under
+the wrong verb, and my first pass at merging the two only made the counts link to `/add`
+rather than moving the work.
+
+The split is by verb now, which is the one line that stays put:
+
+    /add        create and import new information
+    /attention  repair what is already there      ← the cards live here
+    /inbox      redirects to /attention
+    /health     diagnose the system, change nothing
+
+`/add` keeps a **pointer** — "12 cards are waiting for you" — because adding something is
+when a person is most likely to notice there is tidying to do. What it no longer keeps is
+the queue.
+
+Pinned with an e2e check, because an embedded queue is exactly the kind of thing that drifts
+back onto whichever page someone is working on next: `/inbox` must land on `/attention`, the
+cards must render there, and `/add` must not host them.
+
+**Not done in this step, and still true:** Data Health and Needs attention still overlap on
+photos and places (Codex's point), and the repair cards for duplicate PLACES still live at
+`/duplicates`. Both are the same move as this one and are next after tagging.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
