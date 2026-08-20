@@ -6,8 +6,11 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Full validation runs outside the normal PR path.
-    - cron: "0 9 * * *"
+    # WEEKLY, not nightly. This run includes the full cross-browser matrix (~9 minutes of
+    # billable time on its own) and it was firing every night — roughly 450 minutes a month
+    # against a 3,000-minute allowance, to re-prove a suite that already runs on every PR
+    # that touches app code. Sunday 09:00 UTC.
+    - cron: "0 9 * * 0"
   workflow_dispatch:
     inputs:
       full_validation:
@@ -103,6 +106,11 @@ jobs:
   build:
     name: build
     needs: classify
+    # SKIPPED, not started-and-guarded. GitHub rounds every JOB up to a whole
+    # minute, so six jobs that each do nothing still bill six minutes — which is
+    # what a docs-only change used to cost, twice (PR, then push). A skipped job
+    # bills nothing.
+    if: needs.classify.outputs.build == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: No build-relevant changes
@@ -170,6 +178,11 @@ jobs:
   database:
     name: database
     needs: classify
+    # SKIPPED, not started-and-guarded. GitHub rounds every JOB up to a whole
+    # minute, so six jobs that each do nothing still bill six minutes — which is
+    # what a docs-only change used to cost, twice (PR, then push). A skipped job
+    # bills nothing.
+    if: needs.classify.outputs.database == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: No database-relevant changes
@@ -261,6 +274,11 @@ jobs:
   security:
     name: security
     needs: classify
+    # Same reasoning as build/database/smoke above.
+    if: >-
+      ${{ needs.classify.outputs.security_code == 'true'
+          || needs.classify.outputs.security_deps == 'true'
+          || needs.classify.outputs.security_workflows == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -328,6 +346,11 @@ jobs:
   smoke:
     name: smoke
     needs: classify
+    # SKIPPED, not started-and-guarded. GitHub rounds every JOB up to a whole
+    # minute, so six jobs that each do nothing still bill six minutes — which is
+    # what a docs-only change used to cost, twice (PR, then push). A skipped job
+    # bills nothing.
+    if: needs.classify.outputs.smoke == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -468,11 +491,15 @@ jobs:
           SMOKE_RESULT: ${{ needs.smoke.result }}
         run: |
           set -euo pipefail
+          # SKIPPED IS NOT FAILURE. Since the gates became job-level skips (to stop
+          # billing a minute per idle job), a change that touches no app code leaves
+          # build/database/smoke as 'skipped'. That means "there was nothing to check",
+          # which is the whole point — only a real failure may stop a release.
           for result in "$BUILD_RESULT" "$DATABASE_RESULT" "$SECURITY_RESULT" "$SMOKE_RESULT"; do
-            if [ "$result" != "success" ]; then
-              echo "A required release gate did not pass."
-              exit 1
-            fi
+            case "$result" in
+              success|skipped) ;;
+              *) echo "A required release gate did not pass (got: $result)."; exit 1 ;;
+            esac
           done
 
       - name: Determine whether production deployment is enabled
