@@ -94,7 +94,8 @@ begin
 end $$;
 
 -- 6) Viewer permissions: a viewer (member, reaction-only) may NOT create, and RLS
---    forbids a viewer writing people directly, but a viewer MAY read people.
+--    forbids a viewer writing people directly. What a viewer may READ changed on
+--    2026-08-20 — see 6b.
 do $$
 begin
   perform set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-0000-0000-0000000000e3"}', true);
@@ -120,9 +121,27 @@ begin
   exception when insufficient_privilege or others then
     if sqlerrm like 'FAIL:%' then raise; end if;
   end;
-  -- viewer CAN read people (is_member read policy)
-  if (select count(*) from public.people) < 1 then raise exception 'FAIL: viewer cannot read people'; end if;
-  raise notice 'PASS 6b: viewer cannot write people but can read them';
+  -- WHAT A VIEWER MAY READ CHANGED, 2026-08-20 (0247/0252). This asserted "viewer CAN read
+  -- people (is_member read policy)", which was true: every member could read every person.
+  -- §8b-i made a contact OWNER-SCOPED AND PRIVATE, so reading somebody else's contact list is
+  -- the thing that had to stop.
+  --
+  -- The narrower half of the old assertion survives, and matters: the person here is attached
+  -- to a VISIT (section 4). Somebody who can see that visit and cannot read that name is told
+  -- a child was there without being told which child — so a person attached to something you
+  -- can already see stays readable, and only unattached contacts are private.
+  if (select count(*) from public.people p
+       where exists (select 1 from public.visit_people vp where vp.person_id = p.id)) < 1 then
+    raise exception 'FAIL: viewer cannot read a person attached to a visit they can see';
+  end if;
+  if exists (select 1 from public.people p
+              where p.owner_profile <> 'aaaaaaaa-0000-0000-0000-0000000000e3'
+                and p.linked_profile is distinct from 'aaaaaaaa-0000-0000-0000-0000000000e3'
+                and not exists (select 1 from public.visit_people vp where vp.person_id = p.id)
+                and not public.person_on_visible_memory(p.id)) then
+    raise exception 'FAIL: a viewer read somebody else''s private contact';
+  end if;
+  raise notice 'PASS 6b: a viewer cannot write people, reads those on a visit they can see, and not private contacts';
 end $$;
 reset role;
 rollback to savepoint before_rls;

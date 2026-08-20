@@ -485,7 +485,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   caught before it existed rather than after.
 
 
-#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0250)*
+#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0252)*
 
 §5's next concrete step was *"database/RLS contracts for tenancy, universal people, events and
 messaging first"*. **Only the people half is built.** Events and messaging previews are still
@@ -527,6 +527,16 @@ not being on a run**, and nothing derives one from the other.
   not. Both clauses are right and both stayed; two definer helpers break the loop (0250).
 - **ON CONFLICT cannot infer a partial index** — the 0209 trap, again. The predicate bought
   nothing, since a unique index treats NULLs as distinct (0249).
+- `0111_create_experience`: **a viewer could create people.** The old write policy was
+  `is_editor_or_owner()`; 0247 replaced it with `owner_profile = auth.uid()` to make a contact
+  private, and in doing so dropped the requirement to be allowed to write at all. Ownership
+  decides which rows are yours; the role decides whether you may make any. Swapping the second
+  for the first reads like a tightening and is a widening (0251).
+- And the same test, one rule further: **a person attached to a visit is not a private
+  contact** (0252). Its assertion that "a viewer CAN read people" was the old household-wide
+  rule and is superseded — but the narrower half survives and matters: somebody who can see a
+  visit and cannot read the name on it is told a child was there without being told which
+  child. The old instruction is noted in the test rather than deleted.
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
@@ -546,7 +556,7 @@ not being on a run**, and nothing derives one from the other.
 
 | Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
 | ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 3 — approved app structure        | **people model built (0247–0250)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 3 — approved app structure        | **people model built (0247–0252)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
 | Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
