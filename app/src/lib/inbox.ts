@@ -236,8 +236,14 @@ export async function learnRule(activityId: string, name?: string): Promise<void
 
 export interface TagToConfirm {
   claim_id: string;
+  /** WHAT is being claimed. Until 0240 only outings were ever shown — visit claims had been
+   *  storable since 0201 and answerable just as long, but nothing put one in front of the
+   *  person, so they sat 'proposed' forever. A `place` claim is one question covering every
+   *  visit there: 43 questions is not a better version of never being asked. */
+  kind: 'activity' | 'visit' | 'place';
+  subject_id: string;
   status: string;
-  activity_id: string;
+  activity_id: string | null;
   /** True when the outing reaches you through a different recording of the same day. */
   via_another_recording: boolean;
   name: string | null;
@@ -247,6 +253,8 @@ export interface TagToConfirm {
   place: string | null;
   tagged_by: string | null;
   rule_note: string | null;
+  /** How many visits a `place` claim covers. 1 for the other kinds. */
+  visits: number;
 }
 
 export async function fetchTagsToConfirm(): Promise<TagToConfirm[]> {

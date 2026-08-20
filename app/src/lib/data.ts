@@ -2,6 +2,7 @@ import { supabase, sqlNull } from './supabase';
 import type { Json } from './database.types';
 import { applyCategories } from './categories';
 import { duplicatePairs } from './duplicatePlaces';
+import { asOutcome, type WhoOutcome } from './whoWasThere';
 import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
 
 /** Load categories/tags from the DB into the runtime registry (call once at boot). */
@@ -849,22 +850,29 @@ const VISIT_COLS =
   // is on its way out — nothing should start reading it again in the meantime.
   'id, place_id, start_date, end_date, note, trip_marked, status, solo_override, created_at';
 
-/** Manually set who a visit belongs to (null = both). Sticks across rebuilds. */
-export async function setVisitSolo(visitId: string, profileId: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_visit_solo', {
+/** Manually set who a visit belongs to (null = both). Sticks across rebuilds.
+ *
+ *  RETURNS WHAT HAPPENED (0243), because since 0240 naming somebody else is a QUESTION and
+ *  not a fact: `{ stated, asked, removed }`. A caller that drops it will show the person a
+ *  change that has not happened yet. */
+export async function setVisitSolo(visitId: string, profileId: string | null): Promise<WhoOutcome> {
+  const { data, error } = await supabase.rpc('set_visit_solo', {
     p_visit: visitId,
     p_profile: sqlNull(profileId), // null = both
   });
   if (error) throw error;
+  return asOutcome(data);
 }
 
-/** Set who a whole (leaf) place belongs to — sets all its visits. null = both. */
-export async function setPlaceSolo(placeId: string, profileId: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_place_solo', {
+/** Set who a whole (leaf) place belongs to — sets all its visits. null = both.
+ *  Naming somebody else raises ONE question about the place (0240/0242). */
+export async function setPlaceSolo(placeId: string, profileId: string | null): Promise<WhoOutcome> {
+  const { data, error } = await supabase.rpc('set_place_solo', {
     p_place: placeId,
     p_profile: sqlNull(profileId), // null = both
   });
   if (error) throw error;
+  return asOutcome(data);
 }
 
 /** Fetch a city/region's boundary polygon from OpenStreetMap Nominatim.

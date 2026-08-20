@@ -30,6 +30,7 @@ import PhotoMatchReview from '../components/PhotoMatchReview';
 import AuthedImg from '../components/AuthedImg';
 import type { Photo, Place, Visit } from '../lib/types';
 import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
+import { announceWho } from '../lib/whoWasThere';
 
 /** 'all' | 'both' | 'mine' | a profile id — built from the real members. */
 type PersonKey = string;
@@ -211,7 +212,14 @@ export default function PlacesEditor() {
     setRowStatus(p.id, 'saving');
     try {
       if (v) {
-        await setVisitSolo(v.id, profileId ?? null);
+        const outcome = await setVisitSolo(v.id, profileId ?? null);
+        announceWho(outcome, people);
+        // ASKED IS NOT THERE. Reflecting the pick locally when the answer is still
+        // pending would put somebody on a visit they have not agreed to (0240/0243).
+        if (outcome.asked.length) {
+          setRowStatus(p.id, 'saved');
+          return;
+        }
         // Update the edited visit AND recompute the place's aggregate people as the
         // UNION across ALL its visits — editing one visit must never replace people
         // contributed by other visits.
@@ -233,8 +241,14 @@ export default function PlacesEditor() {
           return next;
         });
       } else {
-        // Place-level attribution (no specific visit) sets the whole place.
-        await setPlaceSolo(p.id, profileId ?? null);
+        // Place-level attribution (no specific visit) sets the whole place — and asks
+        // once about it, rather than once per visit (0242).
+        const outcome = await setPlaceSolo(p.id, profileId ?? null);
+        announceWho(outcome, people);
+        if (outcome.asked.length) {
+          setRowStatus(p.id, 'saved');
+          return;
+        }
         setPlacePeople((cur) => {
           const next = new Map(cur);
           const set = new Set<string>();

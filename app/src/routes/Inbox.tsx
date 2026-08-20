@@ -348,8 +348,8 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
         <div className="inbox-rule-offer">
           <p>
             <strong>
-              {tags[0].tagged_by ?? 'Someone'} says you were on {tags.length} outing
-              {tags.length === 1 ? '' : 's'}
+              {tags[0].tagged_by ?? 'Someone'} says you were there — {tags.length}{' '}
+              {tags.length === 1 ? 'thing' : 'things'} to answer
             </strong>
             {tags[0].rule_note ? <> — {tags[0].rule_note}</> : null}. Nothing counts as yours until
             you say so. Saying no removes you from that day and never touches anything you recorded
@@ -375,9 +375,20 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             {tags.slice(0, 12).map((t) => (
               <li key={t.claim_id}>
                 <span>
-                  {t.start_date ? dayLabel(t.start_date) : 'Undated'} —{' '}
-                  {t.place ?? t.name ?? 'an outing'}
-                  {miles(t.distance) ? `, ${miles(t.distance)}` : ''}
+                  {/* A PLACE IS NOT A DAY. It is one question about every visit there, so
+                      leading with a date would describe the last of them and hide the rest. */}
+                  {t.kind === 'place' ? (
+                    <>
+                      {t.place ?? 'a place'} — every visit
+                      {t.visits > 1 ? ` (${t.visits})` : ''}
+                    </>
+                  ) : (
+                    <>
+                      {t.start_date ? dayLabel(t.start_date) : 'Undated'} —{' '}
+                      {t.place ?? t.name ?? (t.kind === 'visit' ? 'a visit' : 'an outing')}
+                      {t.kind === 'activity' && miles(t.distance) ? `, ${miles(t.distance)}` : ''}
+                    </>
+                  )}
                 </span>
                 <span className="ic-actions">
                   <button disabled={busy !== null} onClick={() => onAnswerTag(t, true)}>

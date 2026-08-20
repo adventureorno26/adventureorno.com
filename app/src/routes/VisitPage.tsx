@@ -26,6 +26,7 @@ import {
   type PhotoReaction,
 } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
+import { announceWho } from '../lib/whoWasThere';
 import { useAuth } from '../auth/AuthProvider';
 import type { Place } from '../lib/types';
 import AuthedImg from '../components/AuthedImg';
@@ -251,7 +252,11 @@ export default function VisitPage() {
                 value={d.people.length === 1 ? d.people[0].id : ''}
                 aria-label="Who was here"
                 onChange={(e) =>
-                  void run('Saving…', () => setVisitSolo(v.id, e.target.value || null))
+                  void run('Saving…', async () => {
+                    // Naming somebody else asks them; it does not put them on the day
+                    // (0240). The reload below shows what is actually true.
+                    announceWho(await setVisitSolo(v.id, e.target.value || null), people);
+                  })
                 }
               >
                 <option value="">{people.length > 2 ? 'Everyone' : 'Together'}</option>

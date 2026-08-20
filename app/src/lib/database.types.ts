@@ -4500,7 +4500,7 @@ export type Database = {
       }
       set_activity_solo: {
         Args: { p_activity: string; p_profile: string }
-        Returns: undefined
+        Returns: Json
       }
       set_city_boundary: {
         Args: { p_geojson: string; p_kind?: string; p_place: string }
@@ -4572,7 +4572,7 @@ export type Database = {
       }
       set_place_solo: {
         Args: { p_place: string; p_profile: string }
-        Returns: undefined
+        Returns: Json
       }
       set_share_location: { Args: { p_share: boolean }; Returns: boolean }
       set_visit_dates: {
@@ -4639,24 +4639,7 @@ export type Database = {
       }
       set_visit_participants: {
         Args: { p_profiles: string[]; p_visit: string }
-        Returns: {
-          asserted_by: string | null
-          claim_status: string
-          created_at: string
-          created_by: string
-          decided_at: string | null
-          decided_by: string | null
-          evidence: string
-          profile_id: string
-          rule_id: string | null
-          visit_id: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "visit_profiles"
-          isOneToOne: false
-          isSetofReturn: true
-        }
+        Returns: Json
       }
       set_visit_people: {
         Args: { p_people: string[]; p_visit: string }
@@ -4668,7 +4651,7 @@ export type Database = {
       }
       set_visit_solo: {
         Args: { p_profile: string; p_visit: string }
-        Returns: undefined
+        Returns: Json
       }
       settings_stats: {
         Args: { p_profile?: string }

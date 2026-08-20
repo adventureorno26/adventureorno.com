@@ -44,6 +44,7 @@ import {
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
+import { announceWho } from '../lib/whoWasThere';
 import { photosEnabled } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
@@ -341,8 +342,13 @@ export default function PlacePanel({
     profileId: string | null,
   ) {
     try {
-      if (target.type === 'activity') await setActivitySolo(target.id, profileId);
-      else await setVisitSolo(target.id, profileId);
+      // WHAT CAME BACK MATTERS NOW. Naming somebody else is a question, not a fact
+      // (0236/0240), and the only way this screen can say so is to be told (0243).
+      const outcome =
+        target.type === 'activity'
+          ? await setActivitySolo(target.id, profileId)
+          : await setVisitSolo(target.id, profileId);
+      announceWho(outcome, people);
       await Promise.all([reloadActs(), reloadVisits()]);
     } catch (e) {
       // "leave as-is" meant the dropdown kept the value she picked while the

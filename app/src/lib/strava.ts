@@ -2,6 +2,7 @@
 // connect link, and the paginated backfill driver.
 
 import { supabase, sqlNull } from './supabase';
+import { asOutcome, type WhoOutcome } from './whoWasThere';
 import type { Activity, MileageRow } from './types';
 
 const ACTIVITY_COLS =
@@ -9,13 +10,21 @@ const ACTIVITY_COLS =
   // outing after ~20:00 ET lands on the next calendar day (migration 0143).
   'id, strava_id, type, name, distance, elevation_gain, elevation_profile, moving_time, elapsed_time, start_date, local_date, lat, lng, summary_polyline, place_id, trailhead';
 
-/** Set who an activity belongs to (null = both of us). Rebuilds the place's visits. */
-export async function setActivitySolo(activityId: string, profileId: string | null): Promise<void> {
-  const { error } = await supabase.rpc('set_activity_solo', {
+/** Set who an activity belongs to (null = both of us). Rebuilds the place's visits.
+ *
+ *  RETURNS WHAT HAPPENED (0243): since 0236, naming somebody else PROPOSES a claim they can
+ *  accept or decline, so `{ stated, asked, removed }` is the difference between the screen
+ *  reporting a fact and reporting a question. */
+export async function setActivitySolo(
+  activityId: string,
+  profileId: string | null,
+): Promise<WhoOutcome> {
+  const { data, error } = await supabase.rpc('set_activity_solo', {
     p_activity: activityId,
     p_profile: sqlNull(profileId), // null = both; the argument is required
   });
   if (error) throw error;
+  return asOutcome(data);
 }
 
 // Stats + map trails only reflect activities on/after this date. Older Strava

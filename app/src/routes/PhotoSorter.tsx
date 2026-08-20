@@ -28,6 +28,7 @@ import { whoChoices, whoProfileId } from '../lib/participants';
 import { assignStayGroups } from '../lib/photoGroups';
 import { visitDates } from '../lib/visitDates';
 import { showSnack } from '../lib/snackbar';
+import { announceWho, mergeOutcomes } from '../lib/whoWasThere';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
 /** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
@@ -484,7 +485,14 @@ export default function PhotoSorter() {
           const touched = visits.filter((v) =>
             [...days].some((d) => d >= v.start_date && d <= v.end_date),
           );
-          await Promise.all(touched.map((v) => setVisitSolo(v.id, profileId ?? null)));
+          // ONE sentence for the whole batch. A snack per visit would fire a dozen
+          // times to say the same thing once (0243).
+          announceWho(
+            mergeOutcomes(
+              await Promise.all(touched.map((v) => setVisitSolo(v.id, profileId ?? null))),
+            ),
+            people,
+          );
         } catch {
           /* ignore */
         }
