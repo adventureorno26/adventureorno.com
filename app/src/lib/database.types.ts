@@ -4413,6 +4413,7 @@ export type Database = {
       }
       person_is_mine: { Args: { p_person: string }; Returns: boolean }
       person_on_visible_memory: { Args: { p_person: string }; Returns: boolean }
+      person_on_visible_visit: { Args: { p_person: string }; Returns: boolean }
       person_totals: {
         Args: { p_profile: string }
         Returns: {
