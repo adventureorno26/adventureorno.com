@@ -7,6 +7,12 @@
 //
 // `/people/:personId` is a target route in the approved navigation, and this is it.
 //
+// WHAT IT ANSWERS, precisely: everything THAT PERSON did which you are allowed to see —
+// which includes things they did on their own. It is not "what we did together": that is the
+// people multi-select with ALL/ANY, which §8b-i also asks for and which is not built. The
+// first version of this page had a "Miles together" tile summing exactly this list, which
+// reads as one fact and is another.
+//
 // TWO THINGS IT WILL NOT DO. It never sums a photograph with an outing — §8b-i names that one
 // ("photo presence not silently promoted to outing participation"), so being in a picture
 // taken during a run puts nothing on anybody's mileage. And a pending tag is labelled, never
@@ -108,13 +114,19 @@ export default function PersonPage() {
               </div>
               <div className="dh-stat">
                 <b>{Math.round(counts.miles / MILES).toLocaleString()}</b>
-                <span className="label">Miles together</span>
+                {/* NOT "miles together". This page answers "what did Josh do that I can
+                    see", which includes outings he recorded on his own — so summing them
+                    and calling the total time spent together would be a number that reads
+                    as one fact and is another. The people multi-select (ALL/ANY) is what
+                    will answer "with", and it is not built. */}
+                <span className="label">Their miles</span>
               </div>
             </div>
             <p className="label" style={{ margin: '10px 0 0' }}>
-              An outing counts once however many recordings of it exist. Photos are counted apart
-              from outings and add nothing to the miles — being in a picture taken during a run is
-              not being on the run.
+              Everything here is {name}&rsquo;s, and only what you can see — including things they
+              did on their own. An outing counts once however many recordings of it exist. Photos
+              are counted apart from outings and add nothing to the miles: being in a picture taken
+              during a run is not being on the run.
               {counts.pending > 0 && (
                 <>
                   {' '}
