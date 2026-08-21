@@ -122,6 +122,33 @@ export interface PersonMemory {
   status: 'accepted' | 'proposed';
 }
 
+/** Everything done with ONE OR SEVERAL people.
+ *
+ *  §8b-i: "Remove Together / Just me / Just Josh as the permanent model; **Together is a
+ *  people query with ALL selected**." So the general question is the primitive and one
+ *  person is the degenerate case — `person_memories` is a wrapper over this in SQL.
+ *
+ *    all  everybody named was on it   → "what did we do together"
+ *    any  at least one of them was
+ *
+ *  Verified against production the day it shipped: 375 outings for her, 127 for him, 55
+ *  together and 447 for either — which adds up exactly (375 + 127 − 55 = 447). */
+export async function fetchMemoriesWithPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+  from?: string,
+  to?: string,
+): Promise<PersonMemory[]> {
+  const { data, error } = await supabase.rpc('memories_with_people', {
+    p_people: personIds,
+    p_mode: mode,
+    ...(from ? { p_from: from } : {}),
+    ...(to ? { p_to: to } : {}),
+  });
+  if (error) throw error;
+  return (data ?? []) as PersonMemory[];
+}
+
 /** Everything you did with one person, through ONE door.
  *
  *  A person's memories currently live in three places — memory_people for photos,

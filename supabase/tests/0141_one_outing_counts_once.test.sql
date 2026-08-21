@@ -41,7 +41,20 @@ begin
      'file',  'aaaa7777-0000-0000-0000-00000000f001', null),
     ('Run','V141 Purcellville Running',      71940, '2031-03-07T13:10:00Z', 39.13, -77.55, p,
      'file',  'aaaa7777-0000-0000-0000-00000000f002', null);
-  -- these were all "everyone's", which a bare insert now means by default (0188)
+  -- WHO WAS ON THEM, SAID RATHER THAN INHERITED. This used to read "these were all
+  -- everyone's, which a bare insert now means by default (0188)" — and it has not been true
+  -- since 0193 made a bare insert mean the ONE person who made it. Until 0256 the insert
+  -- trigger credited whoever was signed in, so f001 landed on f002's recording by accident
+  -- and the control happened to be right for the wrong reason; the trigger now credits the
+  -- OWNER, and this says the thing the test always meant: they ran it together, so she is on
+  -- his recording of it too.
+  insert into public.activity_profiles
+    (activity_id, profile_id, claim_status, evidence, created_by, decided_by, decided_at)
+  select id, 'aaaa7777-0000-0000-0000-00000000f001', 'accepted', 'tagged_and_accepted', 'user',
+         'aaaa7777-0000-0000-0000-00000000f001', now()
+    from public.activities
+   where name = 'V141 Purcellville Running'
+  on conflict (activity_id, profile_id) do nothing;
 
   -- CONTROL: ungrouped, all three count — this is the bug, reproduced.
   select miles into m_before from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);

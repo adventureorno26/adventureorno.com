@@ -4294,6 +4294,24 @@ export type Database = {
         Args: { p_field: string; p_id: string; p_type: string }
         Returns: boolean
       }
+      memories_with_people: {
+        Args: {
+          p_from?: string
+          p_mode?: string
+          p_people: string[]
+          p_to?: string
+        }
+        Returns: {
+          distance: number
+          happened_on: string
+          id: string
+          kind: string
+          place_id: string
+          place_name: string
+          status: string
+          title: string
+        }[]
+      }
       merge_nearby_dupes: { Args: never; Returns: number }
       merge_places: {
         Args: { p_loser: string; p_winner: string }

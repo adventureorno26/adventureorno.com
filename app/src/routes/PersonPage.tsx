@@ -21,8 +21,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import AuthedImg from '../components/AuthedImg';
 import {
+  fetchMemoriesWithPeople,
   fetchMyPeople,
-  fetchPersonMemories,
   type PersonContact,
   type PersonMemory,
 } from '../lib/memoryPeople';
@@ -49,17 +49,31 @@ const KIND_LABEL: Record<string, string> = {
 export default function PersonPage() {
   const { personId } = useParams<{ personId: string }>();
   const [person, setPerson] = useState<PersonContact | null | undefined>(undefined);
+  const [everyone, setEveryone] = useState<PersonContact[]>([]);
   const [rows, setRows] = useState<PersonMemory[] | null | undefined>(undefined);
+  // ALSO WITH. §8b-i: "Together is a people query with ALL selected" — so the multi-select
+  // is the real control and one person is the degenerate case. `all` is the default because
+  // "and also Mum" nearly always means "the ones with both of them in".
+  const [also, setAlso] = useState<string[]>([]);
+  const [mode, setMode] = useState<'all' | 'any'>('all');
 
   useEffect(() => {
     if (!personId) return;
     fetchMyPeople()
-      .then((list) => setPerson(list.find((p) => p.id === personId) ?? null))
+      .then((list) => {
+        setEveryone(list);
+        setPerson(list.find((p) => p.id === personId) ?? null);
+      })
       .catch(() => setPerson(null));
-    fetchPersonMemories(personId)
+  }, [personId]);
+
+  useEffect(() => {
+    if (!personId) return;
+    setRows(undefined);
+    fetchMemoriesWithPeople([personId, ...also], also.length ? mode : 'any')
       .then(setRows)
       .catch(() => setRows(null));
-  }, [personId]);
+  }, [personId, also, mode]);
 
   const counts = useMemo(() => {
     const c = { photo: 0, outing: 0, visit: 0, pending: 0, miles: 0 };
@@ -81,6 +95,39 @@ export default function PersonPage() {
         <span>Settings</span>
       </Link>
       <h1>{person === undefined ? '…' : name}</h1>
+
+      {/* ALSO WITH — the multi-select §8b-i asks for, in the one place a person is already
+          the subject. Its permanent home is the Map's `People: Anyone` drawer. */}
+      {everyone.length > 1 && (
+        <div className="also-with">
+          <span className="label">Also with</span>
+          {everyone
+            .filter((p) => p.id !== personId)
+            .map((p) => (
+              <button
+                key={p.id}
+                className={also.includes(p.id) ? 'on' : ''}
+                onClick={() =>
+                  setAlso((cur) =>
+                    cur.includes(p.id) ? cur.filter((x) => x !== p.id) : [...cur, p.id],
+                  )
+                }
+              >
+                {p.is_me ? 'Me' : p.display_name}
+              </button>
+            ))}
+          {also.length > 0 && (
+            <span className="also-mode">
+              <button className={mode === 'all' ? 'on' : ''} onClick={() => setMode('all')}>
+                All of them
+              </button>
+              <button className={mode === 'any' ? 'on' : ''} onClick={() => setMode('any')}>
+                Any of them
+              </button>
+            </span>
+          )}
+        </div>
+      )}
 
       {person === null && (
         <p className="label">
@@ -119,7 +166,7 @@ export default function PersonPage() {
                     and calling the total time spent together would be a number that reads
                     as one fact and is another. The people multi-select (ALL/ANY) is what
                     will answer "with", and it is not built. */}
-                <span className="label">Their miles</span>
+                <span className="label">{also.length ? 'Miles' : 'Their miles'}</span>
               </div>
             </div>
             <p className="label" style={{ margin: '10px 0 0' }}>

@@ -485,7 +485,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   caught before it existed rather than after.
 
 
-#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0253)*
+#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0258)*
 
 §5's next concrete step was *"database/RLS contracts for tenancy, universal people, events and
 messaging first"*. **Only the people half is built.** Events and messaging previews are still
@@ -572,7 +572,7 @@ the Map's `People: Anyone` control, which is not built.
 
 | Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
 | ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 3 — approved app structure        | **people model + one person's memories built (0247–0253)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: the Map `People: Anyone` multi-select with ALL/ANY over `person_memories`, then migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 3 — approved app structure        | **people model, one person's memories, and the ALL/ANY people query built (0247–0258)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: move the multi-select onto the Map (`People: Anyone`) and retire `Together / Just me / Just Josh`, then migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
 | Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |

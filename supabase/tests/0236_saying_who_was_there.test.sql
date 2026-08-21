@@ -35,10 +35,16 @@ begin
   returning id into act;
 
   -- HE HAS ALREADY ANSWERED. This is the record 7a-12 exists to keep.
+  -- The owner is already on their own recording — the insert trigger says so since 0257 —
+  -- so this fills in the shape rather than creating it.
   insert into public.activity_profiles
     (activity_id,profile_id,claim_status,evidence,created_by,asserted_by,decided_by,decided_at)
   values (act,e_id,'accepted','own_recording','import',null,e_id,now()),
-         (act,j_id,'accepted','tagged_and_accepted','user',e_id,j_id,now());
+         (act,j_id,'accepted','tagged_and_accepted','user',e_id,j_id,now())
+  on conflict (activity_id, profile_id) do update
+    set claim_status = excluded.claim_status, evidence = excluded.evidence,
+        created_by = excluded.created_by, asserted_by = excluded.asserted_by,
+        decided_by = excluded.decided_by, decided_at = excluded.decided_at;
 
   -- HIS OWN separate recording, which a tag decision must never touch.
   insert into public.activities
@@ -47,7 +53,8 @@ begin
   returning id into his;
   insert into public.activity_profiles
     (activity_id,profile_id,claim_status,evidence,created_by)
-  values (his,j_id,'accepted','own_recording','import');
+  values (his,j_id,'accepted','own_recording','import')
+  on conflict (activity_id, profile_id) do nothing;
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', e_id, 'role','authenticated')::text, true);
@@ -79,6 +86,19 @@ begin
                   where activity_id=his and profile_id=j_id) then
     raise exception 'FAIL: a tag decision removed him from HIS OWN recording';
   end if;
+
+  -- ---- 3b. …BUT YOUR OWN RECORDING IS YOURS TO STEP OFF (0258) -----------
+  -- The protection above is against somebody ELSE deleting your evidence — 0236's own words:
+  -- "not THE TAGGER'S to delete". Once 0257 made an imported activity's owner row say
+  -- `own_recording`, a blanket rule meant she could no longer take herself off a run she had
+  -- recorded: pressing "Just Josh" left her on it. Saying you were not on your own recording
+  -- is a strange thing to say and it is yours to say.
+  perform public.set_activity_solo(act, j_id);
+  if exists (select 1 from public.activity_profiles where activity_id=act and profile_id=e_id) then
+    raise exception 'FAIL: she could not take herself off a recording she made';
+  end if;
+  -- put her back for the rest of the test
+  perform public.set_activity_solo(act, e_id);
 
   -- ---- 4. adding him again PROPOSES, it does not assert ------------------
   perform public.set_activity_solo(act, null);
