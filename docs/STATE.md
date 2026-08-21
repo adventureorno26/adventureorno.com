@@ -650,6 +650,26 @@ is the second time today. Every edit to this file now asserts its anchor before 
   visit and cannot read the name on it is told a child was there without being told which
   child. The old instruction is noted in the test rather than deleted.
 
+#### 3o. THE REGISTRY MIGRATION HAS STARTED — step one of two *(0262)*
+
+§8b-i calls `activity_profiles` and `visit_profiles` *"migration inputs, not the final
+commercial API"*. 0262 registers a subject for every activity and visit and copies all **1,278
+participations** into `memory_people` with their provenance intact. Verified on production by
+the migration itself, which raises rather than continues: **623 outing and 655 visit rows
+across, none missing, none invented, none changing its answer on the way.**
+
+**What a profile maps to**: a person with an account is one person however many contact lists
+they appear in, so participation is recorded against their **own self-contact** — the `people`
+row whose owner and linked profile are the same. That keeps exactly one row per (memory,
+account) and makes the compatibility views in step two exact rather than DISTINCT-ed. Having
+an account now *creates* that row, by trigger, rather than by a migration that ran once.
+
+**IT IS A MIRROR UNTIL STEP TWO, and that is stated rather than hidden.** Nothing reads the new
+rows yet; the two old tables remain authoritative. The next migration re-runs this backfill —
+so anything written in between is carried over — and then turns those tables into views over
+the new store so the twenty-four readers keep working. **If step two does not happen, 0262 is
+a mirror and should be reverted, not left.**
+
 #### 3n. AN OUTSIDE AUDIT, 2026-08-21 — what it found, and what it had already been fixed
 
 Codex audited the repository against production. Its snapshot was two merges old (735c3c8), so
