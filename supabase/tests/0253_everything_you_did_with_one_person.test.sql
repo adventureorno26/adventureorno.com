@@ -54,9 +54,12 @@ begin
           39.6,-77.6,j_id,'file','file',pl,a1)
   returning id into a2;
   update public.activities set shared_group_id = a1 where id = a1;
+  -- The owner is already on their own recording (0256 makes the trigger follow
+  -- owner_profile), so this only fills in the shape the assertions read.
   insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
   values (a1, j_id, 'accepted', 'own_recording', 'import'),
-         (a2, j_id, 'accepted', 'own_recording', 'import');
+         (a2, j_id, 'accepted', 'own_recording', 'import')
+  on conflict (activity_id, profile_id) do nothing;
 
   select count(*) into n from public.person_memories(him) where kind = 'outing';
   if n <> 1 then
@@ -95,7 +98,8 @@ begin
           j_id,'strava','strava',pl)
   returning id into secret;
   insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
-  values (secret, j_id, 'accepted', 'own_recording', 'import');
+  values (secret, j_id, 'accepted', 'own_recording', 'import')
+  on conflict (activity_id, profile_id) do nothing;
 
   if exists (select 1 from public.person_memories(him) where id = secret) then
     raise exception 'FAIL: his page handed her a recording he has not shared';
@@ -118,6 +122,84 @@ begin
   select count(*) into n from public.person_memories(mum);
   if n <> 0 then
     raise exception 'FAIL: he read % memories through her private contact', n;
+  end if;
+end $$;
+
+-- ---- ONE OR SEVERAL PEOPLE, ALL OR ANY (0255) -------------------------------
+-- §8b-i: "Together is a people query with ALL selected." The property that makes ALL usable
+-- is the one that is easy to get wrong: an outing must collapse to ONE before the people on
+-- it are counted. Count participants per RECORDING and an outing both of them were on looks
+-- like two half-matches — so an ALL query silently drops exactly the outings they did
+-- together, which is the only thing anybody asked it for.
+do $$
+declare
+  e_id uuid := 'eeee0253-0000-0000-0000-000000000001';
+  j_id uuid := 'eeee0253-0000-0000-0000-000000000002';
+  pl uuid; a1 uuid; a2 uuid; solo uuid; me uuid; him uuid; n int;
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', e_id, 'role','authenticated')::text, true);
+
+  insert into public.places (id, name, lat, lng, saved)
+  values (gen_random_uuid(), 'Place 0255', 39.7, -77.7, true) returning id into pl;
+  me  := public.add_contact('Me 0255', e_id);
+  him := public.add_contact('J0255', j_id);
+
+  -- ONE outing, TWO recordings, BOTH of them on it.
+  insert into public.activities
+    (id,type,name,distance,start_date,lat,lng,owner_profile,source,original_source,place_id)
+  values (gen_random_uuid(),'Hike','Together 0255',8000,'2026-07-05T12:00:00Z',39.7,-77.7,
+          e_id,'file','file',pl)
+  returning id into a1;
+  insert into public.activities
+    (id,type,name,distance,start_date,lat,lng,owner_profile,source,original_source,place_id,
+     shared_group_id)
+  values (gen_random_uuid(),'Hike','Together 0255 (his copy)',8100,'2026-07-05T12:00:00Z',
+          39.7,-77.7,j_id,'file','file',pl,a1)
+  returning id into a2;
+  update public.activities set shared_group_id = a1 where id = a1;
+  -- She is on her recording; he is on his. Two rows, two recordings, one outing.
+  -- …which the importer trigger may already have written for the owner of each recording.
+  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
+  values (a1, e_id, 'accepted', 'own_recording', 'import'),
+         (a2, j_id, 'accepted', 'own_recording', 'import')
+  on conflict (activity_id, profile_id) do nothing;
+
+  -- And one she did alone.
+  insert into public.activities
+    (id,type,name,distance,start_date,lat,lng,owner_profile,source,original_source,place_id)
+  values (gen_random_uuid(),'Run','Hers alone 0255',4000,'2026-07-06T12:00:00Z',39.7,-77.7,
+          e_id,'file','file',pl)
+  returning id into solo;
+  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
+  values (solo, e_id, 'accepted', 'own_recording', 'import')
+  on conflict (activity_id, profile_id) do nothing;
+
+  -- Scoped to THIS section's fixtures by name: the block above built outings for the same
+  -- two profiles, and an assertion that counts everything in the transaction is measuring
+  -- the test rather than the function.
+  -- ALL: only the one they were both on, and it counts ONCE.
+  select count(*) into n from public.memories_with_people(array[me, him], 'all')
+   where kind = 'outing' and coalesce(title,'') like '%0255%';
+  if n <> 1 then
+    raise exception 'FAIL: "together" over two people returned % outings, not 1', n;
+  end if;
+  if not exists (select 1 from public.memories_with_people(array[me, him], 'all')
+                  where kind = 'outing' and coalesce(title,'') like 'Together 0255%') then
+    raise exception 'FAIL: the outing they actually did together is the one missing';
+  end if;
+
+  -- ANY: both of hers and his copy of the shared one, still collapsed to one outing each.
+  select count(*) into n from public.memories_with_people(array[me, him], 'any')
+   where kind = 'outing' and coalesce(title,'') like '%0255%';
+  if n <> 2 then
+    raise exception 'FAIL: "any of them" returned % outings, not 2', n;
+  end if;
+
+  -- And one person through the general door is the same answer as through the wrapper.
+  if (select count(*) from public.person_memories(him) where kind = 'outing')
+     <> (select count(*) from public.memories_with_people(array[him], 'any') where kind = 'outing') then
+    raise exception 'FAIL: person_memories and memories_with_people disagree about one person';
   end if;
 end $$;
 
