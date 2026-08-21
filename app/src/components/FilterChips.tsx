@@ -1,36 +1,39 @@
 import { categoryLabel } from '../lib/categories';
-import type { MapPerson } from '../lib/data';
+import type { PersonContact } from '../lib/memoryPeople';
+import type { PeopleSelection } from './PeopleFilter';
 
 // Shows the currently-active map filters as removable chips, with a Reset, and
 // explains an empty filtered result. Renders nothing when no filter is active.
 export default function FilterChips({
   filterCat,
-  personFilter,
+  peopleSel,
   people,
-  meId,
   visibleCount,
   onClearCat,
   onClearPerson,
   onReset,
 }: {
   filterCat: string | null;
-  personFilter: string | null;
-  people: MapPerson[];
-  meId?: string;
+  peopleSel: PeopleSelection;
+  people: PersonContact[];
   visibleCount: number;
   onClearCat: () => void;
   onClearPerson: () => void;
   onReset: () => void;
 }) {
-  const active = filterCat !== null || personFilter !== null;
+  const active = filterCat !== null || peopleSel.people.length > 0;
   if (!active) return null;
 
-  const personLabel =
-    personFilter == null
-      ? null
-      : personFilter === meId
-        ? 'Just me'
-        : `Just ${people.find((p) => p.id === personFilter)?.display_name ?? 'them'}`;
+  // NAMES, JOINED BY THE MODE — because "Erica, Josh" is ambiguous and "Erica and Josh"
+  // versus "Erica or Josh" is the whole difference between the two answers.
+  const names = peopleSel.people.map(
+    (id) => people.find((p) => p.id === id)?.display_name ?? 'them',
+  );
+  const personLabel = !names.length
+    ? null
+    : names.length === 1
+      ? names[0]
+      : names.join(peopleSel.mode === 'all' ? ' and ' : ' or ');
 
   return (
     <div className="filter-chips" role="region" aria-label="Active filters">

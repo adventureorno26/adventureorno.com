@@ -22,8 +22,8 @@ import {
   fetchMapPeople,
   fetchMapProjection,
   fetchPings,
-  fetchPlaceIdsForView,
-  fetchPlaceVisitCounts,
+  fetchPlaceIdsForPeople,
+  fetchPlaceVisitCountsForPeople,
   fetchPlaces,
   fetchVisits,
   triggerGeocode,
@@ -35,7 +35,7 @@ import { enqueueUpload } from '../lib/uploadQueue';
 import NewPlaceDraft from '../components/NewPlaceDraft';
 import {
   createManualActivity,
-  fetchActivityLines,
+  fetchActivityLinesForPeople,
   fetchPlaceCounts,
   type PlaceCount,
 } from '../lib/strava';
@@ -48,7 +48,8 @@ import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import OnThisDay from '../components/OnThisDay';
-import PersonFilter from '../components/PersonFilter';
+import PeopleFilter, { type PeopleSelection } from '../components/PeopleFilter';
+import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
 import FilterChips from '../components/FilterChips';
 import SearchPalette from '../components/SearchPalette';
 import MemoryBanner from '../components/MemoryBanner';
@@ -237,7 +238,17 @@ export default function MapView() {
   const fogLoaded = useRef(false);
   const pingsLoaded = useRef(false);
   // "Just me / Just Josh / Both" filter (null = both).
-  const [personFilter, setPersonFilter] = useState<string | null>(null);
+  // WHO, as a selection rather than one of three answers (0260/0261). An empty list is
+  // "Anyone" — everything you can see — where the old single-profile filter's null meant
+  // SHARED, i.e. only the places they had both been to. Together is now one tap, not the
+  // default the map opens on.
+  const [peopleSel, setPeopleSel] = useState<PeopleSelection>({ people: [], mode: 'any' });
+  const [myPeople, setMyPeople] = useState<PersonContact[]>([]);
+  useEffect(() => {
+    fetchMyPeople()
+      .then(setMyPeople)
+      .catch(() => setMyPeople([]));
+  }, []);
   const [people, setPeople] = useState<MapPerson[]>([]);
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -408,7 +419,7 @@ export default function MapView() {
       Ride: '#c98bff',
     };
     // Both = post-cutoff routes; a person = their full history (pre-cutoff too).
-    void fetchActivityLines(personFilter)
+    void fetchActivityLinesForPeople(peopleSel.people, peopleSel.mode)
       .then((lines) => {
         const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
         for (const l of lines) {
@@ -433,7 +444,7 @@ export default function MapView() {
         });
       })
       .catch(() => undefined);
-  }, [ready, places.length, personFilter]);
+  }, [ready, places.length, peopleSel]);
 
   // One-time map init.
   useEffect(() => {
@@ -872,13 +883,13 @@ export default function MapView() {
   const [viewSet, setViewSet] = useState<Set<string> | null>(null);
   useEffect(() => {
     let active = true;
-    fetchPlaceIdsForView(personFilter)
+    fetchPlaceIdsForPeople(peopleSel.people, peopleSel.mode)
       .then((s) => active && setViewSet(s))
       .catch(() => active && setViewSet(null));
     return () => {
       active = false;
     };
-  }, [personFilter, places.length]);
+  }, [peopleSel, places.length]);
 
   // Visit counts for the SAME view, so the "xN" badge matches the pins shown.
   // Reading places.visit_count here was wrong: it is global, so Potomac Station
@@ -886,13 +897,13 @@ export default function MapView() {
   const [visitCounts, setVisitCounts] = useState<Map<string, number>>(new Map());
   useEffect(() => {
     let active = true;
-    fetchPlaceVisitCounts(personFilter)
+    fetchPlaceVisitCountsForPeople(peopleSel.people, peopleSel.mode)
       .then((m) => active && setVisitCounts(m))
       .catch(() => active && setVisitCounts(new Map()));
     return () => {
       active = false;
     };
-  }, [personFilter, places.length]);
+  }, [peopleSel, places.length]);
 
   // Push new counts into the ref and repaint, so switching Just me / Just Josh /
   // Both updates the badges immediately.
@@ -922,7 +933,6 @@ export default function MapView() {
   });
 
   // Show the person filter once both people exist (test/bot excluded server-side).
-  const filterPeople = people;
 
   // Keep the source in sync once both map and data are ready (idle → syncMarkers).
   useEffect(() => {
@@ -1623,31 +1633,25 @@ export default function MapView() {
         />
       )}
 
-      <PersonFilter
-        people={filterPeople}
-        value={personFilter}
-        onChange={setPersonFilter}
-        meId={profile?.id}
-      />
+      <PeopleFilter people={myPeople} value={peopleSel} onChange={setPeopleSel} />
 
       <StatsBar
         places={places}
         onFilterCategory={setFilterCat}
-        personFilter={personFilter}
+        peopleSel={peopleSel}
         viewSet={viewSet}
       />
 
       <FilterChips
         filterCat={filterCat}
-        personFilter={personFilter}
-        people={filterPeople}
-        meId={profile?.id}
+        peopleSel={peopleSel}
+        people={myPeople}
         visibleCount={visiblePlaces.length}
         onClearCat={() => setFilterCat(null)}
-        onClearPerson={() => setPersonFilter(null)}
+        onClearPerson={() => setPeopleSel({ people: [], mode: 'any' })}
         onReset={() => {
           setFilterCat(null);
-          setPersonFilter(null);
+          setPeopleSel({ people: [], mode: 'any' });
         }}
       />
 
