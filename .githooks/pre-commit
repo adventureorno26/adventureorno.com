@@ -58,3 +58,34 @@ if printf '%s\n' "$staged" | grep -qE '^app/(src|e2e)/.*\.(ts|tsx|css)$'; then
   }
   echo "pre-commit: green." >&2
 fi
+
+# 3. THE PLAN CANNOT BE DELETED BY ACCIDENT.
+#
+#    On 2026-08-21 `docs/STATE.md` in the working tree was replaced by a copy 3,760 lines
+#    older than HEAD, with the characters "ok" prepended to its first line — this repository
+#    lives inside OneDrive, which has resurrected stale files before, and an editor holding an
+#    old buffer does the same thing. Nothing was committed, and only because five separate
+#    edits refused to find their anchors at once.
+#
+#    That was luck. This is not: a commit that removes most of the single planning document is
+#    almost certainly a stale copy rather than an edit, and it has to be said out loud.
+#
+#    The threshold is deliberately loose. Real edits to this file add and remove tens of lines
+#    routinely; the failure being caught deletes thousands.
+if printf '%s\n' "$staged" | grep -qx 'docs/STATE.md'; then
+  deleted="$(git diff --cached --numstat -- docs/STATE.md | awk '{print $2}')"
+  total="$(git show HEAD:docs/STATE.md 2>/dev/null | wc -l | tr -d ' ')"
+  #    A QUARTER, not a half. The 2026-08-20 move of §3b–3l into §7f deleted 524 lines of a
+  #    5,400-line file — 10%, and entirely legitimate — while the stale copy deleted 73%.
+  #    A quarter sits in the gap with room on both sides.
+  if [ -n "$deleted" ] && [ -n "$total" ] && [ "$total" -gt 0 ] &&
+     [ $(( deleted * 4 )) -gt "$total" ]; then
+    echo >&2
+    echo "  ✋ This commit deletes $deleted of $total lines of docs/STATE.md." >&2
+    echo "     That is the shape of a STALE COPY, not an edit — check with:" >&2
+    echo "         git diff --cached docs/STATE.md | head -40" >&2
+    echo "     If the file on disk is older than HEAD:  git checkout -- docs/STATE.md" >&2
+    echo "     If you really meant it:  AON_SKIP_HOOK=1 git commit ..." >&2
+    exit 1
+  fi
+fi

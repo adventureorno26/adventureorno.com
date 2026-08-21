@@ -567,6 +567,42 @@ production, and it adds up: **hers 375 · his 127 · together 55 · either 447**
   reason** — it only reached 135 miles because the old trigger put her on the third person's
   recording by accident. The fixture now says they ran it together, which is what it meant.
 
+**THE MAP ASKS THE SAME QUESTION NOW** *(0260, 0261)*. §8b-i: *"A lightweight `People:
+Anyone` control opens a multi-select drawer"*, and *"Together is a people query with ALL
+selected."* Nine functions carried the two-person model — three behind the markers, the visit
+badges and the route lines, six behind the stats bar — each written as `case when p_profile is
+null then is_shared_X(…) else exists(…participant row…) end`. All nine now consume one rule,
+**`people_memory_keys`**, lifted out of `memories_with_people` so the map and a person's page
+cannot disagree about who was where.
+
+**Half of it would have been worse than none**: with *Anyone* selected the map would have shown
+135 places while the miles beside them counted the 54 they had both been to — each correct
+alone, the pair of them a lie. That is why the six stats functions are in the same change.
+
+**The old answers still mean what they meant**, and `0260_the_map_asks_the_same_question` pins
+it: `place_ids_for_view(null)` ≡ `place_ids_for_people([both],'all')`, the per-profile form ≡
+ANY over one, and the same for the badges and the miles. Measured on production before the
+swap — 54 places and 60 counted identical, 437 miles identical, 1,941 for her identical. Two
+things change on purpose: the map **opens on Anyone** (135 places, 2,513 miles) where the old
+default was SHARED, and the route lines now draw **every** recording of a matching outing
+rather than one, because the canonical one may be the copy without a polyline and a missing
+line is a worse error than two on top of each other.
+
+**AND A STALE COPY OF THIS FILE APPEARED ON DISK** *(2026-08-21, 11:14 ET)*. Mid-session,
+`docs/STATE.md` in the working tree was replaced by a much older version — 3,760 lines
+different from `HEAD` — with the characters `ok` prepended to its first line. **The committed
+file was never affected**: every note from 0247 onward is in `HEAD` and always was, which is
+also why four anchors "vanished" at once and one that had supposedly failed to apply days ago
+turned out to be sitting there perfectly.
+**The mechanism is not established.** This repository lives inside OneDrive, which has
+resurrected stale copies before (§8), and an editor holding an old buffer would produce the
+same result; the `ok` looks like a keystroke landing in a window nobody meant to type into.
+**What matters is what nearly happened**: the next edit would have been written onto the stale
+copy and committed, silently reverting the record of the last five days under a commit message
+about something else. It did not, because every edit to this file asserts its anchor first and
+four failed at once — a pattern that is itself a signal. `git diff docs/STATE.md` before
+editing it is now the rule, and the pre-commit hook refuses a commit that deletes most of it.
+
 **AND TWICE, A SENTENCE THAT READ AS ONE FACT AND WAS ANOTHER.** The first live version of the
 person page said **"Miles together — 1,009"**, when the page answers *"everything that person
 did which you can see"*, including things they did alone. Then, filtered to *Also with: Me /
@@ -604,8 +640,11 @@ is the second time today. Every edit to this file now asserts its anchor before 
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
-- **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
-  `contents:read`). Until then the deploy probe honestly reports that it cannot check.
+- ✅ **`GITHUB_TOKEN` for the watchtower** *(2026-08-21)*. She added it to `.env.local`; it
+  had to be a **Cloudflare Worker secret on `adventureorno-watchtower`** — a different place
+  with the same name, and the Cloudflare API showed that worker holding only
+  `SUPABASE_SERVICE_ROLE_KEY`. Verified against the GitHub API first (it reads `main`), then
+  put on the worker.
 - **The iOS Shortcut** — send `Authorization: Bearer`, and the `?token=` fallback can go.
   Note §C5: the device path has not run since 07-29, so "where we are" is a browser tab for
   both of them right now.
@@ -620,14 +659,14 @@ is the second time today. Every edit to this file now asserts its anchor before 
 
 | Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
 | ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 3 — approved app structure        | **people model, one person's memories, and the ALL/ANY people query built (0247–0258)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: move the multi-select onto the Map (`People: Anyone`) and retire `Together / Just me / Just Josh`, then migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 3 — approved app structure        | **people model, photo tagging, a person's memories, the ALL/ANY query and the Map's people filter built (0247–0261)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. ✅ the Map, its badges, its lines and all six stats read one people rule (0260/0261). NEXT: migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
 | Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
 | Phase 8 — events, social, privacy floor | nothing built                                            | Much of it gated on the LLC and the native shell                                                                                                                                                                                      |
 
-**Two dead components are named and unremoved**: `BucketMiniMap` and `TrailSectionsMap`
-have no consumers. `AddSheet` was the same and she said delete it, so these are probably
+**Three dead components are named and unremoved**: `BucketMiniMap`, `TrailSectionsMap` and
+now `PersonFilter`, superseded by `PeopleFilter` on 08-21. None has a consumer. `AddSheet` was the same and she said delete it, so these are probably
 the same answer — but removals get asked about first.
 
 #### 6. THE STANDING RULES THIS WEEK EARNED

@@ -3513,6 +3513,18 @@ export type Database = {
           type: string
         }[]
       }
+      activities_of_type_for_people: {
+        Args: { p_mode?: string; p_people: string[]; p_type: string }
+        Returns: {
+          distance: number
+          id: string
+          name: string
+          place_id: string
+          place_name: string
+          start_date: string
+          type: string
+        }[]
+      }
       activity_category: { Args: { p_type: string }; Returns: string }
       activity_display_name: {
         Args: { p_given: string; p_place: string; p_type: string }
@@ -3520,6 +3532,16 @@ export type Database = {
       }
       activity_lines: {
         Args: { p_profile?: string }
+        Returns: {
+          id: string
+          owner_profile: string
+          place_id: string
+          summary_polyline: string
+          type: string
+        }[]
+      }
+      activity_lines_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           id: string
           owner_profile: string
@@ -4359,6 +4381,15 @@ export type Database = {
           type: string
         }[]
       }
+      mileage_by_person_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
+        Returns: {
+          activity_count: number
+          meters: number
+          miles: number
+          type: string
+        }[]
+      }
       move_visit_to_place: {
         Args: { p_place: string; p_visit: string }
         Returns: {
@@ -4427,6 +4458,14 @@ export type Database = {
           id: string
           name: string
           place_id: string
+        }[]
+      }
+      people_memory_keys: {
+        Args: { p_mode?: string; p_people: string[] }
+        Returns: {
+          key: string
+          kind: string
+          status: string
         }[]
       }
       person_is_mine: { Args: { p_person: string }; Returns: boolean }
@@ -4513,6 +4552,10 @@ export type Database = {
         Args: { p_lat: number; p_lng: number; p_name: string; p_type: string }
         Returns: string
       }
+      place_ids_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
+        Returns: string[]
+      }
       place_ids_for_view: { Args: { p_profile?: string }; Returns: string[] }
       place_is_saved: { Args: { pid: string }; Returns: boolean }
       place_memberships_all: {
@@ -4539,6 +4582,13 @@ export type Database = {
       }
       place_visit_counts: {
         Args: { p_profile?: string }
+        Returns: {
+          place_id: string
+          visits: number
+        }[]
+      }
+      place_visit_counts_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           place_id: string
           visits: number
@@ -4632,8 +4682,27 @@ export type Database = {
           ord: number
         }[]
       }
+      race_stats_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
+        Returns: {
+          bucket: string
+          miles: number
+          n: number
+          ord: number
+        }[]
+      }
       races_list: {
         Args: { p_profile?: string }
+        Returns: {
+          bucket: string
+          id: string
+          miles: number
+          name: string
+          times: number
+        }[]
+      }
+      races_list_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           bucket: string
           id: string
@@ -5592,6 +5661,17 @@ export type Database = {
           visit_id: string
         }[]
       }
+      trips_list_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
+        Returns: {
+          end_date: string
+          name: string
+          nights: number
+          place_id: string
+          start_date: string
+          visit_id: string
+        }[]
+      }
       undo_approval: { Args: { p_token: string }; Returns: Json }
       unlockrows: { Args: { "": string }; Returns: number }
       untag_person_on_photo: {
@@ -5625,6 +5705,14 @@ export type Database = {
       }
       wander_stats: {
         Args: { p_profile?: string }
+        Returns: {
+          miles: number
+          places_count: number
+          trips_count: number
+        }[]
+      }
+      wander_stats_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           miles: number
           places_count: number

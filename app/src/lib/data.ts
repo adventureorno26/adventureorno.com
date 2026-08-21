@@ -1019,6 +1019,42 @@ export async function fetchPlaceVisitTotals(): Promise<Map<string, number>> {
   return out;
 }
 
+/** THE PEOPLE FILTER, as the map now asks it (0260).
+ *
+ *  An EMPTY list means "Anyone" — no filter at all — where the old
+ *  `place_ids_for_view(null)` meant SHARED, i.e. only what both of them were on. "Together"
+ *  is now `all` with both selected: the same set, one tap, no longer the default. */
+export async function fetchPlaceIdsForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<Set<string>> {
+  const { data, error } = await supabase.rpc('place_ids_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return new Set(
+    (data ?? []).map((r: { place_ids_for_people: string } | string) =>
+      typeof r === 'string' ? r : r.place_ids_for_people,
+    ),
+  );
+}
+
+export async function fetchPlaceVisitCountsForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase.rpc('place_visit_counts_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  const out = new Map<string, number>();
+  for (const r of (data ?? []) as Array<{ place_id: string; visits: number }>)
+    out.set(r.place_id, r.visits);
+  return out;
+}
+
 export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('place_ids_for_view', {
     p_profile: profileId ?? undefined,

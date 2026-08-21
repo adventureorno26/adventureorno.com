@@ -33,6 +33,18 @@ export async function setActivitySolo(
 export const STATS_CUTOFF = '2025-12-21';
 
 /** Mileage by type. Pass a profile id for "just that person"; omit for both. */
+export async function fetchMileageForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<MileageRow[]> {
+  const { data, error } = await supabase.rpc('mileage_by_person_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return (data ?? []) as MileageRow[];
+}
+
 export async function fetchMileage(personId?: string | null): Promise<MileageRow[]> {
   const { data, error } = await supabase.rpc('mileage_by_person', {
     p_profile: personId ?? undefined,
@@ -61,6 +73,20 @@ export interface ActivityListRow {
 
 /** Every activity of one type for a person (null = Both view), newest first —
  *  for the "tap a run total → see the list of runs" drill-down. */
+export async function fetchActivitiesOfTypeForPeople(
+  type: string,
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<ActivityListRow[]> {
+  const { data, error } = await supabase.rpc('activities_of_type_for_people', {
+    p_type: type,
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return (data ?? []) as ActivityListRow[];
+}
+
 export async function fetchActivitiesOfType(
   type: string,
   personId?: string | null,
@@ -112,6 +138,23 @@ export interface ActivityLine {
 
 /** Activity route geometries for the map. Both view = on/after the cutoff; a
  *  single person's view = ALL their routes (their full history). */
+/** The map's route lines for a set of people (0260).
+ *
+ *  Every recording in a matching group is drawn, not just the canonical one: the
+ *  representative may be the copy WITHOUT a polyline, and a missing line is a worse error
+ *  than two drawn on top of each other. */
+export async function fetchActivityLinesForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<ActivityLine[]> {
+  const { data, error } = await supabase.rpc('activity_lines_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return (data ?? []) as ActivityLine[];
+}
+
 export async function fetchActivityLines(personId?: string | null): Promise<ActivityLine[]> {
   // Through the RPC (0184). The map was the last thing in the app filtering on a
   // null: "Both" meant `solo_profile is null`, which is a statement about a column
@@ -143,6 +186,23 @@ export interface WanderStats {
 
 /** Headline stats from the visit-level model: places (each counts once), miles,
  *  and trips (per occurrence). Pass a profile id for that person; omit for Both. */
+export async function fetchWanderStatsForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<WanderStats> {
+  const { data, error } = await supabase.rpc('wander_stats_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  const r = (data?.[0] ?? {}) as Partial<WanderStats>;
+  return {
+    places_count: Number(r.places_count ?? 0),
+    miles: Number(r.miles ?? 0),
+    trips_count: Number(r.trips_count ?? 0),
+  };
+}
+
 export async function fetchWanderStats(personId?: string | null): Promise<WanderStats> {
   const { data, error } = await supabase.rpc('wander_stats', { p_profile: personId ?? undefined });
   if (error) throw error;
@@ -187,6 +247,18 @@ export async function assignActivityToRace(
 }
 
 /** Runnings per distance bucket for a person (null = Both). */
+export async function fetchRaceStatsForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<RaceStat[]> {
+  const { data, error } = await supabase.rpc('race_stats_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return (data ?? []) as RaceStat[];
+}
+
 export async function fetchRaceStats(personId?: string | null): Promise<RaceStat[]> {
   const { data, error } = await supabase.rpc('race_stats', { p_profile: personId ?? undefined });
   if (error) throw error;
@@ -194,6 +266,18 @@ export async function fetchRaceStats(personId?: string | null): Promise<RaceStat
 }
 
 /** One row per named race: how many times run, miles, and distance bucket. */
+export async function fetchRacesListForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<RaceRow[]> {
+  const { data, error } = await supabase.rpc('races_list_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return (data ?? []) as RaceRow[];
+}
+
 export async function fetchRacesList(personId?: string | null): Promise<RaceRow[]> {
   const { data, error } = await supabase.rpc('races_list', { p_profile: personId ?? undefined });
   if (error) throw error;
@@ -210,6 +294,18 @@ export interface TripRow {
   start_date: string;
   end_date: string;
   nights: number;
+}
+
+export async function fetchTripsListForPeople(
+  personIds: string[],
+  mode: 'all' | 'any' = 'all',
+): Promise<TripRow[]> {
+  const { data, error } = await supabase.rpc('trips_list_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
+  if (error) throw error;
+  return (data ?? []) as TripRow[];
 }
 
 export async function fetchTripsList(personId?: string | null): Promise<TripRow[]> {
