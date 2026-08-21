@@ -664,6 +664,21 @@ row whose owner and linked profile are the same. That keeps exactly one row per 
 account) and makes the compatibility views in step two exact rather than DISTINCT-ed. Having
 an account now *creates* that row, by trigger, rather than by a migration that ran once.
 
+**Step two, measured before it was attempted** *(0264, 0265)*. Two things had to be true
+before a view could replace those tables, and one of them was not:
+
+- **The view is byte-identical to the table** — 623 outing and 655 visit rows, none missing
+  either way, **zero differing columns**. It took 0264 to get there: 0262 had folded
+  `accepted_legacy` into `accepted` under "one word for one idea", which is right for
+  *rejected*/*declined* and wrong here. `accepted_legacy` does not mean accepted; it means
+  **accepted by a rule rather than by the person** — the 44 tags applied to Josh before anyone
+  thought to ask him, and the reason `respond_to_tag` still treats them as answerable.
+- **"The writers stay untouched" was never available.** All fourteen writers use `ON CONFLICT`
+  — 32 clauses between them — and a view cannot take one. So the move is 33 write statements
+  translated from `(activity_id, profile_id)` to `(subject_id, person_id)`, not a swap. 0265
+  adds the three get-or-create helpers that make that a substitution rather than fourteen
+  chances to be clever.
+
 **IT IS A MIRROR UNTIL STEP TWO, and that is stated rather than hidden.** Nothing reads the new
 rows yet; the two old tables remain authoritative. The next migration re-runs this backfill —
 so anything written in between is carried over — and then turns those tables into views over

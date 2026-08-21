@@ -4484,6 +4484,7 @@ export type Database = {
           status: string
         }[]
       }
+      person_for_profile: { Args: { p_profile: string }; Returns: string }
       person_is_mine: { Args: { p_person: string }; Returns: boolean }
       person_memories: {
         Args: { p_from?: string; p_person: string; p_to?: string }
@@ -5620,6 +5621,8 @@ export type Database = {
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
       strava_oauth_start: { Args: never; Returns: string }
+      subject_for_activity: { Args: { p_activity: string }; Returns: string }
+      subject_for_visit: { Args: { p_visit: string }; Returns: string }
       tag_person_on_photo: {
         Args: { p_person: string; p_photo: string }
         Returns: Json
