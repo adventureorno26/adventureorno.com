@@ -1175,10 +1175,13 @@ export type Database = {
       memory_people: {
         Row: {
           created_at: string
+          created_by: string
           decided_at: string | null
           decided_by: string | null
+          evidence: string
           participation_status: string
           person_id: string
+          rule_id: string | null
           sharing_status: string
           subject_id: string
           tagged_by: string | null
@@ -1186,10 +1189,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by?: string
           decided_at?: string | null
           decided_by?: string | null
+          evidence?: string
           participation_status?: string
           person_id: string
+          rule_id?: string | null
           sharing_status?: string
           subject_id: string
           tagged_by?: string | null
@@ -1197,10 +1203,13 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by?: string
           decided_at?: string | null
           decided_by?: string | null
+          evidence?: string
           participation_status?: string
           person_id?: string
+          rule_id?: string | null
           sharing_status?: string
           subject_id?: string
           tagged_by?: string | null
@@ -1219,6 +1228,13 @@ export type Database = {
             columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
             referencedColumns: ["id"]
           },
           {
