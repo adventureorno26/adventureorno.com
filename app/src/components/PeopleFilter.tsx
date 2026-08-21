@@ -37,9 +37,15 @@ export default function PeopleFilter({
   const selected = new Set(value.people);
 
   const toggle = (id: string) => {
-    const next = selected.has(id) ? value.people.filter((x) => x !== id) : [...value.people, id];
-    // Two names means "both of them" — the thing Together always meant. One name means
-    // that person, and ANY and ALL are the same answer for one.
+    // PRESSING A NAME MEANS THAT PERSON. The first version was a plain multi-select toggle,
+    // so from "Together" — where everybody is selected — pressing "Me" REMOVED me and left
+    // Josh, and the screen answered a question nobody asked. The old control was three
+    // radio buttons and "Me" always meant just me; that has to survive.
+    //
+    //   part of a wider selection → narrow to this one
+    //   the only one selected     → let go of it, back to Anyone
+    //   not selected              → add, and two names means both of them
+    const next = selected.has(id) ? (value.people.length > 1 ? [id] : []) : [...value.people, id];
     onChange({ people: next, mode: next.length > 1 ? value.mode : 'any' });
   };
 

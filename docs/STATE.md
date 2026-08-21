@@ -588,6 +588,12 @@ default was SHARED, and the route lines now draw **every** recording of a matchi
 rather than one, because the canonical one may be the copy without a polyline and a missing
 line is a worse error than two on top of each other.
 
+**And pressing "Me" gave you Josh.** Found by pressing it on the deployed map. The first
+version of the control was a plain multi-select toggle, so from *Together* — where everybody
+is selected — pressing a name REMOVED that person and left the other one. The old control was
+three radio buttons and "Me" has always meant just me. Pressing a name that is part of a wider
+selection now narrows to that person; pressing the only one selected lets go of it.
+
 **AND A STALE COPY OF THIS FILE APPEARED ON DISK** *(2026-08-21, 11:14 ET)*. Mid-session,
 `docs/STATE.md` in the working tree was replaced by a much older version — 3,760 lines
 different from `HEAD` — with the characters `ok` prepended to its first line. **The committed
