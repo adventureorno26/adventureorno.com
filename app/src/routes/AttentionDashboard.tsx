@@ -33,6 +33,13 @@ const ROWS: Row[] = [
     action: 'Answer them',
   },
   {
+    key: 'photoTagsToConfirm',
+    label: 'Photos someone says you’re in',
+    hint: 'Yours to confirm — saying yes records that it’s you, and adds nothing to your outings',
+    to: '#cards',
+    action: 'Answer them',
+  },
+  {
     key: 'unassignedPhotos',
     label: 'Photos waiting to be sorted',
     hint: 'Uploaded but not yet placed on the map',

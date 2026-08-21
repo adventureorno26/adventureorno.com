@@ -7309,3 +7309,92 @@ button.mi-row:hover {
 .ex-absent li {
   line-height: 1.45;
 }
+
+/* Who is in a photograph (0247/0248). A person here needs no account, so this is not the
+   Together / Just me control — it is a list of people, some of whom happen to sign in. */
+.ph-people {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+.ph-people-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ph-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* Asked and unanswered looks different from agreed, because it is. */
+.ph-person.pending {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+}
+.ph-asked {
+  opacity: 0.7;
+}
+.ph-person-x {
+  background: none;
+  border: 0;
+  padding: 0 0 0 2px;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.ph-person-x:hover {
+  opacity: 1;
+}
+.ph-add {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.ph-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ph-choice {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.ph-new {
+  display: inline-flex;
+  gap: 4px;
+}
+.ph-new input {
+  width: 140px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.ph-new button {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
+/* A photo tag in the review queue shows the photograph — "is this you?" is not a question
+   anybody can answer from a date. */
+.ph-tag-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ph-tag-line img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+}

@@ -35,6 +35,11 @@ import {
 } from '../lib/inbox';
 import { showSnack } from '../lib/snackbar';
 import AuthedImg from '../components/AuthedImg';
+import {
+  fetchMemoryTagsToConfirm,
+  respondToMemoryTag,
+  type MemoryTagToConfirm,
+} from '../lib/memoryPeople';
 import RouteThumb from '../components/RouteThumb';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
@@ -104,6 +109,11 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   // is not settled until that person answers — and until 0213 nobody could: every claim
   // that existed was `accepted_legacy`, which the responder refused.
   const [tags, setTags] = useState<TagToConfirm[]>([]);
+  // PHOTOS somebody says you are in (0247/0248). Kept separate from the outing tags above
+  // rather than folded into them: being in a photograph is not being on a run, and §8b-i
+  // names that one specifically — "photo presence not silently promoted to outing
+  // participation". Two questions, two answers.
+  const [photoTags, setPhotoTags] = useState<MemoryTagToConfirm[]>([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -114,6 +124,9 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
       fetchTagsToConfirm()
         .then(setTags)
         .catch(() => setTags([]));
+      fetchMemoryTagsToConfirm()
+        .then(setPhotoTags)
+        .catch(() => setPhotoTags([]));
       const rows = await fetchInbox();
       setCards(rows);
       // Pre-select rank 0 per field — the recommendation, not a decision.
@@ -272,6 +285,22 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  /** Yes or no to a photograph somebody says you are in. */
+  async function onAnswerPhotoTag(t: MemoryTagToConfirm, accept: boolean) {
+    setBusy(t.subject_id);
+    try {
+      await respondToMemoryTag(t.subject_id, accept);
+      setPhotoTags((ts) => ts.filter((x) => x.subject_id !== t.subject_id));
+      showSnack({
+        message: accept ? 'Confirmed it’s you.' : 'Removed you from that photo.',
+      });
+    } catch (e) {
+      showSnack({ message: e instanceof Error ? e.message : 'Could not answer that.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** Answer all of them at once — still his decision, said once instead of 44 times. */
   async function onAnswerAllTags(accept: boolean) {
     setBusy('tags');
@@ -341,6 +370,38 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             Suggestions from the map data. Nothing here has changed anything yet — a name is only
             written when you say so, and once you do, nothing overwrites it.
           </p>
+        </div>
+      )}
+
+      {photoTags.length > 0 && (
+        <div className="inbox-rule-offer">
+          <p>
+            <strong>
+              {photoTags[0].tagged_by ?? 'Someone'} says you’re in {photoTags.length} photo
+              {photoTags.length === 1 ? '' : 's'}
+            </strong>
+            . Saying yes records that it’s you. It doesn’t add anything to your outings — being in a
+            photograph is not being on a run.
+          </p>
+          <ul className="inbox-tag-list">
+            {photoTags.slice(0, 12).map((t) => (
+              <li key={t.subject_id}>
+                <span className="ph-tag-line">
+                  {t.photo_id && <AuthedImg photoId={t.photo_id} size="thumb" alt="" />}
+                  <span>{dayLabel(t.created_at)}</span>
+                </span>
+                <span className="ic-actions">
+                  <button disabled={busy !== null} onClick={() => void onAnswerPhotoTag(t, true)}>
+                    That’s me
+                  </button>
+                  <button disabled={busy !== null} onClick={() => void onAnswerPhotoTag(t, false)}>
+                    Not me
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {photoTags.length > 12 && <p className="muted">…and {photoTags.length - 12} more.</p>}
         </div>
       )}
 

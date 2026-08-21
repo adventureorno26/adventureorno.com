@@ -485,6 +485,59 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   caught before it existed rather than after.
 
 
+#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0252)*
+
+§5's next concrete step was *"database/RLS contracts for tenancy, universal people, events and
+messaging first"*. **Only the people half is built.** Events and messaging previews are still
+pending your approval, and a storage contract for a screen nobody has agreed to is how a
+schema acquires tables nothing ever uses.
+
+**THE THING THAT WAS IMPOSSIBLE.** §8b-i: *"A user can tag any person."* They could not.
+`activity_profiles` and `visit_profiles` both point at `profiles`, so the only people who could
+ever appear in this app were the two who can sign in to it — a friend, a parent, a child on a
+hike could not be recorded at all. And 178 photos had no participants of any kind, because
+photos were never given a participant table.
+
+| | |
+| --- | --- |
+| `people` | a person, owned by whoever recorded them. `linked_profile` is **nullable** — having an account is a property some people have, not the price of being remembered |
+| `memory_subjects` | the registry §8b-i asked for: four real foreign keys and a CHECK tying the kind to the one that is filled in, rather than an unchecked polymorphic pair. A subject cannot point at something that is not there and cascades away with it |
+| `memory_people` | who was in it, and — kept apart on purpose — whether **they** confirmed it, and whether they can **see** it |
+
+**PHOTO TAGGING IS THE FIRST CONSUMER, and deliberately the only one.** `activity_profiles`
+and `visit_profiles` are untouched and no outing, visit or place subject is registered: §8b-i
+calls those "migration inputs, not the final commercial API", and moving 1,278 rows and
+twenty-four readers in the same change that introduces the model is how one fact ends up
+stored twice. A photo is the one kind with **nothing to mirror**, so this adds a capability
+rather than a second copy of one — and the outing/visit migration will happen against a model
+that has already run against real data.
+
+**THE THREE ANSWERS, each a rule already settled rather than a new invention**: yourself goes
+on (0236); somebody with an account is **asked** (0240), and the chip says *"asked"* until they
+answer (0243); somebody **without** one goes on as your statement, with verification
+`unverified` **forever** — there is nobody to ask, and saying so is the only honest option.
+Removing retracts. §8b-i's own warning is asserted by the tests: **being in a photograph is
+not being on a run**, and nothing derives one from the other.
+
+**Two mistakes the tests caught within the hour**, both mine and both in 0247:
+- `0154_authz_matrix`: `people_read` consulted `memory_people`, whose policy consulted
+  `people`. Postgres stops at **42P17**, so *every direct read of `people` by a signed-in
+  browser was an error* — invisible only because everything ships through SECURITY DEFINER
+  functions, which evaluate no policies at all. The model worked and the table under it did
+  not. Both clauses are right and both stayed; two definer helpers break the loop (0250).
+- **ON CONFLICT cannot infer a partial index** — the 0209 trap, again. The predicate bought
+  nothing, since a unique index treats NULLs as distinct (0249).
+- `0111_create_experience`: **a viewer could create people.** The old write policy was
+  `is_editor_or_owner()`; 0247 replaced it with `owner_profile = auth.uid()` to make a contact
+  private, and in doing so dropped the requirement to be allowed to write at all. Ownership
+  decides which rows are yours; the role decides whether you may make any. Swapping the second
+  for the first reads like a tightening and is a widening (0251).
+- And the same test, one rule further: **a person attached to a visit is not a private
+  contact** (0252). Its assertion that "a viewer CAN read people" was the old household-wide
+  rule and is superseded — but the narrower half survives and matters: somebody who can see a
+  visit and cannot read the name on it is told a child was there without being told which
+  child. The old instruction is noted in the test rather than deleted.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - **`GITHUB_TOKEN` for the watchtower** — `npx wrangler secret put GITHUB_TOKEN` (read-only,
@@ -503,7 +556,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
 
 | Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
 | ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 3 — approved app structure        | people preview approved; events/messages preview pending | Database/RLS contracts for tenancy, universal people, events and messaging first. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 3 — approved app structure        | **people model built (0247–0252)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
 | Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
