@@ -206,6 +206,27 @@ async function circleIconFromUrl(url: string): Promise<ImageData | null> {
   }
 }
 
+// THE ONLY FACE THAT IS ACTUALLY SERVED.
+//
+// These four overlay layers asked for `['Open Sans Bold', 'Noto Sans Bold']`, and measured
+// against production on 2026-08-21 neither one resolves:
+//
+//     /basemap/fonts/Open Sans Bold,Noto Sans Bold/0-255.pbf   → 404
+//     /basemap/fonts/Noto Sans Bold/0-255.pbf                  → 502
+//     /basemap/fonts/Noto Sans Medium/0-255.pbf                → 200, 77 KB
+//
+// The glyph Worker only passes a stack matching /^Noto Sans[ A-Za-z0-9]*$/ — "our font
+// server is not an open proxy" — so a stack beginning "Open Sans" is refused outright. And
+// `Noto Sans Bold` is not published upstream at all, which `style.test.ts` has said in words
+// since the day the basemap was built: *"Noto Sans Bold is not published upstream — it
+// answers 502 — so asking for it puts an error in the console on every tile."* The style
+// obeyed that rule; these four layers, written separately, never heard it.
+//
+// So every labelled overlay has been failing to load a font on every tile, forever, falling
+// back to whatever MapLibre had locally and logging it each time. Medium is what the base
+// style uses for place labels, and it is served.
+const LABEL_FONT = ['Noto Sans Medium'];
+
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -627,7 +648,7 @@ export default function MapView() {
         filter: ['has', 'point_count'],
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-font': LABEL_FONT,
           'text-size': 13,
         },
         paint: { 'text-color': '#05121f' },
@@ -654,7 +675,7 @@ export default function MapView() {
         filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'photo'], 0]],
         layout: {
           'text-field': ['get', 'glyph'],
-          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-font': LABEL_FONT,
           'text-size': 11,
           'text-allow-overlap': true,
           'text-ignore-placement': true,
@@ -686,7 +707,7 @@ export default function MapView() {
         filter: ['all', ['!', ['has', 'point_count']], ['>', ['get', 'visits'], 1]],
         layout: {
           'text-field': ['concat', '×', ['to-string', ['get', 'visits']]],
-          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-font': LABEL_FONT,
           'text-size': 12,
           // A cover-photo marker is ~50px across, so 1.1em (~13px) put the badge
           // inside the photo where it competed with the picture. Sit it on the
@@ -791,7 +812,7 @@ export default function MapView() {
           // Name and age together: the age is not an optional detail, it is what
           // stops the dot from lying.
           'text-field': ['concat', ['get', 'name'], '\n', ['get', 'age']],
-          'text-font': ['Open Sans Bold', 'Noto Sans Bold'],
+          'text-font': LABEL_FONT,
           'text-size': 11,
           'text-offset': [0, 1.9],
           'text-anchor': 'top',

@@ -259,3 +259,47 @@ test.describe('bottom nav must not obstruct interactive elements', () => {
     expect(clear.ok, `"Log a visit" is not tappable: ${clear.reason}`).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// AND NOTHING AT THE TOP OF A PHONE MAY COVER ANYTHING ELSE AT THE TOP.
+// ---------------------------------------------------------------------------
+// Found by an audit on 2026-08-21, screenshotting a 390×844 phone: the "On this day" banner
+// sat straight on top of the Fog / Heat / None control. Both had been placed at
+// `calc(84px + env(safe-area-inset-top))` by rules fifteen hundred lines apart — one written
+// to dodge the crowded bottom of the screen, the other to dodge the stats bar at the top.
+// Each was right about the collision it knew about; neither knew about the other.
+//
+// A CSS-text guard was written first and thrown away: it can only see the literal `84px`, and
+// the next collision will be two different numbers that happen to overlap. This measures what
+// is actually on top at the control's own centre point, which is the property that matters.
+test.describe('the top of a phone is not double-booked', () => {
+  test('the map layer control is tappable, not under the memory banner', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto('/');
+    await page.waitForTimeout(2000);
+
+    const control = page.locator('.layers-control');
+    if ((await control.count()) === 0) test.skip(true, 'No layers control on this build.');
+
+    const covered = await page.evaluate(() => {
+      const el = document.querySelector('.layers-control');
+      if (!el) return { ok: false, by: 'missing' };
+      const r = el.getBoundingClientRect();
+      // Every button in it, not just the pill: the banner covered Fog and Heat and left
+      // None peeking out, which a single centre-point check would have called fine.
+      const bad: string[] = [];
+      for (const b of Array.from(el.querySelectorAll('button'))) {
+        const br = b.getBoundingClientRect();
+        const top = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+        if (!(top && (b.contains(top) || b === top))) {
+          bad.push(
+            `${b.textContent?.trim() || '?'} covered by ${(top as HTMLElement)?.className || 'nothing'}`,
+          );
+        }
+      }
+      return { ok: bad.length === 0, by: bad.join('; '), y: Math.round(r.top) };
+    });
+
+    expect(covered.ok, `layer control buttons are not tappable: ${covered.by}`).toBe(true);
+  });
+});

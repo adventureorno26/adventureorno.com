@@ -600,9 +600,15 @@ different from `HEAD` — with the characters `ok` prepended to its first line. 
 file was never affected**: every note from 0247 onward is in `HEAD` and always was, which is
 also why four anchors "vanished" at once and one that had supposedly failed to apply days ago
 turned out to be sitting there perfectly.
-**The mechanism is not established.** This repository lives inside OneDrive, which has
-resurrected stale copies before (§8), and an editor holding an old buffer would produce the
-same result; the `ok` looks like a keystroke landing in a window nobody meant to type into.
+**WHY, as far as it can be established.** The whole repository — **including `.git`, 32 MB of
+it** — lives under `~/Library/CloudStorage/OneDrive-Personal/`. A cloud-sync agent therefore
+has write authority over every file in the working tree, and over the object store. OneDrive
+has resurrected stale copies in this project before (§8). The `ok` on line 1 says a keystroke
+also reached the file, which is what an editor holding an old buffer would do. Which of the
+two wrote last cannot be established after the fact: the artefact is gone and there are no
+logs to read. What IS established is the standing hazard, and it is bigger than one document —
+**a sync agent that can rewrite `.git` can corrupt the repository, not just a file in it.**
+Moving the repo out of the synced tree is the actual fix and is Erica's call.
 **What matters is what nearly happened**: the next edit would have been written onto the stale
 copy and committed, silently reverting the record of the last five days under a commit message
 about something else. It did not, because every edit to this file asserts its anchor first and
@@ -644,6 +650,22 @@ is the second time today. Every edit to this file now asserts its anchor before 
   visit and cannot read the name on it is told a child was there without being told which
   child. The old instruction is noted in the test rather than deleted.
 
+#### 3n. AN OUTSIDE AUDIT, 2026-08-21 — what it found, and what it had already been fixed
+
+Codex audited the repository against production. Its snapshot was two merges old (735c3c8), so
+some of it was already answered; the rest was right and is listed here with what happened.
+
+| Finding | Verdict |
+| --- | --- |
+| **Overlay labels ask for a font nobody serves** | **CONFIRMED, and it was live.** Measured: `/basemap/fonts/Open Sans Bold,Noto Sans Bold/…` → **404** (the Worker only passes `/^Noto Sans[ A-Za-z0-9]*$/` — it is not an open proxy), `Noto Sans Bold` → **502** (not published upstream), `Noto Sans Medium` → **200**. Four MapView layers asked for the first, on every tile, forever. `style.test.ts` has stated the rule since the basemap was built — it guarded the STYLE and never the app's own layers, which is exactly how a written-down rule gets broken. Fixed, and the guard now covers both. |
+| **Two controls share a row on a phone** | **CONFIRMED.** `.memory-banner` and `.layers-control` were both at `calc(84px + env(safe-area-inset-top))`, placed by rules 1,500 lines apart — one dodging the crowded bottom, one dodging the stats bar. Neither knew about the other, and the wide one covered Fog and Heat. The two rows are named variables now, and `nav-obstruction.spec.ts` measures what is actually on top of every button in that control at 390×844. A CSS-text guard was written first and **thrown away**: it can only see the literal `84px`, and the next collision will be two different numbers. |
+| **STATE.md on disk is a rollback** | **CONFIRMED, and never committed.** See below. |
+| **Two live tests are stale** | **CONFIRMED.** The Routes test held a live Playwright locator across a navigation, so `.nth(i)` re-resolved against the place page and timed out; it snapshots the hrefs now. The Settings test demanded an "Import an activity file" button removed on 08-20 for pointing at a route that does not exist; it asserts the working GPX/TCX/FIT importer instead, with the old instruction noted rather than deleted. |
+| **Nav is still the superseded private model** | **TRUE and known.** `Map / Places / Add / Timeline` against an approved `Map / Add / Insights / Settings`. Tracked in §5; the live test correctly describes today rather than promising tomorrow. |
+| **The people filter is still `Together / Just Erica / Just Josh`** | **STALE.** Replaced on 08-21 by `Anyone / Together / Me / Josh` with explicit ALL/ANY (0260, 0261) — two merges after the snapshot. |
+| **0260 has no regression tests** | **STALE.** `0260_the_map_asks_the_same_question.test.sql` shipped with it, pinning ALL/ANY, empty selection, and that Together and Just-me mean exactly what they meant. Unauthorised person ids are pinned by 0253's test. |
+| **30 `<Link><button>` nested interactive elements** | **CONFIRMED** (15 by a narrower count, same defect). Competing link/button semantics. **NOT fixed here** — it is a mechanical sweep across many files plus an eslint rule, and it is worth doing on its own rather than inside a fix for something else. |
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - ✅ **`GITHUB_TOKEN` for the watchtower** *(2026-08-21)*. She added it to `.env.local`; it
@@ -670,6 +692,12 @@ is the second time today. Every edit to this file now asserts its anchor before 
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
 | Phase 8 — events, social, privacy floor | nothing built                                            | Much of it gated on the LLC and the native shell                                                                                                                                                                                      |
+
+**A mechanical sweep waiting to be done**: 15–30 `<Link><button>…</button></Link>` pairs put a
+button inside a link, which gives the browser two competing controls in one place and shows up
+in the accessibility tree as nested interactive elements. The fix is a styled `Link` plus
+`eslint-plugin-jsx-a11y` so it cannot come back — worth its own change rather than being
+smuggled into a fix for something else.
 
 **Three dead components are named and unremoved**: `BucketMiniMap`, `TrailSectionsMap` and
 now `PersonFilter`, superseded by `PeopleFilter` on 08-21. None has a consumer. `AddSheet` was the same and she said delete it, so these are probably

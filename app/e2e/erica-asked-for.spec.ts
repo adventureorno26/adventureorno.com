@@ -213,15 +213,9 @@ it.describe('the card — what she asked for, on the live site', () => {
     });
     expect(passive, 'the visits section did not render').not.toBeNull();
 
-    expect(passive!, 'the visit section still ASSERTS "Together" as text').not.toMatch(
-      /Together/i,
-    );
-    expect(passive!, 'the visit section still asserts a "· Trip" badge').not.toMatch(
-      /·\s*Trip\b/,
-    );
-    expect(passive!, '"tap a date" is instructional text she removed').not.toMatch(
-      /tap a date/i,
-    );
+    expect(passive!, 'the visit section still ASSERTS "Together" as text').not.toMatch(/Together/i);
+    expect(passive!, 'the visit section still asserts a "· Trip" badge').not.toMatch(/·\s*Trip\b/);
+    expect(passive!, '"tap a date" is instructional text she removed').not.toMatch(/tap a date/i);
   });
 
   it('"Dates should be grouped by year" — and they drop down', async ({ page }) => {
@@ -260,13 +254,23 @@ it.describe('the card — what she asked for, on the live site', () => {
     // opened, which is the behaviour Places was fixed to have.
     const links = page.locator('a[href^="/place/"]:visible');
     await expect(links.first()).toBeVisible();
-    const total = Math.min(await links.count(), 12);
-    expect(total, 'no places to check').toBeGreaterThan(0);
+    // READ THE ADDRESSES BEFORE LEAVING THE PAGE. A Playwright locator is live: it
+    // re-resolves against whatever document is loaded when you use it. This loop navigates
+    // to a place and then asked the SAME locator for its next href — by which time the
+    // document is a place page with no `a[href^="/place/"]:visible` in it, so it waited
+    // thirty seconds and failed on a page full of places. The list is a snapshot now.
+    const hrefs = (
+      await links.evaluateAll((els) =>
+        els.map((e) => (e as HTMLAnchorElement).getAttribute('href')),
+      )
+    )
+      .filter((h): h is string => !!h)
+      .slice(0, 12);
+    expect(hrefs.length, 'no places to check').toBeGreaterThan(0);
 
     let found = '';
-    for (let i = 0; i < total && !found; i++) {
-      const href = await links.nth(i).getAttribute('href');
-      if (!href) continue;
+    for (const href of hrefs) {
+      if (found) break;
       await ready(page, href);
       if (
         (await page
@@ -320,7 +324,15 @@ it.describe('the rest of the app — what she asked for', () => {
   it('"Move Import and Sort Photos into Settings"', async ({ page }) => {
     await ready(page, '/settings');
     await expect(page.getByRole('button', { name: /Import & sort photos/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Import an activity file/i })).toBeVisible();
+    // THE BUTTON WENT, AND THE THING IT PROMISED STAYED. This asserted an "Import an
+    // activity file" button on Settings. That button pointed at `/import/timeline`, a route
+    // that does not exist, AND duplicated the working GPX/TCX/FIT importer sitting a few
+    // inches below it — so it was removed rather than repointed (2026-08-20). Her
+    // instruction was "move import activities to settings"; the importer IS on settings.
+    // The check follows the instruction rather than the button that used to serve it.
+    await expect(
+      page.getByRole('button', { name: /Choose GPX \/ TCX \/ FIT files/i }),
+    ).toBeVisible();
     await ready(page, '/add');
     await expect(page.getByText(/sort photos/i)).toHaveCount(0);
     await expect(page.getByText(/import an activity file/i)).toHaveCount(0);
