@@ -485,7 +485,7 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   caught before it existed rather than after.
 
 
-#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0252)*
+#### 3m. PHASE 3 HAS STARTED — a person no longer needs an account *(0247–0253)*
 
 §5's next concrete step was *"database/RLS contracts for tenancy, universal people, events and
 messaging first"*. **Only the people half is built.** Events and messaging previews are still
@@ -518,6 +518,22 @@ answer (0243); somebody **without** one goes on as your statement, with verifica
 `unverified` **forever** — there is nobody to ask, and saying so is the only honest option.
 Removing retracts. §8b-i's own warning is asserted by the tests: **being in a photograph is
 not being on a run**, and nothing derives one from the other.
+
+**AND THE OTHER HALF OF §8b-i** *(0253)*. §8b-i asks for two things and the model delivered
+one: *"tag any person, FIND ANYONE TAGGED in their photos/memories, retrieve everything they
+did with one or several people"*. Tagging without retrieval is half a feature. `/people/:personId`
+— already a target route in the approved navigation — is built, and reads **one** function.
+That is the point of writing it now rather than after the big migration: a person's memories
+live in three places today (`memory_people` for photos, `activity_profiles` for outings,
+`visit_profiles` for visits), and when the last two fold into the registry, ONE function
+changes and every screen that asked follows. Measured against production: Josh's page shows
+**127 outings from 129 participant rows** — two duplicate recordings collapsed, because "an
+outing counts once however many recordings exist" is the statistics contract and counting rows
+would tell somebody they did the same run twice. A photograph is never summed with an outing,
+a pending tag is labelled and not counted, and a page about a person shows only what the asker
+may see — his unshared Strava recording is not on it. Reachable for now from Settings ▸ People
+▸ *Your people*, which says out loud that it is a temporary home: the approved permanent one is
+the Map's `People: Anyone` control, which is not built.
 
 **Two mistakes the tests caught within the hour**, both mine and both in 0247:
 - `0154_authz_matrix`: `people_read` consulted `memory_people`, whose policy consulted
@@ -556,7 +572,7 @@ not being on a run**, and nothing derives one from the other.
 
 | Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
 | ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 3 — approved app structure        | **people model built (0247–0252)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 3 — approved app structure        | **people model + one person's memories built (0247–0253)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. NEXT: the Map `People: Anyone` multi-select with ALL/ANY over `person_memories`, then migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Map/Add/Insights/Settings, map people/event discovery, Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
 | Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |

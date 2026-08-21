@@ -4412,6 +4412,19 @@ export type Database = {
         }[]
       }
       person_is_mine: { Args: { p_person: string }; Returns: boolean }
+      person_memories: {
+        Args: { p_from?: string; p_person: string; p_to?: string }
+        Returns: {
+          distance: number
+          happened_on: string
+          id: string
+          kind: string
+          place_id: string
+          place_name: string
+          status: string
+          title: string
+        }[]
+      }
       person_on_visible_memory: { Args: { p_person: string }; Returns: boolean }
       person_on_visible_visit: { Args: { p_person: string }; Returns: boolean }
       person_totals: {

@@ -7398,3 +7398,53 @@ button.mi-row:hover {
   object-fit: cover;
   border-radius: 6px;
 }
+
+/* One person's memories (/people/:personId). */
+.person-totals .dh-stats {
+  margin-top: 0;
+}
+.person-memories {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.person-memories li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--card, rgba(255, 255, 255, 0.04));
+}
+/* A tag nobody has answered is marked, never counted. */
+.person-memories li.pending {
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+  background: transparent;
+}
+.person-memories img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
+.pm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.pm-main > b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-person-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
