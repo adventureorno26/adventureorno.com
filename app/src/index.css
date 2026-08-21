@@ -1,4 +1,11 @@
 :root {
+  /* THE TOP OF A PHONE SCREEN HAS TWO FREE ROWS, and only two. Row 1 is just under the
+     search/+Add row; row 2 is under row 1. Anything fixed to the top on a phone takes one of
+     them by name — `.layers-control` has row 1, `.memory-banner` has row 2 — because when
+     both were written as `calc(84px + env(safe-area-inset-top))` in separate places, the
+     wide one covered the small one and nobody noticed until an audit screenshotted it. */
+  --map-phone-row-1: calc(84px + env(safe-area-inset-top));
+  --map-phone-row-2: calc(126px + env(safe-area-inset-top));
   /* Sleek modern blue theme */
   --bg: #060a14;
   --bg-2: #0a1122;
@@ -4488,11 +4495,19 @@ textarea {
 }
 /* On a phone the bottom is crowded (gear, Add Trail, Search, person filter, zoom),
    so the wide "On this day" pill overlapped them. Move it to the top, below the
-   search row, where it's clear. */
+   search row, where it's clear.
+
+   AND THEN IT COVERED THE LAYERS CONTROL. Fog/Heat/None had been moved to exactly the same
+   line — `top: calc(84px + …)` — by a rule fifteen hundred lines away, written to dodge a
+   different collision with the stats bar. Neither rule knew about the other, and the banner
+   is nearly full width, so on a 390px screen it sat straight on top of Fog and Heat.
+   Two things cannot share a row. The layers control keeps the first line because it is small
+   and pinned right; the banner takes the second. Both are named below so the next rule that
+   wants the top of a phone screen has to pick one. */
 @media (max-width: 640px) {
   .memory-banner {
     bottom: auto;
-    top: calc(84px + env(safe-area-inset-top));
+    top: var(--map-phone-row-2);
     max-width: calc(100vw - 24px);
   }
 }
@@ -5306,7 +5321,7 @@ textarea {
    and de-blur it to a solid pill like the other mobile controls. */
 @media (max-width: 560px) {
   .layers-control {
-    top: calc(84px + env(safe-area-inset-top));
+    top: var(--map-phone-row-1);
     right: 12px;
     z-index: 6;
     background: #12131a;

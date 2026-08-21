@@ -1,0 +1,17 @@
+-- 0263 — a trigger function needs no callers.
+--
+-- `0154_authz_matrix` caught 0262 within the hour, which is the third time that test has
+-- earned its place this week:
+--
+--     FAIL: anon can execute SECURITY DEFINER functions: profile_self_person
+--
+-- Postgres grants EXECUTE on a new function to PUBLIC, so `profile_self_person` — created to
+-- give every account its own person row — was callable by an unauthenticated visitor. It is a
+-- trigger function, so calling it directly fails on a null NEW rather than doing anything; the
+-- exposure is nil and the omission is not, because "harmless this time" is how the next one
+-- gets written the same way. 0232 is the same fix for `same_recording_of`, and the reason that
+-- test exists is that a missing REVOKE looks like nothing at all.
+--
+-- Nothing is granted in its place. A trigger runs as the table's owner and needs no grant to
+-- anybody; the only correct audience for this function is the trigger that fires it.
+revoke all on function public.profile_self_person() from public, anon, authenticated;
