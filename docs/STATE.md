@@ -535,6 +535,54 @@ may see — his unshared Strava recording is not on it. Reachable for now from S
 ▸ *Your people*, which says out loud that it is a temporary home: the approved permanent one is
 the Map's `People: Anyone` control, which is not built.
 
+**ONE OR SEVERAL PEOPLE, ALL OR ANY** *(0255)*. §8b-i: *"Remove `Together / Just me / Just
+Josh` as the permanent model; **Together is a people query with ALL selected**."* So the
+general question is the primitive and one person is the degenerate case — `person_memories` is
+now a wrapper over `memories_with_people`, one implementation of authorization, canonical
+outings and the photo/outing separation. **Canonical first, then count**: collapse an outing's
+recordings BEFORE counting who was on it, or an outing they were both on looks like two
+half-matches and an ALL query drops exactly the outings they did together. Measured on
+production, and it adds up: **hers 375 · his 127 · together 55 · either 447** — 375 + 127 − 55
+= 447 exactly. Reachable as *"Also with"* on a person's page.
+
+**AND FOUR DEFECTS FOUND BY WRITING THAT ONE TEST** *(0256–0259)*:
+- `default_participants` credited **`auth.uid()`** and never looked at `owner_profile`, which
+  `set_activity_owner` has already decided in the BEFORE trigger. Inserting an activity on
+  somebody else's behalf put YOU on their run — the 0039 shape. **Measured before claiming
+  harm: zero rows on production came from it** — every current path inserts as the owner, and
+  the Strava backfill has no `auth.uid()` at all. The twelve non-owner rows that exist were
+  written by a backfill on 08-14, are a different question, and are untouched.
+- Fixing that made the owner's row say **`unknown`** instead of `own_recording`, because
+  `ingest_activity`'s explicit insert now lost the conflict — and `own_recording` is exactly
+  what 0236 keys "not yours to delete" on. Every newly imported activity would have had an
+  owner row that "Just me" could delete (0257).
+- `0173_who_did_the_activity` then caught the other side: with the row correctly saying
+  `own_recording`, a blanket protection meant **she could not take herself off a run she had
+  recorded**. 0236's own words settle it — *"not THE TAGGER'S to delete"* — the protection is
+  from other people, not from yourself (0258).
+- And 0258 wrote that rule **backwards on the two visit pickers**: `profile_id <> v_me`
+  exempts the caller from being REMOVED rather than from the protection, so "Just Josh" on a
+  visit left her on it, on every visit in the app (0259).
+- `0141_one_outing_counts_once` then showed its control had been **right for the wrong
+  reason** — it only reached 135 miles because the old trigger put her on the third person's
+  recording by accident. The fixture now says they ran it together, which is what it meant.
+
+**AND TWICE, A SENTENCE THAT READ AS ONE FACT AND WAS ANOTHER.** The first live version of the
+person page said **"Miles together — 1,009"**, when the page answers *"everything that person
+did which you can see"*, including things they did alone. Then, filtered to *Also with: Me /
+All of them*, the paragraph beneath still said *"including things they did on their own"* — the
+opposite of what was on screen. The second is worse, because its fix **had been written and
+silently did not apply**: a string replacement whose target the formatter had re-wrapped, made
+without checking that it matched.
+
+**AND THE SAME MISTAKE, IN THIS FILE, FIVE TIMES.** Everything in the two blocks above was
+written into STATE.md as it happened — and none of it arrived. Each edit anchored on a
+paragraph inserted by the edit before, the first one failed to match, and every one after it
+failed silently on the missing anchor. So the plan was recording *nothing* about 0255–0259
+while the commits said it was. §6 rule 1 is *measure the thing, and check what you pointed at*;
+an unverified string replacement is the same class of error as an unverified query, and this
+is the second time today. Every edit to this file now asserts its anchor before writing.
+
 **Two mistakes the tests caught within the hour**, both mine and both in 0247:
 - `0154_authz_matrix`: `people_read` consulted `memory_people`, whose policy consulted
   `people`. Postgres stops at **42P17**, so *every direct read of `people` by a signed-in

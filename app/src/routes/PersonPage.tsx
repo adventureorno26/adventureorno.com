@@ -170,10 +170,23 @@ export default function PersonPage() {
               </div>
             </div>
             <p className="label" style={{ margin: '10px 0 0' }}>
-              Everything here is {name}&rsquo;s, and only what you can see — including things they
-              did on their own. An outing counts once however many recordings of it exist. Photos
-              are counted apart from outings and add nothing to the miles: being in a picture taken
-              during a run is not being on the run.
+              {/* THE SENTENCE FOLLOWS THE FILTER. It said "including things they did on their
+                  own" whatever was selected — and with "Also with: Me / All of them" that is
+                  the opposite of what is on screen. Same failure as the "Miles together" tile
+                  it shipped beside: text that reads as one fact and is another. */}
+              {also.length === 0 ? (
+                <>
+                  Everything here is {name}&rsquo;s, and only what you can see — including things
+                  they did on their own.
+                </>
+              ) : mode === 'all' ? (
+                <>Only the ones everybody selected was on, and only what you can see.</>
+              ) : (
+                <>Anything involving at least one of the people selected, that you can see.</>
+              )}{' '}
+              An outing counts once however many recordings of it exist. Photos are counted apart
+              from outings and add nothing to the miles: being in a picture taken during a run is
+              not being on the run.
               {counts.pending > 0 && (
                 <>
                   {' '}
