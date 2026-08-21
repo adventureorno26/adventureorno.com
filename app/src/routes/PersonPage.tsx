@@ -1,0 +1,158 @@
+// Everything you did with one person.
+//
+// §8b-i asks for two things and 0247 delivered only the first: *"A user can tag any person,
+// FIND ANYONE TAGGED IN THEIR PHOTOS/MEMORIES, retrieve everything they did with one or
+// several people."* Tagging without retrieval is half a feature — you could say who was in a
+// photograph and there was no way to ask for the ones with them in.
+//
+// `/people/:personId` is a target route in the approved navigation, and this is it.
+//
+// TWO THINGS IT WILL NOT DO. It never sums a photograph with an outing — §8b-i names that one
+// ("photo presence not silently promoted to outing participation"), so being in a picture
+// taken during a run puts nothing on anybody's mileage. And a pending tag is labelled, never
+// counted as agreed: a question shown as a fact is the failure 0243 fixed everywhere else.
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import AuthedImg from '../components/AuthedImg';
+import {
+  fetchMyPeople,
+  fetchPersonMemories,
+  type PersonContact,
+  type PersonMemory,
+} from '../lib/memoryPeople';
+
+const MILES = 1609.344;
+
+const dayLabel = (iso: string | null) => {
+  if (!iso) return 'Undated';
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y) return 'Undated';
+  return new Date(y, (m ?? 1) - 1, d ?? 1).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
+
+const KIND_LABEL: Record<string, string> = {
+  photo: 'Photo',
+  outing: 'Outing',
+  visit: 'Visit',
+};
+
+export default function PersonPage() {
+  const { personId } = useParams<{ personId: string }>();
+  const [person, setPerson] = useState<PersonContact | null | undefined>(undefined);
+  const [rows, setRows] = useState<PersonMemory[] | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!personId) return;
+    fetchMyPeople()
+      .then((list) => setPerson(list.find((p) => p.id === personId) ?? null))
+      .catch(() => setPerson(null));
+    fetchPersonMemories(personId)
+      .then(setRows)
+      .catch(() => setRows(null));
+  }, [personId]);
+
+  const counts = useMemo(() => {
+    const c = { photo: 0, outing: 0, visit: 0, pending: 0, miles: 0 };
+    for (const r of rows ?? []) {
+      if (r.kind in c) c[r.kind as 'photo' | 'outing' | 'visit'] += 1;
+      if (r.status === 'proposed') c.pending += 1;
+      // MILES COME FROM OUTINGS ONLY. A photograph has no distance and adding one in would
+      // be inventing a number.
+      if (r.kind === 'outing' && r.status === 'accepted' && r.distance) c.miles += r.distance;
+    }
+    return c;
+  }, [rows]);
+
+  const name = person?.display_name ?? 'This person';
+
+  return (
+    <div className="page" style={{ maxWidth: 720 }}>
+      <Link className="back-bar" to="/settings">
+        <span>Settings</span>
+      </Link>
+      <h1>{person === undefined ? '…' : name}</h1>
+
+      {person === null && (
+        <p className="label">
+          That isn’t one of your people — or it was removed. Only you can see your own contacts.
+        </p>
+      )}
+
+      {rows === undefined ? (
+        <p className="label">Looking…</p>
+      ) : rows === null ? (
+        <p className="label">Couldn’t load that.</p>
+      ) : rows.length === 0 ? (
+        <p className="label">
+          Nothing recorded with {name} yet. Tag them in a photo and it will show up here.
+        </p>
+      ) : (
+        <>
+          <div className="card person-totals">
+            <div className="dh-stats">
+              <div className="dh-stat">
+                <b>{counts.outing.toLocaleString()}</b>
+                <span className="label">Outings</span>
+              </div>
+              <div className="dh-stat">
+                <b>{counts.visit.toLocaleString()}</b>
+                <span className="label">Visits</span>
+              </div>
+              <div className="dh-stat">
+                <b>{counts.photo.toLocaleString()}</b>
+                <span className="label">Photos</span>
+              </div>
+              <div className="dh-stat">
+                <b>{Math.round(counts.miles / MILES).toLocaleString()}</b>
+                <span className="label">Miles together</span>
+              </div>
+            </div>
+            <p className="label" style={{ margin: '10px 0 0' }}>
+              An outing counts once however many recordings of it exist. Photos are counted apart
+              from outings and add nothing to the miles — being in a picture taken during a run is
+              not being on the run.
+              {counts.pending > 0 && (
+                <>
+                  {' '}
+                  <b>
+                    {counts.pending} {counts.pending === 1 ? 'is' : 'are'} still waiting for an
+                    answer
+                  </b>{' '}
+                  and {counts.pending === 1 ? 'is' : 'are'} not counted above.
+                </>
+              )}
+            </p>
+          </div>
+
+          <ul className="person-memories">
+            {rows.map((r) => (
+              <li key={`${r.kind}:${r.id}`} className={r.status === 'proposed' ? 'pending' : ''}>
+                {r.kind === 'photo' && <AuthedImg photoId={r.id} size="thumb" alt="" />}
+                <span className="pm-main">
+                  <b>{r.title ?? r.place_name ?? KIND_LABEL[r.kind] ?? r.kind}</b>
+                  <span className="label">
+                    {KIND_LABEL[r.kind] ?? r.kind} · {dayLabel(r.happened_on)}
+                    {r.place_name && r.title ? ` · ${r.place_name}` : ''}
+                    {r.kind === 'outing' && r.distance
+                      ? ` · ${(r.distance / MILES).toFixed(1)} mi`
+                      : ''}
+                    {r.status === 'proposed' ? ' · waiting for an answer' : ''}
+                  </span>
+                </span>
+                {r.place_id && (
+                  <Link className="link-btn" to={`/place/${r.place_id}`}>
+                    Open
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}

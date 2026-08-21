@@ -109,3 +109,36 @@ export async function respondToMemoryTag(subjectId: string, accept: boolean): Pr
   });
   if (error) throw error;
 }
+
+export interface PersonMemory {
+  kind: 'photo' | 'outing' | 'visit';
+  id: string;
+  happened_on: string | null;
+  title: string | null;
+  place_id: string | null;
+  place_name: string | null;
+  distance: number | null;
+  /** `proposed` means they have been asked and have not answered — never counted as agreed. */
+  status: 'accepted' | 'proposed';
+}
+
+/** Everything you did with one person, through ONE door.
+ *
+ *  A person's memories currently live in three places — memory_people for photos,
+ *  activity_profiles for outings, visit_profiles for visits — and §8b-i calls the last two
+ *  "migration inputs, not the final commercial API". When they fold into the registry, one
+ *  SQL function changes and every screen that asked follows. A second reader written straight
+ *  against activity_profiles today is a second thing to find and repoint later. */
+export async function fetchPersonMemories(
+  personId: string,
+  from?: string,
+  to?: string,
+): Promise<PersonMemory[]> {
+  const { data, error } = await supabase.rpc('person_memories', {
+    p_person: personId,
+    ...(from ? { p_from: from } : {}),
+    ...(to ? { p_to: to } : {}),
+  });
+  if (error) throw error;
+  return (data ?? []) as PersonMemory[];
+}

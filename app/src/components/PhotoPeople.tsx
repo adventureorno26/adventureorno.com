@@ -16,6 +16,7 @@
 //
 // Removing retracts rather than deletes, everywhere, the same as the other three pickers.
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   addContact,
   fetchMyPeople,
@@ -119,7 +120,11 @@ export default function PhotoPeople({ photoId, canEdit }: { photoId: string; can
             key={p.person_id}
             className={`ph-person ${p.participation_status === 'proposed' ? 'pending' : ''}`}
           >
-            {p.display_name}
+            {/* The name opens their page: everything you did with them, which is the other
+                half of §8b-i. */}
+            <Link to={`/people/${p.person_id}`} className="ph-person-link">
+              {p.display_name}
+            </Link>
             {/* A tag that has been asked and not answered says so, rather than looking
                 like everyone else's. */}
             {p.participation_status === 'proposed' && <span className="ph-asked"> · asked</span>}

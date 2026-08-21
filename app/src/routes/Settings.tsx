@@ -56,6 +56,7 @@ import {
   parseFitActivity,
 } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
+import YourPeopleCard from '../components/YourPeopleCard';
 import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
 import {
@@ -1189,8 +1190,13 @@ export default function Settings() {
                   (Erica, 2026-08-11) — someone asking to join is a person, and
                   the page reads as one thing instead of two stacked lists. */}
               <h2 style={{ marginTop: 28 }}>People</h2>
+              {/* TWO DIFFERENT LISTS, and the order says which is which. Membership is who
+                  can SIGN IN; below it are the people you can TAG, who need no account —
+                  §8b-i keeps account access and memory participation apart on purpose. */}
               <JoinRequestsCard />
               <PeopleCard meId={profile.id} />
+              <h3 style={{ margin: '20px 0 8px' }}>Your people</h3>
+              <YourPeopleCard />
             </>
           )}
         </>

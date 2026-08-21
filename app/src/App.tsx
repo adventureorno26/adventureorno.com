@@ -52,6 +52,7 @@ const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
 const ExportPage = lazyWithReload(() => import('./routes/ExportPage'));
+const PersonPage = lazyWithReload(() => import('./routes/PersonPage'));
 // The review queue, and the recent-activities page — they are the same screen.
 // ONE door for getting things in: add, import, sort, and the review queue.
 const AddPage = lazyWithReload(() => import('./routes/AddPage'));
@@ -290,6 +291,16 @@ export default function App() {
               element={
                 <RequireAuth>
                   <ExportPage />
+                </RequireAuth>
+              }
+            />
+            {/* One person's memories — a target route in the approved navigation, and the
+                other half of §8b-i: tagging without retrieval is half a feature. */}
+            <Route
+              path="/people/:personId"
+              element={
+                <RequireAuth>
+                  <PersonPage />
                 </RequireAuth>
               }
             />
