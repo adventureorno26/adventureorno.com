@@ -822,6 +822,15 @@ Both live nav checks changed with the old expectation written down beside them r
 deleted — including `app.spec.ts`, which asserted Settings was NOT in the nav and now asserts
 Places and Timeline are not, so the count still cannot drift.
 
+**AND A TAB BODY IS A TAB, NOT A PAGE INSIDE A PAGE.** The first deploy shipped both
+screens still wearing the chrome they had as routes: the Places tab rendered *"Map ▸
+Places"* and the Timeline tab rendered *"Settings ▸ Timeline"* — a back-bar offering a way
+out of the page you are already on, above a heading repeating the tab you just pressed.
+(Timeline's pointed at Settings, which was wrong before Insights existed.) Both are gone
+with the route they belonged to; if either becomes a destination again its chrome comes
+back with it. **This was found by looking at the live page, not by a test** — so it is now
+a live check, and that check was proved to FAIL against the deployed site before the fix.
+
 **What is still not built from the contract**: Settings' three destinations
 (`Account | Integrations | Data & Privacy`, the last being one continuous page), and everything
 events/messaging, which waits on previews.

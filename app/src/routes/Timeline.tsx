@@ -5,6 +5,9 @@ import type { Place } from '../lib/types';
 
 /** A single chronological stream of everything — photos + activities by day —
  *  complementing the map. Newest first, grouped by month. */
+// THIS IS A TAB NOW — the Timeline tab of Insights — so the back-bar and the heading
+// are gone with the route they belonged to. That back-bar said SETTINGS, which was
+// already wrong before Insights existed and read "Settings ▸ Timeline" inside it.
 export default function Timeline() {
   const [days, setDays] = useState<TimelineDay[] | null>(null);
   const [places, setPlaces] = useState<Map<string, Place>>(new Map());
@@ -69,11 +72,7 @@ export default function Timeline() {
     new Date(m + '-01T00:00:00').toLocaleDateString(undefined, { month: 'long' });
 
   return (
-    <div className="page" style={{ maxWidth: 720 }}>
-      <Link className="back-bar" to="/settings">
-        <span>Settings</span>
-      </Link>
-      <h1>Timeline</h1>
+    <div className="embedded">
       {days === null ? (
         <p className="label">Loading…</p>
       ) : days.length === 0 ? (
