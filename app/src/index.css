@@ -71,7 +71,28 @@ h3 {
   letter-spacing: -0.01em;
 }
 
-button {
+/* AN ANCHOR THAT IS A BUTTON.
+ *
+ * Fifteen places wrapped a button in a Link, which puts one interactive control inside
+ * another: the browser gets a link and a button in the same box, and which one a keyboard or
+ * a screen reader is addressing stops being obvious. Found by an audit on 2026-08-21.
+ *
+ * The fix keeps the LINK, because these are all navigation and a link is what they are —
+ * cmd-click, open in a new tab, a real href. Turning them into buttons with an onClick would
+ * have thrown all of that away to answer a semantic complaint.
+ *
+ * Only the six base rules are widened, by hand. A regex over every selector mentioning
+ * "button" rewrote a word inside a COMMENT and broke the stylesheet — the second time this
+ * week a clever substitution cost more than the careful one would have. */
+a.as-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+button,
+a.as-button {
   font: inherit;
   cursor: pointer;
   border: 1px solid var(--border);
@@ -85,21 +106,25 @@ button {
     transform 0.06s ease,
     box-shadow 0.15s ease;
 }
-button:hover {
+button:hover,
+a.as-button:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-button:active {
+button:active,
+a.as-button:active {
   transform: translateY(1px);
 }
-button.primary {
+button.primary,
+a.as-button.primary {
   background: var(--grad);
   border: none;
   color: #04121f;
   font-weight: 650;
   box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
 }
-button.primary:hover {
+button.primary:hover,
+a.as-button.primary:hover {
   box-shadow: 0 8px 26px rgba(59, 130, 246, 0.5);
 }
 button.danger {
@@ -111,7 +136,8 @@ button.danger:hover {
   background: rgba(248, 113, 113, 0.12);
   border-color: transparent;
 }
-button:disabled {
+button:disabled,
+a.as-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -274,8 +274,8 @@ function GeocodeCard() {
         <button disabled={busy} onClick={() => void name()}>
           Name new places
         </button>
-        <Link to="/settings/import">
-          <button>Import Google Timeline…</button>
+        <Link to="/settings/import" className="as-button">
+          Import Google Timeline…
         </Link>
       </div>
       {msg && (
@@ -870,8 +870,8 @@ function ExportCard() {
         The places (CSV/GPX/KML), the outings with their routes, or the whole archive as one file.
         Each says what it contains — and what it doesn&rsquo;t — before you download it.
       </p>
-      <Link to="/export">
-        <button>Export &amp; backup</button>
+      <Link to="/export" className="as-button">
+        Export &amp; backup
       </Link>
     </div>
   );
@@ -1248,38 +1248,38 @@ export default function Settings() {
                       many, and the cards are now the first two rows of Needs attention —
                       which is also the first place she looked for them and did not find
                       them. The cards themselves are unchanged and still live on /add. */}
-                  <Link to="/places/edit">
-                    <button className="primary">Edit all places</button>
+                  <Link to="/places/edit" className="as-button primary">
+                    Edit all places
                   </Link>
                   {/* Importing and sorting photos, and importing activity files, live
                       HERE now — Erica: "Move Import and Sort Photos into Settings. Move
                       import activities to settings." The sorter is both: it pulls from
                       the device and Google Photos, then sorts what arrives. */}
-                  <Link to="/photos/sort">
-                    <button>Import &amp; sort photos</button>
+                  <Link to="/photos/sort" className="as-button">
+                    Import &amp; sort photos
                   </Link>
                   {/* "Import an activity file" POINTED AT A ROUTE THAT DOES NOT EXIST —
                       /import/timeline. The router has /settings/import (Google Timeline),
                       and the GPX/TCX/FIT importer is a card on THIS page already. So the
                       button was a dead end AND a duplicate of something a few inches away.
                       Removed rather than repointed: the working importer is right here. */}
-                  <Link to="/attention">
-                    <button>Needs attention</button>
+                  <Link to="/attention" className="as-button">
+                    Needs attention
                   </Link>
-                  <Link to="/albums">
-                    <button>Smart albums</button>
+                  <Link to="/albums" className="as-button">
+                    Smart albums
                   </Link>
-                  <Link to="/timeline">
-                    <button>Timeline</button>
+                  <Link to="/timeline" className="as-button">
+                    Timeline
                   </Link>
-                  <Link to="/duplicates">
-                    <button>Duplicate places</button>
+                  <Link to="/duplicates" className="as-button">
+                    Duplicate places
                   </Link>
-                  <Link to="/health">
-                    <button>Data health</button>
+                  <Link to="/health" className="as-button">
+                    Data health
                   </Link>
-                  <Link to="/trash">
-                    <button>Trash</button>
+                  <Link to="/trash" className="as-button">
+                    Trash
                   </Link>
                 </div>
               </div>
