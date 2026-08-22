@@ -29,6 +29,16 @@ import { liveTest as it } from './fixtures';
 
 const SITE = process.env.LIVE_URL ?? 'https://adventureorno.com';
 
+// THE RULE THAT WAS MISSING, LEARNED THE EXPENSIVE WAY (2026-08-22):
+//
+//   A COUNT OF ZERO PROVES NOTHING UNTIL THE SCREEN HAS RENDERED.
+//
+// `ready()` proves the APP BOOTED — it waits for the nav — and the screen under test
+// arrives after that. `toHaveCount(0)` does not retry upward: asked early it answers
+// "zero, correct", and a check written to catch a defect passed against a site that
+// still had it. So every negative assertion in this file must FOLLOW a positive one
+// that only the real screen can satisfy.
+
 // San Diego — the card she designed everything against.
 const SAN_DIEGO = '/place/0795746e-c5ba-4b15-89c4-1cf0c4612148';
 // The Appalachian Trail — the trail card, the one with 62 visits.
@@ -233,8 +243,10 @@ it.describe('the card — what she asked for, on the live site', () => {
   it('the trail card has NO Sections list — the segment rides on the visit', async ({ page }) => {
     await ready(page, AT);
     await openVisits(page);
-    await expect(page.locator('.panel h3', { hasText: /^SECTIONS/i })).toHaveCount(0);
+    // The positive FIRST: a visit segment on screen is what proves the visits actually
+    // rendered, and only then does "no SECTIONS heading" mean anything.
     await expect(page.locator('.visit-seg').first()).toBeVisible();
+    await expect(page.locator('.panel h3', { hasText: /^SECTIONS/i })).toHaveCount(0);
   });
 
   it('the Routes section holds the map AND the list', async ({ page }) => {
@@ -254,6 +266,12 @@ it.describe('the card — what she asked for, on the live site', () => {
     // opened, which is the behaviour Places was fixed to have.
     const links = page.locator('a[href^="/place/"]:visible');
     await expect(links.first()).toBeVisible();
+    // AND WAIT FOR THE LIST TO BE A LIST. One visible row is not the list: the sample of
+    // twelve below was drawn from whatever had rendered at that instant, so which twelve
+    // places got checked changed from run to run — and on the run where none of them had
+    // activities, this check reported "the section stopped rendering" about an app that
+    // was rendering it. A check whose answer depends on render timing is not a check.
+    await expect.poll(() => links.count(), { timeout: 15_000 }).toBeGreaterThan(20);
     // READ THE ADDRESSES BEFORE LEAVING THE PAGE. A Playwright locator is live: it
     // re-resolves against whatever document is loaded when you use it. This loop navigates
     // to a place and then asked the SAME locator for its next href — by which time the
@@ -283,8 +301,11 @@ it.describe('the card — what she asked for, on the live site', () => {
 
     expect(
       found,
-      `none of the first ${total} places rendered a Routes section — either no place has ` +
-        `activities, or the section stopped rendering`,
+      // `total` DID NOT EXIST. This message only builds when the check has already
+      // failed, so the ReferenceError replaced the report with a crash — the one check
+      // that was telling the truth could not say what it had found.
+      `none of the first ${hrefs.length} places rendered a Routes section — either no ` +
+        `place has activities, or the section stopped rendering`,
     ).not.toBe('');
 
     // The request itself: the section is a map AND a list, not one or the other.
@@ -307,6 +328,8 @@ it.describe('the rest of the app — what she asked for', () => {
 
   it('the map has no redundant "+ Add" button', async ({ page }) => {
     await ready(page, '/');
+    // The map's own chrome first: without it, "no + Add button" is true of a blank page.
+    await expect(page.locator('.stats-bar')).toBeVisible();
     await expect(page.locator('.add-btn')).toHaveCount(0);
   });
 
@@ -334,13 +357,20 @@ it.describe('the rest of the app — what she asked for', () => {
     // tab rendered "Settings ▸ Timeline" — each screen still wearing the back-bar and the
     // heading it had when it was a route. A back-bar inside a tab offers a way out of the
     // page you are already on, and the heading repeats the tab you just pressed.
-    for (const tab of ['places', 'timeline']) {
+    //
+    // AND THE FIRST VERSION OF THIS CHECK PASSED AGAINST A SITE THAT STILL HAD THE BUG.
+    // `ready()` proves the APP BOOTED — it waits for the nav — and the tab body arrives
+    // later, so `toHaveCount(0)` was asked before there was anything to count and answered
+    // "zero, correct". A count of zero proves nothing until the screen has rendered. So
+    // every negative here now follows a POSITIVE one that only the real screen satisfies:
+    // Places has rows, Timeline has years.
+    const RENDERED: Record<string, string> = { places: '.place-rows', timeline: '.tl-year' };
+    for (const [tab, proof] of Object.entries(RENDERED)) {
       await ready(page, `/insights?tab=${tab}`);
+      await expect(page.locator(`.insights-body ${proof}`).first()).toBeVisible();
       await expect(page.locator('.insights-body .back-bar')).toHaveCount(0);
       await expect(page.locator('.insights-body h1')).toHaveCount(0);
-      // And the tab itself is still the one selected, so this cannot pass by rendering
-      // nothing at all.
-      await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+      await expect(page.locator(`[role="tab"][aria-selected="true"]`)).toHaveCount(1);
     }
   });
 
@@ -351,7 +381,11 @@ it.describe('the rest of the app — what she asked for', () => {
 
   it('"Move Import and Sort Photos into Settings"', async ({ page }) => {
     await ready(page, '/settings');
-    await expect(page.getByRole('button', { name: /Import & sort photos/i })).toBeVisible();
+    // A LINK, not a button. It has always been an `<a>` styled `as-button`, so asking for
+    // role=button asked for something that was never there and failed against a Settings
+    // page that has had the control all along. What she asked for is that the control BE
+    // on Settings, and it is; the role is how it gets there.
+    await expect(page.getByRole('link', { name: /Import & sort photos/i })).toBeVisible();
     // THE BUTTON WENT, AND THE THING IT PROMISED STAYED. This asserted an "Import an
     // activity file" button on Settings. That button pointed at `/import/timeline`, a route
     // that does not exist, AND duplicated the working GPX/TCX/FIT importer sitting a few
@@ -362,6 +396,9 @@ it.describe('the rest of the app — what she asked for', () => {
       page.getByRole('button', { name: /Choose GPX \/ TCX \/ FIT files/i }),
     ).toBeVisible();
     await ready(page, '/add');
+    await expect(
+      page.getByRole('button', { name: /Add a place, visit or activity/i }),
+    ).toBeVisible();
     await expect(page.getByText(/sort photos/i)).toHaveCount(0);
     await expect(page.getByText(/import an activity file/i)).toHaveCount(0);
   });
@@ -395,7 +432,10 @@ it.describe('the rest of the app — what she asked for', () => {
   it('"No stats bar on Places" and no settings icon (supersedes "stats at the top")', async ({
     page,
   }) => {
+    // `/places` REDIRECTS into Insights now, so this waits for the tab body to have rows
+    // before asking what is absent — otherwise it passes against an empty page.
     await ready(page, '/places');
+    await expect(page.locator('.insights-body .place-rows')).toBeVisible();
     await expect(page.locator('.stats-bar')).toHaveCount(0);
     await expect(page.locator('.gear-btn')).toHaveCount(0);
     // And they did not simply vanish: Stats is on Settings, where she moved it.

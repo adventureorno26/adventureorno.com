@@ -831,6 +831,36 @@ with the route they belonged to; if either becomes a destination again its chrom
 back with it. **This was found by looking at the live page, not by a test** — so it is now
 a live check, and that check was proved to FAIL against the deployed site before the fix.
 
+#### 3r. A COUNT OF ZERO PROVES NOTHING UNTIL THE SCREEN HAS RENDERED *(2026-08-22)*
+
+The check written for the tab-chrome defect **passed against a site that still had it.**
+`ready()` waits for the NAV — it proves the app booted — and the screen under test arrives
+after that, so `toHaveCount(0)` was asked before there was anything to count and answered
+"zero, correct". That is the same shape as every stale-assertion failure this file has had:
+a check that cannot fail is not a check.
+
+So, in `erica-asked-for.spec.ts`: **every negative assertion now follows a positive one that
+only the real screen satisfies** — Places has rows, Timeline has years, the map has its stats
+bar, /add has its button. The rule is written at the top of the file. The strengthened check
+was proved both ways: it FAILS against a locally-served build with the back-bar put back, and
+passes against the deployed one.
+
+Three more things fell out of looking:
+
+* **`app/e2e/` was typechecked by NOTHING.** `tsconfig.app.json` includes only `src`. The
+  live spec had shipped `ReferenceError: total is not defined` inside a failure message, so
+  the one check that was reporting a real problem *crashed instead of reporting it*. There
+  is now a `tsconfig.e2e.json` in the build, and `tsc -b` — which the pre-commit hook and CI
+  both run — covers the tests. It immediately found two more real type errors in `fixtures.ts`.
+* **"Import & sort photos" was asserted as `role=button`.** It has always been an `<a>`
+  styled `as-button`, so that check demanded something that was never there and went red
+  against a Settings page that has had the control all along.
+* **The Routes check sampled twelve places from whatever had rendered at that instant**, so
+  which twelve changed run to run; on the run where none had activities it reported "the
+  section stopped rendering" about an app that was rendering it. It waits for the list now.
+
+All 25 live checks are green.
+
 **What is still not built from the contract**: Settings' three destinations
 (`Account | Integrations | Data & Privacy`, the last being one continuous page), and everything
 events/messaging, which waits on previews.

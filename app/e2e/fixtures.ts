@@ -78,15 +78,20 @@ function storageKeyFor(url: string): string {
   return `sb-${projectRef(url)}-auth-token`;
 }
 
+// `BrowserContext`, not a hand-written shape. The structural one did not actually
+// accept a real context — `addInitScript` is generic — and nothing noticed, because
+// until 2026-08-22 `e2e/` was typechecked by nothing at all.
 async function injectSession(
-  context: { addInitScript: (fn: unknown, arg: unknown) => Promise<void> },
+  context: import('@playwright/test').BrowserContext,
   session: unknown,
 ): Promise<void> {
   await context.addInitScript(
     ([k, v]: [string, string]) => {
       window.localStorage.setItem(k, v);
     },
-    [storageKeyFor(SUPABASE_URL!), JSON.stringify(session)],
+    // The tuple type has to be written down: inferred, the argument widens to `string[]`
+    // and no longer matches the destructuring pair the browser side expects.
+    [storageKeyFor(SUPABASE_URL!), JSON.stringify(session)] as [string, string],
   );
 }
 
@@ -102,7 +107,6 @@ export const authedTest = base.extend({
     await use(page);
   },
 });
-
 
 // ---------------------------------------------------------------------------
 // A session WITHOUT a password, for the live check.

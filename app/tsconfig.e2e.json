@@ -1,0 +1,26 @@
+{
+  // THE LIVE SPEC WAS NOT TYPECHECKED BY ANYTHING, and it shipped a `ReferenceError:
+  // total is not defined` inside a failure message — so the one check in the file that
+  // was reporting a real problem crashed instead of reporting it. `tsconfig.app.json`
+  // includes only `src`; nothing included `e2e`. This closes that hole, and `tsc -b`
+  // (which `.githooks/pre-commit` and CI both run) now covers the tests as well.
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // These files are Node programs, not browser code: they read `process.env` for the
+    // target URL and the credentials.
+    "types": ["node"]
+  },
+  "include": ["e2e", "playwright.config.ts", "playwright.live.config.ts"]
+}
