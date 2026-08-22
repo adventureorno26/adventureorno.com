@@ -929,6 +929,16 @@ all of them precede a public sign-up form.
   attachment permanent. The 32 with fabricated `12:00:00` stamps must be proposed instead.
 - **Her manual smoke pass** — the last unticked box in the stabilization gate. The
   automated acceptance flows cover the same ground but do not replace her driving it once.
+- **THREE DECISIONS ABOUT OTHER USERS** (§3s), asked 2026-08-22. Step 1 (spaces) does not
+  need any of them — it is the same migration whatever she answers — so nothing waits.
+  Steps 2–3 do:
+  1. **Open registration, or an invite code first?** Recommended: invite code. It lets
+     friends in without opening the door to the internet before moderation exists.
+  2. **What a friend sees by default.** Assumed: *nothing* until you tag or share with them.
+     Friendship is permission to tag, invite and message — not access to a history.
+  3. **Do she and Josh stay ONE shared space?** Recommended yes, because that is what they
+     actually use; the alternative splits her history from his. Friends are separate
+     accounts either way.
 
 #### 5. THEN THE QUEUED LANES, in the order locked on 08-14
 
@@ -936,11 +946,12 @@ all of them precede a public sign-up form.
 
 | Lane                                     | State                                                    | Next concrete step                                                                                                                                                                                                                    |
 | ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 3 — approved app structure        | **people model, photo tagging, a person's memories, the ALL/ANY query and the Map's people filter built (0247–0261)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. ✅ the Map, its badges, its lines and all six stats read one people rule (0260/0261). NEXT: migrate outings/visits/places into the registry and retire the two profile-only participant tables. Then Insights tabs and one Data & Privacy destination. Add creates; Needs Attention repairs. |
+| Phase 3 — approved app structure        | **people model, photo tagging, a person's memories, the ALL/ANY query, the Map's people filter and the approved navigation built (0247–0270, §3q)**; events/messages preview pending | ✅ universal people + subject registry + RLS, photo tagging as its first consumer. ✅ the Map, its badges, its lines and all six stats read one people rule (0260/0261). ✅ the registry migration finished and the profile-only participant tables are gone (0262–0270). ✅ `Map \| Add \| Insights \| Settings`, with Places and Timeline as tabs inside Insights. NEXT: Settings' three destinations — `Account \| Integrations \| Data & Privacy`, the last being one continuous page. Add creates; Needs Attention repairs. |
+| **Phase 3b — OTHER USERS (§3s)**        | **nothing built — and it is the gate on everything social** | Step 1 is `spaces` + `space_memberships`, and it lands in ONE migration series: 58 tables, 97 policies and 230 functions currently end in `is_member()`, which asks *are you signed in to this household*, not *is this yours*. Then self sign-up, then `friendships` between profiles with bidirectional blocking, then cross-space tagging on the `memory_people` machinery that already exists. |
 | Phase 4d — geocoding we own             | nothing built                                            | Overture → PMTiles; Mapbox stays the fallback                                                                                                                                                                                        |
 | Phase 6 — what we own                   | nothing built                                            | §6a-ii first: Copernicus terrain kills the last Mapbox call AND its attribution question                                                                                                                                             |
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
-| Phase 8 — events, social, privacy floor | nothing built                                            | Much of it gated on the LLC and the native shell                                                                                                                                                                                      |
+| Phase 8 — events, social, privacy floor | nothing built | **Now explicitly downstream of Phase 3b**: an event audience of "friends", and a message request from somebody you do not know, both need friendship and blocking underneath them. Much of the rest is gated on the LLC and the native shell. Before strangers hold accounts: privacy policy, terms, self-serve account deletion (export exists, deletion does not), abuse reporting, per-user photo storage cost. |
 
 **✅ The nested controls are gone** *(2026-08-22)*. Fifteen `<Link><button>…</button></Link>`
 pairs across six files put a button inside a link. **The LINK survived** — they are all
@@ -2038,15 +2049,29 @@ purpose" register in §7 exists so nothing is silently lost again.
 
 Database and RLS contracts come before visible work:
 
-1. Separate commercial space access from people tags, event participation and messaging.
-2. Finish canonical outings and move aggregating readers onto them.
-3. Add the universal people registry and memory relationships; migrate existing claims.
+The state of each is marked as of **2026-08-22**. Where a step is not ticked it is because
+nobody has proved it, not because somebody decided against it.
+
+1. **NOT BUILT — this is Phase 3b (§3s).** Separate commercial space access from people
+   tags, event participation and messaging. Everything below that involves another human
+   being is downstream of it: today `is_member()` asks *are you signed in to this
+   household*, so there is no "another user" for a tag or an invitation to point at.
+2. **Not re-verified.** Finish canonical outings and move aggregating readers onto them.
+   §7a-2 defines the step and the guard it needs; `0141` and `0203` cover counting-once for
+   the readers they name. Do not tick this without checking every aggregating reader.
+3. ✅ **Done (0247–0270).** The universal people registry and memory relationships, with
+   existing claims migrated and the profile-only participant tables retired.
 4. Add events, audiences, invites/RSVPs, nearby search and exact-location privacy.
+   **Downstream of 1 and of friendship.**
 5. Add direct/event conversations, message requests, blocking, reporting and notifications.
-6. Build one authorized people/time/category query for Map and Insights statistics.
-7. Implement the approved Map/Add/Insights/Settings structure and people UI; create and
-   approve dedicated event and messaging previews before implementing those visible screens.
-8. Move every repair card into Needs Attention, redirect old routes, test, deploy and verify.
+   **Downstream of 1 and of friendship.**
+6. ✅ **Done (0260/0261).** One authorized people/time/category query — the Map, its badges,
+   its lines, Insights and all six stats read the same `people_memory_keys` rule.
+7. **Half done.** `Map | Add | Insights | Settings` and the people UI are live (§3q);
+   Settings' three destinations are next. The event and messaging previews are still
+   pending, and those screens are not to be implemented before she approves them.
+8. **Partly done.** Old routes redirect (`/places`, `/timeline` → their Insights tab, §3q)
+   and every live check is green; the repair cards are not all in Needs Attention yet.
 
 Still required: restore inline `PlaceQuickEdit` while sorting photos, and make upload/resume
 UI disappear when complete.
