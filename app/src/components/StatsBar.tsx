@@ -57,6 +57,19 @@ function useCountUp(target: number): number {
     let raf = 0;
     const from = 0;
     const dur = 700;
+    // A HIDDEN TAB HAS NO ANIMATION FRAMES, so this counted from zero and stopped there.
+    // The number is the point; the count-up is decoration, and decoration nobody can see is
+    // not worth showing a 0.0 for. Measured on production: visibilityState "hidden",
+    // requestAnimationFrame never fired, and the pill read 0.0 miles for twenty seconds.
+    //
+    // It self-healed the moment the tab came forward, so she would rarely have seen it — but
+    // it also meant the number could not be READ by anything automated, and four screenshots
+    // taken through it produced four different values off the same curve. I wrote those up as
+    // a defect in the stats bar. They were a defect in the instrument.
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      setValue(target);
+      return;
+    }
     const tick = (t: number) => {
       if (startRef.current === null) startRef.current = t;
       const p = Math.min(1, (t - startRef.current) / dur);
