@@ -758,26 +758,38 @@ some of it was already answered; the rest was right and is listed here with what
 | **0260 has no regression tests** | **STALE.** `0260_the_map_asks_the_same_question.test.sql` shipped with it, pinning ALL/ANY, empty selection, and that Together and Just-me mean exactly what they meant. Unauthorised person ids are pinned by 0253's test. |
 | **30 `<Link><button>` nested interactive elements** | **CONFIRMED** (15 by a narrower count, same defect). Competing link/button semantics. **NOT fixed here** — it is a mechanical sweep across many files plus an eslint rule, and it is worth doing on its own rather than inside a fix for something else. |
 
-#### 3p. THE HEADLINE MILES CHANGE WHEN YOU RELOAD — found 2026-08-22, NOT fixed
+#### 3p. THE HEADLINE MILES DO NOT CHANGE. THE INSTRUMENT DID *(retracted, 2026-08-22)*
 
-The map's stats bar shows **places · miles · races**. Places and races are stable; **miles is
-not**. Four loads of the same screen, same filter (`Anyone`), minutes apart:
+**What was written here yesterday was wrong, and this is the correction.** The claim was that
+the map's miles pill shows a different number on every reload — 562.6, 544.4, 976.8, 476.8 —
+and that the defect lay between the query and the pill.
+
+It does not. Measured properly, by reading the DOM once a second for twenty seconds instead of
+screenshotting it four times:
 
 ```
-562.6      544.4      976.8      476.8
+visibilityState   "hidden"
+rafFired          false
+pill              0.0 miles   … for twenty seconds
 ```
 
-Two of those readings predate the registry swap and two follow it, so **it is not the
-migration** — and the server agrees with itself throughout: `mileage_by_person_for_people('{}',
-'any')` is **2,540.5** every time, `mileage_by_person(null)` **436.5**, `mileage_by_person(her)`
-**1,968.4**. None of them is any of the four numbers on screen.
+`useCountUp` drives the pill entirely with `requestAnimationFrame`, and **a browser pauses
+those in a background tab**. Every screenshot was taken during the instant the tab came
+forward, so the four numbers are four points on the same curve toward the same total. For
+somebody actually looking at the page the count-up finishes in 700 ms and the number is right
+and stable — which is exactly what the four server-side readings said all along, and I wrote
+the note anyway.
 
-So the defect is in the stats bar, between the query and the pill, and it is the worst kind of
-number: one she reads, that looks authoritative, and that is different if she presses reload.
-Not chased today because it is not this week's work and because guessing at it is how the
-other two "reads as one fact and is another" bugs got written. **What it needs is a
-measurement of what the component actually sums** — the count-up animation, the cutoff, and
-whether the rows are summed before they have all arrived are the three candidates.
+**The rule I broke is the one in §6 that I keep quoting**: *measure the thing, not a proxy for
+it, and check what you pointed at.* Four screenshots are a proxy. The instrument was never
+checked, and the retraction is more expensive than the check would have been.
+
+**There IS a real bug in there, and it is a small one**: with no animation frames the value sat
+at **0.0** rather than at the total, so a tab loaded in the background showed nothing until it
+was looked at. Fixed by settling on the value immediately when the page is hidden — the number
+is the point, the count-up is decoration, and decoration nobody can see is not worth a 0.0.
+It also makes the pill readable by anything automated, which is what let this be settled at
+all.
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
