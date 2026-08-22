@@ -30,8 +30,12 @@ const BASE = process.env.AUDIT_BASE_URL || 'https://adventureorno.com';
 const SESSION = JSON.parse(process.env.AUDIT_SESSION);
 const STORAGE_KEY = 'sb-aanfyhsjbtnqzphuoiem-auth-token';
 
+// `/places` and `/timeline` stay on this list even though they are now REDIRECTS into
+// Insights: what this script hit-tests is what a saved link opens, and a redirect that
+// lands on an unusable page is exactly the defect it exists to find.
 const ROUTES = [
-  '/', '/places', '/timeline', '/add', '/settings', '/health',
+  '/', '/insights', '/insights?tab=places', '/insights?tab=timeline',
+  '/places', '/timeline', '/add', '/settings', '/health',
   '/bucket', '/wrapped', '/photos/sort', '/places/edit',
 ];
 

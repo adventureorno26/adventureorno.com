@@ -78,8 +78,11 @@ export default function Insights() {
 
       <div className="insights-body">
         {tab === 'overview' && <Overview people={people} contacts={contacts} />}
-        {/* The two screens that were tabs of their own until 2026-08-22. Unchanged: they are
-            given a home, not rewritten. */}
+        {/* The two screens that were destinations of their own until 2026-08-22. `embedded`
+            The only thing that changed in them is that their back-bar and their heading
+            went with the route they belonged to: the live page read "Map ▸ Places" and
+            "Settings ▸ Timeline" INSIDE Insights, offering a way out of a tab and
+            repeating its label. Nothing else about either screen was touched. */}
         {tab === 'places' && <PlacesList />}
         {tab === 'timeline' && <Timeline />}
       </div>

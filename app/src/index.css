@@ -7579,3 +7579,9 @@ button.mi-row:hover {
 .insights-tabs button.on:hover {
   border-bottom-color: var(--accent);
 }
+
+/* `.embedded` — a screen rendered as a TAB BODY rather than as a route of its own
+   (Places and Timeline, inside Insights). It deliberately carries no rules: `.insights`
+   already supplies the margin, the padding and the bottom clearance those screens used
+   to get from `.page`, and zeroing them again would only look like it did something.
+   The class is here so the markup says which of the two a div is. */

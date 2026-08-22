@@ -11,6 +11,10 @@ import {
 import { buildPlaceTree } from '../lib/containers';
 import type { Place } from '../lib/types';
 
+// THIS IS A TAB NOW, not a destination — the Places tab of Insights. So it has no
+// back-bar and no heading: the back-bar led out of the page it now sits inside, and the
+// heading repeated the tab's own label. The live page read "Map ▸ Places" inside Insights.
+// If Places ever becomes a route again, its chrome comes back with the route.
 export default function PlacesList() {
   const { profile } = useAuth();
   const canEdit = profile?.role === 'owner' || profile?.role === 'editor';
@@ -156,12 +160,7 @@ export default function PlacesList() {
   }
 
   return (
-    <div className="page" style={{ maxWidth: 760 }}>
-      <Link className="back-bar" to="/">
-        <span>Map</span>
-      </Link>
-      <h1>Places</h1>
-
+    <div className="embedded">
       {/* NO STATS BAR HERE, AND THAT REMOVES THE GEAR TOO (Erica, 2026-08-15: "the
           settings icon should not appear when I click on places and neither should the
           stats bar"). It was put here on 2026-08-11 when she asked for stats at the top

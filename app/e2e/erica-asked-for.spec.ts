@@ -329,6 +329,21 @@ it.describe('the rest of the app — what she asked for', () => {
     expect(new URL(page.url()).searchParams.get('tab')).toBe('timeline');
   });
 
+  it('a tab body is a tab, not a page inside a page', async ({ page }) => {
+    // FOUND LIVE, not in a test: the Places tab rendered "Map ▸ Places" and the Timeline
+    // tab rendered "Settings ▸ Timeline" — each screen still wearing the back-bar and the
+    // heading it had when it was a route. A back-bar inside a tab offers a way out of the
+    // page you are already on, and the heading repeats the tab you just pressed.
+    for (const tab of ['places', 'timeline']) {
+      await ready(page, `/insights?tab=${tab}`);
+      await expect(page.locator('.insights-body .back-bar')).toHaveCount(0);
+      await expect(page.locator('.insights-body h1')).toHaveCount(0);
+      // And the tab itself is still the one selected, so this cannot pass by rendering
+      // nothing at all.
+      await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
+    }
+  });
+
   it('Settings is ONE page, no tabs', async ({ page }) => {
     await ready(page, '/settings');
     await expect(page.locator('.settings-tabs')).toHaveCount(0);
