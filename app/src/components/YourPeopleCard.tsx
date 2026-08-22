@@ -53,8 +53,8 @@ export default function YourPeopleCard() {
       ) : (
         <div className="btn-row" style={{ marginBottom: 10 }}>
           {people.map((p) => (
-            <Link key={p.id} to={`/people/${p.id}`}>
-              <button>{p.is_me ? 'Me' : p.display_name}</button>
+            <Link key={p.id} to={`/people/${p.id}`} className="as-button">
+              {p.is_me ? 'Me' : p.display_name}
             </Link>
           ))}
         </div>

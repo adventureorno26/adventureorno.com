@@ -134,8 +134,8 @@ export default function DataHealth() {
               The places, the outings, or the whole archive — each says what it contains before you
               download it.
             </p>
-            <Link to="/export">
-              <button>Export &amp; backup</button>
+            <Link to="/export" className="as-button">
+              Export &amp; backup
             </Link>
           </div>
         </>

@@ -137,8 +137,8 @@ export default function AttentionDashboard() {
                 <b>{r.label}</b>
                 <span className="label">{r.hint}</span>
               </div>
-              <Link to={r.to}>
-                <button>{r.action}</button>
+              <Link to={r.to} className="as-button">
+                {r.action}
               </Link>
             </div>
           ))}

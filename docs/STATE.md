@@ -822,11 +822,22 @@ all.
 | Phase 7 — fitness ingest                | nothing built                                            | intervals.icu first; email-in is the best effort-to-coverage item                                                                                                                                                                     |
 | Phase 8 — events, social, privacy floor | nothing built                                            | Much of it gated on the LLC and the native shell                                                                                                                                                                                      |
 
-**A mechanical sweep waiting to be done**: 15–30 `<Link><button>…</button></Link>` pairs put a
-button inside a link, which gives the browser two competing controls in one place and shows up
-in the accessibility tree as nested interactive elements. The fix is a styled `Link` plus
-`eslint-plugin-jsx-a11y` so it cannot come back — worth its own change rather than being
-smuggled into a fix for something else.
+**✅ The nested controls are gone** *(2026-08-22)*. Fifteen `<Link><button>…</button></Link>`
+pairs across six files put a button inside a link. **The LINK survived** — they are all
+navigation, and a link is what they are: cmd-click, open in a new tab, a real href. Turning
+them into buttons with an `onClick` would have thrown all of that away to answer a semantic
+complaint. `a.as-button` carries the styling, and the six base button rules name it alongside
+`button`.
+
+Not eslint-plugin-jsx-a11y, which cannot see this: `Link` is a component, and a linter has no
+way to know it renders an anchor. A source guard does, and it also asserts the replacement is
+still *in use* — a guard that only forbids the old shape passes just as happily on a codebase
+where somebody deleted all fifteen links.
+
+**And a note on how it was done.** The first attempt widened every selector mentioning
+`button` with a regex, which rewrote the word inside a *comment* and broke the stylesheet.
+Reverted; six base rules widened by hand instead. That is the second time this week a clever
+substitution cost more than the careful one would have.
 
 **Three dead components are named and unremoved**: `BucketMiniMap`, `TrailSectionsMap` and
 now `PersonFilter`, superseded by `PeopleFilter` on 08-21. None has a consumer. `AddSheet` was the same and she said delete it, so these are probably

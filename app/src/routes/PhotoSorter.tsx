@@ -771,8 +771,8 @@ export default function PhotoSorter() {
             >
               Sort more photos
             </button>
-            <Link to="/">
-              <button className="primary">Back to map</button>
+            <Link to="/" className="as-button primary">
+              Back to map
             </Link>
           </div>
         </div>
