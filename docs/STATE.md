@@ -706,7 +706,30 @@ fails for a second reason"* is not the rule), and `the_readers_stay_enforced` fo
 `subject_for_activity` reading `activities`, which belongs on the allowlist: it reads one
 column of one row and returns an id.
 
-**Ten of seventy-one SQL tests still fail against PRODUCTION and this is expected.** Each is a
+**AND A VIEW REMEMBERS THE TABLE, NOT THE NAME** *(0268, 0269)*. CI failed on exactly one test
+out of seventy-one — `0200_a_tag_is_not_a_key` — and it was right. Reproduced on production in
+four lines: an outing she has tagged him on, sharing on.
+
+```
+activity_profiles rows for it   2
+his row present                 1
+can_see_activity                TRUE
+visible_activities rows         0      ← the same rule, the opposite answer
+```
+
+Renaming `activity_profiles` moved every **stored expression** that named it. A FUNCTION
+resolves names when it runs, so `can_see_activity` picked up the new view at once. A VIEW does
+not — Postgres records its dependencies by OID — so `visible_activities` followed the rename
+and quietly kept reading the frozen table, and everything written after the swap was invisible
+to it. Then the same thing again for the row POLICY: `activities_select` is a stored expression
+too. **Renaming a table silently moves views, policies and generated columns, and leaves
+functions alone.** Both were found by asking `pg_depend`, not by grepping the name — grepping
+would have found the same two and given no reason to believe there were only two.
+
+After the rebinds, on live data: her visible activities **477**, Anyone **135 places / 2,513
+miles**, Josh's outings **127** — every number identical to before the swap.
+
+**Eight of seventy-one SQL tests still fail against PRODUCTION and this is expected.** Each is a
 whole-database assertion meeting live data — four coordinate-free activities that do carry a
 route, a place whose stored count disagrees, seven awaiting a geocoder that is off — or the
 household-size family (`is_shared_*` requires the fixture's own pair to be the only real
