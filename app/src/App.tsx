@@ -41,13 +41,14 @@ function lazyWithReload<T extends ComponentType<unknown>>(factory: () => Promise
 const MapView = lazyWithReload(() => import('./routes/MapView'));
 const RoutesView = lazyWithReload(() => import('./routes/RoutesView'));
 const DayView = lazyWithReload(() => import('./routes/DayView'));
-const PlacesList = lazyWithReload(() => import('./routes/PlacesList'));
 const PlacesEditor = lazyWithReload(() => import('./routes/PlacesEditor'));
 const PhotoSorter = lazyWithReload(() => import('./routes/PhotoSorter'));
 const Trash = lazyWithReload(() => import('./routes/Trash'));
 const AttentionDashboard = lazyWithReload(() => import('./routes/AttentionDashboard'));
 const SmartAlbums = lazyWithReload(() => import('./routes/SmartAlbums'));
-const Timeline = lazyWithReload(() => import('./routes/Timeline'));
+// PlacesList and Timeline are no longer routed from here: they are TABS inside Insights
+// (2026-08-22), which imports them directly. /places and /timeline redirect there.
+const Insights = lazyWithReload(() => import('./routes/Insights'));
 const Duplicates = lazyWithReload(() => import('./routes/Duplicates'));
 const Compare = lazyWithReload(() => import('./routes/Compare'));
 const DataHealth = lazyWithReload(() => import('./routes/DataHealth'));
@@ -178,14 +179,19 @@ export default function App() {
                 </RequireAuth>
               }
             />
+            {/* INSIGHTS — Overview | Places | Timeline, one people/time scope for all three.
+                The approved third destination (2026-08-22). */}
             <Route
-              path="/places"
+              path="/insights"
               element={
                 <RequireAuth>
-                  <PlacesList />
+                  <Insights />
                 </RequireAuth>
               }
             />
+            {/* The two old destinations keep working: "old routes redirect until links and
+                saved URLs have migrated". They land on the tab they used to be. */}
+            <Route path="/places" element={<Navigate to="/insights?tab=places" replace />} />
             <Route
               path="/places/edit"
               element={
@@ -250,14 +256,7 @@ export default function App() {
                 </RequireAuth>
               }
             />
-            <Route
-              path="/timeline"
-              element={
-                <RequireAuth>
-                  <Timeline />
-                </RequireAuth>
-              }
-            />
+            <Route path="/timeline" element={<Navigate to="/insights?tab=timeline" replace />} />
             <Route
               path="/duplicates"
               element={

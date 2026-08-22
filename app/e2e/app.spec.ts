@@ -18,10 +18,15 @@ test.describe('authenticated app (non-destructive)', () => {
     // ride on the label; that count is gone from the pill and lives on /add, which is
     // the screen that can do something about it. Matching by prefix here would let it
     // creep back without failing anything.
-    for (const label of [/^Map$/, /^Places$/, /^Add$/, /^Timeline$/]) {
+    // THE FOUR CHANGED, 2026-08-22, and so did the last line. This asserted that Settings
+    // was NOT in the nav — true while the nav was four places you could go that were not
+    // Settings, and false now that Settings is one of the four. Kept as an assertion rather
+    // than dropped: it now says Settings IS there, so the count still cannot drift.
+    for (const label of [/^Map$/, /^Add$/, /^Insights$/, /^Settings$/]) {
       await expect(nav.getByRole('link', { name: label })).toBeVisible();
     }
-    await expect(nav.getByRole('link', { name: /^Settings$/ })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: /^Places$/ })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: /^Timeline$/ })).toHaveCount(0);
   });
 
   // A SMOKE TEST, DELIBERATELY THIN. The old test here required "Sort photos" and

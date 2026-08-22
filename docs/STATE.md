@@ -795,6 +795,37 @@ is the point, the count-up is decoration, and decoration nobody can see is not w
 It also makes the pill readable by anything automated, which is what let this be settled at
 all.
 
+#### 3q. THE APPROVED NAVIGATION — `Map | Add | Insights | Settings` *(2026-08-22)*
+
+The persistent primary navigation is the four the contract names. **Places and Timeline stop
+being destinations** and become tabs inside **Insights**, alongside a new **Overview** — which
+is the entire reason to put them together: *"sharing one people/time/category scope."* The
+people control at the top of Insights is the same one the Map uses and reads the same
+`people_memory_keys` rule, so a number there can never disagree with a marker here.
+
+**Overview** is the headline four — places, miles, trips, races — through the `_for_people`
+functions, plus the race buckets. Events are deliberately absent: *"Events do not appear in
+historical Insights until they become history."*
+
+**`/places` and `/timeline` redirect** to their tab, per *"old routes redirect until links and
+saved URLs have migrated"*, and both are asserted by a live test.
+
+**AND SETTINGS COMES BACK INTO THE NAV, which reverses an instruction rather than ignoring
+one.** Erica, 2026-08-17: *"map places add timeline should not appear on the settings page"* —
+and she was right, because none of those four WAS Settings, so the bar offered only ways to
+leave a screen she was still reading. Now Settings is one of the four, so the bar says where
+she is instead. The approved contract calls this navigation persistent; the older instruction
+was about a bar that did not include the page it sat on. **If that reading is wrong, this is
+the line to say so on.**
+
+Both live nav checks changed with the old expectation written down beside them rather than
+deleted — including `app.spec.ts`, which asserted Settings was NOT in the nav and now asserts
+Places and Timeline are not, so the count still cannot drift.
+
+**What is still not built from the contract**: Settings' three destinations
+(`Account | Integrations | Data & Privacy`, the last being one continuous page), and everything
+events/messaging, which waits on previews.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - ✅ **`GITHUB_TOKEN` for the watchtower** *(2026-08-21)*. She added it to `.env.local`; it
