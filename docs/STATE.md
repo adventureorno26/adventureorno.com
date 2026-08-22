@@ -664,7 +664,79 @@ row whose owner and linked profile are the same. That keeps exactly one row per 
 account) and makes the compatibility views in step two exact rather than DISTINCT-ed. Having
 an account now *creates* that row, by trigger, rather than by a migration that ran once.
 
-**IT IS A MIRROR UNTIL STEP TWO, and that is stated rather than hidden.** Nothing reads the new
+**Step two, measured before it was attempted** *(0264, 0265)*. Two things had to be true
+before a view could replace those tables, and one of them was not:
+
+- **The view is byte-identical to the table** — 623 outing and 655 visit rows, none missing
+  either way, **zero differing columns**. It took 0264 to get there: 0262 had folded
+  `accepted_legacy` into `accepted` under "one word for one idea", which is right for
+  *rejected*/*declined* and wrong here. `accepted_legacy` does not mean accepted; it means
+  **accepted by a rule rather than by the person** — the 44 tags applied to Josh before anyone
+  thought to ask him, and the reason `respond_to_tag` still treats them as answerable.
+- **"The writers stay untouched" was never available.** All fourteen writers use `ON CONFLICT`
+  — 32 clauses between them — and a view cannot take one. So the move is 33 write statements
+  translated from `(activity_id, profile_id)` to `(subject_id, person_id)`, not a swap. 0265
+  adds the three get-or-create helpers that make that a substitution rather than fourteen
+  chances to be clever.
+
+**✅ STEP TWO IS DONE** *(0266, 0267)*. `activity_profiles` and `visit_profiles` are **views
+over `memory_people`** now, with the same columns in the same order, and the migration proved
+them row-for-row identical to the tables inside its own transaction before committing to it.
+The old tables are renamed `*_retired` and frozen — nothing reads or writes them; they are a
+backup for one deploy, and dropping them is the next migration. Measured after the swap, on
+live data: **zero rows differ in either direction.**
+
+**Thirty-three write statements moved.** All fourteen writers used `ON CONFLICT` — 32 clauses
+between them — so a view could not take their writes, INSTEAD OF trigger or not. Each was
+matched against the live definition exactly once before replacement and each function asserted
+afterwards to contain no reference to the old tables, because a generated migration that
+rewrites thirteen functions and silently not the fourteenth compiles perfectly and means
+something else. The end-to-end check on production: an activity insert credits its owner
+`own_recording`; the picker gives 2 for everyone and 1 for just her; `create_visit` with both
+gives 2 and narrowing gives 1; and `memory_people` and the view agree throughout.
+
+**And forty test fixtures moved with them**, because a fixture that writes a table cannot write
+a view. That is 17 files, rewritten mechanically and then by hand where the shapes differed —
+the derived-table form keeps the original VALUES untouched and wraps only the two keys.
+
+**Two guards caught what the swap left behind**: new views inherit Supabase's blanket grant, so
+`0176` found INSERT/UPDATE/DELETE back on relations that had spent their whole lives read-only
+(nothing could be written through them — a view over a join is not auto-updatable — but *"it
+fails for a second reason"* is not the rule), and `the_readers_stay_enforced` found
+`subject_for_activity` reading `activities`, which belongs on the allowlist: it reads one
+column of one row and returns an id.
+
+**AND A VIEW REMEMBERS THE TABLE, NOT THE NAME** *(0268, 0269)*. CI failed on exactly one test
+out of seventy-one — `0200_a_tag_is_not_a_key` — and it was right. Reproduced on production in
+four lines: an outing she has tagged him on, sharing on.
+
+```
+activity_profiles rows for it   2
+his row present                 1
+can_see_activity                TRUE
+visible_activities rows         0      ← the same rule, the opposite answer
+```
+
+Renaming `activity_profiles` moved every **stored expression** that named it. A FUNCTION
+resolves names when it runs, so `can_see_activity` picked up the new view at once. A VIEW does
+not — Postgres records its dependencies by OID — so `visible_activities` followed the rename
+and quietly kept reading the frozen table, and everything written after the swap was invisible
+to it. Then the same thing again for the row POLICY: `activities_select` is a stored expression
+too. **Renaming a table silently moves views, policies and generated columns, and leaves
+functions alone.** Both were found by asking `pg_depend`, not by grepping the name — grepping
+would have found the same two and given no reason to believe there were only two.
+
+After the rebinds, on live data: her visible activities **477**, Anyone **135 places / 2,513
+miles**, Josh's outings **127** — every number identical to before the swap.
+
+**Eight of seventy-one SQL tests still fail against PRODUCTION and this is expected.** Each is a
+whole-database assertion meeting live data — four coordinate-free activities that do carry a
+route, a place whose stored count disagrees, seven awaiting a geocoder that is off — or the
+household-size family (`is_shared_*` requires the fixture's own pair to be the only real
+members, and production has two more). The clean database in CI is the arbiter for those, and
+the proof that none of them is a swap regression is that the view and the frozen table return
+**identical rows**: no reader can see anything different.
+ Nothing reads the new
 rows yet; the two old tables remain authoritative. The next migration re-runs this backfill —
 so anything written in between is carried over — and then turns those tables into views over
 the new store so the twenty-four readers keep working. **If step two does not happen, 0262 is

@@ -37,8 +37,9 @@ begin
             'manual', b_id, 'def') returning id into solo_act;
   -- BOTH did the first one, and since 0193 that must be said: the default attributes a
   -- new row to whoever made it, not to everyone.
-  insert into public.activity_profiles (activity_id, profile_id)
-  values (shared_act, a_id), (shared_act, b_id)
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (shared_act, a_id), (shared_act, b_id)) t(activity_id, profile_id)
   on conflict do nothing;
 
   -- only B did the second one (0188: rows, not a column)

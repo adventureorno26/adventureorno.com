@@ -46,7 +46,9 @@ begin
   -- this test did exactly that.
   insert into public.visits (place_id, start_date, end_date, status, manual, accepted_at)
     values (p, '2026-05-02', '2026-05-02', 'taken', true, now()) returning id into v;
-  insert into public.visit_profiles (visit_id, profile_id) values (v, e_id), (v, j_id)
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (v, e_id), (v, j_id)) t(visit_id, profile_id)
   on conflict do nothing;
 
   -- JOSH'S STRAVA RUN. original_source says where it BEGAN, which is the only thing the
@@ -56,7 +58,9 @@ begin
     values ('J0196 Strava Run', 'Run', 8046.72, '2026-05-02T14:00:00Z', p, v,
             'strava', 'strava', j_id)
     returning id into j_strava;
-  insert into public.activity_profiles (activity_id, profile_id) values (j_strava, j_id)
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (j_strava, j_id)) t(activity_id, profile_id)
   on conflict do nothing;
 
   -- JOSH'S FILE IMPORT, same day, same place. This one carries no restriction at all,
@@ -66,7 +70,9 @@ begin
     values ('J0196 File Hike', 'Hike', 3218.69, '2026-05-02T09:00:00Z', p, v,
             'file', 'file', j_id)
     returning id into j_file;
-  insert into public.activity_profiles (activity_id, profile_id) values (j_file, j_id)
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (j_file, j_id)) t(activity_id, profile_id)
   on conflict do nothing;
 
   -- ---------------------------------------------------------------------------

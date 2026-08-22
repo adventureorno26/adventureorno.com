@@ -45,8 +45,10 @@ begin
     values ('E0200 Strava Run', 'Run', 8046.72, '2026-06-01T13:00:00Z', p,
             'strava', 'strava', e_id)
     returning id into a_strava;
-  insert into public.activity_profiles (activity_id, profile_id)
-    values (a_strava, e_id), (a_strava, j_id) on conflict do nothing;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (a_strava, e_id), (a_strava, j_id)) t(activity_id, profile_id)
+  on conflict do nothing;
 
   -- A NON-STRAVA activity, same tagging. This one he is allowed to see — the rule is
   -- about Strava's copy, not about hiding the household's own records from each other.
@@ -55,8 +57,10 @@ begin
     values ('E0200 File Walk', 'Walk', 3218.0, '2026-06-02T13:00:00Z', p,
             'file', 'file', e_id)
     returning id into a_file;
-  insert into public.activity_profiles (activity_id, profile_id)
-    values (a_file, e_id), (a_file, j_id) on conflict do nothing;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (a_file, e_id), (a_file, j_id)) t(activity_id, profile_id)
+  on conflict do nothing;
 
   -- THE CONTROL. Another Strava activity of hers that he is NOT tagged on. Sharing what she
   -- tags him on must never become sharing her account, and only a row like this can prove it.
@@ -65,8 +69,10 @@ begin
   values (gen_random_uuid(), 'Run', 'Hers alone', 7000, '2026-03-02T13:00:00Z', 39.2, -77.6,
           'strava', 'strava', e_id)
   returning id into a_untagged;
-  insert into public.activity_profiles (activity_id, profile_id)
-    values (a_untagged, e_id) on conflict do nothing;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (a_untagged, e_id)) t(activity_id, profile_id)
+  on conflict do nothing;
 
   -- ---- act as JOSH -------------------------------------------------------
   perform set_config('request.jwt.claims',

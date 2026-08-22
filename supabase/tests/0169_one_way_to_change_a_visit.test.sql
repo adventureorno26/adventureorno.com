@@ -144,9 +144,11 @@ begin
   -- Written directly, not through the picker: since 0240 naming somebody else raises a
   -- question and writes no row, and what is being tested here is the grouping rule, not
   -- tagging.
-  delete from public.visit_profiles where visit_id = child;
-  insert into public.visit_profiles (visit_id, profile_id, claim_status, evidence, created_by)
-  values (child, 'dddd0169-0000-0000-0000-000000000002', 'accepted', 'created_with', 'user');
+  delete from public.memory_people mp using public.memory_subjects s
+   where s.id = mp.subject_id and s.visit_id = child;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (child, 'dddd0169-0000-0000-0000-000000000002', 'accepted', 'created_with', 'user')) t(visit_id, profile_id, claim_status, evidence, created_by);
   perform public.detach_child_visit(child);
   begin
     r := public.attach_child_visit(child, trip);

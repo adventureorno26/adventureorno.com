@@ -81,11 +81,13 @@ begin
   -- question and writes no row, and this section is about the parent/child PARTICIPANT rules
   -- — it needs two visits that already have different people on them, not a tagging dance.
   perform public.set_visit_participants(trip, array['eeee0170-0000-0000-0000-000000000001']::uuid[]);
-  insert into public.visit_profiles (visit_id, profile_id, claim_status, evidence, created_by)
-  values (child, 'eeee0170-0000-0000-0000-000000000002', 'accepted', 'created_with', 'user')
-  on conflict (visit_id, profile_id) do nothing;
-  delete from public.visit_profiles
-   where visit_id = child and profile_id <> 'eeee0170-0000-0000-0000-000000000002';
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (child, 'eeee0170-0000-0000-0000-000000000002', 'accepted', 'created_with', 'user')) t(visit_id, profile_id, claim_status, evidence, created_by)
+  on conflict (subject_id, person_id) do nothing;
+  delete from public.memory_people mp using public.memory_subjects s, public.people pe
+   where s.id = mp.subject_id and pe.id = mp.person_id and s.visit_id = child
+     and pe.linked_profile is distinct from 'eeee0170-0000-0000-0000-000000000002';
 
   begin
     update public.visits set parent_visit_id = trip where id = child;

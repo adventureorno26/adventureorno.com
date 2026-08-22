@@ -170,11 +170,13 @@ begin
   insert into public.visits (place_id, start_date, end_date, manual)
     values (p,'2026-04-01','2026-04-01',true);
   -- attribution is rows; the default gives it to whoever inserted it, so replace that
-  delete from public.visit_profiles vp using public.visits v
-   where vp.visit_id = v.id and v.place_id = p and v.start_date = '2026-04-01';
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v.id, 'aaaa7777-0000-0000-0000-00000000c002' from public.visits v
-   where v.place_id = p and v.start_date = '2026-04-01';
+  delete from public.memory_people mp using public.memory_subjects s, public.visits v
+   where s.id = mp.subject_id and s.visit_id = v.id and v.place_id = p
+     and v.start_date = '2026-04-01';
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v.id, 'aaaa7777-0000-0000-0000-00000000c002' from public.visits v
+   where v.place_id = p and v.start_date = '2026-04-01') t(visit_id, profile_id);
   -- ASKED AS A BEFORE/AFTER, not as a comparison between the two people (0193). This
   -- used to assert c_e < c_j, which only held because a bare insert meant EVERYONE and
   -- both counts therefore shared every earlier visit in this file. With "just me" as the

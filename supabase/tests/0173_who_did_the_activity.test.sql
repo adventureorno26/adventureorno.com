@@ -32,9 +32,10 @@ begin
   -- a tag a person accepts rather than something the app assumes.
   insert into public.visits (place_id, start_date, end_date, status, manual)
     values (p, '2026-04-10', '2026-04-10', 'taken', true) returning id into v;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v, pr.id from public.profiles pr
-   where pr.role in ('owner','editor') and coalesce(pr.display_name,'') !~* '(test|bot)'
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v, pr.id from public.profiles pr
+   where pr.role in ('owner','editor') and coalesce(pr.display_name,'') !~* '(test|bot)') t(visit_id, profile_id)
   on conflict do nothing;
 
   if not public.is_shared_visit(v) then

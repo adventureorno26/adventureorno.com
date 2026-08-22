@@ -36,19 +36,36 @@ update public.visits set trip_marked = true
 -- and visit_profiles/activity_profiles were empty in both exports. They matched because
 -- they were both empty.
 --
--- Since 0188 dropped solo_profile these two tables are the ONLY record of who was on a
--- visit and who did an activity, so they are exactly what a restore must not lose.
+-- THOSE TWO ARE VIEWS NOW (0266). Participation lives in `memory_subjects` + `memory_people`,
+-- and the fixture writes there — a fixture that writes a view is how this job started failing
+-- with "cannot insert into view", which is also exactly the failure it was built to catch on
+-- the real data. It is still the ONLY record of who was on a visit and who did an activity,
+-- so it is still exactly what a restore must not lose.
 insert into auth.users (id,email)
   values ('d1d1d1d1-0000-0000-0000-000000000001','rt@example.invalid')
   on conflict (id) do nothing;
 insert into public.profiles (id,display_name,role)
   values ('d1d1d1d1-0000-0000-0000-000000000001','RT Person','owner')
   on conflict (id) do nothing;
-insert into public.visit_profiles (visit_id,profile_id)
-  values ('b1b1b1b1-0000-0000-0000-000000000001','d1d1d1d1-0000-0000-0000-000000000001')
-  on conflict do nothing;
-insert into public.activity_profiles (activity_id,profile_id)
-  values ('c1c1c1c1-0000-0000-0000-000000000001','d1d1d1d1-0000-0000-0000-000000000001')
+-- Written directly rather than through the helpers: triggers are off under the replica role,
+-- so `person_for_profile` would find no self-contact to use. This is the shape a restore has
+-- to carry, so it is the shape the fixture builds.
+insert into public.people (id,display_name,kind,owner_profile,linked_profile,created_by)
+  values ('d2d2d2d2-0000-0000-0000-000000000001','RT Person','person',
+          'd1d1d1d1-0000-0000-0000-000000000001','d1d1d1d1-0000-0000-0000-000000000001',
+          'd1d1d1d1-0000-0000-0000-000000000001')
+  on conflict (id) do nothing;
+insert into public.memory_subjects (id,kind,owner_profile,visit_id)
+  values ('d3d3d3d3-0000-0000-0000-000000000001','visit',
+          'd1d1d1d1-0000-0000-0000-000000000001','b1b1b1b1-0000-0000-0000-000000000001')
+  on conflict (id) do nothing;
+insert into public.memory_subjects (id,kind,owner_profile,activity_id)
+  values ('d3d3d3d3-0000-0000-0000-000000000002','outing',
+          'd1d1d1d1-0000-0000-0000-000000000001','c1c1c1c1-0000-0000-0000-000000000001')
+  on conflict (id) do nothing;
+insert into public.memory_people (subject_id,person_id)
+  values ('d3d3d3d3-0000-0000-0000-000000000001','d2d2d2d2-0000-0000-0000-000000000001'),
+         ('d3d3d3d3-0000-0000-0000-000000000002','d2d2d2d2-0000-0000-0000-000000000001')
   on conflict do nothing;
 insert into public.visit_evidence (visit_id,evidence_type,evidence_id,evidence_date)
   values ('b1b1b1b1-0000-0000-0000-000000000001','activity',
@@ -64,11 +81,11 @@ echo "Export A ..."; bash "$HERE/scripts/export-data.sh" "$TMP/a" 2026-01-01T00:
 python3 - "$TMP/a/manifest.json" <<'PY'
 import json, sys
 tables = {t['name']: t['rows'] for t in json.load(open(sys.argv[1]))['tables']}
-for t in ('visit_profiles', 'activity_profiles', 'visit_evidence'):
+for t in ('memory_subjects', 'memory_people', 'visit_evidence'):
     if tables.get(t, 0) < 1:
         raise SystemExit(f'FAIL: the export has no {t} rows — attribution is not being tested')
 print('  attribution present in the export: '
-      + ', '.join(f'{t}={tables[t]}' for t in ('visit_profiles','activity_profiles','visit_evidence')))
+      + ', '.join(f'{t}={tables[t]}' for t in ('memory_subjects','memory_people','visit_evidence')))
 PY
 echo "Restore from A ..."; AON_RESTORE_CONFIRM=yes bash "$HERE/scripts/restore-data.sh" "$TMP/a" >/dev/null
 echo "Export B ..."; bash "$HERE/scripts/export-data.sh" "$TMP/b" 2026-01-01T00:00:00Z >/dev/null

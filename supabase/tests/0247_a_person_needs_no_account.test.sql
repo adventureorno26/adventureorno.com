@@ -147,8 +147,16 @@ begin
 
   -- ---- AND BEING IN A PHOTOGRAPH IS NOT BEING ON A RUN ----------------------
   -- §8b-i names this one: "photo presence not silently promoted to outing participation".
-  if exists (select 1 from public.memory_subjects where kind = 'outing') then
-    raise exception 'FAIL: tagging a photo registered an outing subject';
+  --
+  -- THE ASSERTION CHANGED WITH 0266 and the property did not. It used to check that no
+  -- OUTING SUBJECT existed at all, which was a fair proxy while nothing else made them —
+  -- every activity has one now, created when the row is inserted, because that is where its
+  -- own participation is recorded. A subject is the identity of a memory, not a claim about
+  -- anybody. What must stay true is that nobody is ON an outing because of a photograph.
+  if exists (select 1 from public.memory_people mp
+              join public.memory_subjects s2 on s2.id = mp.subject_id
+             where s2.kind = 'outing' and mp.person_id in (me, mum, him)) then
+    raise exception 'FAIL: tagging a photo put somebody on an outing';
   end if;
 end $$;
 

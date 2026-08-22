@@ -37,13 +37,13 @@ begin
   -- HE HAS ALREADY ANSWERED. This is the record 7a-12 exists to keep.
   -- The owner is already on their own recording — the insert trigger says so since 0257 —
   -- so this fills in the shape rather than creating it.
-  insert into public.activity_profiles
-    (activity_id,profile_id,claim_status,evidence,created_by,asserted_by,decided_by,decided_at)
-  values (act,e_id,'accepted','own_recording','import',null,e_id,now()),
-         (act,j_id,'accepted','tagged_and_accepted','user',e_id,j_id,now())
-  on conflict (activity_id, profile_id) do update
-    set claim_status = excluded.claim_status, evidence = excluded.evidence,
-        created_by = excluded.created_by, asserted_by = excluded.asserted_by,
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by, tagged_by, decided_by, decided_at)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by, t.asserted_by::uuid, t.decided_by::uuid, t.decided_at::timestamptz
+    from (values (act,e_id,'accepted','own_recording','import',null,e_id,now()),
+         (act,j_id,'accepted','tagged_and_accepted','user',e_id,j_id,now())) t(activity_id, profile_id, claim_status, evidence, created_by, asserted_by, decided_by, decided_at)
+  on conflict (subject_id, person_id) do update
+    set participation_status = excluded.participation_status, evidence = excluded.evidence,
+        created_by = excluded.created_by, tagged_by = excluded.tagged_by,
         decided_by = excluded.decided_by, decided_at = excluded.decided_at;
 
   -- HIS OWN separate recording, which a tag decision must never touch.
@@ -51,10 +51,10 @@ begin
     (id,type,name,distance,start_date,lat,lng,owner_profile,source,original_source)
   values (gen_random_uuid(),'Hike','His own',9100,'2026-04-09T13:01:00Z',39.2,-77.6,j_id,'file','file')
   returning id into his;
-  insert into public.activity_profiles
-    (activity_id,profile_id,claim_status,evidence,created_by)
-  values (his,j_id,'accepted','own_recording','import')
-  on conflict (activity_id, profile_id) do nothing;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (his,j_id,'accepted','own_recording','import')) t(activity_id, profile_id, claim_status, evidence, created_by)
+  on conflict (subject_id, person_id) do nothing;
 
   perform set_config('request.jwt.claims',
     json_build_object('sub', e_id, 'role','authenticated')::text, true);

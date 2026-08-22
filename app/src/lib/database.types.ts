@@ -234,7 +234,7 @@ export type Database = {
           },
         ]
       }
-      activity_profiles: {
+      activity_profiles_retired: {
         Row: {
           activity_id: string
           asserted_by: string | null
@@ -2918,7 +2918,7 @@ export type Database = {
           },
         ]
       }
-      visit_profiles: {
+      visit_profiles_retired: {
         Row: {
           asserted_by: string | null
           claim_status: string
@@ -3215,6 +3215,71 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_profiles: {
+        Row: {
+          activity_id: string | null
+          asserted_by: string | null
+          claim_status: string | null
+          created_at: string | null
+          created_by: string | null
+          decided_at: string | null
+          decided_by: string | null
+          evidence: string | null
+          profile_id: string | null
+          rule_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_people_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_tagged_by_fkey"
+            columns: ["asserted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activity_provenance"
+            referencedColumns: ["activity_id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "visible_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_linked_profile_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_provenance: {
         Row: {
           activity_id: string | null
@@ -3422,6 +3487,64 @@ export type Database = {
             columns: ["visit_id"]
             isOneToOne: false
             referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_profiles: {
+        Row: {
+          asserted_by: string | null
+          claim_status: string | null
+          created_at: string | null
+          created_by: string | null
+          decided_at: string | null
+          decided_by: string | null
+          evidence: string | null
+          profile_id: string | null
+          rule_id: string | null
+          visit_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memory_people_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "tagging_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_people_tagged_by_fkey"
+            columns: ["asserted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "accepted_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memory_subjects_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_linked_profile_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -4484,6 +4607,7 @@ export type Database = {
           status: string
         }[]
       }
+      person_for_profile: { Args: { p_profile: string }; Returns: string }
       person_is_mine: { Args: { p_person: string }; Returns: boolean }
       person_memories: {
         Args: { p_from?: string; p_person: string; p_to?: string }
@@ -5620,6 +5744,8 @@ export type Database = {
       strava_connected: { Args: never; Returns: boolean }
       strava_connected_me: { Args: never; Returns: boolean }
       strava_oauth_start: { Args: never; Returns: string }
+      subject_for_activity: { Args: { p_activity: string }; Returns: string }
+      subject_for_visit: { Args: { p_visit: string }; Returns: string }
       tag_person_on_photo: {
         Args: { p_person: string; p_photo: string }
         Returns: Json
