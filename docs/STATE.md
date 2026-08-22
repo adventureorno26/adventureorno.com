@@ -758,6 +758,27 @@ some of it was already answered; the rest was right and is listed here with what
 | **0260 has no regression tests** | **STALE.** `0260_the_map_asks_the_same_question.test.sql` shipped with it, pinning ALL/ANY, empty selection, and that Together and Just-me mean exactly what they meant. Unauthorised person ids are pinned by 0253's test. |
 | **30 `<Link><button>` nested interactive elements** | **CONFIRMED** (15 by a narrower count, same defect). Competing link/button semantics. **NOT fixed here** — it is a mechanical sweep across many files plus an eslint rule, and it is worth doing on its own rather than inside a fix for something else. |
 
+#### 3p. THE HEADLINE MILES CHANGE WHEN YOU RELOAD — found 2026-08-22, NOT fixed
+
+The map's stats bar shows **places · miles · races**. Places and races are stable; **miles is
+not**. Four loads of the same screen, same filter (`Anyone`), minutes apart:
+
+```
+562.6      544.4      976.8      476.8
+```
+
+Two of those readings predate the registry swap and two follow it, so **it is not the
+migration** — and the server agrees with itself throughout: `mileage_by_person_for_people('{}',
+'any')` is **2,540.5** every time, `mileage_by_person(null)` **436.5**, `mileage_by_person(her)`
+**1,968.4**. None of them is any of the four numbers on screen.
+
+So the defect is in the stats bar, between the query and the pill, and it is the worst kind of
+number: one she reads, that looks authoritative, and that is different if she presses reload.
+Not chased today because it is not this week's work and because guessing at it is how the
+other two "reads as one fact and is another" bugs got written. **What it needs is a
+measurement of what the component actually sums** — the count-up animation, the cutoff, and
+whether the rows are summed before they have all arrived are the three candidates.
+
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
 - ✅ **`GITHUB_TOKEN` for the watchtower** *(2026-08-21)*. She added it to `.env.local`; it
