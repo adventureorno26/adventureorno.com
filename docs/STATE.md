@@ -831,9 +831,89 @@ with the route they belonged to; if either becomes a destination again its chrom
 back with it. **This was found by looking at the live page, not by a test** — so it is now
 a live check, and that check was proved to FAIL against the deployed site before the fix.
 
+#### 3r. A COUNT OF ZERO PROVES NOTHING UNTIL THE SCREEN HAS RENDERED *(2026-08-22)*
+
+The check written for the tab-chrome defect **passed against a site that still had it.**
+`ready()` waits for the NAV — it proves the app booted — and the screen under test arrives
+after that, so `toHaveCount(0)` was asked before there was anything to count and answered
+"zero, correct". That is the same shape as every stale-assertion failure this file has had:
+a check that cannot fail is not a check.
+
+So, in `erica-asked-for.spec.ts`: **every negative assertion now follows a positive one that
+only the real screen satisfies** — Places has rows, Timeline has years, the map has its stats
+bar, /add has its button. The rule is written at the top of the file. The strengthened check
+was proved both ways: it FAILS against a locally-served build with the back-bar put back, and
+passes against the deployed one.
+
+Three more things fell out of looking:
+
+* **`app/e2e/` was typechecked by NOTHING.** `tsconfig.app.json` includes only `src`. The
+  live spec had shipped `ReferenceError: total is not defined` inside a failure message, so
+  the one check that was reporting a real problem *crashed instead of reporting it*. There
+  is now a `tsconfig.e2e.json` in the build, and `tsc -b` — which the pre-commit hook and CI
+  both run — covers the tests. It immediately found two more real type errors in `fixtures.ts`.
+* **"Import & sort photos" was asserted as `role=button`.** It has always been an `<a>`
+  styled `as-button`, so that check demanded something that was never there and went red
+  against a Settings page that has had the control all along.
+* **The Routes check sampled twelve places from whatever had rendered at that instant**, so
+  which twelve changed run to run; on the run where none had activities it reported "the
+  section stopped rendering" about an app that was rendering it. It waits for the list now.
+
+All 25 live checks are green.
+
 **What is still not built from the contract**: Settings' three destinations
 (`Account | Integrations | Data & Privacy`, the last being one continuous page), and everything
 events/messaging, which waits on previews.
+
+#### 3s. OTHER USERS — what exists, and the plan she asked for *(2026-08-22)*
+
+Erica, 2026-08-22: *"I want to be able to share this application with other people... I can
+add people as an editor, but I also want to add other users so they have all the same
+functions and can add other users as friends."*
+
+**WHAT EXISTS TODAY IS ONE HOUSEHOLD, NOT MANY USERS.** Every read policy in the database
+ends in `is_member()` — *are you signed in to this household* — so `places_select`,
+`photos_select` and the rest hand a new account **Erica and Josh's entire history**. Roles
+are `owner | editor | viewer`; they say what you may WRITE, never whose data you see. Sign-up
+is `claim_invite()`: no pending invite, no account, and accepting one puts you in **this**
+household. So today "add a user" and "give somebody all of my data" are the same button.
+Adding a friend that way would be a privacy incident, not a feature.
+
+`people` (0247) is already the right half of the answer: a person is owner-scoped, needs no
+account, and `linked_profile` points at one when they have it. Tagging, ALL/ANY retrieval
+and approvals already work off it. **What is missing is tenancy and friendship.**
+
+**THE PLAN, in the order it has to happen.** Each step is a migration series and a UI slice.
+
+1. **Spaces.** `spaces` + `space_memberships`, per the storage contract above. Every
+   household-owned row gains `space_id`; `is_member()` becomes `is_member(space_id)`.
+   Backfill is one space with Erica as owner and Josh as editor, so nothing she has changes.
+   **This is the big one**: 58 tables, 97 policies and 230 functions currently assume one
+   tenant, and until it lands every other step below would leak. It is also the only step
+   that must be done in one go — a half-partitioned database is worse than an unpartitioned
+   one, because it looks safe.
+2. **Sign-up.** Self-registration creating your own space, with the invite path kept for
+   joining an existing one. Open registration vs invite-code-first is **her call** (§4).
+3. **Friends.** A `friendships` edge between PROFILES (requester, addressee, status
+   `pending | accepted | blocked`), mutual, bidirectional block enforced in RLS — not a
+   `people` row, because a contact is private to its owner and a friendship is agreed by two
+   accounts. `people.linked_profile` is how a friend appears in your own contact list.
+   **Default: a friend sees nothing.** Friendship is permission to tag, invite and message,
+   not access to a history.
+4. **Cross-space tagging.** Tagging a friend writes a claim in THEIR space with
+   `participation_status = 'proposed'` — the machinery `memory_people` already has. Their
+   acceptance puts it in their history; declining leaves the tagger's own record untouched,
+   which is the contract. Sharing what you can SEE of a memory is a separate, explicit act.
+5. **Events and messaging**, which the contract already specifies and which need friends and
+   blocking underneath them.
+
+**What this is not**: it is not "more roles". Roles stay what they are — how much you may
+change inside a space you are already in.
+
+**Before strangers hold accounts**: a privacy policy and terms, a deletion/export path that
+a stranger can run without asking (the export page exists; account deletion does not), abuse
+reporting, and a decision on photo storage cost per user. None of them are code problems and
+all of them precede a public sign-up form.
 
 #### 4. WAITING ON ERICA — none of it blocks the rest
 
