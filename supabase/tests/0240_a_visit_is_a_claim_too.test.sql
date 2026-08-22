@@ -68,13 +68,13 @@ begin
   end if;
 
   -- HE HAS ALREADY ANSWERED a tag on the first visit. This is the record being protected.
-  insert into public.visit_profiles
-    (visit_id, profile_id, claim_status, evidence, created_by, asserted_by, decided_by, decided_at)
-  values (v1, e_id, 'accepted', 'own_statement', 'user', null, e_id, now()),
-         (v1, j_id, 'accepted', 'tagged_and_accepted', 'user', e_id, j_id, now())
-  on conflict (visit_id, profile_id) do update
-    set claim_status = excluded.claim_status, evidence = excluded.evidence,
-        created_by = excluded.created_by, asserted_by = excluded.asserted_by,
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by, tagged_by, decided_by, decided_at)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by, t.asserted_by::uuid, t.decided_by::uuid, t.decided_at::timestamptz
+    from (values (v1, e_id, 'accepted', 'own_statement', 'user', null, e_id, now()),
+         (v1, j_id, 'accepted', 'tagged_and_accepted', 'user', e_id, j_id, now())) t(visit_id, profile_id, claim_status, evidence, created_by, asserted_by, decided_by, decided_at)
+  on conflict (subject_id, person_id) do update
+    set participation_status = excluded.participation_status, evidence = excluded.evidence,
+        created_by = excluded.created_by, tagged_by = excluded.tagged_by,
         decided_by = excluded.decided_by, decided_at = excluded.decided_at;
 
   perform set_config('request.jwt.claims',
@@ -233,11 +233,11 @@ begin
   vis := (public.create_visit(pl, '2026-06-01', '2026-06-01', null, array[e_id]::uuid[])).id;
 
   -- He is on it, and he ACCEPTED being on it.
-  insert into public.visit_profiles
-    (visit_id, profile_id, claim_status, evidence, created_by, asserted_by, decided_by, decided_at)
-  values (vis, j_id, 'accepted', 'tagged_and_accepted', 'user', e_id, j_id, now())
-  on conflict (visit_id, profile_id) do update
-    set claim_status = 'accepted', evidence = 'tagged_and_accepted', decided_by = j_id;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by, tagged_by, decided_by, decided_at)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by, t.asserted_by::uuid, t.decided_by::uuid, t.decided_at::timestamptz
+    from (values (vis, j_id, 'accepted', 'tagged_and_accepted', 'user', e_id, j_id, now())) t(visit_id, profile_id, claim_status, evidence, created_by, asserted_by, decided_by, decided_at)
+  on conflict (subject_id, person_id) do update
+    set participation_status = 'accepted', evidence = 'tagged_and_accepted', decided_by = j_id;
 
   snap := public.delete_visit(vis);
   back := public.restore_visit(snap);

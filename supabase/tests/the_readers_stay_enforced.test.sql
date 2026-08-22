@@ -134,6 +134,13 @@ declare
     -- stops protecting its owner — the caller could delete exactly the rows they cannot see.
     'set_place_solo',
     'set_visit_participants',
+    -- 0265. Reads ONE COLUMN of one row — `owner_profile`, to decide who owns the registry
+    -- entry it is about to make — and returns a subject id. No attribute of an activity
+    -- leaves it. Reading through `visible_activities` would be wrong for the same reason it
+    -- is wrong in the two above: a recording the caller cannot see still needs its registry
+    -- entry, and a subject that silently fails to exist is a participation that silently
+    -- does not get written.
+    'subject_for_activity',
     'shared_outings'
   ];
   unexpected text;

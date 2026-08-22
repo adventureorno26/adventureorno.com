@@ -48,13 +48,13 @@ begin
   -- and the control happened to be right for the wrong reason; the trigger now credits the
   -- OWNER, and this says the thing the test always meant: they ran it together, so she is on
   -- his recording of it too.
-  insert into public.activity_profiles
-    (activity_id, profile_id, claim_status, evidence, created_by, decided_by, decided_at)
-  select id, 'aaaa7777-0000-0000-0000-00000000f001', 'accepted', 'tagged_and_accepted', 'user',
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by, decided_by, decided_at)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by, t.decided_by::uuid, t.decided_at::timestamptz
+    from (select id, 'aaaa7777-0000-0000-0000-00000000f001', 'accepted', 'tagged_and_accepted', 'user',
          'aaaa7777-0000-0000-0000-00000000f001', now()
     from public.activities
-   where name = 'V141 Purcellville Running'
-  on conflict (activity_id, profile_id) do nothing;
+   where name = 'V141 Purcellville Running') t(activity_id, profile_id, claim_status, evidence, created_by, decided_by, decided_at)
+  on conflict (subject_id, person_id) do nothing;
 
   -- CONTROL: ungrouped, all three count — this is the bug, reproduced.
   select miles into m_before from public.wander_stats('aaaa7777-0000-0000-0000-00000000f001'::uuid);

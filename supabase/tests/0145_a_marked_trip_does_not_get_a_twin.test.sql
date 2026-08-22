@@ -77,9 +77,11 @@ begin
     values (p, '2032-05-01','2032-05-01', true, true)
     returning id into v;
   -- Attribution is participant rows since 0188; replace the everyone-by-default.
-  delete from public.visit_profiles where visit_id = v;
-  insert into public.visit_profiles (visit_id, profile_id)
-  values (v, 'aaaa7777-0000-0000-0000-00000000a145');
+  delete from public.memory_people mp using public.memory_subjects s
+   where s.id = mp.subject_id and s.visit_id = v;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (v, 'aaaa7777-0000-0000-0000-00000000a145')) t(visit_id, profile_id);
 
   perform public.rebuild_place_visits(p);
 

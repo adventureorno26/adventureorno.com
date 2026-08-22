@@ -34,10 +34,11 @@ begin
   insert into public.visits (place_id, start_date, end_date, manual, solo_override)
     values (p, '2026-05-01','2026-05-03', true, true);
   -- Erica's alone: replace the everyone-by-default rows (0188).
-  delete from public.visit_profiles vp using public.visits v
-   where vp.visit_id = v.id and v.place_id = p;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v.id, 'aaaa7777-0000-0000-0000-00000000d001' from public.visits v where v.place_id = p;
+  delete from public.memory_people mp using public.memory_subjects s, public.visits v
+   where s.id = mp.subject_id and s.visit_id = v.id and v.place_id = p;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v.id, 'aaaa7777-0000-0000-0000-00000000d001' from public.visits v where v.place_id = p) t(visit_id, profile_id);
 
   select solo_profile into got from public.place_attribution() where place_id = p;
   if got is distinct from 'aaaa7777-0000-0000-0000-00000000d001'::uuid then
@@ -51,8 +52,9 @@ begin
   -- together is a tag a person accepts rather than something the app assumes.
   insert into public.visits (place_id, start_date, end_date, manual)
     values (p, '2026-06-01','2026-06-01', true) returning id into v;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v, pr.id from public.profiles pr where pr.role in ('owner','editor')
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v, pr.id from public.profiles pr where pr.role in ('owner','editor')) t(visit_id, profile_id)
   on conflict do nothing;
   select solo_profile into got from public.place_attribution() where place_id = p;
   if got is not null then
@@ -71,13 +73,14 @@ begin
     (p,'2026-01-05','2026-01-05',true),
     (p,'2026-01-12','2026-01-12',true);
   -- one visit each, as rows (0188)
-  delete from public.visit_profiles vp using public.visits v
-   where vp.visit_id = v.id and v.place_id = p;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v.id,
+  delete from public.memory_people mp using public.memory_subjects s, public.visits v
+   where s.id = mp.subject_id and s.visit_id = v.id and v.place_id = p;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v.id,
          case when v.start_date = '2026-01-05' then 'aaaa7777-0000-0000-0000-00000000d001'
               else 'aaaa7777-0000-0000-0000-00000000d002' end::uuid
-    from public.visits v where v.place_id = p;
+    from public.visits v where v.place_id = p) t(visit_id, profile_id);
   select solo_profile, true into got, found from public.place_attribution() where place_id = p;
   if not coalesce(found,false) then raise exception 'FAIL: place missing from place_attribution()'; end if;
   if got is not null then raise exception 'FAIL: Erica-only + Josh-only must read Both, got %', got; end if;
@@ -92,10 +95,11 @@ begin
   insert into public.places (name, lat, lng, saved) values ('V136 Army Ten Miler', 38.87, -77.06, true) returning id into p;
   insert into public.visits (place_id, start_date, end_date, manual, solo_override)
     values (p,'2025-10-12','2025-10-12', true, true);
-  delete from public.visit_profiles vp using public.visits v
-   where vp.visit_id = v.id and v.place_id = p;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v.id, 'aaaa7777-0000-0000-0000-00000000d001' from public.visits v where v.place_id = p;
+  delete from public.memory_people mp using public.memory_subjects s, public.visits v
+   where s.id = mp.subject_id and s.visit_id = v.id and v.place_id = p;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v.id, 'aaaa7777-0000-0000-0000-00000000d001' from public.visits v where v.place_id = p) t(visit_id, profile_id);
 
   select exists(select 1 from public.place_ids_for_view('aaaa7777-0000-0000-0000-00000000d001') x where x = p) into in_erica;
   select exists(select 1 from public.place_ids_for_view('aaaa7777-0000-0000-0000-00000000d002') x where x = p) into in_josh;

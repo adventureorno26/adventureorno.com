@@ -56,10 +56,11 @@ begin
   update public.activities set shared_group_id = a1 where id = a1;
   -- The owner is already on their own recording (0256 makes the trigger follow
   -- owner_profile), so this only fills in the shape the assertions read.
-  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
-  values (a1, j_id, 'accepted', 'own_recording', 'import'),
-         (a2, j_id, 'accepted', 'own_recording', 'import')
-  on conflict (activity_id, profile_id) do nothing;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (a1, j_id, 'accepted', 'own_recording', 'import'),
+         (a2, j_id, 'accepted', 'own_recording', 'import')) t(activity_id, profile_id, claim_status, evidence, created_by)
+  on conflict (subject_id, person_id) do nothing;
 
   select count(*) into n from public.person_memories(him) where kind = 'outing';
   if n <> 1 then
@@ -97,9 +98,10 @@ begin
   values (gen_random_uuid(),'Run','His alone 0253',5000,'2026-07-02T12:00:00Z',39.6,-77.6,
           j_id,'strava','strava',pl)
   returning id into secret;
-  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
-  values (secret, j_id, 'accepted', 'own_recording', 'import')
-  on conflict (activity_id, profile_id) do nothing;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (secret, j_id, 'accepted', 'own_recording', 'import')) t(activity_id, profile_id, claim_status, evidence, created_by)
+  on conflict (subject_id, person_id) do nothing;
 
   if exists (select 1 from public.person_memories(him) where id = secret) then
     raise exception 'FAIL: his page handed her a recording he has not shared';
@@ -160,10 +162,11 @@ begin
   update public.activities set shared_group_id = a1 where id = a1;
   -- She is on her recording; he is on his. Two rows, two recordings, one outing.
   -- …which the importer trigger may already have written for the owner of each recording.
-  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
-  values (a1, e_id, 'accepted', 'own_recording', 'import'),
-         (a2, j_id, 'accepted', 'own_recording', 'import')
-  on conflict (activity_id, profile_id) do nothing;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (a1, e_id, 'accepted', 'own_recording', 'import'),
+         (a2, j_id, 'accepted', 'own_recording', 'import')) t(activity_id, profile_id, claim_status, evidence, created_by)
+  on conflict (subject_id, person_id) do nothing;
 
   -- And one she did alone.
   insert into public.activities
@@ -171,9 +174,10 @@ begin
   values (gen_random_uuid(),'Run','Hers alone 0255',4000,'2026-07-06T12:00:00Z',39.7,-77.7,
           e_id,'file','file',pl)
   returning id into solo;
-  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
-  values (solo, e_id, 'accepted', 'own_recording', 'import')
-  on conflict (activity_id, profile_id) do nothing;
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (solo, e_id, 'accepted', 'own_recording', 'import')) t(activity_id, profile_id, claim_status, evidence, created_by)
+  on conflict (subject_id, person_id) do nothing;
 
   -- Scoped to THIS section's fixtures by name: the block above built outings for the same
   -- two profiles, and an assertion that counts everything in the transaction is measuring

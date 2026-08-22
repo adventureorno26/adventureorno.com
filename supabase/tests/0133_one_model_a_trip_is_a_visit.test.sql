@@ -125,9 +125,11 @@ begin
     values (p, '2026-05-01', '2026-05-04', true, true) returning id into v;
   -- Josh's trip, and only Josh's: attribution is participant rows since 0188, and a
   -- bare insert means everyone, so this replaces that default.
-  delete from public.visit_profiles where visit_id = v;
-  insert into public.visit_profiles (visit_id, profile_id)
-  values (v, 'ffff6666-0000-0000-0000-00000000b002');
+  delete from public.memory_people mp using public.memory_subjects s
+   where s.id = mp.subject_id and s.visit_id = v;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (values (v, 'ffff6666-0000-0000-0000-00000000b002')) t(visit_id, profile_id);
   select trips_count into c_e from public.wander_stats('ffff6666-0000-0000-0000-00000000b001');
   select trips_count into c_j from public.wander_stats('ffff6666-0000-0000-0000-00000000b002');
   if c_e <> b_e then raise exception 'FAIL: Josh''s trip showed in Erica''s view'; end if;

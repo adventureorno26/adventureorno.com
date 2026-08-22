@@ -117,8 +117,9 @@ begin
   returning id into act;
   -- He is even tagged on it — the strongest version of the case, because a tag is what
   -- 0228 treats as sharing WHEN THE OWNER HAS TURNED IT ON. She has not.
-  insert into public.activity_profiles (activity_id, profile_id, claim_status, evidence, created_by)
-  values (act, j_id, 'proposed', 'owner_asserted', 'user');
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by
+    from (values (act, j_id, 'proposed', 'owner_asserted', 'user')) t(activity_id, profile_id, claim_status, evidence, created_by);
 end $$;
 
 set local role authenticated;

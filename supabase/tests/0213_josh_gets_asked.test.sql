@@ -63,10 +63,10 @@ begin
   values (e_id, j_id, date '2026-01-01', 'active', 'We were together')
   returning id into rule;
 
-  insert into public.activity_profiles
-    (activity_id, profile_id, claim_status, evidence, created_by, asserted_by, rule_id)
-  values ((strav->>'activity_id')::uuid, j_id, 'accepted_legacy',
-          'owner_asserted_date_backfill', 'migration', e_id, rule);
+  insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by, tagged_by, rule_id)
+  select public.subject_for_activity(t.activity_id::uuid), public.person_for_profile(t.profile_id::uuid), t.claim_status, t.evidence, t.created_by, t.asserted_by::uuid, t.rule_id::uuid
+    from (values ((strav->>'activity_id')::uuid, j_id, 'accepted_legacy',
+          'owner_asserted_date_backfill', 'migration', e_id, rule)) t(activity_id, profile_id, claim_status, evidence, created_by, asserted_by, rule_id);
   insert into public.tag_claims
     (rule_id, subject_kind, subject_id, profile_id, asserted_by, status)
   values (rule, 'activity', (strav->>'activity_id')::uuid, j_id, e_id, 'accepted_legacy')

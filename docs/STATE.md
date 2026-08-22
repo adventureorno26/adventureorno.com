@@ -679,7 +679,41 @@ before a view could replace those tables, and one of them was not:
   adds the three get-or-create helpers that make that a substitution rather than fourteen
   chances to be clever.
 
-**IT IS A MIRROR UNTIL STEP TWO, and that is stated rather than hidden.** Nothing reads the new
+**✅ STEP TWO IS DONE** *(0266, 0267)*. `activity_profiles` and `visit_profiles` are **views
+over `memory_people`** now, with the same columns in the same order, and the migration proved
+them row-for-row identical to the tables inside its own transaction before committing to it.
+The old tables are renamed `*_retired` and frozen — nothing reads or writes them; they are a
+backup for one deploy, and dropping them is the next migration. Measured after the swap, on
+live data: **zero rows differ in either direction.**
+
+**Thirty-three write statements moved.** All fourteen writers used `ON CONFLICT` — 32 clauses
+between them — so a view could not take their writes, INSTEAD OF trigger or not. Each was
+matched against the live definition exactly once before replacement and each function asserted
+afterwards to contain no reference to the old tables, because a generated migration that
+rewrites thirteen functions and silently not the fourteenth compiles perfectly and means
+something else. The end-to-end check on production: an activity insert credits its owner
+`own_recording`; the picker gives 2 for everyone and 1 for just her; `create_visit` with both
+gives 2 and narrowing gives 1; and `memory_people` and the view agree throughout.
+
+**And forty test fixtures moved with them**, because a fixture that writes a table cannot write
+a view. That is 17 files, rewritten mechanically and then by hand where the shapes differed —
+the derived-table form keeps the original VALUES untouched and wraps only the two keys.
+
+**Two guards caught what the swap left behind**: new views inherit Supabase's blanket grant, so
+`0176` found INSERT/UPDATE/DELETE back on relations that had spent their whole lives read-only
+(nothing could be written through them — a view over a join is not auto-updatable — but *"it
+fails for a second reason"* is not the rule), and `the_readers_stay_enforced` found
+`subject_for_activity` reading `activities`, which belongs on the allowlist: it reads one
+column of one row and returns an id.
+
+**Ten of seventy-one SQL tests still fail against PRODUCTION and this is expected.** Each is a
+whole-database assertion meeting live data — four coordinate-free activities that do carry a
+route, a place whose stored count disagrees, seven awaiting a geocoder that is off — or the
+household-size family (`is_shared_*` requires the fixture's own pair to be the only real
+members, and production has two more). The clean database in CI is the arbiter for those, and
+the proof that none of them is a swap regression is that the view and the frozen table return
+**identical rows**: no reader can see anything different.
+ Nothing reads the new
 rows yet; the two old tables remain authoritative. The next migration re-runs this backfill —
 so anything written in between is carried over — and then turns those tables into views over
 the new store so the twenty-four readers keep working. **If step two does not happen, 0262 is

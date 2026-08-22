@@ -57,10 +57,11 @@ begin
     (p,'2026-03-01','2026-03-01', true),
     (p,'2026-03-05','2026-03-05', true),
     (p,'2026-03-09','2026-03-09', true);
-  delete from public.visit_profiles vp using public.visits v
-   where vp.visit_id = v.id and v.place_id = p;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v.id, 'eeeeeeee-0000-0000-0000-00000000c002' from public.visits v where v.place_id = p
+  delete from public.memory_people mp using public.memory_subjects s, public.visits v
+   where s.id = mp.subject_id and s.visit_id = v.id and v.place_id = p;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v.id, 'eeeeeeee-0000-0000-0000-00000000c002' from public.visits v where v.place_id = p) t(visit_id, profile_id)
   on conflict do nothing;
 
   select coalesce((select visits from public.place_visit_counts(null) where place_id=p),0) into c_both;
@@ -85,17 +86,18 @@ begin
     (p,'2026-04-09','2026-04-09', true),   -- Erica
     (p,'2026-04-13','2026-04-13', true);   -- Erica
   -- Both = every real member on the visit; a person = only them.
-  delete from public.visit_profiles vp using public.visits v
-   where vp.visit_id = v.id and v.place_id = p;
-  insert into public.visit_profiles (visit_id, profile_id)
-  select v.id, x
+  delete from public.memory_people mp using public.memory_subjects s, public.visits v
+   where s.id = mp.subject_id and s.visit_id = v.id and v.place_id = p;
+  insert into public.memory_people (subject_id, person_id)
+  select public.subject_for_visit(t.visit_id::uuid), public.person_for_profile(t.profile_id::uuid)
+    from (select v.id, x
     from public.visits v
     cross join lateral unnest(
       case when v.start_date <= '2026-04-05'
            then array['eeeeeeee-0000-0000-0000-00000000c001'::uuid,
                       'eeeeeeee-0000-0000-0000-00000000c002'::uuid]
            else array['eeeeeeee-0000-0000-0000-00000000c001'::uuid] end) x
-   where v.place_id = p
+   where v.place_id = p) t(visit_id, profile_id)
   on conflict do nothing;
 
   select visits into c_both  from public.place_visit_counts(null) where place_id=p;
