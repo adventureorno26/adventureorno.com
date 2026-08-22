@@ -43,15 +43,26 @@ SCHEMA_VERSION="$(ls "$MIGR"/*.sql | sed -E 's:.*/([0-9]{4})_.*:\1:' | sort -n |
 # The nightly backup is NOT affected: `backup-db.mjs` enumerates pg_tables and takes
 # whatever exists, which is why it survived the same schema change untouched. This is
 # the hand-maintained list, and hand-maintained lists rot.
+#
+# ⚠️ AND IT ROTTED AGAIN, 2026-08-22, in a way a list cannot notice. `visit_profiles` and
+# `activity_profiles` became VIEWS over `memory_people` (0266), so the export still read them
+# happily and the RESTORE could not write them: "cannot insert into view". A backup that
+# cannot be restored is not a backup, and this failed in the round-trip job rather than on the
+# night somebody needed it — which is the entire reason that job exists.
+#
+# They are replaced by what actually holds the rows now: `memory_subjects` (the registry) and
+# `memory_people` (who was in what), plus `tagging_rules`, which `memory_people.rule_id`
+# points at and which was already missing while `activity_profiles` carried the same column.
 TABLES=(
   profiles people places place_membership place_membership_exceptions
-  place_categories visits visit_profiles visit_people visit_evidence
-  entries activities activity_profiles activity_options location_pings photos videos
+  place_categories visits visit_people visit_evidence
+  entries activities activity_options location_pings photos videos
   trail_routes trip_migration_exceptions
   place_ratings place_wishes photo_reactions activity_reactions peaks parks peak_bags
   board_items shared_links revealed_area deleted_hashes dup_dismissed settings
   approved_fields approval_undo
   visit_participant_review activity_participant_review activity_visit_review
+  tagging_rules memory_subjects memory_people
 )
 
 psql_db() { docker exec -i "$DB" psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"; }
