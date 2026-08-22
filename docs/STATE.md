@@ -682,8 +682,12 @@ before a view could replace those tables, and one of them was not:
 **✅ STEP TWO IS DONE** *(0266, 0267)*. `activity_profiles` and `visit_profiles` are **views
 over `memory_people`** now, with the same columns in the same order, and the migration proved
 them row-for-row identical to the tables inside its own transaction before committing to it.
-The old tables are renamed `*_retired` and frozen — nothing reads or writes them; they are a
-backup for one deploy, and dropping them is the next migration. Measured after the swap, on
+The old tables were renamed `*_retired` and frozen, then **dropped in 0270** once three things
+were true and checked rather than assumed: an off-site backup existed that contains the new
+store (triggered one — `memory_people: 1278`, `memory_subjects: 1119`, 29,227 rows across 54
+tables, encrypted and uploaded); `pg_depend` showed nothing stored still pointing at them; and
+the views and the frozen tables still held identical rows, which is the last moment that
+comparison can be made at all. **Participation now lives in exactly one place.** Measured after the swap, on
 live data: **zero rows differ in either direction.**
 
 **Thirty-three write statements moved.** All fourteen writers used `ON CONFLICT` — 32 clauses
