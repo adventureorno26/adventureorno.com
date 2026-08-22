@@ -5,12 +5,23 @@ import { useAuth } from '../auth/AuthProvider';
 // Erica's standing preference), styled as a bottom-center glass pill to match
 // the existing back-bar / stats-bar language. Rendered globally in App.tsx.
 //
-// FOUR destinations: Map (home), Places (the list), Add and Timeline.
+// FOUR destinations: Map (home), Add, Insights and Settings.
 //
-// ⚠️ REVISED 2026-08-11 (docs/STATE.md). ADD opens a FILLABLE CARD — not a
-// chooser, not a sheet asking what you are adding. Import photos, Sort photos
-// and Import activities live in SETTINGS now. Settings itself is moving out of
-// the nav to the gear wheel, leaving four tabs: Map / Places / Add / Timeline.
+// ⚠️ REVISED 2026-08-22 to the approved navigation: `Map | Add | Insights | Settings`.
+// Places and Timeline are no longer destinations of their own — they are TABS INSIDE
+// Insights, sharing one people/time/category scope with an Overview, which is the whole
+// reason to put them together. /places and /timeline still work and redirect there.
+//
+// AND SETTINGS COMES BACK INTO THE NAV, which reverses an instruction rather than ignoring
+// one. Erica, 2026-08-17: "map places add timeline should not appear on the settings page" —
+// and she was right, because none of those four WAS Settings, so the bar offered only ways
+// to leave a screen she was still reading. Now Settings is one of the four, so the bar says
+// where she is instead. The approved contract calls this navigation persistent; the older
+// instruction was about a bar that did not include the page it sat on.
+//
+// ⚠️ EARLIER, 2026-08-11 (docs/STATE.md). ADD opens a FILLABLE CARD — not a chooser, not
+// a sheet asking what you are adding. Import photos, Sort photos and Import activities live
+// in SETTINGS. Unchanged: Add introduces information only.
 
 /** The Add sheet opens OVER the map, so while it is open the map is not the
  *  current tab — Add is. */
@@ -18,7 +29,6 @@ const addOpen = (search: string) => new URLSearchParams(search).get('add') === '
 
 const TABS: { to: string; label: string; match?: (path: string, search: string) => boolean }[] = [
   { to: '/', label: 'Map', match: (p, s) => (p === '/' || p.startsWith('/place/')) && !addOpen(s) },
-  { to: '/places', label: 'Places', match: (p) => p === '/places' || p === '/places/edit' },
   // Add is a sheet, not a page, so it highlights on its query flag rather than a path.
   // ADD OPENS THE BLANK CARD, not a page (Erica, 2026-08-15). /add still exists — Settings
   // links to it for importing and sorting — but the TAB is for adding one thing.
@@ -27,7 +37,14 @@ const TABS: { to: string; label: string; match?: (path: string, search: string) 
     label: 'Add',
     match: (p, s) => p === '/add' || p === '/photos/sort' || addOpen(s),
   },
-  { to: '/timeline', label: 'Timeline' },
+  {
+    to: '/insights',
+    label: 'Insights',
+    // The two screens that used to be tabs of their own still light Insights, whether they
+    // are reached through it or through a link somebody saved months ago.
+    match: (p) => p === '/insights' || p === '/places' || p === '/places/edit' || p === '/timeline',
+  },
+  { to: '/settings', label: 'Settings', match: (p) => p.startsWith('/settings') },
 ];
 
 export default function PrimaryNav() {
@@ -36,13 +53,11 @@ export default function PrimaryNav() {
 
   // Only for signed-in members, and never over the login screen.
   if (!session || !profile || pathname === '/login') return null;
-  if (pathname === '/settings' || pathname.startsWith('/settings/')) return null;
 
-  // NOT ON SETTINGS (Erica, 2026-08-17: "map places add timeline should not appear on the
-  // settings page"). Settings is a place you went INTO from the gear, and it has its own
-  // back-bar out — a destination bar underneath it offers to leave a screen you are still
-  // reading, and on a phone it sits over the bottom of a long page. The same reasoning
-  // already removed the stats bar and the gear from Places.
+  // IT DOES SHOW ON SETTINGS NOW, because Settings is one of the four. The rule it replaces
+  // said otherwise for a good reason — a bar of four places to go, none of them the page you
+  // are on, is only an invitation to leave — and that reason stops applying the moment the
+  // page you are on is one of them.
 
   // FOUR tabs, and the Add pill says "Add" — nothing else.
   //

@@ -1269,7 +1269,7 @@ export default function Settings() {
                   <Link to="/albums" className="as-button">
                     Smart albums
                   </Link>
-                  <Link to="/timeline" className="as-button">
+                  <Link to="/insights?tab=timeline" className="as-button">
                     Timeline
                   </Link>
                   <Link to="/duplicates" className="as-button">

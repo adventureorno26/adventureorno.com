@@ -25,10 +25,15 @@ export default function PeopleFilter({
   people,
   value,
   onChange,
+  inline = false,
 }: {
   people: PersonContact[];
   value: PeopleSelection;
   onChange: (v: PeopleSelection) => void;
+  /** The Map pins this control to the bottom-left; Insights puts it in the page flow above
+   *  its tabs, because there it is the scope for everything below rather than an overlay on
+   *  something. Same control, same rule, two placements. */
+  inline?: boolean;
 }) {
   // With nobody but yourself recorded there is nothing to choose between.
   if (people.length < 2) return null;
@@ -59,7 +64,7 @@ export default function PeopleFilter({
     // KEEPS `person-filter` as well as its own class on purpose: every rule that positions
     // this control, restyles it on a phone and hides it behind an open card is written
     // against that name, and renaming it would quietly drop all of them.
-    <div className="person-filter people-filter">
+    <div className={`people-filter ${inline ? 'people-filter-inline' : 'person-filter'}`}>
       <button
         className={value.people.length === 0 ? 'on' : ''}
         onClick={() => onChange({ people: [], mode: 'any' })}

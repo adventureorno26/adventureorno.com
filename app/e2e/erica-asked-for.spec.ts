@@ -310,10 +310,23 @@ it.describe('the rest of the app — what she asked for', () => {
     await expect(page.locator('.add-btn')).toHaveCount(0);
   });
 
-  it('the nav is Map / Places / Add / Timeline', async ({ page }) => {
+  it('the nav is Map / Add / Insights / Settings', async ({ page }) => {
+    // CHANGED 2026-08-22 to the approved navigation. It read `Map / Places / Add / Timeline`
+    // and that was correct until the day Places and Timeline stopped being destinations and
+    // became TABS inside Insights, sharing one people scope with an Overview. The old
+    // expectation is written down rather than deleted, because a check that quietly changes
+    // its mind is how you stop being able to tell a decision from a regression.
     await ready(page, '/');
     const tabs = await page.locator('nav.primary-nav a').allTextContents();
-    expect(tabs.map((t) => t.trim())).toEqual(['Map', 'Places', 'Add', 'Timeline']);
+    expect(tabs.map((t) => t.trim())).toEqual(['Map', 'Add', 'Insights', 'Settings']);
+  });
+
+  it('the two old destinations still work and land where they went', async ({ page }) => {
+    // "Old routes redirect until links and saved URLs have migrated."
+    await ready(page, '/places');
+    expect(new URL(page.url()).searchParams.get('tab')).toBe('places');
+    await ready(page, '/timeline');
+    expect(new URL(page.url()).searchParams.get('tab')).toBe('timeline');
   });
 
   it('Settings is ONE page, no tabs', async ({ page }) => {
