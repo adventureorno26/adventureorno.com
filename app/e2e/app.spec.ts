@@ -58,10 +58,21 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(page.getByRole('dialog', { name: 'New place' })).toBeVisible();
   });
 
-  test('/add still renders, with its review queue', async ({ page }) => {
+  // REWRITTEN 2026-08-28. It asserted a "To review" heading ON /add, and #134 moved the
+  // queue OFF it: ONE VERB PER SCREEN — /add creates, /attention repairs. Erica had asked
+  // where the pending cards were precisely because they sat on the page named after
+  // creating. The old expectation is recorded rather than deleted, because a check that
+  // quietly changes its mind is how you stop being able to tell a decision from a
+  // regression. This is what kept main red from 08-23.
+  test('/add creates, and points at the repairs rather than holding them', async ({ page }) => {
     await page.goto('/add');
     await expect(page.getByRole('heading', { name: 'Add', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Add a place, visit or activity/ }),
+    ).toBeVisible();
+    // The queue is NOT here. Asserted only after the screen above has rendered — a count
+    // of zero proves nothing until there is something to count.
+    await expect(page.getByRole('heading', { name: /To review/ })).toHaveCount(0);
   });
 
   // THE CHOOSER IS GONE, and this test was the last thing describing it. #94 replaced
@@ -83,10 +94,11 @@ test.describe('authenticated app (non-destructive)', () => {
   });
 
   // Nothing is orphaned: the retired Inbox tab's URL still works.
-  test('the retired /inbox lands on Add', async ({ page }) => {
+  // REWRITTEN 2026-08-28, same cause. WAS: "/inbox lands on Add". #134 repointed it at
+  // /attention, which is where the cards it used to hold actually live now.
+  test('the retired /inbox lands on Needs attention', async ({ page }) => {
     await page.goto('/inbox');
-    await expect(page).toHaveURL(/\/add$/);
-    await expect(page.getByRole('heading', { name: /To review/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/attention$/);
   });
 
   // Same story as the chooser test above: this drove Photos -> "From this device" ->
@@ -113,16 +125,20 @@ test.describe('authenticated app (non-destructive)', () => {
     expect(results.violations.filter((v) => v.impact === 'critical').map((v) => v.id)).toEqual([]);
   });
 
-  // The bottom nav does not follow you into Settings (Erica, 2026-08-17). Settings is
-  // entered from the gear and leaves by its own back-bar; a destination bar under it is an
-  // invitation to abandon a screen you are still reading.
-  test('the bottom nav is not on Settings', async ({ page }) => {
+  // REWRITTEN 2026-08-28 to the approved navigation.
+  //
+  //   WAS (2026-08-17): "the bottom nav is not on Settings" — Erica: "map places add
+  //   timeline should not appear on the settings page", and she was right, because none of
+  //   those four WAS Settings, so the bar offered only ways to leave a screen she was
+  //   still reading.
+  //   NOW (2026-08-22, #153): the nav is `Map | Add | Insights | Settings`. Settings is one
+  //   of the four, so the bar says where she IS rather than only where else to go. That
+  //   reverses the older instruction rather than ignoring it, and it is recorded here.
+  test('the nav is the approved four, and it includes the page it sits on', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: /settings/i }).first()).toBeVisible();
-    await expect(page.locator('nav.primary-nav')).toHaveCount(0);
-    // …and it is still there where it belongs.
-    await page.goto('/places');
-    await expect(page.locator('nav.primary-nav')).toBeVisible();
+    const tabs = await page.locator('nav.primary-nav a').allTextContents();
+    expect(tabs.map((t) => t.trim())).toEqual(['Map', 'Add', 'Insights', 'Settings']);
   });
 
   // Settings is ONE continuous page since 2026-08-11 — no tabs to click through.
@@ -133,7 +149,11 @@ test.describe('authenticated app (non-destructive)', () => {
     await expect(page.locator('.settings-tabs')).toHaveCount(0);
     // Things that used to live under four different tabs are all on the one page.
     await expect(page.getByRole('heading', { name: 'Manage data' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Data health' })).toBeVisible();
+    // A LINK, not a button — and it always was. Same shape as the "Import & sort photos"
+    // correction already recorded in erica-asked-for.spec.ts: asking for role=button asked
+    // for something that was never there, and went red against a Settings page that has had
+    // the control all along. What she asked is that it BE on Settings, and it is.
+    await expect(page.getByRole('link', { name: 'Data health' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
 

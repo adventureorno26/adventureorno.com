@@ -321,6 +321,94 @@ it.describe('the card — what she asked for, on the live site', () => {
       0,
     );
   });
+
+  // ───────── BUILT 2026-08-28. Three things the locked card has always specified and
+  // never had, and which STATE.md had ticked as done since 08-15. ─────────
+
+  // "Every card should have a cover photo or if it is an activity without a photo just
+  // the letter of the activity" — Erica, 2026-08-11. 121 of 166 places have no cover
+  // photo, and those cards drew no hero at all.
+  it('EVERY card has a cover — a photo, a letter, or a slot', async ({ page }) => {
+    await ready(page, SAN_DIEGO);
+    await expect(page.locator('.panel-hero')).toHaveCount(1);
+    // And the header that used to replace it on a photoless place is gone for good.
+    await expect(page.locator('.panel .panel-head')).toHaveCount(0);
+
+    // A place with NO cover photo must still get one. Find one from the list rather than
+    // hard-coding an id that may gain a photo tomorrow.
+    await ready(page, '/places');
+    const links = page.locator('a[href^="/place/"]:visible');
+    await expect(links.first()).toBeVisible();
+    await expect.poll(() => links.count(), { timeout: 15_000 }).toBeGreaterThan(20);
+    const hrefs = (
+      await links.evaluateAll((els) =>
+        els.map((e) => (e as HTMLAnchorElement).getAttribute('href')),
+      )
+    )
+      .filter((h): h is string => !!h)
+      .slice(0, 15);
+
+    let coverless = '';
+    for (const href of hrefs) {
+      if (coverless) break;
+      await ready(page, href);
+      if ((await page.locator('.panel-hero-img').count()) === 0) coverless = href;
+    }
+    expect(coverless, 'no photoless place among the first 15 — cannot test the fallback').not.toBe(
+      '',
+    );
+    // Whatever it is, it is a cover: the letter, or the slot. Never nothing.
+    const glyphs = await page.locator('.panel-hero-glyph').count();
+    const slots = await page.locator('.panel-hero-slot').count();
+    expect(glyphs + slots, 'a place with no photo drew no cover at all').toBeGreaterThan(0);
+  });
+
+  // "EACH VISIT SHOULD OPEN TO A CARD. THE CARD SHOULD LOOK EXACTLY LIKE SAN DIEGO DOES
+  // NOW" — Erica, 2026-08-11, in capitals.
+  it('a visit opens THE CARD, not a page', async ({ page }) => {
+    await ready(page, SAN_DIEGO);
+    await openVisits(page);
+    const first = page.locator('.visit-row').first();
+    await expect(first).toBeVisible();
+    await first.click();
+    await expect(page).toHaveURL(/\/visit\//);
+
+    // The positive first: it is a panel with a cover and the locked sections.
+    await expect(page.locator('.panel.visit-card')).toBeVisible();
+    await expect(page.locator('.panel-hero')).toHaveCount(1);
+    const heads = (await page.locator('.panel h3, .panel .visits-summary').allTextContents()).map(
+      (t) => t.trim(),
+    );
+    expect(
+      heads.some((t) => /^Visits/i.test(t)),
+      `no Visits section: ${heads.join(' | ')}`,
+    ).toBe(true);
+    expect(heads.some((t) => /Photos and Videos/i.test(t))).toBe(true);
+    expect(heads.some((t) => /NOTES AND REVIEWS/i.test(t))).toBe(true);
+    // Only now does absence mean anything: the page chrome it used to wear.
+    await expect(page.locator('.visit-card .back-bar')).toHaveCount(0);
+    await expect(page.locator('.visit-card h1')).toHaveCount(0);
+    await expect(page.getByText(/What we did/i)).toHaveCount(0);
+  });
+
+  // "clicking add should pull up a blank card to edit" — and it is the CARD, with the
+  // sections, not a form. Moved out of the "not built" block on 2026-08-28.
+  it('"clicking add should pull up a blank card to edit"', async ({ page }) => {
+    await ready(page, '/add');
+    await page.getByRole('button', { name: /Add a place, visit or activity/i }).click();
+    const card = page.getByRole('dialog', { name: 'New place' });
+    await expect(card).toBeVisible();
+    // It is the card: a panel, with a cover and the locked sections.
+    await expect(page.locator('.panel.npd-card')).toBeVisible();
+    await expect(page.locator('.npd-card .panel-hero')).toHaveCount(1);
+    await expect(page.getByPlaceholder(/Name this place/i)).toBeVisible();
+    await expect(page.getByText(/Add a cover photo/i)).toBeVisible();
+    await expect(page.getByText(/this is visit one/i)).toBeVisible();
+    await expect(page.getByText(/Added once this first visit is saved/i).first()).toBeVisible();
+    // Not a chooser, and not the parent picker she deleted.
+    await expect(page.getByText(/what are you adding/i)).toHaveCount(0);
+    await expect(page.getByText(/Part of a trail/i)).toHaveCount(0);
+  });
 });
 
 it.describe('the rest of the app — what she asked for', () => {
@@ -407,15 +495,6 @@ it.describe('the rest of the app — what she asked for', () => {
   // NOT BUILT YET. These fail on purpose: they are the outstanding requests, and
   // they are what "not done" looks like in this system rather than a promise.
   // ---------------------------------------------------------------------------
-
-  it('"clicking add should pull up a blank card to edit"', async ({ page }) => {
-    await ready(page, '/add');
-    await page.getByRole('button', { name: /Add a place, visit or activity/i }).click();
-    // A fillable CARD — its own name field and cover — not a "What are you adding?" menu.
-    await expect(page.getByText(/what are you adding/i)).toHaveCount(0);
-    await expect(page.getByPlaceholder(/Name this place/i)).toBeVisible();
-    await expect(page.getByText(/Add a cover photo/i)).toBeVisible();
-  });
 
   // REWRITTEN 2026-08-17, per rule 4 at the top of this file: she changed her mind, so the
   // check follows the NEW instruction and the old one is recorded rather than deleted.

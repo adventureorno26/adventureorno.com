@@ -1882,31 +1882,32 @@ standing is how work gets done twice, which §0.7 exists to prevent.
 | **Years as dropdowns** inside Visits                            | ✅`.visit-year` details, newest open, asserted in `lockedCard.test.ts`     |
 | **Ratings in two columns**, anyone on the card rates it         | ✅`.dual-rating`, one line across, mapped over every member                  |
 | **Category pills** show the whole palette when you can edit     | ✅ the full`CATEGORIES` palette when `canEdit`, this place's tags when not |
-| The**VISIT card** carries every section, narrowed to that visit | ❌**NOT BUILT — this tick was wrong from 2026-08-15 to 2026-08-28.**`VisitPage` is a SEPARATE PAGE: `.page.visit-page`, a back-bar out to the place, an `h1` of the date range, and `h2` headings "What we did" / "Notes". It has no cover, no name, no ratings, no address sub-line, no category pills, and no Visits/Routes/Restaurants sections. It is not a `.panel`, so it does not even get the card's uppercase blue-rule headings. |
+| The**VISIT card** carries every section, narrowed to that visit | ✅**BUILT 2026-08-28** (`d3121d8`). `VisitPage` is `.panel.visit-card` — the same `CardCover`, the same `details.visits-details`/`visit-year`/`visit-row` markup as the destination card, the same carousel, Routes instead of "What we did", and the trip's places grouped into the same category sections. The sub-line is that visit's dates, in the locked format. Six guards, proved red-then-green. **Not yet Live-verified.** |
 | The**TRAIL card**: no Sections list, segment on the visit       | ✅ asserted in`lockedCard.test.ts`                                           |
-| The**BLANK card** — Add opens it                               | ❌**NOT BUILT — this tick was wrong from 2026-08-15 to 2026-08-28**, and it names `AddSheet`, a component that no longer exists. `NewPlaceDraft` is a `role="dialog"` of label-and-input rows (Name, Location, Official details, Visit date, Its route, What is it?). NONE of the blank card's section copy exists: "this is visit one", "Added once this first visit is saved", "Add an activity to this visit" and "Write a note or review" all return ZERO hits across app/src. |
+| The**BLANK card** — Add opens it                               | ✅**BUILT 2026-08-28** (`6cec2c1`). `NewPlaceDraft` is `.panel.npd-card` — the cover with its slot, the name typed onto it, the rating under the name, the address with an edit, category PILLS, the trail question, then Visits ("this is visit one") · Photos and Videos · Routes · Restaurants ("Added once this first visit is saved") · Notes and reviews, then Save · Cancel. Everything staged; nothing written until Save. Eight guards, proved red-then-green. **Not yet Live-verified.** |
 | A**Save button that visibly freezes automation**                | ✅ 2026-08-14, PR#65 — and it says what it froze                              |
 
-**WHAT IS ACTUALLY NOT BUILT — re-measured against the deployed bundle, 2026-08-28.**
-The trail question above HAS since been built. These have not, and the two ticks corrected
-above are why nobody noticed for thirteen days:
+**THE CARD, FINISHED — 2026-08-28.** Five items were re-measured against the deployed
+bundle that morning; four were built the same day, on branch
+`chore/one-document-and-the-card`. Each has a source guard that was **proved to fail
+before it passed**, which is the only kind of tick this file now accepts.
 
-1. **Every card has a cover** — a photo, or **the letter of the activity**. The letter
-   cover does not exist anywhere in `app/src`; there is no fallback and no slot, the hero
-   is simply skipped. **121 of the 166 live places have no `cover_photo_id`**, so three
-   cards in four open as a small plain header instead of the approved card.
-2. **The VISIT card is the same card, scoped to one visit.** See the row above.
-3. **The BLANK card is the same card with its fields empty.** See the row above.
-4. **Activities can be added on the blank card** (Erica, 2026-08-12). `AddActivity`
-   renders only inside a SAVED card's visit row.
-5. **The section headings carry their scope** — the preview reads "Routes · every visit"
-   and "Photos and videos · this visit"; the card renders "Routes (6)".
+| Locked                                                                  | State                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Every card has a cover** — a photo, or the letter of the activity | ✅**BUILT** (`4ec7141`).`components/CardCover.tsx`, three states: photo · letter · empty slot. The card used to draw a hero ONLY with a photo and fall back to `.panel-head` — which is what **121 of the 166 live places** got. H hike, R run, **B biking** (Strava says "Ride", which collides with Run), W walking; first letter otherwise. The letter is the place's DOMINANT activity, ties to the most recent. The empty slot opens the gallery's own picker rather than adding a second one. |
+| **The VISIT card** is the same card, scoped to one visit          | ✅**BUILT** (`d3121d8`). See the row above.                                                                                                                                                                                                                |
+| **The BLANK card** is the same card with its fields empty         | ✅**BUILT** (`6cec2c1`). See the row above.                                                                                                                                                                                                                |
+| **The trail is asked ONCE**                                       | ✅**BUILT** (`4ec7141`).`"Part of a trail?"` deleted at her instruction; the toggle is what labels a trail.                                                                                                                                                |
+| **Activities can be added on the blank card** (2026-08-12)        | ⚠️**OPEN, AND IT NEEDS HER**. An activity attaches to a VISIT, and a blank card has no visit until Save — which is exactly why the approved preview shows Routes reading "Added once this first visit is saved" on that card. Her 08-12 instruction and the 08-11 preview genuinely disagree. Ask before building either. |
+| **Section headings carry their scope**                            | ⚠️**PARTIAL.** The preview reads "Routes · every visit" and "Photos and videos · this visit"; the destination card renders "Routes (6)". The VISIT card says "this visit" already. |
 
-**HOW THIS HAPPENED, so it does not again.** A tick in this table is the only thing that
-decides whether work is finished. Two of them said "built" about components that had never
-been written, and every session after 2026-08-15 read them, believed them, and worked
-elsewhere. A tick now requires the evidence beside it — a file and a line, a passing guard,
-or a live check — and "somebody said so" is not one of them.
+**HOW THE TWO FALSE TICKS HAPPENED, so it does not again.** A tick in this table is the
+only thing that decides whether work is finished. Two of them said "built" about
+components that had never been written — one naming `AddSheet`, deleted before the tick
+was added — and every session after 2026-08-15 read them, believed them, and worked
+elsewhere. A tick now requires the evidence beside it: a commit, a file, a passing guard
+that was proved to fail first. "Somebody said so" is not one of them, and neither is a
+tick without a commit hash.
 
 ### Remove anything that rewrites or confuses this
 
