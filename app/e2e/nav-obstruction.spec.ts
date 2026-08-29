@@ -139,13 +139,29 @@ test.describe('bottom nav must not obstruct interactive elements', () => {
         return Math.floor(parseFloat(getComputedStyle(el).paddingBottom) || 0);
       }, selector);
 
-    // `.page` is the shared shell for every centred scrolling route; it carries
-    // --pnav-clearance so whatever ends the page stays reachable.
-    const shell = await measure('.page');
-    expect(shell, '.page shell not rendered').not.toBeNull();
+    // FIXED 2026-08-28. This measured `.page` on /places — and since #153, /places
+    // REDIRECTS into `/insights?tab=places`, whose shell is `.insights`. There was no
+    // `.page` to measure, so the check reported "shell not rendered" and kept main red
+    // from 08-23 while the clearance was in fact correct all along (`.insights` reserves
+    // 96px + the safe area, more than the nav's footprint).
+    //
+    // It measures WHICHEVER shell the route actually rendered, so a future move of this
+    // screen fails on the clearance rather than on the selector.
+    const SHELLS = ['.insights', '.page'];
+    let shell: number | null = null;
+    let shellName = '';
+    for (const sel of SHELLS) {
+      const px = await measure(sel);
+      if (px !== null) {
+        shell = px;
+        shellName = sel;
+        break;
+      }
+    }
+    expect(shell, `no scrolling shell rendered — looked for ${SHELLS.join(', ')}`).not.toBeNull();
     expect(
       shell!,
-      `.page reserves ${shell}px but the nav occupies ${navFootprint}px — whatever ends the page would be untappable`,
+      `${shellName} reserves ${shell}px but the nav occupies ${navFootprint}px — whatever ends the page would be untappable`,
     ).toBeGreaterThanOrEqual(navFootprint);
 
     // Now open a place card and assert the same for the sheet.

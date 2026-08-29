@@ -55,6 +55,11 @@ const BANNED: { word: RegExp; why: string }[] = [
 
 const CARD = SOURCES.find(([p]) => p.endsWith('components/PlacePanel.tsx'))?.[1] ?? '';
 const BLANK = SOURCES.find(([p]) => p.endsWith('components/NewPlaceDraft.tsx'))?.[1] ?? '';
+// THE COVER IS ITS OWN COMPONENT SINCE 2026-08-28, shared by the destination card, the
+// visit card and the blank card — which is the only way "ONE card" can be true rather
+// than asserted. The name/rating guard below follows the markup here rather than staying
+// pointed at the file it used to live in.
+const COVER = SOURCES.find(([p]) => p.endsWith('components/CardCover.tsx'))?.[1] ?? '';
 
 // Words that are fine in general but must never appear in the CARD's visit list.
 const BANNED_IN_VISITS = [
@@ -108,11 +113,43 @@ describe('the locked card — the sections, in the locked order', () => {
   });
 
   it('puts the rating UNDER the name, not above it', () => {
-    const hero = card.indexOf('className="hero-title"');
-    expect(hero).toBeGreaterThan(-1);
-    const title = card.indexOf('title-with-rating', hero);
-    const rating = card.indexOf('hero-rating', hero);
+    // Asserted in CardCover, where the markup now lives. When this moved out of
+    // PlacePanel the guard went red rather than silently passing against a file that no
+    // longer contained the thing it was checking — which is the point of it.
+    const hero = COVER.indexOf('className="hero-title"');
+    expect(hero, 'CardCover has no hero-title').toBeGreaterThan(-1);
+    const title = COVER.indexOf('title-with-rating', hero);
+    const rating = COVER.indexOf('hero-rating', hero);
+    expect(title, 'the name must come before the rating').toBeGreaterThan(-1);
     expect(title, 'the name must come before the rating').toBeLessThan(rating);
+  });
+
+  // EVERY CARD HAS A COVER — a photograph, the LETTER of its activity, or a slot that adds
+  // one. Until 2026-08-28 the card drew a hero only when there WAS a photo and fell back to
+  // a small plain header otherwise, which is what 121 of 166 places got.
+  it('has three cover states, and no header that bypasses them', () => {
+    expect(COVER, 'the photo state').toMatch(/kind === 'photo'/);
+    expect(COVER, 'the letter state').toMatch(/kind === 'letter'/);
+    expect(COVER, 'the empty-slot state').toMatch(/kind === 'empty'/);
+    // The ternary that produced a coverless card. If it comes back, so does the bug.
+    expect(card, 'the card must not render a bare .panel-head instead of a cover').not.toMatch(
+      /className="panel-head"/,
+    );
+    expect(card, 'the card must render the shared cover').toMatch(/<CardCover/);
+  });
+
+  it('spells the activity letters the way she named them', () => {
+    // "H hike, R run, B biking, W walking". Strava calls biking "Ride", which would
+    // collide with Run on first letter alone — hers is the naming that matters here.
+    expect(COVER).toMatch(/hike: 'H'/);
+    expect(COVER).toMatch(/run: 'R'/);
+    expect(COVER).toMatch(/walk: 'W'/);
+    expect(COVER).toMatch(/ride: 'B'/);
+  });
+
+  it('the letter is text, never an icon', () => {
+    // Her standing rule, and the reason a letter is allowed where a pictogram is not.
+    expect(COVER).not.toMatch(/<svg|<img[^>]*icon|📷|🏔|🥾/);
   });
 });
 
@@ -211,6 +248,19 @@ describe('the blank card asks the trail question once', () => {
     expect(BLANK).toMatch(/Is this a trail with sections\?/);
   });
 
+  // Erica, 2026-08-28: "I DO want the trail toggle to label a trail, and the is this part
+  // of a trail question deleted." Two trail questions three rows apart asked one person two
+  // different things about trails. The toggle is the one that labels; the parent picker is
+  // gone, and a new place joins a trail from the trail's own card instead.
+  it('does not also ask "Part of a trail?"', () => {
+    // visibleText, not the raw source: the comment recording WHY it went names the
+    // question, and a guard that its own explanation trips is a guard nobody keeps.
+    expect(visibleText(BLANK), 'the parent picker was deleted on 2026-08-28').not.toMatch(
+      /Part of a trail/i,
+    );
+    expect(visibleText(BLANK), 'and the part_of it wrote went with it').not.toMatch(/part_of:/);
+  });
+
   it('asks it ONCE — the tag list must not ask the same thing again', () => {
     // Being a trail IS carrying the `trail` tag. If Trail is also offered in "+ tag"
     // there are two controls for one fact sitting on the same screen, which is the
@@ -238,6 +288,127 @@ describe('the blank card asks the trail question once', () => {
     // is drawn by the same draw mode the trail card uses. Two drawing surfaces would
     // be two ways to make the same thing.
     expect(BLANK).toMatch(/onSaved\(placeId, isTrail && drawAfter/);
+  });
+});
+
+// THE BLANK CARD IS THE CARD WITH ITS FIELDS EMPTY. §"THE CARD — LOCKED":
+// "The blank (new) card is the same card with the fields empty... Its Visits section says
+// 'this is visit one', because saving a new place IS its first visit. Routes and
+// Restaurants say 'Added once this first visit is saved'."
+//
+// It was a dialog of label-and-input rows until 2026-08-28, with no sections at all — and
+// STATE.md ticked it as done for thirteen days, naming a component (AddSheet) that no
+// longer existed. These are the checks that tick now has to survive.
+// THE VISIT CARD IS THE CARD, OPENED AT A VISIT.
+//
+// Erica, 2026-08-11, in capitals: "EACH VISIT SHOULD OPEN TO A CARD. THE CARD SHOULD LOOK
+// EXACTLY LIKE SAN DIEGO DOES NOW" — and "EVERY SECTION SHOULD LOOK EXACTLY THE SAME when
+// a user clicks on a visit, only the activities and routes should be specific to the dates
+// of that single visit."
+//
+// It was a separate page until 2026-08-28, and STATE.md ticked it as built for thirteen days.
+describe('the visit card is the card, opened at a visit', () => {
+  const VISIT = SOURCES.find(([p]) => p.endsWith('routes/VisitPage.tsx'))?.[1] ?? '';
+
+  it('is a .panel, not a page', () => {
+    expect(VISIT).toMatch(/className="panel visit-card"/);
+    // The chrome that made it a different screen. A back-bar inside the card offers a way
+    // out of the thing you are looking at, and the h1 repeated what the sub-line says.
+    expect(VISIT, 'the back-bar belonged to the page it stopped being').not.toMatch(
+      /className="page visit-page"/,
+    );
+    expect(VISIT, 'no h1 — the name over the cover is the title').not.toMatch(/<h1>/);
+  });
+
+  it('opens with the same cover component as the other two', () => {
+    expect(VISIT).toMatch(/<CardCover/);
+    expect(VISIT).toMatch(/from '\.\.\/components\/CardCover'/);
+  });
+
+  it('has the locked sections, scoped to this visit', () => {
+    const order = ['visits-summary', 'Photos and Videos', 'Routes ', 'NOTES AND REVIEWS'];
+    let at = -1;
+    for (const marker of order) {
+      const next = VISIT.indexOf(marker, at + 1);
+      expect(next, `"${marker}" is missing or out of order on the visit card`).toBeGreaterThan(at);
+      at = next;
+    }
+    // "What we did" was its own heading. A hike, a ride, a walk and a run ARE routes.
+    expect(visibleText(VISIT), '"What we did" is not a section on the locked card').not.toMatch(
+      /What we did/,
+    );
+  });
+
+  it("draws its Visits list with the destination card's own markup", () => {
+    // Identical classes, or the two sections look different while claiming to be the same.
+    expect(VISIT).toMatch(/details className="visits-details"/);
+    expect(VISIT).toMatch(/summary className="visits-summary"/);
+    expect(VISIT).toMatch(/details key=\{y\} className="visit-year"/);
+    expect(VISIT).toMatch(/summary className="visit-year-head"/);
+    expect(VISIT).toMatch(/span className="visit-year-n"/);
+  });
+
+  it('uses the two locked date formats, and no third one', () => {
+    expect(VISIT).toMatch(/visitDates\(/);
+    // It rendered "August 2 – 7, 2026" of its own.
+    expect(VISIT, 'fmtSpan was a third date format').not.toMatch(/function fmtSpan/);
+  });
+
+  it('says each section is scoped to this visit', () => {
+    expect(VISIT).toMatch(/this visit/);
+  });
+});
+
+describe('the blank card is the card with its fields empty', () => {
+  it("is a .panel, so it wears the card's own stylesheet", () => {
+    // The single most load-bearing line: the uppercase blue-rule headings, the pills and
+    // the cover are all `.panel` rules. A blank card that is not a panel is a form.
+    expect(BLANK).toMatch(/className="panel npd-card"/);
+  });
+
+  it('opens with the cover, the name over it, and the rating under the name', () => {
+    expect(BLANK).toMatch(/<CardCover/);
+    expect(BLANK).toMatch(/Name this place/);
+    expect(BLANK).toMatch(/Add a cover photo/);
+    // The same component as the saved card, not a second one that looks like it.
+    expect(BLANK).toMatch(/from '\.\/CardCover'/);
+  });
+
+  it('has the five sections, in the locked order, saying what will fill them', () => {
+    const order = ['Visits ', 'Photos and Videos', 'Routes', 'Restaurants', 'NOTES AND REVIEWS'];
+    let at = -1;
+    for (const marker of order) {
+      const next = BLANK.indexOf(marker, at + 1);
+      expect(next, `"${marker}" is missing or out of order on the blank card`).toBeGreaterThan(at);
+      at = next;
+    }
+  });
+
+  it('says "this is visit one", because saving a place IS its first visit', () => {
+    expect(BLANK).toMatch(/this is visit one/);
+  });
+
+  it('says what Routes and Restaurants are waiting for', () => {
+    expect(BLANK).toMatch(/Added once this first visit is saved/);
+  });
+
+  it('offers the categories as PILLS, not a dropdown', () => {
+    expect(BLANK).toMatch(/cat-pill/);
+    expect(visibleText(BLANK), 'the "+ tag" select is gone').not.toMatch(/\+ tag/);
+  });
+
+  it('its footer is Save and Cancel', () => {
+    expect(BLANK).toMatch(/npd-footer/);
+    expect(visibleText(BLANK)).toMatch(/Cancel/);
+  });
+
+  it('nothing is written until Save', () => {
+    // Every field stages into local state. If one starts calling its RPC on change, the
+    // blank card has quietly become save-as-you-type and a discarded draft leaves rows.
+    expect(BLANK).toMatch(/const \[rating, setRating\] = useState/);
+    expect(BLANK, 'the rating is applied WITH the save, not as you tap').toMatch(
+      /if \(rating != null\) extra\.rating = rating;/,
+    );
   });
 });
 

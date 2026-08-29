@@ -160,6 +160,11 @@ jobs:
         if: needs.classify.outputs.build == 'true'
         run: npm run check:env
 
+      # ONE DOCUMENT. Unconditional on purpose: the failure mode is a deleted plan
+      # REAPPEARING on disk, which no path filter can predict. Erica, 2026-08-28.
+      - name: One planning document, and no other markdown
+        run: npm run check:docs
+
       - name: Worker — typecheck
         if: needs.classify.outputs.build == 'true'
         working-directory: workers/photo-gateway

@@ -89,3 +89,19 @@ if printf '%s\n' "$staged" | grep -qx 'docs/STATE.md'; then
     exit 1
   fi
 fi
+
+# 4. ONE DOCUMENT.
+#
+#    Erica, 2026-08-28: "fix EVERY fucking markdown file so you stop doing shit I dont want."
+#
+#    The thirteen competing plans were deleted from git on 2026-08-11 and were ALL still on
+#    disk seventeen days later, because OneDrive restores what git removes. This runs on every
+#    commit rather than only when markdown is staged: the failure mode is a file REAPPEARING
+#    on its own, which never shows up in `git diff --cached`.
+node scripts/check-one-document.mjs >/dev/null || {
+  echo >&2
+  echo "  ✋ A second planning document is present. Run:" >&2
+  echo "         node scripts/check-one-document.mjs" >&2
+  echo "     Plans go in docs/STATE.md. Nowhere else." >&2
+  exit 1
+}

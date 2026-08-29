@@ -39,6 +39,11 @@ interface Props {
   // Fired after photos are added, so the parent can refresh the place (e.g. to
   // pick up the new cover photo and convert its map marker).
   onUploaded?: () => void;
+  /** THE EMPTY COVER'S CONTROL. `CardCover` renders "Add a cover photo" on a card that
+   *  has none, and that button has to open the picker that lives down here — otherwise it
+   *  is a label pretending to be a control. The gallery hands its opener back through this
+   *  callback, so there is still exactly ONE file picker on the card. */
+  onPickerReady?: (open: (() => void) | null) => void;
 }
 
 const SKIP_LABELS: Record<string, string> = {
@@ -53,7 +58,7 @@ const OVERRIDABLE = new Set(['screenshot']);
 
 // `visits` is no longer read: the gallery is ONE carousel ordered by date, not
 // one strip per visit. The prop stays so callers do not all have to change.
-export default function PhotoGallery({ place, day, onUploaded }: Props) {
+export default function PhotoGallery({ place, day, onUploaded, onPickerReady }: Props) {
   const { profile } = useAuth();
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -118,6 +123,16 @@ export default function PhotoGallery({ place, day, onUploaded }: Props) {
   }
 
   const canUpload = profile?.role === 'owner' || profile?.role === 'editor';
+
+  // Hand the file picker up to the card, so the empty cover's "Add a cover photo" opens
+  // THIS input rather than growing a second one. Withdrawn on unmount and whenever the
+  // viewer cannot upload, so the cover never offers a control that would do nothing.
+  useEffect(() => {
+    if (!onPickerReady) return;
+    onPickerReady(canUpload ? () => fileRef.current?.click() : null);
+    return () => onPickerReady(null);
+  }, [onPickerReady, canUpload]);
+
   // Google Photos import is a deliberate manual upload — editors (Josh) can use
   // it too, from their own Google account. (The Erica-only rule is the automated
   // nightly device ingest, not hand-picking photos in the app.)

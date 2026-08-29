@@ -136,7 +136,10 @@ for (const role of ['owner', 'editor'] as const) {
       // rather than on a Save button — which is itself worth pinning down: a test that
       // typed and navigated away without blurring would pass while saving nothing.
       const note = page.locator('textarea.visit-note');
-      await expect(note, 'an editor role must get the editable note, not read-only text').toBeVisible();
+      await expect(
+        note,
+        'an editor role must get the editable note, not read-only text',
+      ).toBeVisible();
 
       const words = `${who} was here — ${RUN_ID}`;
       await note.fill(words);
@@ -203,7 +206,9 @@ for (const role of ['owner', 'editor'] as const) {
       await expect(note).toHaveValue(`quiet ${RUN_ID}`);
 
       await expect(page.getByText('That did not save.')).toHaveCount(0);
-      await expect(page.getByText(/permission denied|not authorized|row-level security/i)).toHaveCount(0);
+      await expect(
+        page.getByText(/permission denied|not authorized|row-level security/i),
+      ).toHaveCount(0);
 
       const denied = errors.filter((e) => /42501|permission denied|not authorized/i.test(e));
       expect(denied, `${who} hit an authorization error in the console`).toEqual([]);

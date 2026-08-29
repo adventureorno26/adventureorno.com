@@ -13,6 +13,7 @@ import {
   restoreVisit,
   fetchMapPeople,
   fetchPlaces,
+  fetchVisits,
   setVisitDates,
   setVisitIsTrip,
   setVisitSolo,
@@ -31,16 +32,16 @@ import { useAuth } from '../auth/AuthProvider';
 import type { Place } from '../lib/types';
 import AuthedImg from '../components/AuthedImg';
 import ThumbMarks from '../components/ThumbMarks';
+import CardCover from '../components/CardCover';
+import StarRating from '../components/StarRating';
+import { categoryLabel, effectiveCategories } from '../lib/categories';
+import { pluralLabel } from '../lib/plural';
+import { visitDates } from '../lib/visitDates';
+import type { Visit } from '../lib/types';
 
-/** "Aug 2 – 7, 2026", or a single day. */
-function fmtSpan(start: string, end: string): string {
-  const s = new Date(start + 'T00:00:00');
-  const e = new Date(end + 'T00:00:00');
-  const full: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric', year: 'numeric' };
-  if (start === end) return s.toLocaleDateString(undefined, full);
-  const sameYear = s.getFullYear() === e.getFullYear();
-  return `${s.toLocaleDateString(undefined, sameYear ? { month: 'long', day: 'numeric' } : full)} – ${e.toLocaleDateString(undefined, full)}`;
-}
+// `fmtSpan` is gone. It rendered "August 2 – 7, 2026", and the locked card has exactly two
+// date formats everywhere on it — "May 2" and "5/4 - 5/7" — both from lib/visitDates.ts.
+// A visit card writing its own third format is how a card stops looking like the card.
 const fmtDay = (d: string | null): string =>
   d
     ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -74,6 +75,10 @@ export default function VisitPage() {
   // The same marks the place card's carousel carries — this section has to look
   // exactly like that one, so it uses the same component and the same one-call read.
   const [marks, setMarks] = useState<Map<string, PhotoReaction[]>>(new Map());
+  // EVERY VISIT TO THIS PLACE, so the Visits section reads exactly as it does on the
+  // destination card — years newest-first, only years that have visits, this one marked.
+  // A visit card that could not show its siblings would be a different screen again.
+  const [siblings, setSiblings] = useState<Visit[]>([]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -96,6 +101,13 @@ export default function VisitPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!d?.place.id) return;
+    void fetchVisits(d.place.id)
+      .then(setSiblings)
+      .catch(() => setSiblings([]));
+  }, [d?.place.id]);
 
   useEffect(() => {
     void fetchPlaces()
@@ -195,150 +207,209 @@ export default function VisitPage() {
     .filter((p) => p.id !== d.place.id && p.name.trim() !== '')
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // The place this visit belongs to, from the full list — `d.place` is the visit RPC's
+  // slim shape and carries no categories or cover.
+  const full = places.find((p) => p.id === d.place.id) ?? null;
+
+  // THE COVER. This visit's own first photo, because a visit card should look like the
+  // visit; the place's cover when it has none; then the letter of what was done here.
+  const coverPhotoId = d.photos[0]?.id ?? full?.cover_photo_id ?? null;
+  const coverType = (() => {
+    const tally = new Map<string, number>();
+    for (const a of d.activities) if (a.type) tally.set(a.type, (tally.get(a.type) ?? 0) + 1);
+    if (!tally.size) return null;
+    return [...tally.entries()].sort((x, y) => y[1] - x[1])[0]![0];
+  })();
+
+  // THE VISITS SECTION, exactly as the destination card draws it: years newest-first,
+  // only years that have visits, this one marked. It is what makes a visit card feel like
+  // the same card opened at a date rather than a different screen.
+  const byYear = new Map<string, typeof siblings>();
+  for (const sv of siblings) {
+    const y = sv.start_date.slice(0, 4);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y)!.push(sv);
+  }
+  const years = [...byYear.keys()].sort((a, b) => b.localeCompare(a));
+
+  // The places you went to DURING this visit, grouped into the same category sections the
+  // destination card uses — Restaurants, Beaches, Wineries. Not a "places here" list.
+  const contentGroups = (() => {
+    const groups = new Map<string, { label: string; rows: typeof d.contents }>();
+    for (const c of d.contents) {
+      const cp = places.find((p) => p.id === c.place_id);
+      const slug = cp ? (effectiveCategories(cp)[0] ?? 'default') : 'default';
+      const label = slug === 'default' ? 'Places' : pluralLabel(categoryLabel(slug));
+      if (!groups.has(slug)) groups.set(slug, { label, rows: [] });
+      groups.get(slug)!.rows.push(c);
+    }
+    return [...groups.values()];
+  })();
+
   return (
-    <div className="page visit-page">
-      <Link className="back-bar" to={`/place/${d.place.id}`}>
-        {d.place.name}
-      </Link>
+    // THE VISIT CARD IS THE CARD, OPENED AT A VISIT (rebuilt 2026-08-28).
+    //
+    // Erica, 2026-08-11, in capitals: "EACH VISIT SHOULD OPEN TO A CARD. THE CARD SHOULD
+    // LOOK EXACTLY LIKE SAN DIEGO DOES NOW." And: "EVERY SECTION SHOULD LOOK EXACTLY THE
+    // SAME when a user clicks on a visit, only the activities and routes should be specific
+    // to the dates of that single visit."
+    //
+    // It was `.page.visit-page` — a back-bar, an h1 of the date range, and h2 headings
+    // "What we did" and "Notes". No cover, no name, no ratings, no pills, and because it
+    // was not a `.panel` it did not even get the card's uppercase blue-rule headings.
+    // STATE.md ticked it as built for thirteen days.
+    //
+    // `.panel` is what makes it the card. Everything below is the locked order, narrowed
+    // to this visit's dates.
+    <aside className="panel visit-card">
+      <CardCover
+        photoId={coverPhotoId}
+        activityType={coverType}
+        onClose={() => navigate(`/place/${d.place.id}`)}
+        closeLabel={`Back to ${d.place.name}`}
+        onPickPhoto={canEdit && !coverPhotoId ? () => fileRef.current?.click() : undefined}
+        // The NAME is the place's, and it is the way back to it — which is what the
+        // back-bar used to be, without a second bar to say so.
+        title={
+          <Link className="visit-card-place" to={`/place/${d.place.id}`}>
+            {d.place.name}
+          </Link>
+        }
+        rating={
+          full?.rating != null ? <StarRating value={full.rating} size={16} readOnly /> : undefined
+        }
+      />
 
-      <header className="visit-head">
-        <h1>{fmtSpan(v.start_date, v.end_date)}</h1>
-        <div className="visit-sub">
-          <Link to={`/place/${d.place.id}`}>{d.place.name}</Link>
-          {d.place.admin1 ? <span className="muted"> · {d.place.admin1}</span> : null}
+      {/* The address, then the sub-line — WHICH ON A VISIT CARD IS THAT VISIT'S DATES. */}
+      <div className="meta">
+        <span>
+          <span className="region-directions">
+            {d.place.address || [d.place.admin1, d.place.country].filter(Boolean).join(', ')}
+          </span>
+          {' · '}
+          <span className="visit-card-span">{visitDates(v.start_date, v.end_date)}</span>
+        </span>
+      </div>
+
+      {/* Category pills — the place's, shown here because a visit card carries every
+          section the destination card does. */}
+      {full && effectiveCategories(full).length > 0 && (
+        <div className="cat-pills">
+          {effectiveCategories(full).map((slug) => (
+            <span key={slug} className="cat-pill on">
+              {categoryLabel(slug)}
+            </span>
+          ))}
         </div>
-
-        {canEdit && (
-          <div className="visit-controls">
-            <input
-              type="date"
-              value={v.start_date}
-              aria-label="Start date"
-              onChange={(e) =>
-                void run('Saving dates…', () =>
-                  setVisitDates(
-                    v.id,
-                    e.target.value,
-                    v.end_date < e.target.value ? e.target.value : v.end_date,
-                  ),
-                )
-              }
-            />
-            <span className="ve-to">to</span>
-            <input
-              type="date"
-              value={v.end_date}
-              aria-label="End date"
-              onChange={(e) =>
-                void run('Saving dates…', () => setVisitDates(v.id, v.start_date, e.target.value))
-              }
-            />
-            <button
-              // The switch is the DECISION a person made — trip_marked — not whether
-              // the visit counts as a trip. A multi-day visit counts either way (§0.4),
-              // so showing it as "on" would make the switch look stuck.
-              className={v.trip_marked ? 've-btn on' : 've-btn'}
-              aria-pressed={v.trip_marked}
-              onClick={() => void run('Saving…', () => setVisitIsTrip(v.id, !v.trip_marked))}
-            >
-              Trip
-            </button>
-            {people.length >= 2 && (
-              <select
-                className="attribution-select"
-                // From the participant ROWS: exactly one person means that person,
-                // anything else means everyone. That is what solo_profile's null used
-                // to mean, said in a way that can also describe three (§0.3).
-                value={d.people.length === 1 ? d.people[0].id : ''}
-                aria-label="Who was here"
-                onChange={(e) =>
-                  void run('Saving…', async () => {
-                    // Naming somebody else asks them; it does not put them on the day
-                    // (0240). The reload below shows what is actually true.
-                    announceWho(await setVisitSolo(v.id, e.target.value || null), people);
-                  })
-                }
-              >
-                <option value="">{people.length > 2 ? 'Everyone' : 'Together'}</option>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        )}
-      </header>
-
-      {/* WHAT WE DID ---------------------------------------------------------- */}
-      <h2>What we did</h2>
-      {d.activities.length === 0 && d.contents.length === 0 ? (
-        <p className="muted">Nothing recorded during this visit yet.</p>
-      ) : (
-        <ul className="visit-list">
-          {d.activities.map((a) => (
-            <li key={a.id}>
-              <div className="vl-main">
-                <span className="vl-title">{a.name || a.type}</span>
-                <span className="muted">
-                  {[a.type, miles(a.distance), fmtDay(a.local_date)].filter(Boolean).join(' · ')}
-                </span>
-              </div>
-              {canEdit &&
-                (movingAct === a.id ? (
-                  <select
-                    autoFocus
-                    className="kind-select"
-                    defaultValue=""
-                    onChange={(e) => {
-                      const to = e.target.value;
-                      setMovingAct(null);
-                      if (to) void run('Moving…', () => reassignActivity(a.id, to));
-                    }}
-                    onBlur={() => setMovingAct(null)}
-                  >
-                    <option value="">Move to…</option>
-                    {otherPlaces.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <button className="link-btn" onClick={() => setMovingAct(a.id)}>
-                    Wrong place?
-                  </button>
-                ))}
-            </li>
-          ))}
-          {/* On a marked trip: the places you went to during it. */}
-          {d.contents.map((c) => (
-            <li key={c.visit_id}>
-              <div className="vl-main">
-                <Link className="vl-title" to={`/visit/${c.visit_id}`}>
-                  {c.place_name}
-                </Link>
-                <span className="muted">{fmtDay(c.start_date)}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
       )}
 
-      {/* PHOTOS --------------------------------------------------------------- */}
-      <h2>
-        Photos{d.photos.length ? ` (${d.photos.length})` : ''}
+      {/* ───────── VISITS ───────── */}
+      {canEdit && (
+        <div className="visit-controls">
+          <input
+            type="date"
+            value={v.start_date}
+            aria-label="Start date"
+            onChange={(e) =>
+              void run('Saving dates…', () =>
+                setVisitDates(
+                  v.id,
+                  e.target.value,
+                  v.end_date < e.target.value ? e.target.value : v.end_date,
+                ),
+              )
+            }
+          />
+          <span className="ve-to">to</span>
+          <input
+            type="date"
+            value={v.end_date}
+            aria-label="End date"
+            onChange={(e) =>
+              void run('Saving dates…', () => setVisitDates(v.id, v.start_date, e.target.value))
+            }
+          />
+          <button
+            // The switch is the DECISION a person made — trip_marked — not whether the
+            // visit counts as a trip. A multi-day visit counts either way (§0.4), so
+            // showing it as "on" would make the switch look stuck.
+            className={v.trip_marked ? 've-btn on' : 've-btn'}
+            aria-pressed={v.trip_marked}
+            onClick={() => void run('Saving…', () => setVisitIsTrip(v.id, !v.trip_marked))}
+          >
+            Count this as a trip
+          </button>
+          {people.length >= 2 && (
+            <select
+              className="attribution-select"
+              // From the participant ROWS: exactly one person means that person, anything
+              // else means everyone. That is what solo_profile's null used to mean, said
+              // in a way that can also describe three (§0.3).
+              value={d.people.length === 1 ? d.people[0].id : ''}
+              aria-label="Who was here"
+              onChange={(e) =>
+                void run('Saving…', async () => {
+                  // Naming somebody else asks them; it does not put them on the day
+                  // (0240). The reload below shows what is actually true.
+                  announceWho(await setVisitSolo(v.id, e.target.value || null), people);
+                })
+              }
+            >
+              <option value="">{people.length > 2 ? 'Everyone' : 'Together'}</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+      {/* THE SAME MARKUP THE DESTINATION CARD USES — `details.visits-details` holding
+          `details.visit-year` holding `.visit-row`. Identical classes on purpose: "EVERY
+          SECTION SHOULD LOOK EXACTLY THE SAME when a user clicks on a visit". The year
+          holding THIS visit is the one that opens. */}
+      <details className="visits-details" open>
+        <summary className="visits-summary">
+          Visits{siblings.length > 0 ? ` (${siblings.length})` : ''}
+        </summary>
+        <div className="visits">
+          {years.map((y) => (
+            <details key={y} className="visit-year" open={y === v.start_date.slice(0, 4)}>
+              <summary className="visit-year-head">
+                <span className="visit-year-n">{y}</span>
+                <span className="label">
+                  {byYear.get(y)!.length} {byYear.get(y)!.length === 1 ? 'visit' : 'visits'}
+                </span>
+              </summary>
+              {byYear.get(y)!.map((sv) => (
+                <Link
+                  key={sv.id}
+                  className={`visit-row${sv.id === v.id ? ' here' : ''}`}
+                  to={`/visit/${sv.id}`}
+                >
+                  <span className="visit-date">{visitDates(sv.start_date, sv.end_date)}</span>
+                </Link>
+              ))}
+            </details>
+          ))}
+        </div>
+      </details>
+
+      {/* ───────── PHOTOS AND VIDEOS ───────── */}
+      <h3 style={{ marginTop: 22 }}>
+        Photos and Videos{' '}
+        <span className="label">this visit{d.photos.length ? ` · ${d.photos.length}` : ''}</span>
         {canEdit && (
           <button
             className="link-btn"
             style={{ marginLeft: 10 }}
             onClick={() => fileRef.current?.click()}
           >
-            + Add
+            Add
           </button>
         )}
-      </h2>
+      </h3>
       <input
         ref={fileRef}
         type="file"
@@ -388,24 +459,89 @@ export default function VisitPage() {
         </div>
       )}
 
-      {/* NOTES ---------------------------------------------------------------- */}
-      <h2>Notes</h2>
+      {/* ───────── ROUTES ─────────
+          "What we did" is gone: a hike, a ride, a walk and a run ARE routes, and the
+          locked card lists them here. Only this visit's. */}
+      <h3 style={{ marginTop: 22 }}>
+        Routes <span className="label">this visit</span>
+      </h3>
+      {d.activities.length === 0 ? (
+        <p className="muted">Nothing recorded on this visit yet.</p>
+      ) : (
+        <div className="route-rows">
+          {d.activities.map((a) => (
+            <div className="route-row" key={a.id}>
+              <span className="route-row-name">{a.name || a.type}</span>
+              <span className="label">
+                {[a.type, miles(a.distance), fmtDay(a.local_date)].filter(Boolean).join(' · ')}
+              </span>
+              {canEdit &&
+                (movingAct === a.id ? (
+                  <select
+                    autoFocus
+                    className="kind-select"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const to = e.target.value;
+                      setMovingAct(null);
+                      if (to) void run('Moving…', () => reassignActivity(a.id, to));
+                    }}
+                    onBlur={() => setMovingAct(null)}
+                  >
+                    <option value="">Move to…</option>
+                    {otherPlaces.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <button className="link-btn" onClick={() => setMovingAct(a.id)}>
+                    Wrong place?
+                  </button>
+                ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ───────── THE CATEGORY SECTIONS ─────────
+          On a marked trip, the places you went to during it — grouped by category, exactly
+          as the destination card groups them. Never a "places here" list. */}
+      {contentGroups.map((g) => (
+        <div key={g.label}>
+          <h3 style={{ marginTop: 22 }}>
+            {g.label} <span className="label">this visit</span>
+          </h3>
+          <div className="route-rows">
+            {g.rows.map((c) => (
+              <Link className="route-row" key={c.visit_id} to={`/visit/${c.visit_id}`}>
+                <span className="route-row-name">{c.place_name}</span>
+                <span className="label">{fmtDay(c.start_date)}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* ───────── NOTES AND REVIEWS ───────── */}
+      <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
       {canEdit ? (
         <textarea
           className="visit-note"
           rows={3}
           value={note}
-          placeholder="What happened?"
-          onChange={(e) => setNote(e.target.value)}
+          placeholder="Write a note or review"
           onBlur={() =>
             note !== (v.note ?? '') && void run('Saving note…', () => setVisitNote(v.id, note))
           }
+          onChange={(e) => setNote(e.target.value)}
         />
       ) : (
         <p className={v.note ? '' : 'muted'}>{v.note || 'No notes.'}</p>
       )}
 
-      {/* CORRECTIONS ---------------------------------------------------------- */}
+      {/* The two corrections that matter, and Delete. */}
       {canEdit && (
         <div className="btn-row" style={{ marginTop: 22 }}>
           <button onClick={() => setMoving((m) => !m)}>Move this visit</button>
@@ -438,6 +574,6 @@ export default function VisitPage() {
       )}
 
       {busy && <div className="label">{busy}</div>}
-    </div>
+    </aside>
   );
 }

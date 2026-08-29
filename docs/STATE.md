@@ -1,12 +1,17 @@
 AdventureOrNo — what this is, and what is left to build
 
 **This is the only planning document.** If a plan is not written here, it is not the plan.
-Every competing one was DELETED on 2026-08-11 — `README.md`, `docs/archive/`, `docs/adr/`,
-CLAUDE.md's backlog ledger, `NewClaude.md`, `CLAUDE-CODE-INSTRUCTIONS-2-70.md` — and they
-are recoverable from git history if a decision needs looking up. Do not recreate them:
-plans go HERE.
 
-Last updated: 2026-08-20.
+Every competing one was deleted from git on 2026-08-11 — and on **2026-08-28 every single
+one was found still sitting on the disk**, because OneDrive restores what git removes.
+`README.md` had needed deleting twice for exactly that reason. So for seventeen days this
+file was one of thirteen documents in a folder, and any session that opened the folder
+instead of this file got a different plan. They are gone from disk now, and
+`scripts/check-one-document.mjs` **fails the build** if any of them comes back. Do not
+recreate them: plans go HERE. If a decision needs looking up, git history has them —
+§7's register names the commit for each.
+
+Last updated: 2026-08-28.
 
 **HOW TO READ A ✅ IN THIS FILE (new 2026-08-16).** A tick used to mean "somebody
 finished it", and that turned out to cover five different states — which is how this
@@ -228,6 +233,72 @@ messaging capability, combined visual direction, navigation labels and Settings 
 above are approved. Event and messaging screen previews are still required before their UI
 is implemented. Database/RLS contracts come first; then generated types/RPCs; then approved
 UI; then production verification.
+
+## APPROVED 2026-08-28 — FINISH THE CARD, IN THIS ORDER
+
+Erica approved this on 2026-08-28 after an audit of both prior sessions against the live
+site. **It supersedes nothing below; it says which of it happens first.**
+
+### What the audit found
+
+Forty-one concrete requests from the 11–15 and 16–22 August sessions were checked against
+the deployed bundle, the production database and the four service APIs. **Thirty are live
+and correct.** Eleven are not, and **eight of them are the card**. Nothing had regressed:
+local `main`, `origin/main` and the live site were all `dee153d`, all 270 migrations were
+recorded, and the destination card still passed 35 of its 36 source guards. The card was
+never finished — and §"Still to build on the card" claimed twice that it was.
+
+### The stages
+
+1. **Make the site provable again.** Connect Chrome so the card can be seen signed-in; put
+   `TEST_BOT_EMAIL`/`TEST_BOT_PASSWORD` in `.env.local` so `verify:live` stops SKIPPING
+   every authed card check; retire the five stale CI expectations left by `/add`→`/attention`
+   and by Settings joining the nav, so `main` is green and the nightly can warn again;
+   clear the deleted-but-still-on-disk source files that break the local typecheck.
+2. **Build the card, fully** — to the approved v5 preview, which is not being redesigned:
+   the cover (letter of the activity, and a real slot where there is no photo), the VISIT
+   card as the card scoped to one visit, the BLANK card as the card with empty fields,
+   activities on the blank card, the scope text on every section heading, and the trail
+   change below. **A guard per item**, so none of it can quietly come undone again.
+3. **The two gates on anyone else using this.** Move the 31 SECURITY DEFINER readers of
+   `activities` onto `can_see_activity()` (§7d); fix the four SECURITY DEFINER views from
+   `0266` (§6c); give `cron.job_run_details` a reader.
+4. **People.** Phase 3 step 1 — separate signing in to a space from being tagged in a
+   memory — then friends/family as tags on every card, then a tagged person's rating row.
+5. **The rest, as already sequenced.** Settings' three destinations; the remaining repair
+   cards into Needs Attention; geocoding we own; events then messaging (**previews first**);
+   fitness ingest, which is blocked behind stage 3; native apps, deferred until the LLC.
+
+### THE TRAIL CHANGE — approved 2026-08-28
+
+> Erica: *"I DO want the trail toggle to label a trail, and the is this part of a trail
+> question deleted."*
+
+This **amends the locked card**, on her express instruction, and it is the only change to
+that template approved since 2026-08-11:
+
+- **KEEP** the "Is this a trail with sections?" Yes/No toggle. It is the control that
+  labels a place a trail; it keeps writing `is_trail`, and it stays the only place the
+  question is asked. This replaces the preview's line that the Trail tag is "gone from
+  every card" — the toggle IS the label now.
+- **DELETE** the "Part of a trail?" parent picker from the blank card, and the `part_of`
+  it wrote.
+- **Consequence, stated to her before doing it:** a new place can no longer be attached to
+  a trail at the moment it is created. That still works from the trail's own card ("Add
+  places you've already saved to this one"), and it matches the model in which a segment
+  name rides on the visit rather than on a parent link.
+
+### ONE DOCUMENT, NOW ENFORCED
+
+> Erica: *"fix EVERY fucking markdown file so you stop doing shit I dont want."*
+
+Thirty-one superseded markdown files were removed on 2026-08-28 (§7 register). They had
+been deleted from git on 2026-08-11 and were **all still on disk**, because OneDrive
+restores what git removes. `scripts/check-one-document.mjs` now fails the build if any
+markdown appears outside `CLAUDE.md`, `docs/STATE.md` and a snapshot `MANIFEST.md`. A rule
+in prose could not fail a build; this one can.
+
+---
 
 ## NOW — the order of work (locked 2026-08-14)
 
@@ -1811,14 +1882,32 @@ standing is how work gets done twice, which §0.7 exists to prevent.
 | **Years as dropdowns** inside Visits                            | ✅`.visit-year` details, newest open, asserted in `lockedCard.test.ts`     |
 | **Ratings in two columns**, anyone on the card rates it         | ✅`.dual-rating`, one line across, mapped over every member                  |
 | **Category pills** show the whole palette when you can edit     | ✅ the full`CATEGORIES` palette when `canEdit`, this place's tags when not |
-| The**VISIT card** carries every section, narrowed to that visit | ✅`VisitPage`: what we did, photos and videos, notes                         |
+| The**VISIT card** carries every section, narrowed to that visit | ✅**BUILT 2026-08-28** (`d3121d8`). `VisitPage` is `.panel.visit-card` — the same `CardCover`, the same `details.visits-details`/`visit-year`/`visit-row` markup as the destination card, the same carousel, Routes instead of "What we did", and the trip's places grouped into the same category sections. The sub-line is that visit's dates, in the locked format. Six guards, proved red-then-green. **Not yet Live-verified.** |
 | The**TRAIL card**: no Sections list, segment on the visit       | ✅ asserted in`lockedCard.test.ts`                                           |
-| The**BLANK card** — Add opens it                               | ✅`AddSheet` opens the card, asserted live in `verify:live`                |
+| The**BLANK card** — Add opens it                               | ✅**BUILT 2026-08-28** (`6cec2c1`). `NewPlaceDraft` is `.panel.npd-card` — the cover with its slot, the name typed onto it, the rating under the name, the address with an edit, category PILLS, the trail question, then Visits ("this is visit one") · Photos and Videos · Routes · Restaurants ("Added once this first visit is saved") · Notes and reviews, then Save · Cancel. Everything staged; nothing written until Save. Eight guards, proved red-then-green. **Not yet Live-verified.** |
 | A**Save button that visibly freezes automation**                | ✅ 2026-08-14, PR#65 — and it says what it froze                              |
 
-**The one thing genuinely not built:** the blank card does not ask *"Is this a trail with
-sections?"* once. Nothing in the app contains that question. A trail is set by tapping
-the Trail pill afterwards, which works but is not what was asked for.
+**THE CARD, FINISHED — 2026-08-28.** Five items were re-measured against the deployed
+bundle that morning; four were built the same day, on branch
+`chore/one-document-and-the-card`. Each has a source guard that was **proved to fail
+before it passed**, which is the only kind of tick this file now accepts.
+
+| Locked                                                                  | State                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Every card has a cover** — a photo, or the letter of the activity | ✅**BUILT** (`4ec7141`).`components/CardCover.tsx`, three states: photo · letter · empty slot. The card used to draw a hero ONLY with a photo and fall back to `.panel-head` — which is what **121 of the 166 live places** got. H hike, R run, **B biking** (Strava says "Ride", which collides with Run), W walking; first letter otherwise. The letter is the place's DOMINANT activity, ties to the most recent. The empty slot opens the gallery's own picker rather than adding a second one. |
+| **The VISIT card** is the same card, scoped to one visit          | ✅**BUILT** (`d3121d8`). See the row above.                                                                                                                                                                                                                |
+| **The BLANK card** is the same card with its fields empty         | ✅**BUILT** (`6cec2c1`). See the row above.                                                                                                                                                                                                                |
+| **The trail is asked ONCE**                                       | ✅**BUILT** (`4ec7141`).`"Part of a trail?"` deleted at her instruction; the toggle is what labels a trail.                                                                                                                                                |
+| **Activities can be added on the blank card** (2026-08-12)        | ⚠️**OPEN, AND IT NEEDS HER**. An activity attaches to a VISIT, and a blank card has no visit until Save — which is exactly why the approved preview shows Routes reading "Added once this first visit is saved" on that card. Her 08-12 instruction and the 08-11 preview genuinely disagree. Ask before building either. |
+| **Section headings carry their scope**                            | ⚠️**PARTIAL.** The preview reads "Routes · every visit" and "Photos and videos · this visit"; the destination card renders "Routes (6)". The VISIT card says "this visit" already. |
+
+**HOW THE TWO FALSE TICKS HAPPENED, so it does not again.** A tick in this table is the
+only thing that decides whether work is finished. Two of them said "built" about
+components that had never been written — one naming `AddSheet`, deleted before the tick
+was added — and every session after 2026-08-15 read them, believed them, and worked
+elsewhere. A tick now requires the evidence beside it: a commit, a file, a passing guard
+that was proved to fail first. "Somebody said so" is not one of them, and neither is a
+tick without a commit hash.
 
 ### Remove anything that rewrites or confuses this
 
@@ -4219,8 +4308,60 @@ A backup nobody has restored is a rumour. This one has been restored.
 ### Raw dumps still never go in git
 
 `supabase/snapshots/` is gitignored and `.backup-work/` was added to `.gitignore` with
-this work. The repo is **public** (§ above) — anything committed is world-readable the
-moment it is pushed.
+this work. **The repository is PRIVATE** — verified against the GitHub API on 2026-08-28
+(`adventureorno26/adventureorno.com`, `isPrivate: true`). This paragraph said "public"
+until then, contradicting the correction already recorded above; the habit stands either
+way, because private is a setting and a leak is forever.
+
+## 6c. SUPABASE ADVISOR BASELINE (folded in from `security/advisor-baseline.md`, 2026-08-28)
+
+That file was the last markdown outside this one. Its content lives here now and the file
+is gone, per §"one document". **Re-measured on 2026-08-28, not copied forward.**
+
+Re-check with (the browser-like User-Agent is required — the Cloudflare WAF in front of the
+Management API returns 403 "error 1010" without one):
+
+```bash
+curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
+  "https://api.supabase.com/v1/projects/aanfyhsjbtnqzphuoiem/advisors/security"
+```
+
+**The baseline was 83 findings on 2026-08-07. It is 188 on 2026-08-28.** A finding NOT on
+this list is new and needs a decision.
+
+| Level | Name                                              | 08-07 | 08-28 | Status                                     |
+| ----- | ------------------------------------------------- | ----- | ----- | ------------------------------------------ |
+| ERROR | `security_definer_view`                           | 0     | **4** | **OPEN — NEW, and it is ours (see below)** |
+| ERROR | `rls_disabled_in_public` (`spatial_ref_sys`)      | 1     | 1     | Cannot fix — PostGIS-owned                 |
+| WARN  | `authenticated_security_definer_function_executable` | 72 | 167   | Intended — the RPCs are the only door      |
+| WARN  | `anon_security_definer_function_executable`       | 3     | 3     | Cannot fix — PostGIS `st_estimatedextent`  |
+| WARN  | `function_search_path_mutable`                    | 0     | 6     | OPEN — new, low severity, fix with the views |
+| WARN  | `extension_in_public`                             | 3     | 3     | Accepted                                   |
+| WARN  | `auth_leaked_password_protection`                 | 1     | 1     | **Open — needs Erica** (a dashboard toggle) |
+| INFO  | `rls_enabled_no_policy`                           | 3     | 3     | Intended (deny-all)                        |
+
+### The four new ERRORs are ours, and they matter before anyone else has an account
+
+Migration `0266` turned the profile-only participant tables into views, and all four were
+created **SECURITY DEFINER**:
+
+`public.activity_profiles` · `public.activity_provenance` · `public.visible_activities` ·
+`public.visit_profiles`
+
+A SECURITY DEFINER view runs as its OWNER, so it **bypasses the row-level security of
+whoever queries it**. Today that is survivable because the only two accounts are Erica's
+and Josh's inside one household. It stops being survivable the moment Phase 3b gives
+anyone else an account, and it is the same shape of hole as §7d's Strava finding: a lock
+built in the database and fitted nowhere. Fix them to `security_invoker = true` and prove
+each one still returns the same rows for each member.
+
+**`spatial_ref_sys` and `st_estimatedextent` are not ours.** Both are owned by
+`supabase_admin` and belong to PostGIS — verified via `pg_class.relowner` + `pg_depend`.
+Migration `0093`'s lockdown tried to revoke the `st_*` grants and Postgres answered
+`WARNING: no privileges could be revoked`. This is why `scripts/db-test.sh`'s lockdown
+check excepts `st_*`, and why its "0 anon-executable SECDEF functions" result is accurate
+for first-party code.
 
 ## 7. Removed on purpose — the register
 
@@ -4238,6 +4379,9 @@ lost work and can be restored in minutes.
 | The**`detect-trips` nightly auto-detection** (deployment deleted)                                      | 2026-08-12 | Erica: "disable the nightly auto-detect feature". Its cron was already unscheduled; the deployment was what remained. It also contradicts §2 — it creates places tagged`trip`, and a trip is never labelled | source kept at`supabase/functions/detect-trips/`; `supabase functions deploy detect-trips` restores it, and the config entry is commented in `supabase/config.toml` |
 | The**Sections list** on a trail card, its walked-sections map, and the per-section date disclosure | 2026-08-11 | The approved preview replaced it: the segment name rides on the visit, so a trail card reads like every other card                                                                                              | commit`438677e0`; the deleted JSX is also saved verbatim in the session scratchpad                                                                                      |
 | The generic**"Places"** section on a card (uncategorised members)                                        | 2026-08-11 | It IS the PLACES HERE section she asked to be rid of. The locked card has category sections and nothing else                                                                                                    | commit`a8e60124` + follow-up. **Three places app-wide are affected — Fort Rosencrans (San Diego) and two others. They need a category, not a bucket.**           |
+| **Thirty-one superseded markdown files** — `README.md`, `docs/COMPLETION-PLAN.md`, `docs/decisions.md`, `docs/SCHEMA.md`, `docs/RECONCILIATION.md`, `docs/MANUAL-SETUP.md`, the three `deploy-*.md`, `backup-restore.md`, the three `ios-shortcut-*.md`, and the folders `docs/adr/` (2), `docs/archive/` (8), `docs/phases/` (6) | 2026-08-28 | Erica: *"fix EVERY fucking markdown file so you stop doing shit I dont want."* Every one had been DELETED FROM GIT on 2026-08-11 and was **still on disk** — OneDrive restores what git removes, which is why `README.md` needed deleting twice (commit`e9e0e7a`, "Delete README.md again"). Any session reading the folder found a dozen plans contradicting this one. | All recoverable from git history: `4fa9fc2`, `6d27635`, `d0bfea7`, `e9e0e7a`. **`scripts/check-one-document.mjs` now fails the build if any of them returns.** |
+| `CLAUDE-CODE-INSTRUCTIONS-2-70.md` and `workbench-entries.md` (parent folder)                            | 2026-08-28 | 60 KB of instructions predating this file, plus a scratch list. Same reason as the row above — but these two were **never tracked by git**, so they were copied out first rather than deleted outright          | `../.superseded-docs-2026-08-28/` — the only copy. Not in any commit                                                                                                       |
+| `security/advisor-baseline.md`                                                                           | 2026-08-28 | The last markdown outside this file. Its content is **re-measured and folded into §6c**, not merely moved — the baseline had drifted from 83 findings to 188                                                    | §6c above; the file itself was untracked                                                                                                                                  |
 
 ---
 
