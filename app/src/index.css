@@ -1414,6 +1414,64 @@ a {
   object-position: 50% var(--pos, 50%);
   display: block;
 }
+/* THE THREE COVER STATES (2026-08-28). Every card has a cover: a photograph, the
+   LETTER of its activity, or a slot waiting for one. Before this, a place with no
+   cover photo drew no hero at all — 121 of 166 places — and the card silently became
+   a different object. See components/CardCover.tsx.
+
+   The gradient is the same one the photo state uses, so the name and its stars sit on
+   the same footing whichever state the cover is in. */
+.panel-hero-letter,
+.panel-hero-empty {
+  background:
+    linear-gradient(180deg, rgba(6, 10, 20, 0) 45%, rgba(6, 10, 20, 0.92) 100%),
+    linear-gradient(135deg, var(--panel-2, #131f36), var(--panel, #0e1728));
+}
+/* A LETTER IS TEXT, NOT AN ICON — which is why it is allowed here. Large, quiet, and
+   behind the name rather than competing with it. */
+.panel-hero-glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 96px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--muted);
+  opacity: 0.55;
+  /* Clear of the name and stars, which sit at the bottom. */
+  padding-bottom: 26px;
+  pointer-events: none;
+  user-select: none;
+}
+/* The empty cover. A dashed slot, centred — and a real control when the card can be
+   edited, because "add a cover photo" is the thing to do about an empty one. */
+.panel-hero-slot {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  color: var(--muted);
+  font-size: 13px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  white-space: nowrap;
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.panel-hero-slot:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  border-style: dashed;
+  background: transparent;
+}
+.panel-hero-slot.is-static {
+  pointer-events: none;
+}
+
 .hero-adjust {
   position: absolute;
   top: 10px;

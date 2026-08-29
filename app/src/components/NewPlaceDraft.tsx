@@ -78,8 +78,6 @@ export default function NewPlaceDraft({
   const [name, setName] = useState(presetName ?? '');
   // Where does it belong? A TRAIL is the only container ever chosen by hand —
   // cities and regions attach spatially by boundary, so they are never a question.
-  const [partOf, setPartOf] = useState('');
-  const trails = places.filter((p) => p.is_trail).sort((a, b) => a.name.localeCompare(b.name));
   const [lat, setLat] = useState(initialLat);
   const [lng, setLng] = useState(initialLng);
   const [admin1, setAdmin1] = useState<string | null>(null);
@@ -191,7 +189,6 @@ export default function NewPlaceDraft({
           // Tagging it Trail IS what makes it a trail — there is no separate
           // "make this a trail" control any more.
           is_trail: tags.includes('trail'),
-          part_of: partOf ? [partOf] : undefined,
         },
         !wanted && visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
       );
@@ -476,24 +473,16 @@ export default function NewPlaceDraft({
           )}
         </div>
 
-        {/* Where does it belong? Nothing, or a trail. Cities and regions attach by
-            boundary, so they are never asked. Hidden entirely when no trail exists
-            — an empty question is still a question. */}
-        {trails.length > 0 && !tags.includes('trail') && (
-          // Also a <label>. It escaped axe only because the run had no trails to offer,
-          // so the row never rendered — the same bug, one condition away from being seen.
-          <label className="npd-row">
-            <span>Part of a trail?</span>
-            <select value={partOf} onChange={(e) => setPartOf(e.target.value)}>
-              <option value="">Nothing</option>
-              {trails.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        {/* "PART OF A TRAIL?" IS GONE (Erica, 2026-08-28): *"I DO want the trail toggle to
+            label a trail, and the is this part of a trail question deleted."* Two trail
+            questions on one card asked the same person two different things about trails
+            three rows apart. The toggle above is the one that stays — it is what LABELS a
+            place a trail.
+
+            A new place therefore no longer joins a trail at the moment it is created. That
+            still happens from the trail's own card ("Add places you've already saved to
+            this one"), and it matches the model: a segment name rides on the VISIT, not on
+            a parent link. Told to her before it was done. */}
 
         {!wanted && (
           <div className="npd-row">

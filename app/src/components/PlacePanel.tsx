@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   addExperience,
@@ -48,9 +48,9 @@ import { announceWho } from '../lib/whoWasThere';
 import { photosEnabled } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
-import AuthedImg from './AuthedImg';
 import EntryEditor from './EntryEditor';
 import AddActivity from './AddActivity';
+import CardCover from './CardCover';
 import MapSearch from './MapSearch';
 import PhotoGallery from './PhotoGallery';
 import WeatherLine from './WeatherLine';
@@ -959,6 +959,38 @@ export default function PlacePanel({
 
   const hasHero = Boolean(place.cover_photo_id) && photosEnabled();
 
+  // THE LETTER'S ACTIVITY. With no photograph, the cover becomes the letter of what this
+  // place IS — so it has to be the activity that dominates the place, not whichever row
+  // happened to load first. Ties go to the most recent, because a place you used to run
+  // and now hike reads better as the thing you do now.
+  const coverActivityType = useMemo(() => {
+    const acts = trailActs ?? [];
+    if (!acts.length) return null;
+    const tally = new Map<string, number>();
+    for (const a of acts) {
+      if (!a.type) continue;
+      tally.set(a.type, (tally.get(a.type) ?? 0) + 1);
+    }
+    if (!tally.size) return null;
+    const best = Math.max(...tally.values());
+    const tied = [...tally.entries()].filter(([, n]) => n === best).map(([t]) => t);
+    if (tied.length === 1) return tied[0]!;
+    const newest = [...acts]
+      .filter((a) => a.type && tied.includes(a.type))
+      .sort((x, y) => (y.local_date ?? '').localeCompare(x.local_date ?? ''))[0];
+    return newest?.type ?? tied[0]!;
+  }, [trailActs]);
+
+  // The gallery's file picker, lent upward so the empty cover's "Add a cover photo" opens
+  // the one that already exists rather than adding a second.
+  const [openPhotoPicker, setOpenPhotoPicker] = useState<(() => void) | null>(null);
+  // A stable identity, and the functional setState form — `setOpenPhotoPicker(fn)` would
+  // treat the picker itself as an updater and call it during render.
+  const receivePhotoPicker = useCallback(
+    (open: (() => void) | null) => setOpenPhotoPicker(() => open),
+    [],
+  );
+
   // Example hint for the (manual) Title on a freshly-added category place.
   const titlePlaceholder = (() => {
     const cats = effectiveCategories(place);
@@ -1212,56 +1244,41 @@ export default function PlacePanel({
 
   return (
     <aside className="panel">
-      {hasHero ? (
-        <div className="panel-hero" style={{ ['--pos' as string]: `${coverPos}%` }}>
-          <AuthedImg
-            photoId={place.cover_photo_id!}
-            size="full"
-            className={`panel-hero-img${canEdit ? ' adjustable' : ''}`}
-            onClick={canEdit ? () => setAdjustCover((v) => !v) : undefined}
+      {/* ONE COVER, ALWAYS (2026-08-28). This used to be a ternary: a hero when the place
+          had a cover photo, and a small `.panel-head` when it did not — which is what 121
+          of the 166 live places got, so three cards in four were not the card at all. The
+          locked card says every card has a cover: a photograph, the LETTER of its activity,
+          or a slot that adds one. CardCover is the same component the visit card and the
+          blank card use, so they cannot drift apart again. */}
+      <CardCover
+        photoId={hasHero ? place.cover_photo_id : null}
+        coverPos={coverPos}
+        activityType={coverActivityType}
+        onClose={onClose}
+        onAdjust={canEdit && hasHero ? () => setAdjustCover((v) => !v) : undefined}
+        onPickPhoto={canEdit && !hasHero ? (openPhotoPicker ?? undefined) : undefined}
+        title={
+          <>
+            {titleEl}
+            {dirty && <span className="edited-dot"> ● edited</span>}
+          </>
+        }
+        rating={ratingEl}
+      >
+        {/* Framing slider overlaid on the bottom of the photo when you tap it. */}
+        {canEdit && hasHero && adjustCover && (
+          <input
+            className="cover-pos-slider"
+            type="range"
+            min={0}
+            max={100}
+            value={coverPos}
+            onChange={(e) => setCoverPos(Number(e.target.value))}
+            onPointerUp={() => void patch({ cover_pos_y: coverPos })}
+            onKeyUp={() => void patch({ cover_pos_y: coverPos })}
           />
-          <button className="close hero-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-          {/* THE NAME, THEN THE RATING UNDER IT — the locked card, bottom-left of
-              the photo. The stars used to sit above the name. */}
-          <div className="hero-title">
-            <h2 className="title-with-rating">
-              {titleEl}
-              {dirty && <span className="edited-dot"> ● edited</span>}
-            </h2>
-            <div className="hero-rating">{ratingEl}</div>
-          </div>
-          {/* Framing slider overlaid on the bottom of the photo when you tap it. */}
-          {canEdit && adjustCover && (
-            <input
-              className="cover-pos-slider"
-              type="range"
-              min={0}
-              max={100}
-              value={coverPos}
-              onChange={(e) => setCoverPos(Number(e.target.value))}
-              onPointerUp={() => void patch({ cover_pos_y: coverPos })}
-              onKeyUp={() => void patch({ cover_pos_y: coverPos })}
-            />
-          )}
-        </div>
-      ) : (
-        <div className="panel-head">
-          <div>
-            <h2 className="title-with-rating">
-              {titleEl}
-              {dirty && <span className="edited-dot"> ● edited</span>}
-            </h2>
-            <div className="rating-above">{ratingEl}</div>
-          </div>
-          <div className="head-actions">
-            <button className="close" onClick={onClose} aria-label="Close">
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </CardCover>
 
       {/* Address line — the full address (tap for Directions) with an "edit" that
           opens a search. Independent of the Title. */}
@@ -1908,7 +1925,14 @@ export default function PlacePanel({
           visits as two different kinds of thing on one card. */}
 
       <h3 style={{ marginTop: 22 }}>Photos and Videos</h3>
-      <PhotoGallery place={place} visits={visits ?? undefined} onUploaded={refreshPlace} />
+      <PhotoGallery
+        place={place}
+        visits={visits ?? undefined}
+        onUploaded={refreshPlace}
+        // `useCallback` on purpose: a fresh function each render would re-run the
+        // gallery's effect on every render and thrash the handle.
+        onPickerReady={receivePhotoPicker}
+      />
 
       {/* ROUTES — third, per the locked card. The map shows EVERY route from every
           visit; the list under it is every one of them by name. Hikes, biking,

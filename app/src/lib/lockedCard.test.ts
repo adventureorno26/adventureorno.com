@@ -55,6 +55,11 @@ const BANNED: { word: RegExp; why: string }[] = [
 
 const CARD = SOURCES.find(([p]) => p.endsWith('components/PlacePanel.tsx'))?.[1] ?? '';
 const BLANK = SOURCES.find(([p]) => p.endsWith('components/NewPlaceDraft.tsx'))?.[1] ?? '';
+// THE COVER IS ITS OWN COMPONENT SINCE 2026-08-28, shared by the destination card, the
+// visit card and the blank card — which is the only way "ONE card" can be true rather
+// than asserted. The name/rating guard below follows the markup here rather than staying
+// pointed at the file it used to live in.
+const COVER = SOURCES.find(([p]) => p.endsWith('components/CardCover.tsx'))?.[1] ?? '';
 
 // Words that are fine in general but must never appear in the CARD's visit list.
 const BANNED_IN_VISITS = [
@@ -108,11 +113,43 @@ describe('the locked card — the sections, in the locked order', () => {
   });
 
   it('puts the rating UNDER the name, not above it', () => {
-    const hero = card.indexOf('className="hero-title"');
-    expect(hero).toBeGreaterThan(-1);
-    const title = card.indexOf('title-with-rating', hero);
-    const rating = card.indexOf('hero-rating', hero);
+    // Asserted in CardCover, where the markup now lives. When this moved out of
+    // PlacePanel the guard went red rather than silently passing against a file that no
+    // longer contained the thing it was checking — which is the point of it.
+    const hero = COVER.indexOf('className="hero-title"');
+    expect(hero, 'CardCover has no hero-title').toBeGreaterThan(-1);
+    const title = COVER.indexOf('title-with-rating', hero);
+    const rating = COVER.indexOf('hero-rating', hero);
+    expect(title, 'the name must come before the rating').toBeGreaterThan(-1);
     expect(title, 'the name must come before the rating').toBeLessThan(rating);
+  });
+
+  // EVERY CARD HAS A COVER — a photograph, the LETTER of its activity, or a slot that adds
+  // one. Until 2026-08-28 the card drew a hero only when there WAS a photo and fell back to
+  // a small plain header otherwise, which is what 121 of 166 places got.
+  it('has three cover states, and no header that bypasses them', () => {
+    expect(COVER, 'the photo state').toMatch(/kind === 'photo'/);
+    expect(COVER, 'the letter state').toMatch(/kind === 'letter'/);
+    expect(COVER, 'the empty-slot state').toMatch(/kind === 'empty'/);
+    // The ternary that produced a coverless card. If it comes back, so does the bug.
+    expect(card, 'the card must not render a bare .panel-head instead of a cover').not.toMatch(
+      /className="panel-head"/,
+    );
+    expect(card, 'the card must render the shared cover').toMatch(/<CardCover/);
+  });
+
+  it('spells the activity letters the way she named them', () => {
+    // "H hike, R run, B biking, W walking". Strava calls biking "Ride", which would
+    // collide with Run on first letter alone — hers is the naming that matters here.
+    expect(COVER).toMatch(/hike: 'H'/);
+    expect(COVER).toMatch(/run: 'R'/);
+    expect(COVER).toMatch(/walk: 'W'/);
+    expect(COVER).toMatch(/ride: 'B'/);
+  });
+
+  it('the letter is text, never an icon', () => {
+    // Her standing rule, and the reason a letter is allowed where a pictogram is not.
+    expect(COVER).not.toMatch(/<svg|<img[^>]*icon|📷|🏔|🥾/);
   });
 });
 
@@ -209,6 +246,19 @@ describe('the blank card asks the trail question once', () => {
   // that count, so nothing else on the card means the same once the answer is yes.
   it('asks it, in the words of the plan', () => {
     expect(BLANK).toMatch(/Is this a trail with sections\?/);
+  });
+
+  // Erica, 2026-08-28: "I DO want the trail toggle to label a trail, and the is this part
+  // of a trail question deleted." Two trail questions three rows apart asked one person two
+  // different things about trails. The toggle is the one that labels; the parent picker is
+  // gone, and a new place joins a trail from the trail's own card instead.
+  it('does not also ask "Part of a trail?"', () => {
+    // visibleText, not the raw source: the comment recording WHY it went names the
+    // question, and a guard that its own explanation trips is a guard nobody keeps.
+    expect(visibleText(BLANK), 'the parent picker was deleted on 2026-08-28').not.toMatch(
+      /Part of a trail/i,
+    );
+    expect(visibleText(BLANK), 'and the part_of it wrote went with it').not.toMatch(/part_of:/);
   });
 
   it('asks it ONCE — the tag list must not ask the same thing again', () => {
