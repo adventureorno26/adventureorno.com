@@ -6017,6 +6017,27 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
   which is why `.github/dependabot.yml` had been opening version PRs but nothing was
   watching for vulnerabilities). `gh api repos/<repo>/vulnerability-alerts` returns 204
   when enabled and 404 when not; `automated-security-fixes` reports `{"enabled":true}`.
+
+  **Turning it on immediately surfaced 17 open advisories — 2 critical, 8 high, 7
+  moderate** — that had been invisible the whole time, and the first push to the repo
+  after enabling it said so in the push output. They are all dependencies, so they are
+  **not** in the change that found them; automated security fixes will start opening the
+  PRs. What is there today:
+
+  | severity | package | vulnerable | patched |
+  | -------- | ------- | ---------- | ------- |
+  | CRITICAL | `vitest` (root lock **and** `workers/photo-gateway`) | `< 3.2.6` | `3.2.6` |
+  | HIGH | `vite` | `<= 6.4.2` | `6.4.3` |
+  | HIGH | `sharp` | `< 0.35.0` | `0.35.0` |
+  | HIGH | `brace-expansion` (×4 ranges) | `< 1.1.18`, `< 5.0.9` | `1.1.18` / `5.0.9` |
+  | HIGH | `undici` | `>= 7.0.0, < 7.29.0` | `7.29.0` |
+  | HIGH | `js-yaml` | `>= 4.0.0, < 4.3.1` | `4.3.1` |
+  | MODERATE | `esbuild`, `vite`, `undici` (×4) | see the alert list | — |
+
+  The two CRITICALs are the same finding twice: the photo gateway still runs **vitest 2**,
+  which is exactly the pin the `optionalDependencies` note in `package.json` describes
+  working around. Upgrading it is a real change with a real chance of turning the release
+  gate red, so it wants its own branch and its own verification, not a footnote in this one.
 - Never force-push. The ruleset now refuses it rather than relying on memory. The only
   exception is the separately approved history-scrub procedure, which must stop for
   Erica's exact approval before any rewrite — and now also for a deliberate admin bypass.
