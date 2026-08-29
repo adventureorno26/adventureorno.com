@@ -3233,16 +3233,102 @@ button.panel-hero-slot:hover {
   background: rgba(6, 10, 20, 0.55);
   overflow-y: auto;
 }
-.npd-card {
+/* THE BLANK CARD IS THE CARD (2026-08-28). It carries `.panel` now, so it inherits the
+   card's own stylesheet — the cover, the uppercase blue-rule section headings, the pills,
+   all of it — and these rules only undo `.panel`'s MAP POSITIONING, which is the one thing
+   that does not apply to a card floating in a modal. Everything visual is deliberately
+   left to `.panel` so the two cannot drift apart again. */
+.panel.npd-card {
+  position: static;
+  inset: auto;
   width: min(460px, 100%);
-  background: var(--panel);
+  max-height: min(92vh, 900px);
+  overflow-y: auto;
   border: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow);
-  padding: 16px;
+  /* Matches `.panel` so the hero's negative margins bleed to the right edges. */
+  padding: 16px 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  animation: none;
+}
+/* The cover's corners follow the card's. */
+.panel.npd-card .panel-hero {
+  border-radius: 15px 15px 0 0;
+}
+/* The name is typed straight onto the cover, so it must read as the title rather than as
+   a form field sitting on a photograph. */
+.hero-name-input {
+  width: 100%;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed var(--border);
+  border-radius: 0;
+  padding: 0 0 2px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+.hero-name-input::placeholder {
+  color: var(--muted);
+  font-weight: 600;
+}
+.hero-name-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+/* What a section will hold once there is something to hold. The locked card's words:
+   "Added once this first visit is saved". */
+.npd-fill {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  background: rgba(19, 31, 54, 0.4);
+}
+/* A labelled control inside a section — the shape the old `.npd-row` had, kept for the
+   handful of fields that genuinely are questions rather than sections. */
+.npd-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.npd-field > span:first-child {
+  color: var(--muted);
+  font-size: 13px;
+  min-width: 96px;
+}
+.npd-visit-one {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.npd-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.npd-ask > span:first-child {
+  flex: 1 1 auto;
+}
+.npd-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .npd-head {

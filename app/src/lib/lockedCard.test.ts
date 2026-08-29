@@ -291,6 +291,73 @@ describe('the blank card asks the trail question once', () => {
   });
 });
 
+// THE BLANK CARD IS THE CARD WITH ITS FIELDS EMPTY. §"THE CARD — LOCKED":
+// "The blank (new) card is the same card with the fields empty... Its Visits section says
+// 'this is visit one', because saving a new place IS its first visit. Routes and
+// Restaurants say 'Added once this first visit is saved'."
+//
+// It was a dialog of label-and-input rows until 2026-08-28, with no sections at all — and
+// STATE.md ticked it as done for thirteen days, naming a component (AddSheet) that no
+// longer existed. These are the checks that tick now has to survive.
+describe('the blank card is the card with its fields empty', () => {
+  it('is a .panel, so it wears the card\'s own stylesheet', () => {
+    // The single most load-bearing line: the uppercase blue-rule headings, the pills and
+    // the cover are all `.panel` rules. A blank card that is not a panel is a form.
+    expect(BLANK).toMatch(/className="panel npd-card"/);
+  });
+
+  it('opens with the cover, the name over it, and the rating under the name', () => {
+    expect(BLANK).toMatch(/<CardCover/);
+    expect(BLANK).toMatch(/Name this place/);
+    expect(BLANK).toMatch(/Add a cover photo/);
+    // The same component as the saved card, not a second one that looks like it.
+    expect(BLANK).toMatch(/from '\.\/CardCover'/);
+  });
+
+  it('has the five sections, in the locked order, saying what will fill them', () => {
+    const order = [
+      'Visits ',
+      'Photos and Videos',
+      'Routes',
+      'Restaurants',
+      'NOTES AND REVIEWS',
+    ];
+    let at = -1;
+    for (const marker of order) {
+      const next = BLANK.indexOf(marker, at + 1);
+      expect(next, `"${marker}" is missing or out of order on the blank card`).toBeGreaterThan(at);
+      at = next;
+    }
+  });
+
+  it('says "this is visit one", because saving a place IS its first visit', () => {
+    expect(BLANK).toMatch(/this is visit one/);
+  });
+
+  it('says what Routes and Restaurants are waiting for', () => {
+    expect(BLANK).toMatch(/Added once this first visit is saved/);
+  });
+
+  it('offers the categories as PILLS, not a dropdown', () => {
+    expect(BLANK).toMatch(/cat-pill/);
+    expect(visibleText(BLANK), 'the "+ tag" select is gone').not.toMatch(/\+ tag/);
+  });
+
+  it('its footer is Save and Cancel', () => {
+    expect(BLANK).toMatch(/npd-footer/);
+    expect(visibleText(BLANK)).toMatch(/Cancel/);
+  });
+
+  it('nothing is written until Save', () => {
+    // Every field stages into local state. If one starts calling its RPC on change, the
+    // blank card has quietly become save-as-you-type and a discarded draft leaves rows.
+    expect(BLANK).toMatch(/const \[rating, setRating\] = useState/);
+    expect(BLANK, 'the rating is applied WITH the save, not as you tap').toMatch(
+      /if \(rating != null\) extra\.rating = rating;/,
+    );
+  });
+});
+
 describe('adding a visit asks for both dates', () => {
   // Erica, 2026-08-15, having opened a real card: "I opened a card to add a visit and
   // it doesn't look like the one I finalized and asked not to be changed again. There

@@ -17,6 +17,8 @@ import { whoChoices, whoProfileId } from '../lib/participants';
 import { showSnack } from '../lib/snackbar';
 import { announceWho } from '../lib/whoWasThere';
 import MapSearch from './MapSearch';
+import CardCover from './CardCover';
+import StarRating from './StarRating';
 import { useDialog } from '../lib/useDialog';
 import type { Place } from '../lib/types';
 
@@ -87,6 +89,11 @@ export default function NewPlaceDraft({
   const [visitDate, setVisitDate] = useState('');
   const [who, setWho] = useState<Who>('both');
   const [website, setWebsite] = useState<string | null>(null);
+  // Staged like every other field on this card — nothing is written until Save.
+  const [rating, setRating] = useState<number | null>(null);
+  // The address is shown as a line with an "edit" that opens the search, exactly as the
+  // saved card does it, rather than as a permanently-open search box.
+  const [editingAddress, setEditingAddress] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   // Asked once, here only (§0.6): "Is this a trail with sections?" — and having said
   // yes, the offer to draw its reference route straight away.
@@ -156,6 +163,7 @@ export default function NewPlaceDraft({
     setAddress(r.address);
     setPoi(null);
     setPoiChecked(false);
+    setEditingAddress(false);
   }
 
   async function lookupPoi() {
@@ -194,8 +202,12 @@ export default function NewPlaceDraft({
       );
       const placeId = res.place_id;
 
-      // Enrichments create_experience doesn't own.
-      if (website) await updatePlace(placeId, { website }).catch(() => undefined);
+      // Enrichments create_experience doesn't own. The rating is staged on the blank
+      // card like everything else, so it is applied here rather than as you tap.
+      const extra: { website?: string; rating?: number } = {};
+      if (website) extra.website = website;
+      if (rating != null) extra.rating = rating;
+      if (Object.keys(extra).length) await updatePlace(placeId, extra).catch(() => undefined);
       // Somewhere-to-go-later has no visit, so there is nothing to attribute.
       if (!wanted && who !== 'both') {
         // Not swallowed: losing this silently means the place is saved and
@@ -274,10 +286,18 @@ export default function NewPlaceDraft({
   // one container a person sets by hand, and it is set by the question above — asking
   // again here would be asking twice.
   const NOT_A_TAG = new Set(['city', 'region', 'trip', 'trail']);
-  const avail = MANUAL_CATEGORIES.filter((c) => !tags.includes(c.slug) && !NOT_A_TAG.has(c.slug));
+  // `avail` (the "+ tag" dropdown's remaining options) went with the select: the locked
+  // card shows category TAGS AS PILLS, and on a blank card every one of them is still a
+  // choice, so the whole palette is offered and each pill toggles itself.
 
   // Guard against losing entered work: confirm before closing a dirty draft.
-  const dirty = !!name.trim() || files.length > 0 || !!visitDate || tags.length > 0 || !!website;
+  const dirty =
+    !!name.trim() ||
+    files.length > 0 ||
+    !!visitDate ||
+    tags.length > 0 ||
+    !!website ||
+    rating != null;
   function requestCancel() {
     if (busy) return;
     if (dirty && !confirm('Discard this new place and everything you’ve entered?')) return;
@@ -292,49 +312,72 @@ export default function NewPlaceDraft({
         if (e.target === e.currentTarget) requestCancel();
       }}
     >
-      <div
-        className="npd-card"
+      {/* THE BLANK CARD IS THE CARD WITH ITS FIELDS EMPTY (rebuilt 2026-08-28).
+          §"THE CARD — LOCKED": "The blank (new) card is the same card with the fields
+          empty... Its Visits section says 'this is visit one', because saving a new place
+          IS its first visit. Routes and Restaurants say 'Added once this first visit is
+          saved'."
+
+          It used to be a dialog of label-and-input rows — Name, Location, Official details,
+          Visit date, What is it? — with no sections at all, and none of that copy anywhere
+          in the app. It carries `.panel` now, so it inherits the card's own stylesheet:
+          the same cover, the same uppercase blue-rule headings, the same everything. The
+          logic underneath is untouched — the duplicate check, the POI lookup, the reverse
+          geocode and the atomic save all still do exactly what they did. */}
+      <aside
+        className="panel npd-card"
         ref={cardRef}
         role="dialog"
         aria-modal="true"
-        aria-label="New place"
+        aria-label={wanted ? 'Somewhere to go later' : 'New place'}
         tabIndex={-1}
       >
-        {/* THE COVER, exactly where the saved card has it (§0.6: cover, then name).
-            It is a real control — it opens the same picker the Photos section uses —
-            not a label pretending to be one. Photos chosen here are attached on Save,
-            and the first becomes the cover. */}
-        <div className="npd-cover">
-          <button type="button" className="npd-cover-btn" onClick={() => fileRef.current?.click()}>
-            {files.length > 0
+        {/* 1. THE COVER, 2. THE NAME OVER IT, 3. THE RATING UNDER THE NAME. The same
+            component the saved card and the visit card use, so the three cannot drift. */}
+        <CardCover
+          onClose={requestCancel}
+          closeLabel="Cancel"
+          onPickPhoto={() => fileRef.current?.click()}
+          slotLabel={
+            files.length > 0
               ? `${files.length} photo${files.length === 1 ? '' : 's'} — the first is the cover`
-              : 'Add a cover photo'}
-          </button>
-          <button className="npd-x" onClick={requestCancel} aria-label="Cancel">
-            ×
-          </button>
-        </div>
-        <div className="npd-head">
-          <b>{wanted ? 'Somewhere to go later' : 'A place you have been'}</b>
-        </div>
+              : 'Add a cover photo'
+          }
+          title={
+            <input
+              className="title-input hero-name-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name this place"
+              aria-label="Name this place"
+            />
+          }
+          rating={
+            // Dim stars mean not rated yet — the locked card's words. Staged like every
+            // other field: nothing is written until Save.
+            <StarRating value={rating} size={16} onChange={(n) => setRating(n)} />
+          }
+        />
 
-        <label className="npd-row">
-          <span>Name</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Name this place"
-          />
-        </label>
-
-        <div className="npd-row">
-          <span>Location</span>
-          <MapSearch placeholder="Search an address or place…" onPick={pickLocation} />
+        {/* 4. THE ADDRESS, prefilled from where you tapped and editable, then the sub-line
+            saying what this is in plain words. */}
+        <div className="meta">
+          {editingAddress ? (
+            <div className="place-locate bucket-search">
+              <MapSearch placeholder="Search an address or place…" onPick={pickLocation} />
+            </div>
+          ) : (
+            <span>
+              <span className="region-directions">
+                {address || [admin1, country].filter(Boolean).join(', ') || 'Where you tapped'}
+              </span>
+              <button className="link-btn region-edit-btn" onClick={() => setEditingAddress(true)}>
+                edit
+              </button>
+            </span>
+          )}
           <div className="npd-coords label">
-            {lat.toFixed(5)}, {lng.toFixed(5)}
-            {[admin1, country].filter(Boolean).length
-              ? ` · ${[admin1, country].filter(Boolean).join(', ')}`
-              : ''}
+            {lat.toFixed(5)}, {lng.toFixed(5)} · {wanted ? 'not visited yet' : 'this is visit one'}
           </div>
         </div>
 
@@ -359,7 +402,153 @@ export default function NewPlaceDraft({
           </div>
         )}
 
-        <div className="npd-row">
+        {/* 5. CATEGORY TAGS AS PILLS — never city or region. The whole palette is offered
+            here, because on a blank card every one of them is still a choice. */}
+        <div className="cat-pills">
+          {MANUAL_CATEGORIES.filter((c) => !NOT_A_TAG.has(c.slug)).map((c) => {
+            const on = tags.includes(c.slug);
+            return (
+              <button
+                key={c.slug}
+                type="button"
+                className={`cat-pill${on ? ' on' : ''}`}
+                aria-pressed={on}
+                onClick={() =>
+                  setTags((t) => (on ? t.filter((x) => x !== c.slug) : [...t, c.slug]))
+                }
+              >
+                {categoryLabel(c.slug)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ASKED ONCE, AND ONLY HERE. A trail is the one kind of place that is not obvious
+            from where you tapped: it is a container whose SECTIONS are the places that
+            count, so answering yes changes what the rest of this card means. The answer is
+            not stored twice — it sets the `trail` tag, which is what makes a place a trail,
+            and the pills above do not offer it.
+
+            "Part of a trail?" was DELETED here on 2026-08-28 at Erica's instruction: the
+            toggle is what labels a trail, and one card asked about trails twice. */}
+        <div className="npd-ask">
+          <span>Is this a trail with sections?</span>
+          <div className="ps-who-toggle">
+            <button type="button" className={isTrail ? '' : 'on'} onClick={() => setIsTrail(false)}>
+              No
+            </button>
+            <button type="button" className={isTrail ? 'on' : ''} onClick={() => setIsTrail(true)}>
+              Yes
+            </button>
+          </div>
+        </div>
+        {isTrail && (
+          <span className="label">
+            Its sections are the places that count — this one holds them together.
+          </span>
+        )}
+
+        {/* ───────── THE SECTIONS, in the locked order, each saying what will fill it ───────── */}
+
+        <h3 style={{ marginTop: 22 }}>
+          Visits <span className="label">{wanted ? 'none yet' : 'this is visit one'}</span>
+        </h3>
+        {wanted ? (
+          <div className="npd-fill">
+            Somewhere to go later has no visit yet — add one after you have been.
+          </div>
+        ) : (
+          <div className="npd-visit-one">
+            <label className="npd-field">
+              <span>{isTrail ? 'Date you walked it (optional)' : 'Date'}</span>
+              <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+            </label>
+            <div className="npd-field">
+              <span>Who was there</span>
+              <div className="ps-who-toggle">
+                {choices.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    className={who === c.key ? 'on' : ''}
+                    onClick={() => setWho(c.key)}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <h3 style={{ marginTop: 22 }}>
+          Photos and Videos{' '}
+          {files.length > 0 && <span className="label">({files.length} to add)</span>}
+        </h3>
+        <div className="btn-row">
+          {googlePhotosEnabled() && (
+            <button
+              onClick={() =>
+                void pickFromGooglePhotos((s) => setBusy(s))
+                  .then((f) => {
+                    setBusy(null);
+                    setFiles((cur) => [...cur, ...f]);
+                  })
+                  .catch(() => setBusy(null))
+              }
+            >
+              Google Photos
+            </button>
+          )}
+          <button onClick={() => fileRef.current?.click()}>Choose photos</button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(e) => {
+              const f = e.target.files ? Array.from(e.target.files) : [];
+              e.target.value = '';
+              setFiles((cur) => [...cur, ...f]);
+            }}
+          />
+        </div>
+
+        <h3 style={{ marginTop: 22 }}>Routes</h3>
+        {isTrail ? (
+          <div className="npd-field">
+            <span>Its route</span>
+            <div className="ps-who-toggle">
+              <button
+                type="button"
+                className={drawAfter ? '' : 'on'}
+                onClick={() => setDrawAfter(false)}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                className={drawAfter ? 'on' : ''}
+                onClick={() => setDrawAfter(true)}
+              >
+                Draw it after saving
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="npd-fill">Added once this first visit is saved</div>
+        )}
+
+        <h3 style={{ marginTop: 22 }}>Restaurants</h3>
+        <div className="npd-fill">Added once this first visit is saved</div>
+
+        <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
+        <div className="npd-fill">Write a note or review — once this first visit is saved</div>
+
+        {/* Official details sit last: they enrich a place that already has a name, and on
+            the locked card nothing about them belongs above the sections. */}
+        <div className="npd-field" style={{ marginTop: 18 }}>
           <span>Official details</span>
           <button type="button" onClick={() => void lookupPoi()} disabled={!!busy}>
             Look up name &amp; website
@@ -384,167 +573,17 @@ export default function NewPlaceDraft({
           {website && <div className="npd-current label">Website: {website}</div>}
         </div>
 
-        {/* ASKED ONCE, AND ONLY HERE (§0.6). A trail is the one kind of place that is
-            not obvious from where you tapped: it is a container whose SECTIONS are the
-            places that count, so answering yes changes what the rest of this card
-            means. The answer is not stored twice — it sets the `trail` tag, which is
-            what makes a place a trail, and the tag list below no longer offers it. */}
-        <div className="npd-row">
-          <span>Is this a trail with sections?</span>
-          <div className="ps-who-toggle">
-            <button type="button" className={isTrail ? '' : 'on'} onClick={() => setIsTrail(false)}>
-              No
-            </button>
-            <button type="button" className={isTrail ? 'on' : ''} onClick={() => setIsTrail(true)}>
-              Yes
-            </button>
-          </div>
-          {isTrail && (
-            <span className="label">
-              Its sections are the places that count — this one holds them together.
-            </span>
-          )}
-        </div>
-
-        {!wanted && (
-          // A <label>, not a <div>, so the visible text is the input's accessible name —
-          // the same shape the Name row above already uses. As a div this was a critical
-          // axe `label` violation: the words were on screen and attached to nothing.
-          <label className="npd-row">
-            {/* A trail can exist before you have walked any of it, so its date is
-                genuinely optional: with no date, no visit is logged. */}
-            <span>{isTrail ? 'Date you walked it (optional)' : 'Visit date'}</span>
-            <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
-          </label>
-        )}
-
-        {isTrail && (
-          <div className="npd-row">
-            <span>Its route</span>
-            <div className="ps-who-toggle">
-              <button
-                type="button"
-                className={drawAfter ? '' : 'on'}
-                onClick={() => setDrawAfter(false)}
-              >
-                Not now
-              </button>
-              <button
-                type="button"
-                className={drawAfter ? 'on' : ''}
-                onClick={() => setDrawAfter(true)}
-              >
-                Draw it after saving
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="npd-row">
-          <span>What is it?</span>
-          <div className="pe-chips">
-            {tags.map((slug) => (
-              <button
-                key={slug}
-                type="button"
-                className="pe-chip"
-                onClick={() => setTags((t) => t.filter((c) => c !== slug))}
-              >
-                {categoryLabel(slug)} ×
-              </button>
-            ))}
-          </div>
-          {avail.length > 0 && (
-            // This row holds chips AND this select, so it cannot be one wrapping <label>
-            // the way the rows above are — a label names a single control. Hence an
-            // explicit aria-label: "What is it?" belongs to the row, not to the picker.
-            <select
-              aria-label="Add a tag"
-              value=""
-              onChange={(e) => e.target.value && setTags((t) => [...t, e.target.value])}
-            >
-              <option value="">+ tag</option>
-              {avail.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* "PART OF A TRAIL?" IS GONE (Erica, 2026-08-28): *"I DO want the trail toggle to
-            label a trail, and the is this part of a trail question deleted."* Two trail
-            questions on one card asked the same person two different things about trails
-            three rows apart. The toggle above is the one that stays — it is what LABELS a
-            place a trail.
-
-            A new place therefore no longer joins a trail at the moment it is created. That
-            still happens from the trail's own card ("Add places you've already saved to
-            this one"), and it matches the model: a segment name rides on the VISIT, not on
-            a parent link. Told to her before it was done. */}
-
-        {!wanted && (
-          <div className="npd-row">
-            <span>Who was there</span>
-            <div className="ps-who-toggle">
-              {choices.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  className={who === c.key ? 'on' : ''}
-                  onClick={() => setWho(c.key)}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="npd-row">
-          <span>Photos {files.length ? `(${files.length})` : ''}</span>
-          <div className="btn-row">
-            {googlePhotosEnabled() && (
-              <button
-                onClick={() =>
-                  void pickFromGooglePhotos((s) => setBusy(s))
-                    .then((f) => {
-                      setBusy(null);
-                      setFiles((cur) => [...cur, ...f]);
-                    })
-                    .catch(() => setBusy(null))
-                }
-              >
-                Google Photos
-              </button>
-            )}
-            <button onClick={() => fileRef.current?.click()}>Choose photos</button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                const f = e.target.files ? Array.from(e.target.files) : [];
-                e.target.value = '';
-                setFiles((cur) => [...cur, ...f]);
-              }}
-            />
-          </div>
-        </div>
-
+        {/* 7. THE FOOTER. On the blank card: Save · Cancel. */}
         {busy && <div className="label">{busy}</div>}
-        <div className="btn-row" style={{ marginTop: 8 }}>
+        <div className="btn-row npd-footer">
           <button className="primary" disabled={!!busy} onClick={() => void save()}>
-            {wanted ? 'Save to the list' : 'Save place'}
+            {wanted ? 'Save to the list' : 'Save'}
           </button>
           <button onClick={requestCancel} disabled={!!busy}>
             Cancel
           </button>
         </div>
-      </div>
+      </aside>
     </div>
   );
 }
