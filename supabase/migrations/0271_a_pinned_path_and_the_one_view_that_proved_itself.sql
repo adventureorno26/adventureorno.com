@@ -50,8 +50,16 @@ alter function public.local_zone(double precision, double precision, text, text)
 alter function public.owner_profile_is_immutable()                                     set search_path = public, pg_temp;
 alter function public.together_since()                                                 set search_path = public, pg_temp;
 
--- 3. The stale mirror. Scoped to the one place that disagrees, and asserted both ways so
---    this cannot quietly rewrite a count that was right.
+-- 3. The stale mirror. Scoped to the place that disagrees, and bounded so this cannot
+--    quietly rewrite a count that was right.
+--
+--    THE GUARD IS "AT MOST", NOT "EXACTLY", and the first draft got that wrong. It said
+--    `if n <> 1`, which is a statement about production on the afternoon this was written
+--    — and every migration here is also replayed from nothing by `scripts/db-test.sh`,
+--    where a database with no visits has no stale mirrors and n is 0. The exact form
+--    failed CI on an empty schema, correctly. What actually needs preventing is repairing
+--    MORE than the one row this file was written for; finding none is what a fresh
+--    database and a second run both look like.
 do $$
 declare n int;
 begin
@@ -59,8 +67,8 @@ begin
     from public.places p
    where p.deleted_at is null
      and p.visit_count is distinct from (select count(*) from public.visits v where v.place_id = p.id);
-  if n <> 1 then
-    raise exception 'expected exactly 1 place with a stale visit_count, found %', n;
+  if n > 1 then
+    raise exception 'expected at most 1 place with a stale visit_count, found %', n;
   end if;
 
   update public.places p

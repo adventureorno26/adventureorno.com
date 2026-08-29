@@ -16,6 +16,11 @@
 -- not a repair. The choice — trigger it, or retire the column and the check with it — is
 -- recorded in STATE.md beside the description of `check-data-integrity.mjs`, and is Erica's.
 
+-- The guard below is "at most 2", not "exactly 2", for the reason spelled out in 0271:
+-- this file is replayed against an empty schema by `scripts/db-test.sh`, and a database
+-- with no visits has no stale mirrors. Bounding it still catches the thing worth catching
+-- — a repair wider than the two rows this file was written for.
+
 begin;
 
 do $$
@@ -25,8 +30,8 @@ begin
     from public.places p
    where p.deleted_at is null
      and p.visit_count is distinct from (select count(*) from public.visits v where v.place_id = p.id);
-  if n <> 2 then
-    raise exception 'expected exactly 2 places with a stale visit_count, found %', n;
+  if n > 2 then
+    raise exception 'expected at most 2 places with a stale visit_count, found %', n;
   end if;
 
   update public.places p

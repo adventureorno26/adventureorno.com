@@ -4337,7 +4337,7 @@ decision.
 | ERROR | `rls_disabled_in_public` (`spatial_ref_sys`)      | 1     | 1     | 1     | Cannot fix — PostGIS-owned                 |
 | WARN  | `authenticated_security_definer_function_executable` | 72 | 167   | 167   | Intended — the RPCs are the only door      |
 | WARN  | `anon_security_definer_function_executable`       | 3     | 3     | 3     | Cannot fix — PostGIS `st_estimatedextent`  |
-| WARN  | `function_search_path_mutable`                    | 0     | 6     | **0** | **CLOSED** — all six pinned in `0271`      |
+| WARN  | `function_search_path_mutable`                    | 0     | 6     | **0** | **CLOSED** — all six pinned in `0271`. A pin is not permanent: a later `create or replace function` without `set search_path` silently drops it, which is how `is_generic_activity_name` (created `0147`, re-created `0226`) would have lost one. If this row comes back, that is why |
 | WARN  | `extension_in_public`                             | 3     | 3     | 3     | Accepted                                   |
 | WARN  | `auth_leaked_password_protection`                 | 1     | 1     | 1     | **Open — needs Erica.** Offered 2026-08-29 and not taken; it is a Management API `PATCH /v1/projects/<ref>/config/auth` or one dashboard toggle |
 | INFO  | `rls_enabled_no_policy`                           | 3     | 3     | 3     | Intended (deny-all)                        |
