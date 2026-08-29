@@ -4603,6 +4603,18 @@ model rather than a repair. **The choice is Erica's, and it is one of two:**
 
 Until one of those happens, expect this row to return every time a visit is deleted.
 
+**It came back forty minutes later, and not from a deletion.** The final check of the
+2026-08-29 session found `Red Iguana stored=1 actual=2`. Nothing in that session touched
+Red Iguana: Erica added a manual visit through the app at `22:14:56Z`, while the session
+was still running, and `places.visit_count` did not move. So the mirror is not merely
+un-refreshed on **delete** — **nothing maintains it in either direction**, and a normal
+afternoon of using the app drifts it. That is as close to a live reproduction as this
+question is going to get, and it argues for option 1.
+
+This one is deliberately left unrepaired. Repairing it would be one `update` and would
+hide the evidence a day later; the count is a cache, the visits are correct, and what
+needs fixing is the maintainer, not the number.
+
 ## 7d. 2026-08-16 — the day nothing was broken and nothing was live
 
 Erica: *"the map style has not changed when I looked at it."* She was right, and every
