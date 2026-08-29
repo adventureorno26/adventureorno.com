@@ -5999,6 +5999,15 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
 - Remote: `adventureorno26/adventureorno.com`, authenticated via the local `gh` CLI session
   (account adventureorno26). Verify with `gh auth status` at session start; if unauthenticated,
   stop and ask Erica to run `gh auth login`.
+  **`gh` holds four github.com accounts on this machine and `adventureorno26` is not the
+  active one** (2026-08-29 — the active account was `erica-83`). The failure is confusing
+  rather than obvious: every call returns `Could not resolve to a Repository`, i.e. a private
+  repo answering as if it does not exist. `gh auth status` alone is not enough — check *which*
+  account is active, and `gh auth switch --user adventureorno26` before anything else:
+
+  ```sh
+  gh api user --jq .login     # must print adventureorno26
+  ```
 - Work on a focused branch; open a PR with a summary and exact verification counts.
   Never merge or promote a production deployment while required CI is red.
 - **`main` is protected, and the line that said it could not be is wrong** (corrected
