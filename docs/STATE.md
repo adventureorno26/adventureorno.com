@@ -4327,19 +4327,23 @@ curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   "https://api.supabase.com/v1/projects/aanfyhsjbtnqzphuoiem/advisors/security"
 ```
 
-**The baseline was 83 findings on 2026-08-07. It is 188 on 2026-08-28.** A finding NOT on
-this list is new and needs a decision.
+**The baseline was 83 findings on 2026-08-07 and 188 on 2026-08-28. Re-measured 2026-08-29:
+188 before any change, 181 after `0271`.** A finding NOT on this list is new and needs a
+decision.
 
-| Level | Name                                              | 08-07 | 08-28 | Status                                     |
-| ----- | ------------------------------------------------- | ----- | ----- | ------------------------------------------ |
-| ERROR | `security_definer_view`                           | 0     | **4** | **OPEN — NEW, and it is ours (see below)** |
-| ERROR | `rls_disabled_in_public` (`spatial_ref_sys`)      | 1     | 1     | Cannot fix — PostGIS-owned                 |
-| WARN  | `authenticated_security_definer_function_executable` | 72 | 167   | Intended — the RPCs are the only door      |
-| WARN  | `anon_security_definer_function_executable`       | 3     | 3     | Cannot fix — PostGIS `st_estimatedextent`  |
-| WARN  | `function_search_path_mutable`                    | 0     | 6     | OPEN — new, low severity, fix with the views |
-| WARN  | `extension_in_public`                             | 3     | 3     | Accepted                                   |
-| WARN  | `auth_leaked_password_protection`                 | 1     | 1     | **Open — needs Erica** (a dashboard toggle) |
-| INFO  | `rls_enabled_no_policy`                           | 3     | 3     | Intended (deny-all)                        |
+| Level | Name                                              | 08-07 | 08-28 | 08-29 | Status                                     |
+| ----- | ------------------------------------------------- | ----- | ----- | ----- | ------------------------------------------ |
+| ERROR | `security_definer_view`                           | 0     | **4** | **3** | `visible_activities` fixed in `0271`; the other three are **open by decision** — see the proof below |
+| ERROR | `rls_disabled_in_public` (`spatial_ref_sys`)      | 1     | 1     | 1     | Cannot fix — PostGIS-owned                 |
+| WARN  | `authenticated_security_definer_function_executable` | 72 | 167   | 167   | Intended — the RPCs are the only door      |
+| WARN  | `anon_security_definer_function_executable`       | 3     | 3     | 3     | Cannot fix — PostGIS `st_estimatedextent`  |
+| WARN  | `function_search_path_mutable`                    | 0     | 6     | **0** | **CLOSED** — all six pinned in `0271`      |
+| WARN  | `extension_in_public`                             | 3     | 3     | 3     | Accepted                                   |
+| WARN  | `auth_leaked_password_protection`                 | 1     | 1     | 1     | **Open — needs Erica.** Offered 2026-08-29 and not taken; it is a Management API `PATCH /v1/projects/<ref>/config/auth` or one dashboard toggle |
+| INFO  | `rls_enabled_no_policy`                           | 3     | 3     | 3     | Intended (deny-all)                        |
+
+**Total: 83 (08-07) → 188 (08-28) → 181 (08-29).** The seven that went are the six pinned
+search paths and the one view that proved safe to flip.
 
 ### The four new ERRORs are ours, and they matter before anyone else has an account
 
@@ -4355,6 +4359,49 @@ and Josh's inside one household. It stops being survivable the moment Phase 3b g
 anyone else an account, and it is the same shape of hole as §7d's Strava finding: a lock
 built in the database and fitted nowhere. Fix them to `security_invoker = true` and prove
 each one still returns the same rows for each member.
+
+### 2026-08-29 — the proof was run, and it says three of the four are not a flip
+
+The instruction above ends *"prove each one still returns the same rows for each member."*
+That proof had never been run. It has now: all four views flipped to `security_invoker`
+inside a transaction, `count(*)` taken as each of the three accounts (`set local role
+authenticated` + `request.jwt.claims.sub`), then **rolled back**. Nothing was changed to
+measure it.
+
+| view                  | Erica        | Josh         | Test bot     | verdict     |
+| --------------------- | ------------ | ------------ | ------------ | ----------- |
+| `activity_profiles`   | 627 → 536    | 627 → 486    | 627 → 303    | **DIFFERS** |
+| `activity_provenance` | 571 → 480    | 571 → 430    | 571 → 293    | **DIFFERS** |
+| `visible_activities`  | 480 → 480    | 430 → 430    | 293 → 293    | same        |
+| `visit_profiles`      | 664 → 359    | 664 → 305    | 664 → **0**  | **DIFFERS** |
+
+So the assumption behind the instruction was wrong, and that is worth more than the fix
+would have been. **The definer property is currently doing something**: it hands every
+member all 627 participations and all 664 visit participations, straight past the RLS on
+`memory_people` (`can_see_memory_subject(subject_id) or person_is_mine(person_id)`),
+`memory_subjects` and `people`. Those policies exist and are not decorative — under
+invoker they remove between 15% and 100% of the rows depending on who is asking.
+
+Flipping the three is still the right end state; it is exactly the leak this section
+describes. But it **changes what the app shows today** — Erica's visit participations
+would go 664 → 359 — and that is a decision about the product, not one a migration takes
+on its own. It stays open, with the numbers, so it is argued from evidence next time
+rather than re-measured.
+
+`visible_activities` is the exception and not by luck: its own `WHERE` is the same
+expression as the `activities_select` policy, so invoker RLS re-applies a filter the view
+had already applied. Identical for all three accounts. **Migration `0271` flips that one,
+pins the six `function_search_path_mutable` paths (all six are SECURITY INVOKER and
+reference only `public`, so pinning changes no result), and asserts all of it in the same
+transaction.** Applied and recorded 2026-08-29; the advisor count moved 188 → 181.
+
+**Erica's decision, 2026-08-29: leave the three open and documented**, and revisit before
+Phase 3b gives anyone else an account — which is the moment §6c already names as the one
+where it stops being survivable. When that day comes the work is not "flip them": it is to
+decide, for each of the three, whether the RLS-filtered row set is what the screen should
+show, and then either flip and re-verify the participant lists in the app, or keep the
+views definer and write the intended visibility into their `WHERE` clauses explicitly. The
+numbers above are the starting point either way, so nobody has to measure this twice.
 
 **`spatial_ref_sys` and `st_estimatedextent` are not ours.** Both are owned by
 `supabase_admin` and belong to PostGIS — verified via `pg_class.relowner` + `pg_depend`.
@@ -4382,6 +4429,52 @@ lost work and can be restored in minutes.
 | **Thirty-one superseded markdown files** — `README.md`, `docs/COMPLETION-PLAN.md`, `docs/decisions.md`, `docs/SCHEMA.md`, `docs/RECONCILIATION.md`, `docs/MANUAL-SETUP.md`, the three `deploy-*.md`, `backup-restore.md`, the three `ios-shortcut-*.md`, and the folders `docs/adr/` (2), `docs/archive/` (8), `docs/phases/` (6) | 2026-08-28 | Erica: *"fix EVERY fucking markdown file so you stop doing shit I dont want."* Every one had been DELETED FROM GIT on 2026-08-11 and was **still on disk** — OneDrive restores what git removes, which is why `README.md` needed deleting twice (commit`e9e0e7a`, "Delete README.md again"). Any session reading the folder found a dozen plans contradicting this one. | All recoverable from git history: `4fa9fc2`, `6d27635`, `d0bfea7`, `e9e0e7a`. **`scripts/check-one-document.mjs` now fails the build if any of them returns.** |
 | `CLAUDE-CODE-INSTRUCTIONS-2-70.md` and `workbench-entries.md` (parent folder)                            | 2026-08-28 | 60 KB of instructions predating this file, plus a scratch list. Same reason as the row above — but these two were **never tracked by git**, so they were copied out first rather than deleted outright          | `../.superseded-docs-2026-08-28/` — the only copy. Not in any commit                                                                                                       |
 | `security/advisor-baseline.md`                                                                           | 2026-08-28 | The last markdown outside this file. Its content is **re-measured and folded into §6c**, not merely moved — the baseline had drifted from 83 findings to 188                                                    | §6c above; the file itself was untracked                                                                                                                                  |
+| **Two visits claiming evidence that was not there** — Leesburg `2024-10-22` and Great Falls `2026-07-19`                                                                                                     | 2026-08-29 | Both machine-created on 2026-07-22, `source='evidence'`, no note, no `created_by`, and **nothing at their place inside their dates**. `delete_visit` returned `"evidence": []` for both — the same answer the two `2026-12-25` visits gave in §7c. Erica's explicit yes. What was on those days sat elsewhere: Leesburg's only record is one activity at *North Street Northeast*; Great Falls' day is at Claytor Lake, the Washington Monument and Leesburg VA, plus 438 unplaced pings | **The two undo snapshots below** — `delete_visit`'s own return value, which is everything needed to put each row back |
+| `ingest_tokens` row **"Josh iPhone — photos"** (revoked, not deleted)                                     | 2026-08-29 | Business rule #7: *"no ingest token is ever issued to him."* It had been live since 2026-07-25 and used once, the day it was made. Revoking is reversible and keeps the row and its history                     | `update public.ingest_tokens set revoked_at = null where id = '91ed38b3-6e6c-48a9-917a-35a5ac94a104'`                                                                       |
+
+#### The two undo snapshots, 2026-08-29
+
+`delete_visit` returns everything required to restore what it removed. Both are recorded
+verbatim so "we deleted two visits" is a reversible sentence rather than a regrettable one.
+
+```json
+// Leesburg 2024-10-22 — visit 88f89b11-7dc3-4da1-a0d6-60eda68bdf14
+{ "visit": { "id": "88f89b11-7dc3-4da1-a0d6-60eda68bdf14", "place_id": "0fabb00c-92d4-4c06-b928-ec857aa12187",
+             "start_date": "2024-10-22", "end_date": "2024-10-22", "source": "evidence", "status": "taken",
+             "note": null, "manual": false, "trip_marked": false, "solo_override": false,
+             "created_at": "2026-07-22T23:17:49.502968+00:00", "created_by": null,
+             "accepted_at": "2026-07-22T23:17:49.502968+00:00", "accepted_by": null,
+             "decided_at": null, "updated_at": "2026-08-17T21:07:09.215393+00:00",
+             "parent_visit_id": null, "client_key": null },
+  "profiles": [ { "profile_id": "ca941ae8-099d-4217-afa7-67a6cadb50f4", "claim_status": "accepted",
+                  "evidence": "unknown", "created_by": "unknown",
+                  "created_at": "2026-08-17T21:07:09.215393+00:00",
+                  "asserted_by": null, "decided_by": null, "decided_at": null, "rule_id": null } ],
+  "people": [], "children": [], "evidence": [] }
+
+// Great Falls 2026-07-19 — visit 42e11a96-ce19-40db-aea2-3da29eece7b5
+{ "visit": { "id": "42e11a96-ce19-40db-aea2-3da29eece7b5", "place_id": "1fccdc7a-7106-4ca8-82d4-3771f2c2c46a",
+             "start_date": "2026-07-19", "end_date": "2026-07-19", "source": "evidence", "status": "taken",
+             "note": null, "manual": false, "trip_marked": false, "solo_override": false,
+             "created_at": "2026-07-22T21:54:52.946504+00:00", "created_by": null,
+             "accepted_at": "2026-07-22T21:54:52.946504+00:00", "accepted_by": null,
+             "decided_at": null, "updated_at": "2026-08-13T17:17:17.388994+00:00",
+             "parent_visit_id": null, "client_key": null },
+  "profiles": [ { "profile_id": "12ef0b67-4ae8-4d2c-8a60-26316f7fd040", "claim_status": "accepted",
+                  "evidence": "unknown", "created_by": "unknown",
+                  "created_at": "2026-08-13T17:17:22.179469+00:00",
+                  "asserted_by": null, "decided_by": null, "decided_at": null, "rule_id": null },
+                { "profile_id": "ca941ae8-099d-4217-afa7-67a6cadb50f4", "claim_status": "accepted",
+                  "evidence": "unknown", "created_by": "unknown",
+                  "created_at": "2026-08-13T17:17:22.179469+00:00",
+                  "asserted_by": null, "decided_by": null, "decided_at": null, "rule_id": null } ],
+  "people": [], "children": [], "evidence": [] }
+```
+
+Restoring either is an `insert` of `visit` back into `public.visits` followed by its
+`profiles` rows into `memory_people` through the participant path (`visit_profiles` is a
+view over `memory_people` + `memory_subjects` since `0266` — it cannot be inserted into
+directly), then a recount of that place's `visit_count`.
 
 ---
 
@@ -4484,6 +4577,31 @@ one that passes.
 - **87 visits have no evidence, and 84 of those are fine** — a trail's evidence lives on its
   sections. Only non-containers count. That distinction is the difference between a real
   finding and a scary number.
+- **2026-08-29: the check reads clean — "Production data is consistent."** It had been
+  reporting three rows. Two were the bare visits deleted below with Erica's yes; the third
+  was Riverpoint Drive Trailhead's `visit_count` saying 13 against 12, repaired in `0271`.
+
+#### `places.visit_count` has no maintainer, and deleting a visit proves it
+
+Repairing Riverpoint was not the end of it. The moment the two bare visits were deleted,
+the same check went from one stale mirror to **two** — Great Falls 3 vs 2, Leesburg 5 vs 4
+— because **`delete_visit` removes the row and never touches `places.visit_count`**. There
+is no trigger on `visits`; the only things that have ever written that column are backfills
+in old migrations (`0003`, `0009`, `0010`, `0015`, `0097`, `0117`, `0190`, `0240`, `0260`).
+It is a cache that is correct exactly until somebody changes a visit, which is why this
+check keeps finding it.
+
+`0272` repaired the two and deliberately did **not** add a trigger. `visit_count` decides
+which place survives a merge, so giving it a new maintainer is a decision about the data
+model rather than a repair. **The choice is Erica's, and it is one of two:**
+
+1. **Maintain it** — a trigger on `visits` (insert/update/delete) that recounts the
+   affected place, plus a one-time backfill. The column becomes trustworthy and the check
+   row can be deleted.
+2. **Retire it** — drop the column, read counts from `place_visit_totals()` where they are
+   needed, and the check row retires with it, exactly as the check's own text predicts.
+
+Until one of those happens, expect this row to return every time a visit is deleted.
 
 ## 7d. 2026-08-16 — the day nothing was broken and nothing was live
 
@@ -5842,6 +5960,13 @@ database and the screen disagree, the screen is right.
 7. **Auto-upload is Erica-only.** Exactly one device ingest token exists (Erica's). The partner
    has role `editor`: full manual upload / entry editing rights in the UI, but no ingest token is
    ever issued to him, and there is no UI to create additional device tokens without owner role.
+   **The database disagreed with this rule until 2026-08-29**, when `ingest_tokens` held three
+   live rows: Erica's *daily Shortcut* token (the one actually in use), an *"Erica iPhone —
+   photos"* token created 2026-07-25 that has **never been used**, and a *"Josh iPhone —
+   photos"* token, also live, which is the row this rule says must not exist. Josh's was
+   revoked (§7 register). Erica's unused second token was left live at her instruction —
+   `select label, last_used_at, revoked_at from ingest_tokens` is the check, and a rule kept
+   only in prose is one nothing enforces.
 8. **Privacy.** No public routes. Every page requires an authenticated session; every table has
    RLS requiring a `profiles` row. Signups disabled in Supabase Auth — access only via the invite
    flow. Never log photo coordinates or tokens.
@@ -5875,11 +6000,56 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
   (account adventureorno26). Verify with `gh auth status` at session start; if unauthenticated,
   stop and ask Erica to run `gh auth login`.
 - Work on a focused branch; open a PR with a summary and exact verification counts.
-  Never merge or promote a production deployment while required CI is red. This
-  private repository cannot use GitHub's paid branch protection on the current
-  plan, so enforce the gate through the deployment workflow and human review.
-- Never force-push. The only exception is the separately approved history-scrub
-  procedure, which must stop for Erica's exact approval before any rewrite.
+  Never merge or promote a production deployment while required CI is red.
+- **`main` is protected, and the line that said it could not be is wrong** (corrected
+  2026-08-29). It said *"this private repository cannot use GitHub's paid branch
+  protection on the current plan"*. That was written before the account moved to GitHub
+  Pro (§7d, 2026-08-16) and nobody re-tested it afterwards. **A repository ruleset was
+  created and is `active`**: ruleset `21818125`, "main protection", on `refs/heads/main`,
+  with
+  `deletion`, `non_fast_forward` (force-push), `pull_request` (0 approvals — there is
+  only one reviewer) and `required_status_checks` = **`Release gate`**, the single job
+  that already aggregates build/database/security/smoke. `RepositoryRole 5` (admin)
+  keeps `bypass_mode: always`, so Erica is never locked out of her own repository;
+  everything else has to go through a PR with a green gate.
+  Read it back with `gh api repos/adventureorno26/adventureorno.com/rulesets/21818125`.
+- **Dependabot alerts and automated security fixes are on** (2026-08-29 — both were off,
+  which is why `.github/dependabot.yml` had been opening version PRs but nothing was
+  watching for vulnerabilities). `gh api repos/<repo>/vulnerability-alerts` returns 204
+  when enabled and 404 when not; `automated-security-fixes` reports `{"enabled":true}`.
+- Never force-push. The ruleset now refuses it rather than relying on memory. The only
+  exception is the separately approved history-scrub procedure, which must stop for
+  Erica's exact approval before any rewrite — and now also for a deliberate admin bypass.
+
+#### 2026-08-29 — the working copy had no `.git` at all
+
+`/Users/ericagaffney/Code/adventureorno` was **not a git repository**. No `.git`, so
+`git status`, `git log`, `git diff` and every hook were dead, `gh` had nothing to push,
+and the `.githooks/pre-commit` gate could not run because nothing invoked it. Any edit
+made in that state was one accidental overwrite away from gone — and OneDrive sits on
+this folder, which is the same mechanism that kept restoring the deleted markdown files.
+
+**Nothing was lost.** Before touching anything, the remote was cloned to a scratch
+directory and diffed against the working copy: every tracked file was byte-identical to
+`origin/main` at `9aa0b76`. The only extra entries on disk were already-ignored local
+artifacts (`.env.local`, `.backup-work/`, `supabase/snapshots/`, `app/TimlineTakeout/`,
+build tsbuildinfo, `.wrangler/`) plus `.claude/`, which is now ignored too.
+
+Repaired in place without overwriting a single working file — `git init -b main`, add the
+`origin` remote, `git fetch`, then `git reset --mixed origin/main`, which sets HEAD and the
+index and leaves the working tree alone. `git config core.hooksPath .githooks` was set again
+because that is repo-local config and died with the old `.git`. `git status` came back clean.
+
+**Check this at the start of a session**, because it is silent while it is true:
+
+```sh
+git rev-parse --is-inside-work-tree   # must print true
+git config core.hooksPath             # must print .githooks
+git status --short --branch           # must show a branch tracking origin/main
+```
+
+How it happened is not known — there is no `.git` left to ask. What is known is that the
+condition produced no error anywhere until someone ran a git command.
 
 #### Conventions
 
@@ -6002,7 +6172,23 @@ appear on the map within ~a minute; `/settings → Strava → Backfill` pulls hi
   device ingest token from `.env.local` as `?token=` (C5, §7 — still in plaintext in the
   request logs). **The Shortcut Erica runs today exists only on her phone.** Writing its
   steps down here is a real gap, not a formatting one.
-- Install **Overland** (App Store, free). In its settings:
+- Install **Overland** (App Store, free).
+
+  > ⚠️ **2026-08-29: OVERLAND HAS NEVER DELIVERED A SINGLE PING.** This was written as a
+  > completed setup and it is not one. `select source, count(*) from location_pings` returns
+  > **`timeline` 16,952** (Google Takeout imports, 2025-12-19 → 2026-07-19) and **`app` 191**
+  > (the in-browser location, 2026-07-25 → 2026-08-28). `source='overland'` is **zero rows,
+  > all time**, and `ingest-overland` stamps `last_used_at` on every accepted batch, so this
+  > is not a logging gap — the function has never accepted one. Matching that, the token this
+  > step tells Overland to use — `ERICA_DEVICE_INGEST_TOKEN`, which is the row labelled
+  > *"Erica iPhone — daily Shortcut"* — last authenticated **2026-07-29**, a month ago.
+  >
+  > So there is no live location ingest at all right now: Timeline stopped on 07-19 and
+  > Overland never started. Nothing is broken in a way that logs; it simply never ran. Before
+  > writing any of this off as a credential problem, do the cheap test first — the **Send Now**
+  > step below returns `{"result":"ok"}` when the token is good, and a 401 when it is not.
+
+  In its settings:
   - **Receiver Endpoint URL:**
     `https://aanfyhsjbtnqzphuoiem.supabase.co/functions/v1/ingest-overland?token=<ERICA_DEVICE_INGEST_TOKEN>`
     (the same device token as the photo Shortcut — value is in `.env.local` as
