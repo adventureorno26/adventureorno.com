@@ -2169,11 +2169,36 @@ a destination, a visit, an activity, a trail, and a blank new one.
    | **Notes and reviews** | note + date, and "Write a note or review" at the bottom                                                                                                            | scoped to the visit      |
 7. **The footer**: "Add another visit" · "Delete". On the blank card: **Save · Cancel**.
 
+**THE RESTAURANTS SECTION IS NOT MISSING — audited 2026-08-30.** A live audit reported
+that a saved card tagged Restaurant shows no RESTAURANTS section and offers "+ Add your
+favorite beer" instead. Both halves are working as designed and neither is a bug. The
+section lists the restaurants a place **holds** — member places whose first category is
+`dining`, and entries of kind `dining` — so a place that IS a restaurant holds none and
+correctly has no such section. (San Diego does have one, from the entry "Shorebirds";
+that is what `erica-asked-for.spec.ts` checks.) The beer line comes from the
+winery/brewery **favourites** list, and the one card the audit is describing — *934 South
+Denver Street* — is tagged `dining, bar, brewery`: it shows beer because it is a brewery,
+not because it is a restaurant. There is nothing broken to copy. On a saved card a
+restaurant is added in exactly two ways, and the blank card now mirrors both: the note
+form at the bottom of Notes and reviews with **Kind = Restaurant** (which creates a place
+grouped under this one), and **"+ Add an activity" → Restaurant** inside an open visit.
+
 **The blank (new) card** is the same card with the fields empty: "Add a cover photo",
 "Name this place", the address **prefilled from where you tapped and editable**, and one
 extra question asked **once, here only** — *"Is this a trail with sections?"* Its Visits
 section says **"this is visit one"**, because **saving a new place IS its first visit**.
-Routes and Restaurants say "Added once this first visit is saved".
+
+**AND IT IS FULLY EDITABLE (Erica, 2026-08-30).** Routes, Restaurants and Notes and
+reviews read *"Added once this first visit is saved"* from 2026-08-11 until 2026-08-30,
+because an activity attaches to a VISIT and a blank card has no visit until Save. She has
+now ruled: *"I also think Add should lead to a card where I can add an activity,
+restaurant, notes, etc — it should be fully editable."* So all three take input, using the
+**same controls the saved card uses** — "+ Add an activity" for the routes and the
+restaurants, the shared note form for the notes — and everything is **STAGED**, exactly as
+the name, rating, tags, date and photos already were. Nothing is written until Save;
+Cancel leaves no place, visit, activity or entry behind. The waiting words survive only
+where they are still true: **somewhere to go later has no visit**, and neither does a card
+whose date has been cleared.
 
 **Gone from every card, and it stays gone:**
 
@@ -2216,7 +2241,7 @@ standing is how work gets done twice, which §0.7 exists to prevent.
 | **Category pills** show the whole palette when you can edit     | ✅ the full`CATEGORIES` palette when `canEdit`, this place's tags when not |
 | The**VISIT card** carries every section, narrowed to that visit | ✅**BUILT 2026-08-28** (`d3121d8`). `VisitPage` is `.panel.visit-card` — the same `CardCover`, the same `details.visits-details`/`visit-year`/`visit-row` markup as the destination card, the same carousel, Routes instead of "What we did", and the trip's places grouped into the same category sections. The sub-line is that visit's dates, in the locked format. Six guards, proved red-then-green. **Not yet Live-verified.** |
 | The**TRAIL card**: no Sections list, segment on the visit       | ✅ asserted in`lockedCard.test.ts`                                           |
-| The**BLANK card** — Add opens it                               | ✅**BUILT 2026-08-28** (`6cec2c1`). `NewPlaceDraft` is `.panel.npd-card` — the cover with its slot, the name typed onto it, the rating under the name, the address with an edit, category PILLS, the trail question, then Visits ("this is visit one") · Photos and Videos · Routes · Restaurants ("Added once this first visit is saved") · Notes and reviews, then Save · Cancel. Everything staged; nothing written until Save. Eight guards, proved red-then-green. **Not yet Live-verified.** |
+| The**BLANK card** — Add opens it                               | ✅**BUILT 2026-08-28** (`6cec2c1`). `NewPlaceDraft` is `.panel.npd-card` — the cover with its slot, the name typed onto it, the rating under the name, the address with an edit, category PILLS, the trail question, then Visits ("this is visit one") · Photos and Videos · Routes · Restaurants · Notes and reviews, then Save · Cancel. **All three of Routes, Restaurants and Notes became fillable on 2026-08-30 — see the row below.** Everything staged; nothing written until Save. Eight guards, proved red-then-green. **Not yet Live-verified.** |
 | A**Save button that visibly freezes automation**                | ✅ 2026-08-14, PR#65 — and it says what it froze                              |
 
 **THE CARD, FINISHED — 2026-08-28.** Five items were re-measured against the deployed
@@ -2230,7 +2255,7 @@ before it passed**, which is the only kind of tick this file now accepts.
 | **The VISIT card** is the same card, scoped to one visit          | ✅**BUILT** (`d3121d8`). See the row above.                                                                                                                                                                                                                |
 | **The BLANK card** is the same card with its fields empty         | ✅**BUILT** (`6cec2c1`). See the row above.                                                                                                                                                                                                                |
 | **The trail is asked ONCE**                                       | ✅**BUILT** (`4ec7141`).`"Part of a trail?"` deleted at her instruction; the toggle is what labels a trail.                                                                                                                                                |
-| **Activities can be added on the blank card** (2026-08-12)        | ⚠️**OPEN, AND IT NEEDS HER**. An activity attaches to a VISIT, and a blank card has no visit until Save — which is exactly why the approved preview shows Routes reading "Added once this first visit is saved" on that card. Her 08-12 instruction and the 08-11 preview genuinely disagree. Ask before building either. |
+| **Activities can be added on the blank card** (2026-08-12)        | ✅**BUILT 2026-08-30 — SHE ANSWERED IT.** It was OPEN here for eighteen days: an activity attaches to a VISIT, a blank card has no visit until Save, and her 08-12 instruction and the 08-11 preview ("Added once this first visit is saved") genuinely disagreed. **Erica, 2026-08-30: _"I also think Add should lead to a card where I can add an activity, restaurant, notes, etc — it should be fully editable."_** Built by STAGING, not by creating the place early: `lib/draftStaging.ts` holds the routes, restaurants and notes in the card's own state, and `save()` calls `writeStaged` ONCE, after the place and its first visit exist. A route becomes an activity on that visit, a restaurant from the list becomes a place on it, a plain note an entry, a restaurant REVIEW a place grouped under this one — the same four writes the saved card makes, through the same two components (`AddActivity`, `EntryEditor`). A staged route also makes the card log its manual visit even when there are photos; `rebuild_place_visits` drops a derived island a manual visit already covers, so that does not double-count. Guarded: `draftStaging.test.ts` (11 checks incl. retry-after-failure) and `lockedCard.test.ts` ("stages them — none of the three is written before Save", a source scan proved red first). **Not yet Live-verified.** |
 | **Section headings carry their scope**                            | ⚠️**PARTIAL.** The preview reads "Routes · every visit" and "Photos and videos · this visit"; the destination card renders "Routes (6)". The VISIT card says "this visit" already. |
 
 **HOW THE TWO FALSE TICKS HAPPENED, so it does not again.** A tick in this table is the
