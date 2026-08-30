@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   mapAppearance,
@@ -9,11 +9,15 @@ import {
 } from '../lib/basemap';
 import {
   addCategory,
+  fetchAttention,
   fetchClimbingStatsForPeople,
   fetchGeoCoverageForPeople,
+  fetchImportRuns,
   fetchMapPeople,
   fetchPeaksBaggedForPeople,
   fetchPlaceIdsForPeople,
+  type Attention,
+  type ImportRun,
   type MapPerson,
   type Peak,
   fetchMapProjection,
@@ -42,6 +46,7 @@ import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
 import { nextOpenPanel, panelIsOpen, type OpenPanel } from '../lib/disclosure';
 import type { Place } from '../lib/types';
 import { showSnack } from '../lib/snackbar';
+import { whyItFailed } from '../lib/whyItFailed';
 import {
   backfillPage,
   beginStravaLink,
@@ -972,27 +977,6 @@ function ProjectionCard() {
   );
 }
 
-/** A pointer to /export, not a second export.
- *
- *  This card WAS the export: three buttons, "Download all 162 places", and nothing about
- *  the 567 outings, 552 visits, 178 photos or the journal. Data health carried the same
- *  three buttons under the words "Download everything you can take with you". Two screens,
- *  one incomplete export, and a sentence that was not true — so both now point at one
- *  screen that distinguishes the places, the outings and the whole archive (§3e Step 7). */
-function ExportCard() {
-  return (
-    <div className="card">
-      <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
-        The places (CSV/GPX/KML), the outings with their routes, or the whole archive as one file.
-        Each says what it contains — and what it doesn&rsquo;t — before you download it.
-      </p>
-      <Link to="/export" className="as-button">
-        Export &amp; backup
-      </Link>
-    </div>
-  );
-}
-
 /** Upload Garmin (or any) GPX/TCX activity files — the Strava-limit workaround.
  *  Parses each client-side and imports it, attributed to whoever's signed in. */
 function GarminImportCard() {
@@ -1262,8 +1246,301 @@ function StravaCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
-export default function Settings() {
+/**
+ * IMPORT HISTORY — the ledger every import already writes to, finally readable.
+ *
+ * The approved contract (2026-08-20) puts "connection state and import history"
+ * under Integrations. `ingest_runs` has recorded every run since 0148 and members
+ * have been able to SELECT it since 0202; nothing in the app ever showed one, so
+ * "what did that import actually do?" had no answer outside SQL.
+ */
+function ImportHistoryCard() {
+  const [runs, setRuns] = useState<ImportRun[] | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    fetchImportRuns()
+      .then(setRuns)
+      .catch((e) =>
+        setProblem(
+          whyItFailed('Couldn’t read the import history', e, { online: navigator.onLine }),
+        ),
+      );
+  }, []);
+  const when = (iso: string): string =>
+    new Date(iso).toLocaleString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <b>Import history</b>
+      <div style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 10px' }}>
+        Every import writes to a ledger — what came in, what was already there, and what could not
+        be read. This is that ledger.
+      </div>
+      {problem ? (
+        <div className="banner">{problem}</div>
+      ) : runs === null ? (
+        <p className="label">Loading…</p>
+      ) : runs.length === 0 ? (
+        <p className="label">No imports recorded yet.</p>
+      ) : (
+        <div className="visit-list">
+          {runs.map((r) => (
+            <div key={r.id} className="visit-row">
+              <span className="visit-main">
+                {r.source}
+                {r.method ? ` · ${r.method}` : ''}
+              </span>
+              <span className="label">
+                {when(r.started_at)} · {r.ok} in{r.failed > 0 ? `, ${r.failed} failed` : ''}
+                {r.finished_at ? '' : ' · still running'}
+                {r.status && r.status !== 'ok' ? ` · ${r.status}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * MESSAGING AND EVENT PRIVACY — named by the contract, backed by nothing yet.
+ *
+ * The approved section list includes it, and there are no events and no messages in
+ * this app: no tables, no routes, no screens. Rendering plausible-looking switches
+ * would be inventing controls that do nothing, which is the exact class of defect
+ * the rest of this change exists to remove. So the section is here, under its
+ * approved name, saying what is true.
+ */
+function MessagingPrivacyCard() {
+  return (
+    <div className="card">
+      <p style={{ margin: 0, color: 'var(--muted)', fontSize: 14 }}>
+        Nothing to set yet — there are no events and no messages in the app, so there is no privacy
+        to choose for them. This section is here because the approved plan puts these settings here;
+        the controls arrive with the features, not before them.
+      </p>
+    </div>
+  );
+}
+
+/** What is waiting in the repair queue, counted here so the section says something
+ *  true rather than being a label over a link. Same counts as the queue itself. */
+function NeedsAttentionCard() {
+  const [a, setA] = useState<Attention | null>(null);
+  useEffect(() => {
+    fetchAttention()
+      .then(setA)
+      .catch(() => setA(null));
+  }, []);
+  const total = a
+    ? a.reviewCards +
+      a.tagsToConfirm +
+      a.photoTagsToConfirm +
+      a.unassignedPhotos +
+      a.photosNoDate +
+      a.unnamedPlaces +
+      a.missingCategories +
+      a.missingDates +
+      a.activitiesNoPlace +
+      a.duplicatePlaces
+    : null;
+  return (
+    <div className="card">
+      <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+        The only repair queue: names to confirm, photos to sort, tags to answer and places that may
+        be the same place. Every row opens the exact records it counted.
+      </p>
+      <p className="label" style={{ margin: '0 0 10px' }}>
+        {total === null
+          ? 'Checking…'
+          : total === 0
+            ? 'All clear — nothing is waiting.'
+            : `${total} thing${total === 1 ? '' : 's'} waiting.`}
+      </p>
+      <Link to="/settings/data/attention" className="as-button primary">
+        Needs attention
+      </Link>
+    </div>
+  );
+}
+
+/** Data Management — the tools for tidying everything up, on their own destination
+ *  (`/settings/data/manage`) as the approved route table names it. */
+function DataManagementCard() {
+  return (
+    <div className="card">
+      <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+        Tools for tidying everything up — edit every place in one table, sort photos, merge
+        duplicates, and check the health of your data.
+      </p>
+      <div className="settings-tools">
+        {/* "Review inbox" USED TO BE A SECOND BUTTON HERE, pointing at /inbox
+            (which redirects to the repair queue). Erica, 2026-08-18: "Needs Attention
+            and Review Inbox are redundant. Put anything unique in Review Inbox into
+            needs attentions." Two screens listing what is waiting is one too many, and
+            the cards are now the first rows of Needs attention. */}
+        <Link to="/places/edit" className="as-button primary">
+          Edit all places
+        </Link>
+        {/* Importing and sorting photos lives HERE — Erica: "Move Import and Sort
+            Photos into Settings." The sorter is both: it pulls from the device and
+            Google Photos, then sorts what arrives. */}
+        <Link to="/photos/sort" className="as-button">
+          Import &amp; sort photos
+        </Link>
+        <Link to="/albums" className="as-button">
+          Smart albums
+        </Link>
+        <Link to="/insights?tab=timeline" className="as-button">
+          Timeline
+        </Link>
+        <Link to="/duplicates" className="as-button">
+          Duplicate places
+        </Link>
+        <Link to="/health" className="as-button">
+          Data health
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SETTINGS HAS EXACTLY THREE DESTINATIONS.
+ *
+ *   Account | Integrations | Data & Privacy
+ *
+ * Approved 2026-08-20 and RULED DEFINITIVE by Erica on 2026-08-30, which settled a
+ * contradiction that had been sitting in docs/STATE.md unresolved:
+ *
+ *   - 2026-08-11: "One continuous page … No section labels — not 'Account', not
+ *     'People'." (This is the instruction the previous version of this file obeyed.)
+ *   - 2026-08-20: Settings has exactly three destinations.
+ *
+ * Her ruling: use the 08-20 plan. The 08-11 "no section labels" instruction is
+ * retired and must not be cited again. So the labels are back, and they are
+ * destinations rather than the five-tab bar that 08-11 removed — every card that was
+ * on the one long page is still here, under the destination whose written definition
+ * covers it, and nothing was dropped.
+ *
+ * `Data & Privacy` is deliberately still ONE CONTINUOUS PAGE, not pills or sub-tabs:
+ * the contract says so in as many words. Its deeper screens (`/settings/data/attention`,
+ * `/manage`, `/export`, `/trash`) are the work, not a second level of navigation.
+ */
+export type SettingsDestination = 'account' | 'integrations' | 'data' | 'data-manage';
+
+const DESTINATIONS: { to: string; label: string }[] = [
+  { to: '/settings/account', label: 'Account' },
+  { to: '/settings/integrations', label: 'Integrations' },
+  { to: '/settings/data', label: 'Data & Privacy' },
+];
+
+/** Back-bar, title and the three destinations — the frame every one of them sits in. */
+function SettingsShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="settings-page">
+      <Link className="back-bar" to="/">
+        <span>Map</span>
+      </Link>
+      <h1>Settings</h1>
+      {/* NOT `.settings-tabs`. That class was the five-tab bar Erica had removed on
+          2026-08-11, and it stays gone — these are the three approved DESTINATIONS,
+          which is a different thing with a different contract. */}
+      <nav className="settings-dests" aria-label="Settings">
+        {DESTINATIONS.map((d) => (
+          <NavLink
+            key={d.to}
+            to={d.to}
+            // Data & Privacy stays lit on its own deeper screens.
+            end={d.to !== '/settings/data'}
+            className={({ isActive }) => (isActive ? 'on' : '')}
+          >
+            {d.label}
+          </NavLink>
+        ))}
+      </nav>
+      {children}
+    </div>
+  );
+}
+
+/** Identity, preferences, and Map Appearance. */
+function AccountDestination() {
   const { profile, signOut } = useAuth();
+  return (
+    <>
+      <p style={{ color: 'var(--muted)' }}>
+        Signed in as <b>{profile?.display_name ?? 'you'}</b> · role <b>{profile?.role}</b>
+      </p>
+      <button onClick={() => void signOut()}>Sign out</button>
+
+      <h2 style={{ marginTop: 28 }}>Map appearance</h2>
+      <MapAppearanceSection />
+      {profile?.role === 'owner' && <ProjectionCard />}
+
+      <h2 style={{ marginTop: 28 }}>Tags</h2>
+      <TagsCard />
+
+      {/* STATS LIVES UNDER ACCOUNT, and this is the one placement the approved
+          section list does not name — reported rather than quietly filed.
+          Erica moved Stats onto Settings herself ("No stats bar on Places",
+          2026-08-15) and asked twice for Trips to sit inside it. It is not an
+          integration and it is not a privacy control, so of the three destinations
+          Account is the honest one: a personal summary, beside the other things
+          that are about you. */}
+      <h2 style={{ marginTop: 28 }}>Stats</h2>
+      <StatsSection />
+    </>
+  );
+}
+
+/** Connected sources, connection state and import history. */
+function IntegrationsDestination() {
+  const { profile } = useAuth();
+  return (
+    <>
+      <h2 style={{ marginTop: 28 }}>Strava &amp; Garmin</h2>
+      {profile ? (
+        <>
+          <StravaCard isOwner={profile.role === 'owner'} />
+          <GarminImportCard />
+        </>
+      ) : null}
+
+      <h2 style={{ marginTop: 28 }}>Google Timeline</h2>
+      <div className="card">
+        <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+          Bring a Google Timeline export in as location history. It feeds the map fog and the places
+          that get created from where you have actually been.
+        </p>
+        {/* MOVED HERE FROM "Places & location". It is a source you connect, which is
+            this destination's whole definition — the clustering and naming JOBS that
+            run over the result stayed under Data & Privacy ▸ Location. */}
+        <Link to="/settings/import" className="as-button">
+          Import Google Timeline…
+        </Link>
+      </div>
+
+      <h2 style={{ marginTop: 28 }}>Import history</h2>
+      <ImportHistoryCard />
+    </>
+  );
+}
+
+/**
+ * ONE DESTINATION AND ONE CONTINUOUS PAGE — not pills, not sub-tabs.
+ *
+ * Sections in the order the contract sets them out: Location, Sharing, People and
+ * tag approvals, Messaging and event privacy, Needs attention, Your data.
+ */
+function DataPrivacyDestination() {
+  const { profile } = useAuth();
   const [members, setMembers] = useState<MapPerson[]>([]);
   useEffect(() => {
     fetchMapPeople()
@@ -1274,151 +1551,87 @@ export default function Settings() {
     .map((m) => m.display_name)
     .filter(Boolean)
     .join(' & ');
-
-  // ONE PAGE, not five tabs. Erica, 2026-08-11: "everything from account,
-  // connections, privacy, data, and advanced should [be] extracted and added to one
-  // page, nicely styled... I don't need the labels like Account etc make it look
-  // like a seamless page."
-  //
-  // Every card that was behind a tab is still here, in the same order, just
-  // continuous — and the group labels the tabs implied are gone with them.
+  const canManage = profile?.role === 'owner' || profile?.role === 'editor';
 
   return (
-    <div
-      className="settings-page"
-      style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px 96px' }}
-    >
-      <Link className="back-bar" to="/">
-        <span>Map</span>
-      </Link>
-      <h1>Settings</h1>
-      <p style={{ color: 'var(--muted)' }}>
-        Signed in as <b>{profile?.display_name ?? 'you'}</b> · role <b>{profile?.role}</b>
-      </p>
+    <>
+      <h2 style={{ marginTop: 28 }}>Location</h2>
+      {profile && <TrackingCard myId={profile.id} />}
+      {profile?.role === 'owner' && <GeocodeCard />}
 
-      {
-        <>
-          <button onClick={() => void signOut()}>Sign out</button>
-
-          {profile?.role === 'owner' && (
-            <>
-              {/* Join requests are PART OF People, not a section of their own
-                  (Erica, 2026-08-11) — someone asking to join is a person, and
-                  the page reads as one thing instead of two stacked lists. */}
-              <h2 style={{ marginTop: 28 }}>People</h2>
-              {/* TWO DIFFERENT LISTS, and the order says which is which. Membership is who
-                  can SIGN IN; below it are the people you can TAG, who need no account —
-                  §8b-i keeps account access and memory participation apart on purpose. */}
-              <JoinRequestsCard />
-              <PeopleCard meId={profile.id} />
-              <h3 style={{ margin: '20px 0 8px' }}>Your people</h3>
-              <YourPeopleCard />
-            </>
-          )}
-        </>
-      }
-
-      {profile && (
-        <>
-          <h2 style={{ marginTop: 20 }}>Strava &amp; Garmin</h2>
-          <StravaCard isOwner={profile.role === 'owner'} />
-          <GarminImportCard />
-        </>
-      )}
-
-      {
-        <>
-          <h2 style={{ marginTop: 20 }}>{memberNames ? `Shared — ${memberNames}` : 'Shared'}</h2>
-          <SharedHub />
-
-          {profile && (
-            <>
-              <h2 style={{ marginTop: 28 }}>Location tracking</h2>
-              <TrackingCard myId={profile.id} />
-            </>
-          )}
-        </>
-      }
-
-      {
-        <>
-          <h2 style={{ marginTop: 20 }}>Map appearance</h2>
-          <MapAppearanceSection />
-
-          <h2 style={{ marginTop: 20 }}>Stats</h2>
-          <StatsSection />
-
-          {(profile?.role === 'owner' || profile?.role === 'editor') && (
-            <>
-              <h2 style={{ marginTop: 28 }}>Manage data</h2>
-              <div className="card">
-                <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
-                  Tools for tidying everything up — edit every place in one table, sort photos,
-                  review what needs attention, merge duplicates, and check the health of your data.
-                </p>
-                <div className="settings-tools">
-                  {/* "Review inbox" USED TO BE A SECOND BUTTON HERE, pointing at /inbox
-                      (which redirects to /add). Erica, 2026-08-18: "Needs Attention and
-                      Review Inbox are redundant. Put anything unique in Review Inbox into
-                      needs attentions." Two screens listing what is waiting is one too
-                      many, and the cards are now the first two rows of Needs attention —
-                      which is also the first place she looked for them and did not find
-                      them. The cards themselves are unchanged and still live on /add. */}
-                  <Link to="/places/edit" className="as-button primary">
-                    Edit all places
-                  </Link>
-                  {/* Importing and sorting photos, and importing activity files, live
-                      HERE now — Erica: "Move Import and Sort Photos into Settings. Move
-                      import activities to settings." The sorter is both: it pulls from
-                      the device and Google Photos, then sorts what arrives. */}
-                  <Link to="/photos/sort" className="as-button">
-                    Import &amp; sort photos
-                  </Link>
-                  {/* "Import an activity file" POINTED AT A ROUTE THAT DOES NOT EXIST —
-                      /import/timeline. The router has /settings/import (Google Timeline),
-                      and the GPX/TCX/FIT importer is a card on THIS page already. So the
-                      button was a dead end AND a duplicate of something a few inches away.
-                      Removed rather than repointed: the working importer is right here. */}
-                  <Link to="/attention" className="as-button">
-                    Needs attention
-                  </Link>
-                  <Link to="/albums" className="as-button">
-                    Smart albums
-                  </Link>
-                  <Link to="/insights?tab=timeline" className="as-button">
-                    Timeline
-                  </Link>
-                  <Link to="/duplicates" className="as-button">
-                    Duplicate places
-                  </Link>
-                  <Link to="/health" className="as-button">
-                    Data health
-                  </Link>
-                  <Link to="/trash" className="as-button">
-                    Trash
-                  </Link>
-                </div>
-              </div>
-            </>
-          )}
-
-          <h2 style={{ marginTop: 28 }}>Tags</h2>
-          <TagsCard />
-
-          <h2 style={{ marginTop: 28 }}>Export our data</h2>
-          <ExportCard />
-        </>
-      }
+      <h2 style={{ marginTop: 28 }}>Sharing{memberNames ? ` — ${memberNames}` : ''}</h2>
+      <SharedHub />
 
       {profile?.role === 'owner' && (
         <>
-          <h2 style={{ marginTop: 20 }}>Map</h2>
-          <ProjectionCard />
-
-          <h2 style={{ marginTop: 28 }}>Places &amp; location</h2>
-          <GeocodeCard />
+          {/* TWO DIFFERENT LISTS, and the order says which is which. Membership is who
+              can SIGN IN; below it are the people you can TAG, who need no account —
+              §8b-i keeps account access and memory participation apart on purpose. */}
+          <h2 style={{ marginTop: 28 }}>People and tag approvals</h2>
+          <JoinRequestsCard />
+          <PeopleCard meId={profile.id} />
+          <h3 style={{ margin: '20px 0 8px' }}>Your people</h3>
+          <YourPeopleCard />
         </>
       )}
-    </div>
+
+      <h2 style={{ marginTop: 28 }}>Messaging and event privacy</h2>
+      <MessagingPrivacyCard />
+
+      <h2 style={{ marginTop: 28 }}>Needs attention</h2>
+      <NeedsAttentionCard />
+
+      <h2 style={{ marginTop: 28 }}>Your data</h2>
+      <div className="card">
+        <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+          Everything you can tidy, take with you, or put back.
+        </p>
+        <div className="settings-tools">
+          {canManage && (
+            <Link to="/settings/data/manage" className="as-button primary">
+              Data Management
+            </Link>
+          )}
+          {/* A POINTER TO /export, NOT A SECOND EXPORT. This card WAS the export: three
+              buttons, "Download all 162 places", and nothing about the outings, visits,
+              photos or the journal. Both screens point at one now (§3e Step 7). */}
+          <Link to="/settings/data/export" className="as-button">
+            Export &amp; backup
+          </Link>
+          <Link to="/settings/data/trash" className="as-button">
+            Trash
+          </Link>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Which destination the URL is asking for. Read from the path rather than passed
+ *  as a prop: the routes are lazily loaded through `lazyWithReload`, whose signature
+ *  takes no props, and the path IS the destination. */
+function destFromPath(pathname: string): SettingsDestination {
+  if (pathname.startsWith('/settings/integrations')) return 'integrations';
+  if (pathname.startsWith('/settings/data/manage')) return 'data-manage';
+  if (pathname.startsWith('/settings/data')) return 'data';
+  return 'account';
+}
+
+export default function Settings() {
+  const dest = destFromPath(useLocation().pathname);
+  if (dest === 'data-manage') {
+    return (
+      <SettingsShell>
+        <h2 style={{ marginTop: 28 }}>Data Management</h2>
+        <DataManagementCard />
+      </SettingsShell>
+    );
+  }
+  return (
+    <SettingsShell>
+      {dest === 'account' && <AccountDestination />}
+      {dest === 'integrations' && <IntegrationsDestination />}
+      {dest === 'data' && <DataPrivacyDestination />}
+    </SettingsShell>
   );
 }

@@ -96,6 +96,8 @@ test.describe('authenticated app (non-destructive)', () => {
   // Nothing is orphaned: the retired Inbox tab's URL still works.
   // REWRITTEN 2026-08-28, same cause. WAS: "/inbox lands on Add". #134 repointed it at
   // /attention, which is where the cards it used to hold actually live now.
+  // The path moved with the 08-20 restructure: Needs attention is a section of Data &
+  // Privacy now (/settings/data/attention), and /attention redirects there too.
   test('the retired /inbox lands on Needs attention', async ({ page }) => {
     await page.goto('/inbox');
     await expect(page).toHaveURL(/\/attention$/);
@@ -141,20 +143,61 @@ test.describe('authenticated app (non-destructive)', () => {
     expect(tabs.map((t) => t.trim())).toEqual(['Map', 'Add', 'Insights', 'Settings']);
   });
 
-  // Settings is ONE continuous page since 2026-08-11 — no tabs to click through.
-  // Erica: "everything from account, connections, privacy, data, and advanced
-  // should [be] extracted and added to one page... make it look like a seamless page."
-  test('Settings is one page, with no tab bar to click through', async ({ page }) => {
+  // REWRITTEN 2026-08-30, and the reason is a RULING rather than a drift.
+  //
+  //   WAS (2026-08-11): "Settings is one page, with no tab bar to click through."
+  //   Erica: "everything from account, connections, privacy, data, and advanced should
+  //   [be] extracted and added to one page... make it look like a seamless page."
+  //   NOW (2026-08-20, ruled definitive 2026-08-30): Settings has EXACTLY THREE
+  //   destinations — Account | Integrations | Data & Privacy.
+  //
+  // Those two instructions contradicted each other and both were live in docs/STATE.md
+  // until 2026-08-30, when Erica ruled for the 08-20 plan and retired the 08-11 "no
+  // section labels" line by name. The old expectation is recorded rather than deleted.
+  //
+  // `.settings-tabs` STAYS PINNED AT ZERO: that class was the FIVE-tab bar 08-11
+  // removed, its CSS is deleted, and nothing may bring it back. The three destinations
+  // are `.settings-dests`, which is a different contract — and asserted, so this check
+  // cannot pass against a Settings page that simply lost its navigation.
+  test('Settings has exactly the three approved destinations', async ({ page }) => {
     await page.goto('/settings');
+    // /settings is not itself a destination — it lands on Account.
+    await expect(page).toHaveURL(/\/settings\/account$/);
     await expect(page.locator('.settings-tabs')).toHaveCount(0);
-    // Things that used to live under four different tabs are all on the one page.
-    await expect(page.getByRole('heading', { name: 'Manage data' })).toBeVisible();
-    // A LINK, not a button — and it always was. Same shape as the "Import & sort photos"
-    // correction already recorded in erica-asked-for.spec.ts: asking for role=button asked
-    // for something that was never there, and went red against a Settings page that has had
-    // the control all along. What she asked is that it BE on Settings, and it is.
-    await expect(page.getByRole('link', { name: 'Data health' })).toBeVisible();
+    const dests = await page.locator('.settings-dests a').allTextContents();
+    expect(dests.map((t) => t.trim())).toEqual(['Account', 'Integrations', 'Data & Privacy']);
+    // Identity is Account's, by the contract's own words.
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  });
+
+  // Nothing was dropped in the restructure: each destination still carries the cards
+  // that used to sit under its heading on the one long page.
+  test('every destination carries what moved into it', async ({ page }) => {
+    await page.goto('/settings/account');
+    await expect(page.getByRole('heading', { name: 'Map appearance' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Stats' })).toBeVisible();
+
+    await page.goto('/settings/integrations');
+    await expect(page.getByRole('heading', { name: /Strava/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Import history' })).toBeVisible();
+
+    // Data & Privacy is ONE CONTINUOUS PAGE — the contract says so in as many words —
+    // so every section is on it at once, not behind pills or sub-tabs.
+    await page.goto('/settings/data');
+    for (const heading of [
+      /^Location$/,
+      /^Sharing/,
+      /^Messaging and event privacy$/,
+      /^Needs attention$/,
+      /^Your data$/,
+    ]) {
+      await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    }
+    // A LINK, not a button — and it always was. Same shape as the "Import & sort photos"
+    // correction recorded in erica-asked-for.spec.ts: asking for role=button asked for
+    // something that was never there. Data health moved with the rest of Data Management.
+    await page.goto('/settings/data/manage');
+    await expect(page.getByRole('link', { name: 'Data health' })).toBeVisible();
   });
 
   // ONE VERB PER SCREEN (2026-08-20). Erica: "Needs Attention and Review Inbox are
@@ -162,9 +205,9 @@ test.describe('authenticated app (non-destructive)', () => {
   // /inbox redirecting there. She asked where the pending cards were because they were
   // filed under the wrong verb.
   //
-  //     /add        create and import
-  //     /attention  repair            ← the cards
-  //     /inbox      redirects to /attention
+  //     /add                          create and import
+  //     /settings/data/attention      repair            ← the cards
+  //     /inbox, /attention            redirect there
   //
   // Pinned because it is exactly the kind of thing that drifts back: an embedded queue is
   // easy to drop onto whichever page someone is working on next.
