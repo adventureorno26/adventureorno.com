@@ -1913,6 +1913,25 @@ button.panel-hero-slot:hover {
   margin: 20px auto;
   padding: 0 16px var(--pnav-clearance);
 }
+/* ARRIVED FROM A REPAIR TILE — what is being shown, and how to fix it.
+   The tile used to open the whole 168-row table with nothing narrowed, so the
+   press looked like it had done nothing. */
+.pe-needs {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.pe-needs .label {
+  flex: 1 1 260px;
+}
+
 .pe-controls {
   display: flex;
   align-items: center;
@@ -2462,34 +2481,38 @@ button.panel-hero-slot:hover {
 }
 
 /* Uniform grid of tool buttons inside the "Edit all places" card (no overflow). */
-/* Settings destination tabs (Prompt 7 rec 41). Sticky so they stay reachable while
-   scrolling a section. */
-.settings-tabs {
+/* SETTINGS' THREE DESTINATIONS — Account | Integrations | Data & Privacy.
+   Approved 2026-08-20, ruled definitive 2026-08-30.
+
+   The `.settings-tabs` rules that were here are DELETED, not renamed: they dressed
+   the five-tab bar Erica had removed on 2026-08-11 ("make it look like a seamless
+   page"), nothing has rendered that class since, and `app.spec.ts` pins it at zero.
+   These are the three destinations, and they wear the underline treatment the
+   Insights tabs already use — text controls, thin divider, no decorative pill, and
+   no accent FILL, which is the shape that put white on #3b82f6 and failed AA. */
+.settings-dests {
   display: flex;
+  gap: 4px;
+  margin: 12px 0 18px;
+  border-bottom: 1px solid var(--border-soft);
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 14px 0 4px;
-  position: sticky;
-  top: 0;
-  background: var(--bg, #0f1115);
-  padding: 8px 0;
-  z-index: 3;
 }
-.settings-tabs button {
-  padding: 7px 14px;
-  min-height: 36px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 13px;
+.settings-dests a {
+  padding: 8px 14px;
+  border-bottom: 2px solid transparent;
   font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: none;
 }
-.settings-tabs button.on {
+.settings-dests a:hover {
   color: var(--text);
-  border-color: var(--accent, #38bdf8);
-  background: color-mix(in srgb, var(--accent, #38bdf8) 16%, transparent);
+  border-bottom-color: var(--border);
+}
+.settings-dests a.on,
+.settings-dests a.on:hover {
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .settings-tools {
@@ -5021,7 +5044,16 @@ textarea {
 .fav-del:hover {
   color: #f87171;
 }
-/* Settings — smaller headings + thinner pills. */
+/* Settings — smaller headings + thinner pills.
+   The wrapper used to carry `maxWidth: 640; margin: 40px auto; padding: 0 20px 96px`
+   as an inline style. The 96px was a hand-rolled copy of the floating nav's
+   footprint, and `acceptance.spec.ts` reported it as the same inline-wrapper pattern
+   every other route was fixed for — it is `--pnav-clearance` now, like `.page`. */
+.settings-page {
+  max-width: 640px;
+  margin: 40px auto;
+  padding: 0 20px var(--pnav-clearance);
+}
 .settings-page h1 {
   font-size: 22px;
 }
@@ -6870,6 +6902,22 @@ button.mi-row:hover {
   flex-wrap: wrap;
   margin-top: 4px;
 }
+/* WHY THE CARD DID NOT MOVE.
+   A failed RPC used to leave the card exactly where it was and say nothing that
+   outlived a six-second toast, so pressing the button and the button doing nothing
+   looked the same (measured live, 2026-08-30). This sits beside the control that
+   failed and stays until the next attempt. Text, no icon — the standing rule. */
+.ic-problem {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #6b2a2a;
+  border-left: 3px solid var(--danger);
+  border-radius: 8px;
+  background: #2a1414;
+  color: #ffc9c9;
+  font-size: 13px;
+  line-height: 1.45;
+}
 /* THE MAP CREDIT — quiet, but never hidden.
    Erica, 2026-08-17: "alter the OSM info to be less visible."
 
@@ -7458,8 +7506,13 @@ button.mi-row:hover {
 .attention-page {
   max-width: 860px;
 }
-.attn-cards {
+/* Both fragment targets ("Review them", "See them"). Scroll-margin so the jump does
+   not land the heading under the sticky back-bar — a jump you cannot see is the same
+   dead button the tiles already were (2026-08-30). */
+.attn-cards,
+.attn-section {
   margin-top: 26px;
+  scroll-margin-top: 64px;
 }
 
 /* Export & backup (/export). The table of contents is the point of the screen:

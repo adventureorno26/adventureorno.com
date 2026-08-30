@@ -111,7 +111,7 @@ export default function Wrapped() {
 
   return (
     <div className="wrapped">
-      <Link className="back-bar" to="/settings">
+      <Link className="back-bar" to="/settings/account">
         <span>Settings</span>
       </Link>
 

@@ -462,18 +462,74 @@ it.describe('the rest of the app — what she asked for', () => {
     }
   });
 
-  it('Settings is ONE page, no tabs', async ({ page }) => {
+  // REWRITTEN 2026-08-30 under rule 4 at the top of this file, and it is a RULING
+  // rather than a drift — which is the one case rule 4 exists for.
+  //
+  //   WAS (2026-08-11): "Settings is ONE page, no tabs." Erica: "everything from
+  //                     account, connections, privacy, data, and advanced should [be]
+  //                     extracted and added to one page… I don't need the labels like
+  //                     Account etc make it look like a seamless page."
+  //   NOW (2026-08-20, RULED DEFINITIVE 2026-08-30): Settings has EXACTLY THREE
+  //                     destinations — Account | Integrations | Data & Privacy.
+  //
+  // Both instructions sat in docs/STATE.md contradicting each other and neither had
+  // been retired. On 2026-08-30 Erica ruled for the 08-20 plan and retired the 08-11
+  // "no section labels" line by name: *"use the 08-20 three-destination plan. The
+  // 08-11 'no section labels' instruction is hereby retired and must not be cited
+  // again."* The older instruction is recorded here rather than deleted.
+  //
+  // `.settings-tabs` STILL HAS TO BE ZERO. That class was the FIVE-tab bar 08-11
+  // removed and its CSS is deleted with this change; it may not come back under cover
+  // of the new contract. The three destinations are `.settings-dests`, and they are
+  // asserted BY NAME — so this cannot pass against a Settings page that quietly lost
+  // its navigation, and it cannot pass against one that grew a fourth destination.
+  it('Settings has exactly three destinations: Account | Integrations | Data & Privacy', async ({
+    page,
+  }) => {
     await ready(page, '/settings');
+    // A positive assertion first: a count of zero proves nothing until the screen has
+    // rendered, which is this file's own hardest-learned rule.
+    const dests = page.locator('.settings-dests a');
+    await expect(dests.first()).toBeVisible();
+    expect((await dests.allTextContents()).map((t) => t.trim())).toEqual([
+      'Account',
+      'Integrations',
+      'Data & Privacy',
+    ]);
     await expect(page.locator('.settings-tabs')).toHaveCount(0);
   });
 
+  it('Data & Privacy is ONE destination and ONE continuous page', async ({ page }) => {
+    // "…not Location/Data pills or separate Data/Privacy destinations" — so every
+    // section is on the page at once, in the order the contract sets them out.
+    await ready(page, '/settings/data');
+    await expect(page.getByRole('heading', { name: /^Location$/ })).toBeVisible();
+    for (const heading of [
+      /^Sharing/,
+      /^Messaging and event privacy$/,
+      /^Needs attention$/,
+      /^Your data$/,
+    ]) {
+      await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    }
+  });
+
   it('"Move Import and Sort Photos into Settings"', async ({ page }) => {
-    await ready(page, '/settings');
+    // THE PATHS MOVED, THE INSTRUCTION DID NOT. Both controls were on `/settings` when
+    // Settings was one long page. Under the three-destination contract ruled definitive
+    // on 2026-08-30 they sit in the destination whose written definition covers them:
+    // sorting photos is Data Management (Data & Privacy ▸ Your data), and a Garmin file
+    // is a connected source (Integrations). Her instruction was that they BE in
+    // Settings, and they are — so this follows them rather than going red against a
+    // page that is now correct, which is the stale-assertion trap this file's own
+    // helper already records.
+    await ready(page, '/settings/data/manage');
     // A LINK, not a button. It has always been an `<a>` styled `as-button`, so asking for
     // role=button asked for something that was never there and failed against a Settings
     // page that has had the control all along. What she asked for is that the control BE
     // on Settings, and it is; the role is how it gets there.
     await expect(page.getByRole('link', { name: /Import & sort photos/i })).toBeVisible();
+    await ready(page, '/settings/integrations');
     // THE BUTTON WENT, AND THE THING IT PROMISED STAYED. This asserted an "Import an
     // activity file" button on Settings. That button pointed at `/import/timeline`, a route
     // that does not exist, AND duplicated the working GPX/TCX/FIT importer sitting a few

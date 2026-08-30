@@ -9,7 +9,7 @@ export default function ImportTimeline() {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (profile && profile.role !== 'owner') return <Navigate to="/settings" replace />;
+  if (profile && profile.role !== 'owner') return <Navigate to="/settings/integrations" replace />;
 
   async function handleFile(file: File) {
     setBusy(true);
@@ -59,7 +59,7 @@ export default function ImportTimeline() {
 
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: '0 20px' }}>
-      <Link className="back-bar" to="/settings">
+      <Link className="back-bar" to="/settings/integrations">
         <span>Settings</span>
       </Link>
       <h1>Import Google Timeline</h1>

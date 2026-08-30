@@ -20,7 +20,12 @@ const ROUTES = [
   '/places',
   '/timeline',
   '/?add=1',
+  // ALL THREE SETTINGS DESTINATIONS (2026-08-30). '/settings' redirects to Account, so
+  // scanning it alone left Integrations and the whole of Data & Privacy — the longest
+  // page in the app, and the one with the most controls — unscanned.
   '/settings',
+  '/settings/integrations',
+  '/settings/data',
   '/health',
   '/bucket',
   // The review queue. New surface, and the one with the most controls per card:

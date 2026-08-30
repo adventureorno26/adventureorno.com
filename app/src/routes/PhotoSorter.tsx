@@ -526,7 +526,7 @@ export default function PhotoSorter() {
   if (!canEdit) {
     return (
       <div className="photo-sorter">
-        <Link className="back-bar" to="/settings">
+        <Link className="back-bar" to="/settings/data/manage">
           <span>Settings</span>
         </Link>
         <p>Only editors can sort photos into places.</p>
@@ -542,7 +542,7 @@ export default function PhotoSorter() {
 
   return (
     <div className="photo-sorter">
-      <Link className="back-bar" to="/settings">
+      <Link className="back-bar" to="/settings/data/manage">
         <span>Settings</span>
       </Link>
       <h1>Sort photos into places</h1>
