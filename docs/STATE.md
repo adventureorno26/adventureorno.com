@@ -4647,6 +4647,67 @@ finding an element "covered" by its own ancestor (`covered by settings-page`), w
 normal and not a fault. Repositioning chrome is a locked design decision per the same header,
 so nothing was changed.
 
+### 6j. SIX READERS COUNTED THE SAME OUTING TWICE — `0278`, 2026-08-30
+
+The canonical key of an outing is **`coalesce(shared_group_id, id)`**, not `id`. Two people
+recording the same run make two `activities` rows tied by `shared_group_id` (0140/0141), and
+a reader that does not collapse to that key reports the number of *recordings* while the
+screen says *outings*.
+
+`mileage_by_person_for_people` has collapsed since it was written. **Six readers did not**,
+and `0261` carried five of them across to the people-aware variants verbatim — its own note
+says *"the bodies are otherwise untouched"*, which was true and is exactly how the defect
+propagated:
+
+    activities_of_type_for_people · race_stats_for_people · races_list_for_people
+    activities_of_type            · race_stats            · races_list
+
+**Exposure, measured 2026-08-30:** 572 activities, 91 in a `shared_group_id`, 31 groups with
+more than one member — so **57 rows are second recordings** of an outing already in the set.
+By type: Run 279 rows / 247 canonical (+32), Hike 152 / 137 (+15), Walk 130 / 121 (+9). Ride,
+Swim and Workout have none.
+
+Row counts in `activities` are not the same claim as rows a person sees — `visible_activities`
+is per-viewer — so each reader was called as each of the three accounts inside a rolled-back
+transaction, before and after:
+
+| reader | | Erica | Josh | Test bot |
+| ------ | - | ----- | ---- | -------- |
+| `activities_of_type_for_people('Run', '{}', 'all')` | | 216 → **200** | 248 → **216** | 168 → **165** |
+| …`'Hike'` | | 139 → **134** | 71 → **56** | 41 → 41 |
+| …`'Walk'` | | 115 → **106** | 105 → **98** | 79 → **74** |
+| `activities_of_type('Run', <account>)` | | 143 → **128** | 163 → **145** | 0 → 0 |
+| …`'Hike'` | | 139 → **134** | 30 → **20** | 0 → 0 |
+| …`'Walk'` | | 115 → **106** | 26 → 26 | 0 → 0 |
+| `activities_of_type('Run', null)` | | 27 → **26** | 27 → **26** | 10 → 10 |
+| …`'Hike'` / `'Walk'` | | 17 / 11 unchanged | 17 / 11 unchanged | 0 / 0 |
+
+Every one fell or held; **none rose**. No other reader moved: `mileage_by_person_for_people`
+still counts 450 / 376 / 285 outings and `activity_lines*` still draws 480 / 431 / 293 lines,
+identical to the digit.
+
+**The race readers are fixed with zero effect today, and that is worth saying plainly rather
+than dressing up as a win.** Four activities qualify as races and none is in a multi-member
+group, so `race_stats*` and `races_list*` return exactly what they returned before — 4 / 2 / 1
+races and 66.650 / 30.037 / 10.105 miles. The defect was in the code and not yet in the data.
+Fixing it now is what stops the first jointly-recorded race counting as two, which nobody
+would notice because a race count of 2 looks like a race count of 2.
+
+**`activity_lines` and `activity_lines_for_people` are deliberately left non-deduping.** Their
+own body says why: the representative of a group may be the copy *without* a route, and a
+missing line on the map is a worse error than two drawn on top of each other. `0278` asserts
+they still do **not** contain a `distinct on`, so a later pass that "finishes the job" has to
+argue with a raise rather than slip through.
+
+Each of the six keeps its `RETURNS TABLE` signature, `SECURITY DEFINER` and pinned
+`search_path`; all eight functions are asserted non-executable by `anon` (0274's lesson: a
+definer function's grant is asserted, never assumed). The migration's behaviour block calls
+the readers for real and compares against a canonical count taken from the same tables, and
+**returns with a notice when `profiles` is empty** — so it replays against a fresh schema in
+`scripts/db-test.sh` instead of failing on an "expected exactly N" that CI can never satisfy.
+That mistake has been made twice in this repo; this is the form that does not make it.
+
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
