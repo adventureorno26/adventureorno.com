@@ -33,7 +33,6 @@ export interface WhoChoice {
  * view is Together so investigate why you are saying Both". The style option is gone
  * rather than re-defaulted, because an option is how the wrong word came back. */
 export function everyoneLabel(people: MapPerson[]): string {
-  if (people.length > 2) return 'Everyone';
   // Three people are not "together" as a pair — that word means the two of them.
   return people.length > 2 ? 'Everyone' : 'Together';
 }
@@ -67,4 +66,39 @@ export function whoProfileId(key: string, meId: string | null | undefined): stri
   if (key === 'both') return null;
   if (key === 'mine') return meId ?? null;
   return key;
+}
+
+// ---------------------------------------------------------------------------
+// FILTERS ASK A DIFFERENT QUESTION, AND THE DIFFERENCE IS REAL.
+//
+// An attribution says who WAS there. Every visit has an answer and "everyone" is one of
+// them, so `whoChoices()` is the whole list.
+//
+// A filter says whose places to SHOW, and it has one answer an attribution cannot have:
+// do not narrow this at all. That is NOT the same as "all of us" — /places/edit lists a
+// place nobody has recorded a visit to under `all`, and never under `both`. Collapsing
+// the two would hide rows, so they stay separate on purpose.
+//
+// The word for it is ANYONE. Not a new one: §8b-i approved it — *"A lightweight
+// `People: Anyone` control opens a multi-select drawer"* — and the Map's PeopleFilter has
+// said it since 0260. /places/edit said "All", which was the same idea under a fourth
+// word, so the word now comes from here and a filter cannot invent its own.
+// ---------------------------------------------------------------------------
+
+/** The key for "do not narrow this at all". Distinct from `both` — see above. */
+export const ANYONE_KEY = 'all';
+
+/**
+ * The choices for a filter: ANYONE, then exactly the attribution choices, in the
+ * attribution's order. Same words and same order as the picker on every card, so a
+ * person reads one vocabulary across the app.
+ *
+ * `profileId` on the ANYONE choice is null because there is nobody to narrow to — a
+ * filter reads `key`, never `profileId`.
+ */
+export function whoFilterChoices(
+  people: MapPerson[],
+  meId: string | null | undefined,
+): WhoChoice[] {
+  return [{ key: ANYONE_KEY, label: 'Anyone', profileId: null }, ...whoChoices(people, meId)];
 }

@@ -9,7 +9,14 @@
 // So: the choices come from the real members, and this test fails the build if a
 // name-shaped choice is written by hand again.
 import { describe, expect, it } from 'vitest';
-import { everyoneLabel, whoChoices, whoKey, whoProfileId } from './participants';
+import {
+  ANYONE_KEY,
+  everyoneLabel,
+  whoChoices,
+  whoFilterChoices,
+  whoKey,
+  whoProfileId,
+} from './participants';
 import type { MapPerson } from './data';
 
 const person = (id: string, display_name: string): MapPerson => ({ id, display_name }) as MapPerson;
@@ -60,6 +67,46 @@ describe('who was there', () => {
   });
 });
 
+describe('a filter asks the same question, plus one', () => {
+  it('offers ANYONE and then exactly the attribution choices, in that order', () => {
+    // The point of the whole consolidation: a filter and a picker say the same words in
+    // the same order, so there is nothing to learn twice. /places/edit used to read
+    // "All / Just me / Just Josh / Together" - its own word for everyone, its own order,
+    // and the everyone pill typed in by hand.
+    expect(whoFilterChoices([ME, JOSH], ME.id).map((c) => c.label)).toEqual([
+      'Anyone',
+      'Together',
+      'Just me',
+      'Just Josh',
+    ]);
+  });
+
+  it('says "Everyone", not "Together", once a third member exists', () => {
+    // The hand-written pill could not do this: it said "Together" for three people.
+    expect(whoFilterChoices([ME, JOSH, THIRD], ME.id).map((c) => c.label)).toEqual([
+      'Anyone',
+      'Everyone',
+      'Just me',
+      'Just Josh',
+      'Just Sam',
+    ]);
+  });
+
+  it('keeps ANYONE and `both` as different answers', () => {
+    // They are not the same question, and merging them would HIDE ROWS: /places/edit
+    // lists a place nobody has recorded a visit to under `all` and never under `both`.
+    const keys = whoFilterChoices([ME, JOSH], ME.id).map((c) => c.key);
+    expect(keys).toContain(ANYONE_KEY);
+    expect(keys).toContain('both');
+    expect(ANYONE_KEY).not.toBe('both');
+  });
+
+  it('adds nothing but that one extra answer', () => {
+    const attribution = whoChoices([ME, JOSH, THIRD], ME.id);
+    expect(whoFilterChoices([ME, JOSH, THIRD], ME.id).slice(1)).toEqual(attribution);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The source guard: no component may write a member's name by hand again.
 // ---------------------------------------------------------------------------
@@ -68,6 +115,10 @@ const RAW = import.meta.glob('../**/*.{ts,tsx}', {
   import: 'default',
   eager: true,
 }) as Record<string, string>;
+
+/** Source with its comments removed - a rule about what the app SAYS must not be tripped
+ *  by a comment quoting the very word it retired. */
+const strip = (src: string) => src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 
 const HOOKS = import.meta.glob('../../../.githooks/*', {
   query: '?raw',
@@ -87,6 +138,91 @@ describe('no member is hardcoded', () => {
       if (/Just\s+(Josh|Erica)\b/.test(code)) offenders.push(`${path} (a member named in a label)`);
     }
     expect(offenders).toEqual([]);
+  });
+
+  // ONE VOCABULARY, ENFORCED. Seven surfaces asked "who was there" and three of them
+  // still built the option list by hand - `<option value="">{everyoneLabel(people)}</option>`
+  // followed by `people.map((p) => (p.id === profile?.id ? 'Just me' : ...))`. That is
+  // whoChoices() re-implemented, and re-implementations drift: each carried its own copy
+  // of the everyone-word, and none of them put "Just me" where the pickers put it.
+  it('has no hand-written "Just me" option outside the helper', () => {
+    const offenders = Object.entries(RAW)
+      .filter(([path]) => !/participants\.(ts|test\.ts)$/.test(path))
+      .filter(([path]) => !/\.test\.tsx?$/.test(path))
+      .filter(([, src]) => /Just me/.test(strip(src)))
+      .map(([path]) => path);
+    expect(offenders, 'build the choices with whoChoices() instead').toEqual([]);
+  });
+
+  // Erica, 2026-08-15: "the view is Together so investigate why you are saying Both".
+  // The word outlived that instruction on /bucket - "Both want to go", in the filter and
+  // again on every row - because the Settings guard below only ever read one file.
+  //
+  // Scoped to the word USED OF PEOPLE. "Both recordings are kept" on the Inbox is two
+  // recordings, not two members, and a guard that cannot tell the difference is a guard
+  // somebody switches off the first time it is wrong.
+  it('does not use the retired word "Both" of people', () => {
+    const offenders = Object.entries(RAW)
+      .filter(([path]) => !/participants\.(ts|test\.ts)$/.test(path))
+      .filter(([path]) => !/\.test\.tsx?$/.test(path))
+      .filter(([, src]) => />\s*Both\b|\bBoth (want|of us|of them|of you)\b/.test(strip(src)))
+      .map(([path]) => path);
+    expect(offenders, 'the everyone-word comes from everyoneLabel()').toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EVERY SURFACE THAT ASKS "WHO WAS THERE", BY NAME.
+//
+// The audit behind this consolidation found seven of them and three vocabularies:
+// Together on the cards, All on the places editor, Both on the bucket list. A guard that
+// only knows about the file that was wrong LAST time is how the bucket list went on
+// saying "Both" long after the word was retired - so the list is the whole set, and a
+// new surface joins it rather than starting a fourth vocabulary.
+// ---------------------------------------------------------------------------
+describe('every who-was-there control is generated', () => {
+  const file = (name: string) => Object.entries(RAW).find(([p]) => p.endsWith(name))?.[1] ?? '';
+
+  // An ATTRIBUTION - who was on this visit. Its choices are whoChoices(), always.
+  const ATTRIBUTION = [
+    'components/NewPlaceDraft.tsx', // the new-place card, /?add=1
+    'components/PlacePanel.tsx', // a saved card: the visit rows AND add-a-visit
+    'components/PlaceQuickEdit.tsx',
+    'routes/VisitPage.tsx',
+    'routes/PlacesEditor.tsx', // the per-row "Who was there"
+    'routes/PhotoSorter.tsx',
+    'routes/Settings.tsx', // the Stats scope
+  ];
+
+  for (const name of ATTRIBUTION) {
+    it(`${name} builds its choices from the real members`, () => {
+      const src = file(name);
+      expect(src.length, `app/src/${name} should be readable`).toBeGreaterThan(500);
+      expect(strip(src), 'call whoChoices() rather than mapping people by hand').toMatch(
+        /whoChoices\(/,
+      );
+    });
+  }
+
+  it('the /places/edit filter takes its pills from whoFilterChoices()', () => {
+    // It used to take whoChoices(), REMOVE the everyone choice and re-add it at the end
+    // with the word typed in - so it read "All / Just me / Just Josh / Together" while
+    // every card read "Together / Just me / Just Josh", and with three members its
+    // hand-typed pill went on saying "Together" after the cards had moved to "Everyone".
+    const src = strip(file('routes/PlacesEditor.tsx'));
+    expect(src).toMatch(/whoFilterChoices\(/);
+    expect(src, 'the no-restriction key comes from ANYONE_KEY').not.toMatch(/key: 'all'/);
+  });
+
+  it('the /bucket list takes its everyone-word from everyoneLabel()', () => {
+    const src = strip(file('routes/BucketList.tsx'));
+    expect(src).toMatch(/everyoneLabel\(/);
+  });
+
+  it('PersonFilter.tsx is gone, not sitting there as a fifth implementation', () => {
+    // 32 lines, zero importers, superseded by PeopleFilter - and still carrying its own
+    // "Together / Just me / Just Josh" list for whoever wired it back up.
+    expect(Object.keys(RAW).filter((p) => p.endsWith('components/PersonFilter.tsx'))).toEqual([]);
   });
 });
 
