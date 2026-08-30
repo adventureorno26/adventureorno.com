@@ -6059,6 +6059,36 @@ merge radius 10 km, assigning to nearest existing place within 10 km before crea
   which is exactly the pin the `optionalDependencies` note in `package.json` describes
   working around. Upgrading it is a real change with a real chance of turning the release
   gate red, so it wants its own branch and its own verification, not a footnote in this one.
+
+  **Closed out the same day, 17 → 0.** `#158` (brace-expansion), `#159` (js-yaml) and `#161`
+  (vite + vitest) landed on `main`; `#161` put the photo gateway on `vitest ^4.1.11` and left
+  a single `vitest 4.1.11` / `vite 8.2.2` in the tree instead of two. The last six — `sharp`
+  HIGH and `undici` HIGH ×1 + MODERATE ×4 — were **not** separate packages to chase: both
+  arrive only through `wrangler` → `miniflare`, and `wrangler` was pinned exactly at
+  `4.113.0` in three places. `4.120.0` onward resolves `sharp 0.35.2` and `undici 7.29.0`,
+  so the whole remainder is one pin bump to `4.127.1` (`app`, `photo-gateway`, `basemap`;
+  `watchtower` floats on `^4.0.0`). The pin stays exact — that was deliberate and reproducible
+  deploys still want it. `jsdom`'s `undici 8.10.0` was never in range and is untouched.
+
+  Verified from a **clean `npm ci`**, not an incremental install: lint + prettier clean,
+  **286 tests across 34 files**, worker typecheck clean, production build clean, and
+  `wrangler deploy --dry-run` for all three workers with every binding still resolving
+  (`PHOTOS` R2, `BASEMAP` R2, and the environment variables).
+
+#### The `@rollup/rollup-linux-x64-gnu` pin is gone, because rollup is
+
+`package.json` carried a long `//optionalDependencies` note explaining that npm records only
+the HOST platform's optional binary, so a lock generated on a Mac gave Linux CI no rollup
+native — fatal because *"the photo-gateway worker still runs vitest 2, which loads rollup."*
+
+That premise died with `#161`. **`rollup` is no longer in the dependency tree at all**: Vite 8
+builds with **rolldown**, and rolldown declares all fifteen platform bindings as ordinary
+optional dependencies, so `package-lock.json` contains every one of them —
+`@rolldown/binding-linux-x64-gnu` included. The pin was holding a package nothing depended
+on. Removed, and the note rewritten to say what is actually true, including the thing worth
+keeping: if a Linux-only native goes missing again, **check whether the bundler changed
+before re-adding a pin.** This is the class of bug that cannot be seen on a Mac, so the
+proof is Linux CI, not a local run.
 - Never force-push. The ruleset now refuses it rather than relying on memory. The only
   exception is the separately approved history-scrub procedure, which must stop for
   Erica's exact approval before any rewrite — and now also for a deliberate admin bypass.
