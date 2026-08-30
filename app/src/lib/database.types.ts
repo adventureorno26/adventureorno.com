@@ -2226,7 +2226,7 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          handle: string
+          handle?: string
           handle_claimed_at?: string | null
           id: string
           profile_visibility?: string
