@@ -2,7 +2,7 @@
   "name": "adventureorno",
   "private": true,
   "version": "0.1.0",
-  "description": "Private travel-map web app \u2014 adventureorno.com",
+  "description": "Private travel-map web app — adventureorno.com",
   "workspaces": [
     "app",
     "scripts",
@@ -35,8 +35,5 @@
     "node": ">=22 <23",
     "npm": ">=10"
   },
-  "//optionalDependencies": "npm records only the HOST platform's optional binary in the lockfile, so a lock generated on a Mac contains @rollup/rollup-darwin-arm64 and nothing else \u2014 and every `npm ci` on Linux CI installs no rollup native at all. The Vite 8 upgrade made that fatal: the photo-gateway worker still runs vitest 2, which loads rollup, so `Worker \u2014 test` failed on Linux while passing locally, and the release gate has been red since. Declaring the Linux binary directly puts BOTH platforms in the lock. Pinned exactly to rollup's own optional-dependency version so it dedupes instead of resolving a second copy; bump it with rollup.",
-  "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "4.62.2"
-  }
+  "//rolldown": "Vite 8 build the app with ROLLDOWN, not rollup, and rolldown declares every platform binding as a normal optional dependency - all 15 are in package-lock.json, linux-x64-gnu included. So npm ci on Linux CI installs the right native without help. The old workaround here pinned @rollup/rollup-linux-x64-gnu because the photo-gateway worker still ran vitest 2, which loaded rollup; #161 moved that worker to vitest 4 and rollup left the tree entirely, leaving the pin referring to a package nothing depends on. Removed 2026-08-29. If a Linux-only native ever goes missing again, check whether the bundler changed before re-adding a pin."
 }
