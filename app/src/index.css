@@ -2223,6 +2223,26 @@ button.panel-hero-slot:hover {
   font-size: 13px;
   padding: 5px 8px;
 }
+/* "Fix this place" in the photo sorter — the place's own fields, folded away so the
+   default view stays JUST THE VISIT (Erica, 2026-07-26) while the correction she asked
+   for on 2026-08-29 is one click in. Same ▸/▾ language as every other disclosure. */
+.ps-placeedit > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.ps-placeedit > summary::-webkit-details-marker {
+  display: none;
+}
+.ps-placeedit > summary::before {
+  content: '▸ ';
+}
+.ps-placeedit[open] > summary::before {
+  content: '▾ ';
+}
 .ps-skip {
   font-size: 12px;
   padding: 5px 10px;
@@ -5114,9 +5134,33 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* A 16px line was the whole hit area. Give the finger something to land on. */
+  padding: 4px 0;
 }
 .stats-dropdown > summary::-webkit-details-marker {
   display: none;
+}
+/* THE ARROW. These four summaries used to hide the native marker and put nothing
+   back, so a panel looked EXACTLY the same open as shut — nothing said the word
+   "Stats" was a control, and nothing said a panel you had opened could be closed
+   again. Erica, 2026-08-29: "They don't disappear and are redundant." The native
+   toggle worked the whole time; it just never showed. Same ▸/▾ language as the
+   Visits and Spots dropdowns, so every disclosure in the app reads alike. */
+.stats-dropdown > summary::before {
+  content: '▸ ';
+  color: var(--muted);
+}
+.stats-dropdown[open] > summary::before {
+  content: '▾ ';
+}
+/* Second level: the states inside "Cities and states". Same control, smaller voice —
+   it replaced `.spot-cat`, which was a fourth spelling of the same idea. */
+.stats-dropdown-sub {
+  margin-top: 2px;
+}
+.stats-dropdown-sub > summary {
+  font-weight: 650;
+  color: var(--accent);
 }
 .our-stats {
   display: flex;
@@ -5498,24 +5542,9 @@ textarea {
     backdrop-filter: none;
   }
 }
-.spot-cat > summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--accent);
-  padding: 6px 0;
-}
-.spot-cat > summary::-webkit-details-marker {
-  display: none;
-}
-.spot-cat > summary::before {
-  content: '▸ ';
-  color: var(--muted);
-}
-.spot-cat[open] > summary::before {
-  content: '▾ ';
-}
+/* `.spot-cat` lived here — the per-state dropdown inside Settings › Stats › Cities
+   and states. It is now a `.stats-dropdown.stats-dropdown-sub`, the same control as
+   its parent, so the stats section has ONE disclosure pattern instead of two. */
 
 /* Thinner +Add and Activity dropdown pills + the activity filter. */
 .add-menu button,
