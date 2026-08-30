@@ -321,7 +321,7 @@ Erica: *"that order is fine."* Items 1–3 are in flight as of 2026-08-30.
 | 5 | **Reconcile the disagreeing numbers** (finding 3) | queued |
 | 6 | **Needs Attention** (finding 4) — filtered destinations per tile, and real error feedback when an RPC fails | queued |
 | 7 | **Multi-user tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam | queued |
-| 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | queued |
+| 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | **decided and written, 2026-08-30** — not a flip: each view states its own space boundary in its `WHERE`. SQL dry-run and waiting in `supabase/proposals/definer_views_state_their_own_boundary.sql`; **ships inside the spaces partition** (§3s step 1), not before it |
 | 9 | **Spaces, friends, public profiles** (Phase 3b) — the gate on everything social. One indivisible migration | queued |
 | 10 | **Settings' three destinations** — `Account \| Integrations \| Data & Privacy`, per the 08-20 ruling above | queued |
 
@@ -4496,6 +4496,70 @@ show, and then either flip and re-verify the participant lists in the app, or ke
 views definer and write the intended visibility into their `WHERE` clauses explicitly. The
 numbers above are the starting point either way, so nobody has to measure this twice.
 
+### 2026-08-30 — that day came, and the answer is the second branch, not the first
+
+Phase 3b was approved (add/remove/block, other users), so the three were re-measured from
+scratch rather than trusted. Same shape, slightly different data — and one column the
+2026-08-29 table never had: **`stranger`**, a syntactically valid `authenticated` JWT whose
+`sub` matches no row in `profiles`. That is what a signed-up account is before it is
+invited into anything. `authenticated` holds SELECT on all three views, so PostgREST
+publishes them, and today a stranger reads the lot.
+
+| view                  | Erica     | Josh      | Test bot  | **Stranger** |
+| --------------------- | --------- | --------- | --------- | ------------ |
+| `activity_profiles`   | 628 → 536 | 628 → 487 | 628 → 303 | **628 → 0**  |
+| `activity_provenance` | 572 → 480 | 572 → 431 | 572 → 293 | **572 → 0**  |
+| `visit_profiles`      | 665 → 362 | 665 → 303 | 665 → **0** | **665 → 0** |
+
+**Erica's decisions, 2026-08-30 — three questions, three answers:**
+
+1. **"Does seeing a memory mean seeing who was on it?" — YES.** So the flip column is
+   rejected. *"Within a space you already share, a card that hides who was there lies by
+   omission."* Erica can read all 557 visits and would see participants on 356 of them.
+2. **"Should an owner see more than an editor?" — NO.** Roles govern WRITES. Visibility
+   belongs to the SPACE boundary. *"Two parallel visibility systems is how this class of bug
+   gets rebuilt."*
+3. **"Now, or with the partition?" — WITH THE PARTITION** (§3s step 1). The rule only means
+   something once the space boundary exists, so nothing is applied to production before it.
+
+So: **keep the views definer and write the intended visibility into their `WHERE` clauses**
+— the second of the two branches the 08-29 note left open. The SQL is written, dry-run and
+waiting in **`supabase/proposals/definer_views_state_their_own_boundary.sql`**, deliberately
+NOT in `supabase/migrations/` because `db-bootstrap.sh` replays that folder from empty and
+the file references `memory_subjects.space_id`, `activities.space_id` and
+`is_member(uuid)`, none of which exist yet. It gets its `0NNN` number and moves when the
+partition lands. Dry-run 2026-08-30 against production inside `begin … rollback`, with the
+partition simulated (one space, every existing profile a member): **every row identical for
+Erica, Josh and Test Bot on all three views; stranger 628/572/665 → 0/0/0.** The assertion
+that the clause is present was proved red-then-green by deleting it.
+
+Four things that audit turned up, all of which the partition must plan around:
+
+- **No application code reads these views.** Not `app/src`, not `workers`, not `scripts` —
+  only generated types and comments. Every screen goes through a SECURITY DEFINER RPC. The
+  `authenticated` SELECT grant is published, unused attack surface.
+- **A flip would never have moved the 30 SECURITY DEFINER readers** (they run as `postgres`,
+  which owns the tables and is not subject to their RLS). It would have moved the six
+  SECURITY INVOKER ones — including `export_manifest` / `export_section`, called from the
+  browser as the signed-in user, whose export would have silently dropped from 665
+  participation rows to 362.
+- **`visits_check_parent` is a TRIGGER that reads `visit_profiles`.** `auth.uid()` is null
+  for any JWT-less writer, so under the new clause the view goes empty and the *"everyone on
+  the child must have been on the parent"* guard silently **passes** instead of erroring.
+  Nothing scheduled or service-role reaches it today (verified by a recursive call-graph
+  walk from all four `cron.job` entry points and the three service-role RPCs), but the
+  partition should stop that trigger reading a compatibility view at all — it asks an
+  integrity question, not a visibility one.
+- **`visit_profiles_check_children` is attached to no trigger at all.** Zero rows in
+  `pg_trigger`. A guard that is not guarding, dead since `0266` renamed what it reads.
+
+And the gap behind `visit_profiles → 0`: **`can_see_memory_subject` has no `visit` branch**
+— its `case` falls to `else false` for all 557 visit subjects. The only reason Erica and
+Josh are not also zero is that `memory_subjects_write` is declared `FOR ALL`, and `FOR ALL`
+includes SELECT, so a write policy quietly doubles as a read rule. Adding
+`when 'visit' then true` returns all three members to 665 and leaves the stranger at 0 —
+measured. That one line belongs in the partition, next to every other `is_member()` rewrite.
+
 **`spatial_ref_sys` and `st_estimatedextent` are not ours.** Both are owned by
 `supabase_admin` and belong to PostGIS — verified via `pg_class.relowner` + `pg_depend`.
 Migration `0093`'s lockdown tried to revoke the `st_*` grants and Postgres answered
@@ -4531,7 +4595,10 @@ by omission, and each is recorded where the work would start:
 1. **The three SECURITY DEFINER views** (`activity_profiles`, `activity_provenance`,
    `visit_profiles`) — §6c, with the measured row counts per member. Erica's decision was to
    leave them and revisit **before Phase 3b gives anyone else an account**, which is the
-   moment §6c already names as the one where it stops being survivable.
+   moment §6c already names as the one where it stops being survivable. **Superseded
+   2026-08-30** — revisited, re-measured with a `stranger` column, and decided: they stay
+   definer and state their boundary explicitly, shipping inside the spaces partition. See
+   §6c and `supabase/proposals/definer_views_state_their_own_boundary.sql`.
 2. **`auth_leaked_password_protection`** — one toggle, offered and not taken. §6c.
 3. **Retiring `places.visit_count`** — optional now rather than needed. `0273` made the
    column correct; deleting it is a tidier end state whenever a reader-migration is worth
