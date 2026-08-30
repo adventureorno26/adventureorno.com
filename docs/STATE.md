@@ -394,7 +394,9 @@ Ordered, because each depends on the one above it.
 
 1. **Partition the data.** Every read policy ends in `is_member()`, so *add a user* and
    *give them my entire history* are the same button today. One indivisible migration:
-   **57 tables, 81 policies, 201 SECURITY DEFINER functions.**
+   **58 tables, 81 policies, 205 SECURITY DEFINER functions** (re-measured 2026-08-30;
+   the older 57/201 was one migration out of date). **Step 1a is written and rehearsed —
+   see the section below. Step 1b, the split itself, is not.**
 2. **Add / remove / block, and follow.** A directory, public profiles with a handle, a
    **mutual** add and a **one-way** follow that exposes only what the person made public,
    and removal and blocking — blocking bidirectional and enforced in RLS, not in the UI.
@@ -409,6 +411,87 @@ Ordered, because each depends on the one above it.
 4. **The three scopes**, on the map pill, Settings ▸ Stats and Insights together.
 
 The pills are last because they are the only easy part.
+
+### THE PARTITION, STEP 1a — WRITTEN AND REHEARSED, NOT APPLIED *(2026-08-30, migration `0281`)*
+
+`0281_a_space_is_the_boundary_and_it_says_so.sql` is on `feat/spaces-partition` as a **draft
+PR**. It is one transaction. **It has not been applied to production.**
+
+**What it does.** `spaces` + `space_memberships`; `is_member(space_id)`,
+`is_editor_or_owner(space_id)`, `is_owner(space_id)`; `space_id` NOT NULL on **48** tables;
+**70 policies** rewritten from the session-wide check to the row's space; the three SECURITY
+DEFINER views given the boundary clause reviewed on `design/definer-views-with-partition`,
+plus the four `security_invoker` views, which need it for the same reason because a definer
+function reads them as the table owner and an owner is not subject to RLS; and
+`can_see_memory_subject` given the `visit` branch it never had. Two spaces are created,
+Erica's and Josh's, each owned by its person. **Test Bot is placed in Erica's space** — he is
+a member of everything today and would otherwise have dropped to zero unnoticed.
+
+**What it deliberately does NOT do — and this is the half that remains.** It does not move
+Josh's rows into Josh's space. Everything is backfilled into Erica's space and Josh stays an
+editor of it, exactly as today.
+
+The split needs no invention; the tags already determine it, and it was verified:
+
+| | total | Erica only | Josh only | tagged BOTH | unattributed |
+| --- | --- | --- | --- | --- | --- |
+| visits | 557 | 349 | 100 | **108** | 0 |
+| activities | 572 | 351 | 165 | **56** | 0 |
+| photos (by `uploaded_by`) | 180 | 146 | 34 | — | 0 |
+| places (reachable from) | 168 | 85 | 7 | **76** | 0 |
+
+A both-tagged row must be **materialised into both spaces**, which forks 108 visits, 56
+outings and 76 places plus everything hanging off them — **41 foreign keys** point at those
+three tables. The fork is not what blocks it. **The ~60 SECURITY DEFINER stat readers bypass
+RLS by construction**, so once a shared card exists twice they count it twice and every
+person-scoped number moves on the 108/56 shared rows. Making them space-aware is a second,
+separately reviewable change, and landing the fork without it would move numbers on Erica's
+and Josh's screens for a reason nobody chose — which is exactly the abort criterion. So the
+fork waits, with its counts already measured rather than guessed.
+
+**REHEARSAL — production, 2026-08-30, entirely inside `begin … rollback`.** Supabase
+branching is **not available on this project** (`entitlement_required: branching_limit` — it
+needs Pro; the org is on Free), so the rehearsal was done two ways instead: the full
+migration chain replayed from an EMPTY schema by `scripts/db-bootstrap.sh` (**281 migrations,
+zero errors**) with all **75** `supabase/tests/*.test.sql` passing; and the migration applied
+to production inside a transaction that was rolled back, with every number measured before
+and after.
+
+**Not one of the 22 numbers behind My Stats, Our Stats, Settings ▸ Stats and Insights moved
+for Erica, Josh or Test Bot.** My Stats read 132 places · 2135.6 mi before and after; Our
+Stats 55 places · 481.6 mi before and after — the same figures §0.2 records.
+
+Four counts changed, and all four are the point of the change:
+
+| who | what | before → after | why |
+| --- | --- | --- | --- |
+| a 4th account with a `profiles` row and no invitation | visits · places · photos · evidence | 557 · 156 · 179 · 619 → **0 · 0 · 0 · 0** | the whole reason for the file |
+| same | `visit_profiles` · `activity_profiles` · `activity_provenance` | 665 · 628 · 572 → **0 · 0 · 0** | the definer-view bypass closes |
+| Erica / Josh / Bot | visit subjects `can_see_memory_subject` allows | 0 → **557** | the missing `visit` branch |
+| Erica / Josh / Bot | `memory_subjects` readable | +201 / +356 / +557 | each of them previously saw only the visit subjects they *created* (356 / 201 / 0), because `memory_subjects_write` is `FOR ALL` and was standing in for the read rule. 557 − 356 = 201, 557 − 201 = 356, 557 − 0 = 557. |
+
+**Two things the rehearsal found that were nobody's plan.**
+
+- **`place_membership` holds an invalid row today.** Backfilling the column re-fired
+  `place_membership_no_cycle()`, which rejected `parent 0fabb00c-92d4-4c06-b928-ec857aa12187
+  is not a container (holds_children)` — a row that predates all of this; a parent lost
+  `holds_children` after the membership was written. `0281` sidesteps it honestly by adding
+  the column WITH a default instead of running an UPDATE, so nothing is validated because
+  nothing is edited. **The inconsistency is real and is not fixed by `0281`.**
+- **Production's `activities` column order differs from the same migrations replayed from
+  empty** — `… also_profiles, elevation_gain, source_id …` on production versus
+  `… also_profiles, source_id, is_race, elevation_profile, elevation_gain …` on a fresh
+  replay. `create or replace view` refuses to reorder a column, so a hand-written column list
+  is correct in exactly one of the two databases. `0281` reads the order from the catalogue.
+
+**Before this is applied, in this order:** apply → `npm run gen:types` → commit
+`database.types.ts`. The types can only be generated against production, so they are not
+stale until the migration lands, and they become stale the moment it does.
+
+**And it must not be applied piecemeal.** `default_space()` carries a temporary fallback so
+that worker and `service_role` writes, which pass no `space_id` yet, keep working on the day
+it lands. **The split migration has to delete that fallback**; `0281` asserts that at most one
+space holds visits, so the fallback cannot survive the split unnoticed.
 
 ---
 
