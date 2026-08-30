@@ -7,7 +7,7 @@ import {
   createPlaceAtomic,
   fetchPoiDetails,
   newExperienceKey,
-  setPlaceSolo,
+  setVisitParticipants,
   updatePlace,
   type ActivityOption,
   type PoiDetails,
@@ -25,7 +25,8 @@ import { localDateOf, prefill, suggestedPlaceName, todayLocalDate } from '../lib
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { haversineMeters } from '../lib/geo';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
-import { whoChoices, whoProfileId } from '../lib/participants';
+import { whoForWrite } from '../lib/participants';
+import WhoPicker from './WhoPicker';
 import { showSnack } from '../lib/snackbar';
 import { announceWho } from '../lib/whoWasThere';
 import MapSearch from './MapSearch';
@@ -36,8 +37,9 @@ import EntryEditor from './EntryEditor';
 import { useDialog } from '../lib/useDialog';
 import type { NewEntry, Place } from '../lib/types';
 
-/** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
-type Who = string;
+/** Who was there: the profile ids tagged on the visit this card will create. Empty
+ *  means it was just you (Erica, 2026-08-30) — never a keyword standing in for a person. */
+type Who = string[];
 
 // How close another place must be to count as a possible duplicate, by type.
 // Tight for point venues (a restaurant next door is a different place); wide for
@@ -108,7 +110,7 @@ export default function NewPlaceDraft({
   // card she has not touched.
   const prefilledDate = useRef(visitDate);
   const dateEdited = useRef(false);
-  const [who, setWho] = useState<Who>('both');
+  const [who, setWho] = useState<Who>([]);
   const [website, setWebsite] = useState<string | null>(null);
   // Staged like every other field on this card — nothing is written until Save.
   const [rating, setRating] = useState<number | null>(null);
@@ -138,7 +140,6 @@ export default function NewPlaceDraft({
   // Nominatim is asked ONCE per opened card and never in a loop (rate limits, and it
   // is a free service). The ref also survives StrictMode's double effect in dev.
   const poiAsked = useRef(false);
-  const choices = whoChoices(people, meId);
   // Idempotency keys per save action (reused on retry, reset on success). One for
   // the "create new place" action, one for "add to an existing (duplicate) place".
   const keyNew = useRef<string | null>(null);
@@ -196,9 +197,31 @@ export default function NewPlaceDraft({
     return Promise.resolve();
   }
 
-  // Map the tri-state Who selector to the create_experience `who` param.
-  function whoParam(): string | undefined {
-    return whoProfileId(who, meId) ?? undefined; // 'both' — leave attribution unset
+  /**
+   * WHO THE VISIT IS CREATED AS, and who is tagged onto it afterwards.
+   *
+   * `create_experience` takes ONE name for `who`, and the only name it can write as a
+   * FACT is your own — since 0240 naming somebody else is a question they answer, not a
+   * row the creation asserts. So the visit is always created as yours, and anything else
+   * you tagged goes through `set_visit_participants` on the id it hands back, which is
+   * the same door every other picker in the app writes through.
+   */
+  async function tagTheVisit(visitId: string | null): Promise<void> {
+    const tagged = whoForWrite(who, meId);
+    if (!visitId || !tagged.length) return;
+    if (tagged.length === 1 && tagged[0] === meId) return; // already exactly what was created
+    // Not swallowed: losing this silently means the card is saved and attributed to the
+    // wrong people, with nothing on screen to say so.
+    await setVisitParticipants(visitId, tagged)
+      .then((outcome) => announceWho(outcome, people))
+      .catch((e: unknown) => {
+        showSnack({
+          message:
+            e instanceof Error
+              ? `Saved, but could not set who was there: ${e.message}`
+              : 'Saved, but could not set who was there.',
+        });
+      });
   }
 
   // DOES THIS SAVE LOG A VISIT ROW? It always did with a date and no photos. A staged
@@ -372,7 +395,7 @@ export default function NewPlaceDraft({
           // "make this a trail" control any more.
           is_trail: tags.includes('trail'),
         },
-        logsAVisit ? { date: visitDate, who: whoParam() } : {},
+        logsAVisit ? { date: visitDate, who: 'me' } : {},
       );
       const placeId = res.place_id;
 
@@ -382,21 +405,13 @@ export default function NewPlaceDraft({
       if (website) extra.website = website;
       if (rating != null) extra.rating = rating;
       if (Object.keys(extra).length) await updatePlace(placeId, extra).catch(() => undefined);
-      // Somewhere-to-go-later has no visit, so there is nothing to attribute.
-      if (!wanted && who !== 'both') {
-        // Not swallowed: losing this silently means the place is saved and
-        // attributed to the wrong people, with nothing on screen to say so.
-        await setPlaceSolo(placeId, whoProfileId(who, meId))
-          .then((outcome) => announceWho(outcome, people))
-          .catch((e: unknown) => {
-            showSnack({
-              message:
-                e instanceof Error
-                  ? `Saved, but could not set who was there: ${e.message}`
-                  : 'Saved, but could not set who was there.',
-            });
-          });
-      }
+      // THE VISIT IS WHAT CARRIES WHO WAS THERE, so the tagging goes onto the visit id
+      // this call returned. It used to go onto the PLACE — `setPlaceSolo` — which sets
+      // every visit there and holds one name; on a card that has just created its first
+      // visit those were the same write, and on a card that had not created one at all it
+      // was a write with nothing to write to. Somewhere-to-go-later has no visit, so there
+      // is still nothing to attribute and `tagTheVisit` returns on the null.
+      await tagTheVisit(res.visit_id);
 
       // EVERYTHING THE CARD WAS HOLDING, in one place and only here. Before the
       // photos, because these are quick and a photo upload is the slow part.
@@ -452,8 +467,12 @@ export default function NewPlaceDraft({
       const res = await addExperience(
         keyExisting.current,
         { id: p.id },
-        logsAVisitOnExisting ? { date: visitDate, who: whoParam() } : {},
+        logsAVisitOnExisting ? { date: visitDate, who: 'me' } : {},
       );
+      // The people you tagged come with the date and the photos — that is what "picking a
+      // duplicate must not throw away what you entered" has to mean now that who was there
+      // is a list rather than one of three words.
+      await tagTheVisit(res.visit_id);
       // The routes, restaurants and notes go where the visit went. Picking a duplicate
       // has never thrown away what you entered, and this is more of what you entered.
       if (outings.length || notes.length) {
@@ -734,18 +753,9 @@ export default function NewPlaceDraft({
             </label>
             <div className="npd-field">
               <span>Who was there</span>
-              <div className="ps-who-toggle">
-                {choices.map((c) => (
-                  <button
-                    key={c.key}
-                    type="button"
-                    className={who === c.key ? 'on' : ''}
-                    onClick={() => setWho(c.key)}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
+              {/* Staged like every other field on this card: nothing is written until
+                  Save, and the people go on with the visit Save creates. */}
+              <WhoPicker people={people} meId={meId} value={who} onChange={setWho} />
             </div>
           </div>
         )}

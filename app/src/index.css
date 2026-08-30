@@ -7718,10 +7718,13 @@ button.mi-row:hover {
    is the overlap, always; there is no second answer for a pair of buttons to switch
    between. */
 
-/* ---------- Who is in Our Stats — the scope picker ---------- */
-/* A sheet rather than more pills in the control. The control carries the two SCOPES and
-   nobody's name (§0.2); picking the people is a separate act with room to say what it
-   costs, and it is the same bottom-sheet shape as the map's category sheet. */
+/* ---------- The people sheet — picking names, wherever it is asked ---------- */
+/* A sheet rather than more pills in a control. TWO controls render it and they are
+   deliberately not one component: `PeopleFilter` asks which SCOPE the numbers are about
+   (§0.2), and `WhoPicker` asks who was on a card. They share this markup so a fix worked
+   out on a real phone — `--pnav-clearance` below — cannot apply to only one of them.
+   The class names still say `scope-` because every rule here was written under that name
+   and renaming them would quietly drop the lot; `.who-picker` marks the second one. */
 .scope-picker-backdrop {
   position: fixed;
   inset: 0;
@@ -7798,6 +7801,29 @@ button.mi-row:hover {
 }
 .scope-picker-actions .primary:disabled {
   opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The button that opens the people sheet on a card. It reads the ANSWER — "You",
+   "You and Josh" — rather than a label, because the answer is the whole point of the
+   control and a person should not have to open it to see who is on the card. Sized like
+   the `<select>` it replaced so the rows it sits in do not reflow. */
+.who-picker-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(19, 31, 54, 0.5);
+  border: 1px solid var(--border-soft);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.who-picker-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

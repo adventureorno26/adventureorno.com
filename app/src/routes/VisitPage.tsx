@@ -16,7 +16,7 @@ import {
   fetchVisits,
   setVisitDates,
   setVisitIsTrip,
-  setVisitSolo,
+  setVisitParticipants,
   type MapPerson,
 } from '../lib/data';
 import { reassignActivity } from '../lib/strava';
@@ -28,7 +28,8 @@ import {
 } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { announceWho } from '../lib/whoWasThere';
-import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
+import { whoForWrite } from '../lib/participants';
+import WhoPicker from '../components/WhoPicker';
 import { useAuth } from '../auth/AuthProvider';
 import type { Place } from '../lib/types';
 import AuthedImg from '../components/AuthedImg';
@@ -341,34 +342,25 @@ export default function VisitPage() {
             Count this as a trip
           </button>
           {people.length >= 2 && (
-            <select
-              className="attribution-select"
-              // From the participant ROWS: exactly one person means that person, anything
-              // else means everyone. That is what solo_profile's null used to mean, said
-              // in a way that can also describe three (§0.3). `whoKey` is that same
-              // reading; this line used to spell it out and then re-derive "Everyone /
-              // Together" a second time below, one of the four private copies of the
-              // control that lib/participants exists to end.
-              value={whoKey(d.people.length === 1 ? d.people[0].id : null, profile?.id)}
-              aria-label="Who was here"
-              onChange={(e) =>
+            // THE PARTICIPANT ROWS ARE THE VALUE, whole. This used to collapse them —
+            // "exactly one person means that person, anything else means everyone" — because
+            // the control could only say one of three words. A visit with three of us on it
+            // read as the same answer as a visit with two, and saving re-wrote it that way.
+            // The picker carries the list, and `set_visit_participants` stores the list.
+            <WhoPicker
+              className="attribution-who"
+              people={people}
+              meId={profile?.id}
+              value={d.people.map((x) => x.id)}
+              onChange={(ids) =>
                 void run('Saving…', async () => {
-                  // Naming somebody else asks them; it does not put them on the day
+                  // Naming somebody else ASKS them; it does not put them on the day
                   // (0240). The reload below shows what is actually true.
-                  const outcome = await setVisitSolo(
-                    v.id,
-                    whoProfileId(e.target.value, profile?.id),
-                  );
+                  const outcome = await setVisitParticipants(v.id, whoForWrite(ids, profile?.id));
                   announceWho(outcome, people);
                 })
               }
-            >
-              {whoChoices(people, profile?.id).map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            />
           )}
         </div>
       )}

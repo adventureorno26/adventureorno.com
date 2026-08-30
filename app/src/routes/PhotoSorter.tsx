@@ -8,7 +8,7 @@ import {
   fetchVisits,
   setVisitDates,
   matchPhoto,
-  setVisitSolo,
+  setVisitParticipants,
 } from '../lib/data';
 import type { MapPerson } from '../lib/data';
 import {
@@ -25,15 +25,17 @@ import MapSearch from '../components/MapSearch';
 import PlaceQuickEdit from '../components/PlaceQuickEdit';
 import AuthedImg from '../components/AuthedImg';
 import type { Place, Visit } from '../lib/types';
-import { whoChoices, whoProfileId } from '../lib/participants';
+import { whoForWrite } from '../lib/participants';
+import WhoPicker from '../components/WhoPicker';
 import { assignStayGroups } from '../lib/photoGroups';
 import { visitDates } from '../lib/visitDates';
 import { showSnack } from '../lib/snackbar';
 import { announceWho, mergeOutcomes } from '../lib/whoWasThere';
 
 type Phase = 'idle' | 'reading' | 'review' | 'uploading' | 'done';
-/** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
-type Who = string;
+/** Who was on a group's visit: the profile ids tagged on it. Empty means it was just
+ *  you (Erica, 2026-08-30) — never a keyword standing in for a person. */
+type Who = string[];
 
 /** A place chosen for a group that has NOT been written yet. Held here until the
  *  photos are actually saved — see the note on createFromSearch. */
@@ -120,7 +122,6 @@ export default function PhotoSorter() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const meId = profile?.id ?? null;
-  const whoOptions = whoChoices(people, meId);
 
   useEffect(() => {
     fetchPlaces()
@@ -489,14 +490,16 @@ export default function PhotoSorter() {
       // Attribute ONLY the visits this group's photos actually landed on — never
       // other visits that merely fall near this one at this place (which would
       // overwrite a separate visit's attribution).
-      const who = groupWho[g.id] ?? 'both';
-      const profileId = whoProfileId(who, meId);
+      const who = whoForWrite(groupWho[g.id] ?? [], meId);
       const days = new Set<string>(
         g.items
           .map((it) => (override ? override : (it.takenAt ?? '').slice(0, 10)))
           .filter((d): d is string => !!d),
       );
-      if (days.size) {
+      // `who` is empty only with no signed-in profile, which cannot reach this screen —
+      // and `set_visit_participants` refuses an empty list, so it is checked rather than
+      // sent and turned into an error the person cannot act on.
+      if (days.size && who.length) {
         try {
           const visits = await fetchVisits(placeId);
           const touched = visits.filter((v) =>
@@ -505,9 +508,7 @@ export default function PhotoSorter() {
           // ONE sentence for the whole batch. A snack per visit would fire a dozen
           // times to say the same thing once (0243).
           announceWho(
-            mergeOutcomes(
-              await Promise.all(touched.map((v) => setVisitSolo(v.id, profileId ?? null))),
-            ),
+            mergeOutcomes(await Promise.all(touched.map((v) => setVisitParticipants(v.id, who)))),
             people,
           );
         } catch {
@@ -616,7 +617,7 @@ export default function PhotoSorter() {
           {groups.map((g) => {
             const unassigned = g.placeId == null;
             const reason = g.items.find((it) => it.reason)?.reason;
-            const who = groupWho[g.id] ?? 'both';
+            const who = groupWho[g.id] ?? [];
             return (
               <div key={g.id} className={`card ps-group ${unassigned ? 'ps-none' : ''}`}>
                 <div className="ps-group-head">
@@ -737,21 +738,17 @@ export default function PhotoSorter() {
                           onChange={(e) => setGroupDate((d) => ({ ...d, [g.id]: e.target.value }))}
                         />
                       </label>
-                      <label className="ps-field">
+                      <div className="ps-field">
                         <span>Who was on this visit?</span>
-                        <select
+                        {/* Nothing is written here — this is the one visit these photos
+                            land on, and the tagging goes with them when Add is pressed. */}
+                        <WhoPicker
+                          people={people}
+                          meId={meId}
                           value={who}
-                          onChange={(e) =>
-                            setGroupWho((cur) => ({ ...cur, [g.id]: e.target.value as Who }))
-                          }
-                        >
-                          {whoOptions.map((c) => (
-                            <option key={c.key} value={c.key}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          onChange={(ids) => setGroupWho((cur) => ({ ...cur, [g.id]: ids }))}
+                        />
+                      </div>
                     </div>
                     {/* INLINE PLACE EDITING. The same editor the place card uses —
                         rename, fix the location by address search (the repair for a

@@ -1,22 +1,20 @@
-// The guard against a person being hardcoded back into the app.
+// The guard against a person, or a word for a group of people, being written back into
+// the app by hand.
 //
 // Four components each declared `type Who = 'both' | 'mine' | 'josh'` and rendered a
 // literal `<option value="josh">Just Josh</option>`, while resolving the id behind it
 // as "whichever member isn't me". With two people that works. With three it labels an
 // arbitrary member "Josh" and saves the wrong attribution — and the whole point of the
-// flok work is that a third person can join.
+// participants work is that a third person can join.
 //
-// So: the choices come from the real members, and this test fails the build if a
-// name-shaped choice is written by hand again.
+// PR #176 replaced those with one generated list of CHOICES, which fixed the hardcoding
+// and left the vocabulary. §0.2 then retired the vocabulary, and Erica supplied what
+// replaces it — 2026-08-30: *"yes, people picker."* So the answer is no longer a word at
+// all: every "who was there" control renders `<WhoPicker>` and holds a list of profile
+// ids. This file fails the build if a surface starts writing a name, or a word for a set
+// of people, by hand again.
 import { describe, expect, it } from 'vitest';
-import {
-  ANYONE_KEY,
-  everyoneLabel,
-  whoChoices,
-  whoFilterChoices,
-  whoKey,
-  whoProfileId,
-} from './participants';
+import { orderWho, whoForWrite, whoLabel, whoSingle } from './participants';
 import { isOurStats, myStats, ourStats, scopeLabel, scopeNames, scopeSentence } from './statsScope';
 import type { PersonContact } from './memoryPeople';
 import type { MapPerson } from './data';
@@ -44,84 +42,71 @@ const CONTACTS: PersonContact[] = [
 ];
 
 describe('who was there', () => {
-  it('reads exactly as it did before, with two members', () => {
-    // The control must not visibly change for Erica. Same words, same order.
-    // TOGETHER, not "Both" (Erica, 2026-08-15: "the view is Together so investigate why
-    // you are saying Both"). The label used to depend on a style option the caller had to
-    // remember to pass, so the same idea appeared under two words on different screens.
-    expect(whoChoices([ME, JOSH], ME.id).map((c) => c.label)).toEqual([
-      'Together',
-      'Just me',
-      'Just Josh',
+  it('reads as the names, not as a word for a group', () => {
+    // THE RULING. Erica, 2026-08-30: "yes, people picker." The control used to offer
+    // three answers — an everyone-word, "Just me" and "Just <name>" — and §0.2 retired
+    // all three. What replaced them is not a fourth word: it is the list of people, so
+    // there is nothing left that can stop being true when a third person joins.
+    expect(whoLabel([ME.id], [ME, JOSH], ME.id)).toBe('You');
+    expect(whoLabel([ME.id, JOSH.id], [ME, JOSH], ME.id)).toBe('You and Josh');
+    expect(whoLabel([ME.id, JOSH.id, THIRD.id], [ME, JOSH, THIRD], ME.id)).toBe(
+      'You, Josh and Sam',
+    );
+  });
+
+  it('reads an empty tagging as "it was just you"', () => {
+    // Her mapping, exactly: "Nobody chosen = tagging nobody else." An empty set is an
+    // ANSWER on this control, never a gap — so it must never render as blank, and it
+    // must never be written as an empty participant list either.
+    expect(whoLabel([], [ME, JOSH], ME.id)).toBe('You');
+    expect(whoForWrite([], ME.id)).toEqual([ME.id]);
+  });
+
+  it('can say a card somebody else was on and you were not', () => {
+    // The old control could: "Just Josh" was one of its three answers, and Josh has 61
+    // places to my 132. A picker that could only ADD people to my own card would have
+    // quietly made those cards unreachable.
+    expect(whoLabel([JOSH.id], [ME, JOSH], ME.id)).toBe('Josh');
+    expect(whoForWrite([JOSH.id], ME.id)).toEqual([JOSH.id]);
+  });
+
+  it('names a third person instead of dropping them', () => {
+    expect(whoLabel([JOSH.id, THIRD.id], [ME, JOSH, THIRD], ME.id)).toBe('Josh and Sam');
+  });
+
+  it('lists you first and everyone else in the order the people came', () => {
+    // A control that re-ordered itself as you ticked would look like it was losing your
+    // choices. The order is the people's, always.
+    expect(orderWho([THIRD.id, JOSH.id, ME.id], [ME, JOSH, THIRD], ME.id)).toEqual([
+      ME.id,
+      JOSH.id,
+      THIRD.id,
     ]);
   });
 
-  it('names a third member instead of dropping them', () => {
-    const labels = whoChoices([ME, JOSH, THIRD], ME.id).map((c) => c.label);
-    expect(labels).toEqual(['Everyone', 'Just me', 'Just Josh', 'Just Sam']);
-    // "Both" is a lie once there are three.
-    expect(everyoneLabel([ME, JOSH, THIRD])).toBe('Everyone');
+  it('keeps somebody it cannot name rather than untagging them', () => {
+    // A tagged person missing from `map_people` — a role change, a stale list — must not
+    // disappear on the next save. Dropping them here would be this control silently
+    // removing a participant nobody asked it to remove.
+    const kept = orderWho([ME.id, 'ghost-id'], [ME, JOSH], ME.id);
+    expect(kept).toEqual([ME.id, 'ghost-id']);
+    expect(whoLabel(kept, [ME, JOSH], ME.id)).toBe('You and someone');
   });
 
-  it('carries the profile id, so a choice cannot mean the wrong person', () => {
-    const choices = whoChoices([ME, JOSH, THIRD], ME.id);
-    expect(choices.map((c) => c.profileId)).toEqual([null, ME.id, JOSH.id, THIRD.id]);
-  });
-
-  it('round-trips an attribution back to the choice that produced it', () => {
-    for (const stored of [null, ME.id, JOSH.id, THIRD.id]) {
-      const key = whoKey(stored, ME.id);
-      expect(whoProfileId(key, ME.id)).toBe(stored);
-    }
-  });
-
-  it('survives a member with no display name without guessing one', () => {
+  it('survives a person with no display name without guessing one', () => {
     const nameless = person('x-id', null as unknown as string);
-    expect(whoChoices([ME, nameless], ME.id).map((c) => c.label)).toEqual([
-      'Together',
-      'Just me',
-      'Just them',
-    ]);
-  });
-});
-
-describe('a filter asks the same question, plus one', () => {
-  it('offers ANYONE and then exactly the attribution choices, in that order', () => {
-    // The point of the whole consolidation: a filter and a picker say the same words in
-    // the same order, so there is nothing to learn twice. /places/edit used to read
-    // "All / Just me / Just Josh / Together" - its own word for everyone, its own order,
-    // and the everyone pill typed in by hand.
-    expect(whoFilterChoices([ME, JOSH], ME.id).map((c) => c.label)).toEqual([
-      'Anyone',
-      'Together',
-      'Just me',
-      'Just Josh',
-    ]);
+    expect(whoLabel([ME.id, 'x-id'], [ME, nameless], ME.id)).toBe('You and someone');
   });
 
-  it('says "Everyone", not "Together", once a third member exists', () => {
-    // The hand-written pill could not do this: it said "Together" for three people.
-    expect(whoFilterChoices([ME, JOSH, THIRD], ME.id).map((c) => c.label)).toEqual([
-      'Anyone',
-      'Everyone',
-      'Just me',
-      'Just Josh',
-      'Just Sam',
-    ]);
-  });
-
-  it('keeps ANYONE and `both` as different answers', () => {
-    // They are not the same question, and merging them would HIDE ROWS: /places/edit
-    // lists a place nobody has recorded a visit to under `all` and never under `both`.
-    const keys = whoFilterChoices([ME, JOSH], ME.id).map((c) => c.key);
-    expect(keys).toContain(ANYONE_KEY);
-    expect(keys).toContain('both');
-    expect(ANYONE_KEY).not.toBe('both');
-  });
-
-  it('adds nothing but that one extra answer', () => {
-    const attribution = whoChoices([ME, JOSH, THIRD], ME.id);
-    expect(whoFilterChoices([ME, JOSH, THIRD], ME.id).slice(1)).toEqual(attribution);
+  it('refuses to collapse two names into a one-name record', () => {
+    // THE HARD LIMIT, AS A THROW RATHER THAN A COMMENT. `set_place_solo` and
+    // `set_activity_solo` take ONE profile id; only `set_visit_participants` takes a
+    // list. A picker that looked multi-select and kept the first name would report a
+    // save it did not make, which is worse than the buttons it replaced — so the
+    // place-level path cannot even be handed two.
+    expect(whoSingle([], ME.id)).toBe(ME.id);
+    expect(whoSingle([JOSH.id], ME.id)).toBe(JOSH.id);
+    expect(() => whoSingle([ME.id, JOSH.id], ME.id)).toThrow(/one name/);
   });
 });
 
@@ -158,18 +143,17 @@ describe('no member is hardcoded', () => {
     expect(offenders).toEqual([]);
   });
 
-  // ONE VOCABULARY, ENFORCED. Seven surfaces asked "who was there" and three of them
-  // still built the option list by hand - `<option value="">{everyoneLabel(people)}</option>`
-  // followed by `people.map((p) => (p.id === profile?.id ? 'Just me' : ...))`. That is
-  // whoChoices() re-implemented, and re-implementations drift: each carried its own copy
-  // of the everyone-word, and none of them put "Just me" where the pickers put it.
-  it('has no hand-written "Just me" option outside the helper', () => {
+  // "JUST ME" IS RETIRED EVERYWHERE, not merely centralised. It first went because three
+  // of the seven surfaces re-implemented the option list by hand and each put the phrase
+  // somewhere different; §0.2 then retired the phrase itself, and the picker has no word
+  // for it at all — nobody tagged IS "it was just you", so there is nothing to type.
+  it('has no "Just me" left anywhere in the app', () => {
     const offenders = Object.entries(RAW)
       .filter(([path]) => !/participants\.(ts|test\.ts)$/.test(path))
       .filter(([path]) => !/\.test\.tsx?$/.test(path))
       .filter(([, src]) => /Just me/.test(strip(src)))
       .map(([path]) => path);
-    expect(offenders, 'build the choices with whoChoices() instead').toEqual([]);
+    expect(offenders, 'tag the people with <WhoPicker> instead').toEqual([]);
   });
 
   // Erica, 2026-08-15: "the view is Together so investigate why you are saying Both".
@@ -185,7 +169,7 @@ describe('no member is hardcoded', () => {
       .filter(([path]) => !/\.test\.tsx?$/.test(path))
       .filter(([, src]) => />\s*Both\b|\bBoth (want|of us|of them|of you)\b/.test(strip(src)))
       .map(([path]) => path);
-    expect(offenders, 'the everyone-word comes from everyoneLabel()').toEqual([]);
+    expect(offenders, 'name the people with <WhoPicker> instead of a word for them').toEqual([]);
   });
 });
 
@@ -198,10 +182,10 @@ describe('no member is hardcoded', () => {
 // saying "Both" long after the word was retired - so the list is the whole set, and a
 // new surface joins it rather than starting a fourth vocabulary.
 // ---------------------------------------------------------------------------
-describe('every who-was-there control is generated', () => {
+describe('every who-was-there control is the people picker', () => {
   const file = (name: string) => Object.entries(RAW).find(([p]) => p.endsWith(name))?.[1] ?? '';
 
-  // An ATTRIBUTION - who was on this visit. Its choices are whoChoices(), always.
+  // An ATTRIBUTION - who was on this card. It is `<WhoPicker>`, always.
   const ATTRIBUTION = [
     'components/NewPlaceDraft.tsx', // the new-place card, /?add=1
     'components/PlacePanel.tsx', // a saved card: the visit rows AND add-a-visit
@@ -218,34 +202,96 @@ describe('every who-was-there control is generated', () => {
   ];
 
   for (const name of ATTRIBUTION) {
-    it(`${name} builds its choices from the real members`, () => {
+    it(`${name} asks with the people picker`, () => {
       const src = file(name);
       expect(src.length, `app/src/${name} should be readable`).toBeGreaterThan(500);
-      expect(strip(src), 'call whoChoices() rather than mapping people by hand').toMatch(
-        /whoChoices\(/,
+      const code = strip(src);
+      expect(code, 'render <WhoPicker> rather than a control of its own').toMatch(/<WhoPicker/);
+      // AND THE VALUE IS THE PEOPLE. A surface could render the picker and still keep a
+      // keyword behind it, which is the shape every one of these had before: a `Who`
+      // that was `'both' | 'mine' | <id>` and a translation on each side of it.
+      expect(code, 'a keyword standing in for a person is retired').not.toMatch(
+        /'both'|'mine'|whoKey\(|whoProfileId\(/,
       );
     });
   }
 
-  it('the /places/edit filter takes its pills from whoFilterChoices()', () => {
-    // It used to take whoChoices(), REMOVE the everyone choice and re-add it at the end
-    // with the word typed in - so it read "All / Just me / Just Josh / Together" while
-    // every card read "Together / Just me / Just Josh", and with three members its
-    // hand-typed pill went on saying "Together" after the cards had moved to "Everyone".
-    const src = strip(file('routes/PlacesEditor.tsx'));
-    expect(src).toMatch(/whoFilterChoices\(/);
-    expect(src, 'the no-restriction key comes from ANYONE_KEY').not.toMatch(/key: 'all'/);
+  it(`the picker is one component, not one per surface`, () => {
+    // The reason all seven can be checked by name above: there IS one control. If it
+    // ever goes, they each grow their own again, which is the state PR #176 found.
+    expect(file('components/WhoPicker.tsx').length).toBeGreaterThan(500);
   });
 
-  it('the /bucket list takes its everyone-word from everyoneLabel()', () => {
+  it('it reuses the sheet the scope picker already proved on a phone', () => {
+    // Not a second picker. `--pnav-clearance` and the 44px rows were worked out on a real
+    // phone for `.scope-picker` (#187, and the click that landed on the Settings tab);
+    // rendering the same markup is what stops that fix applying to only one of them.
+    const code = strip(file('components/WhoPicker.tsx'));
+    expect(code).toMatch(/scope-picker-backdrop/);
+    expect(code).toMatch(/scope-pick /);
+  });
+
+  it('the /places/edit filter is the same picker, asking the other question', () => {
+    // It used to be four pills whose everyone-answer was re-added at the end with the
+    // word typed in - so it read one vocabulary while every card read another, and
+    // neither could describe two people out of three. Nobody picked narrows nothing,
+    // which is the answer the retired word "Anyone" used to carry.
+    const src = strip(file('routes/PlacesEditor.tsx'));
+    expect(src).toMatch(/emptyLabel=/);
+    expect(src, 'the no-restriction answer is an empty pick, not a key').not.toMatch(
+      /ANYONE_KEY|key: 'all'/,
+    );
+  });
+
+  it('the /bucket list names who wants to go instead of a word for them', () => {
+    // It said "Both want to go", then "Together" - two attempts to name the set of us,
+    // both retired. The badge reads the wanters now, through the same helper the pickers
+    // label themselves with.
     const src = strip(file('routes/BucketList.tsx'));
-    expect(src).toMatch(/everyoneLabel\(/);
+    expect(src).toMatch(/whoLabel\(/);
   });
 
   it('PersonFilter.tsx is gone, not sitting there as a fifth implementation', () => {
     // 32 lines, zero importers, superseded by PeopleFilter - and still carrying its own
-    // "Together / Just me / Just Josh" list for whoever wired it back up.
+    // hardcoded list for whoever wired it back up.
     expect(Object.keys(RAW).filter((p) => p.endsWith('components/PersonFilter.tsx'))).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // WHAT THE PICKER CAN ACTUALLY SAVE, checked at the call site rather than trusted.
+  //
+  // `set_visit_participants(p_visit, uuid[])` takes a list. `set_place_solo` and
+  // `set_activity_solo` take ONE profile id. So a surface writing a visit may offer
+  // multi-select and a surface writing a place may not, and the difference has to be
+  // visible in the code or it becomes a picker that quietly keeps the first name.
+  // ---------------------------------------------------------------------------
+  it('every visit-level surface writes the whole list', () => {
+    const offenders = [
+      'components/PlacePanel.tsx',
+      'routes/VisitPage.tsx',
+      'routes/PhotoSorter.tsx',
+    ]
+      .filter((name) => !/setVisitParticipants\(/.test(strip(file(name))))
+      .concat(
+        // The old one-name wrapper must not come back on a visit: it took `string | null`
+        // and spent the null on "every profile with an account".
+        Object.entries(RAW)
+          .filter(([path]) => !/\.test\.tsx?$/.test(path))
+          .filter(([, src]) => /setVisitSolo\(/.test(strip(src)))
+          .map(([path]) => `${path} (setVisitSolo is retired)`),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it('every place-level write goes through whoSingle(), which refuses to collapse', () => {
+    const offenders = Object.entries(RAW)
+      .filter(([path]) => !/\.test\.tsx?$/.test(path))
+      // The wrapper itself. The glob keys this file's own directory as `./`.
+      .filter(([path]) => !/(^|\/)data\.ts$/.test(path))
+      .filter(([, src]) => /setPlaceSolo\(/.test(strip(src)))
+      .filter(([, src]) => !/whoSingle\(/.test(strip(src)))
+      .map(([path]) => path);
+    expect(offenders, 'setPlaceSolo holds one name — take it from whoSingle()').toEqual([]);
   });
 });
 
@@ -378,20 +424,30 @@ describe('the scope control', () => {
 //     Just me   Just Josh   Just Erica   Together   Both   All   Anyone
 //     the ALL / ANY operator
 //
-// NAMED INDIVIDUALLY, like the `whoChoices()` guard above, and for the same reason: a rule
-// written as "somewhere in the app" is one a new screen is born outside of. `/bucket` kept
-// the retired word "Both" for a year under a guard that only ever read `Settings.tsx`.
+// NAMED INDIVIDUALLY, like the picker guard above, and for the same reason: a rule written
+// as "somewhere in the app" is one a new screen is born outside of. `/bucket` kept the
+// retired word "Both" for a year under a guard that only ever read `Settings.tsx`.
+//
+// THE ATTRIBUTION SURFACES JOINED THIS LIST ON 2026-08-30, and until then they were the
+// reason it could not be the whole app: §0.2 retired the words on every screen, PR #187
+// could only clear the SCOPE ones, and the seven "who was there" controls went on saying
+// `Together / Just me / Just <name>` live on production because no replacement existed for
+// them yet. Erica supplied it — *"yes, people picker"* — so they are checked here now, and
+// leaving one out is exactly how the last one survived.
 //
 // COMMENTS ARE STRIPPED FIRST. §0.2 bans these words in comments too, but a file has to be
-// able to record WHICH word it retired — `PeopleFilter.tsx` keeps that ledger deliberately
-// — and a guard that made the ledger illegal would be deleted rather than obeyed.
+// able to record WHICH word it retired — `PeopleFilter.tsx` and `PlacePanel.tsx` both keep
+// that ledger deliberately — and a guard that made the ledger illegal would be deleted
+// rather than obeyed.
 // ---------------------------------------------------------------------------
 describe('the retired scope words stay retired', () => {
   const file = (name: string) => Object.entries(RAW).find(([p]) => p.endsWith(name))?.[1] ?? '';
 
-  // Every surface that renders a scope, a scope's name, or the people in one. The glob
-  // keys this file's own directory as `./`, so the lib entry carries no `lib/` prefix.
+  // Every surface that renders a scope, a scope's name, an attribution, or the people in
+  // one. The glob keys this file's own directory as `./`, so the lib entry carries no
+  // `lib/` prefix.
   const SURFACES = [
+    // The scope of a set of numbers — §0.2, PR #187.
     'statsScope.ts',
     'components/PeopleFilter.tsx',
     'components/FilterChips.tsx',
@@ -400,6 +456,16 @@ describe('the retired scope words stay retired', () => {
     'routes/Insights.tsx',
     'routes/Settings.tsx',
     'routes/PersonPage.tsx',
+    // Who was on a card — the seven, plus the control itself and the wish badge that
+    // spent a year finding new words for the same idea.
+    'components/WhoPicker.tsx',
+    'components/NewPlaceDraft.tsx',
+    'components/PlacePanel.tsx',
+    'components/PlaceQuickEdit.tsx',
+    'routes/VisitPage.tsx',
+    'routes/PlacesEditor.tsx',
+    'routes/PhotoSorter.tsx',
+    'routes/BucketList.tsx',
   ];
 
   // Each pattern is the word AS A LABEL OR AN OPERATOR, not as ordinary English: prose may

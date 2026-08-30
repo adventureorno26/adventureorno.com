@@ -13,7 +13,7 @@ import {
   repairablePlaces,
   restorePlace,
   setPlaceSolo,
-  setVisitSolo,
+  setVisitParticipants,
   updatePlace,
 } from '../lib/data';
 import type { MapPerson, PlaceNeed } from '../lib/data';
@@ -32,13 +32,8 @@ import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import PhotoMatchReview from '../components/PhotoMatchReview';
 import AuthedImg from '../components/AuthedImg';
 import type { Photo, Place, Visit } from '../lib/types';
-import {
-  ANYONE_KEY,
-  whoChoices,
-  whoFilterChoices,
-  whoKey,
-  whoProfileId,
-} from '../lib/participants';
+import { whoForWrite, whoSingle } from '../lib/participants';
+import WhoPicker from '../components/WhoPicker';
 import { announceWho } from '../lib/whoWasThere';
 
 /**
@@ -78,9 +73,19 @@ function asNeeds(v: string | null): NeedsFilter | null {
   return v && v in NEEDS ? (v as NeedsFilter) : null;
 }
 
-/** ANYONE_KEY | 'both' | 'mine' | a profile id — built from the real members. */
-type PersonKey = string;
-type Who = string;
+/** Both the filter and the per-row control hold the same thing: profile ids.
+ *
+ *  The FILTER's empty set means "do not narrow this" — the answer that used to be the
+ *  word "Anyone", which §0.2 retired outright because it only ever meant "everyone in
+ *  this household" and there is no household. Empty is a better shape for it than a
+ *  keyword anyway: an unpicked filter narrows nothing without having to be interpreted.
+ *
+ *  The ROW's empty set means "it was just you" (Erica, 2026-08-30). They are still two
+ *  different questions — whose places to SHOW versus who was THERE — which is why they
+ *  are two pieces of state and not one, and why /places/edit lists a place nobody has
+ *  recorded a visit to under an empty filter and never under a tagging. */
+type PersonKey = string[];
+type Who = string[];
 type RowStatus = 'saving' | 'saved' | 'error' | undefined;
 
 function fmtVisit(v: Visit): string {
@@ -111,7 +116,7 @@ export default function PlacesEditor() {
   const [visitPeople, setVisitPeople] = useState<Map<string, string[]>>(new Map());
   const [selVisit, setSelVisit] = useState<Record<string, string>>({});
   const [q, setQ] = useState('');
-  const [person, setPerson] = useState<PersonKey>(ANYONE_KEY);
+  const [person, setPerson] = useState<PersonKey>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const needs = asNeeds(searchParams.get('needs'));
   /** place id → how many of its photos have no capture time. Only loaded when the
@@ -172,12 +177,6 @@ export default function PlacesEditor() {
   }, [needs]);
 
   const meId = profile?.id ?? null;
-  const whoOptions = useMemo(() => whoChoices(people, meId), [people, meId]);
-  /** The same words in the same order, plus the one answer a filter has and an
-   *  attribution does not: ANYONE. */
-  const filterOptions = useMemo(() => whoFilterChoices(people, meId), [people, meId]);
-  /** Everyone except the signed-in member, in the order they appear. */
-  const others = useMemo(() => people.filter((x) => x.id !== meId), [people, meId]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -193,16 +192,16 @@ export default function PlacesEditor() {
         const hay = `${p.name} ${p.city ?? ''} ${p.admin1 ?? ''} ${p.country ?? ''}`.toLowerCase();
         if (!hay.includes(s)) return false;
       }
-      if (person === ANYONE_KEY) return true;
+      // NOBODY PICKED NARROWS NOTHING. The four pills this replaced each carried their
+      // own reading of the same set — "Anyone" meant do not narrow, "Just me" meant the
+      // set contains me, and "Together" meant it contains EVERY member — and only the
+      // last of those could describe two people out of three. Picking names is one rule:
+      // show the places everybody picked contributed to.
+      if (person.length === 0) return true;
       const set = placePeople.get(p.id) ?? new Set<string>();
-      const hasMe = meId ? set.has(meId) : false;
-      if (person === 'mine') return hasMe;
-      // 'both' means EVERY member was there, which is the honest reading once
-      // there are three of us — it used to mean "me and the other one".
-      if (person === 'both') return people.every((x) => set.has(x.id));
-      return set.has(person);
+      return person.every((id) => set.has(id));
     });
-  }, [places, q, person, placePeople, meId, people, needs, undatedPhotos]);
+  }, [places, q, person, placePeople, needs, undatedPhotos]);
 
   function setRowStatus(id: string, s: RowStatus) {
     setStatus((cur) => ({ ...cur, [id]: s }));
@@ -253,53 +252,49 @@ export default function PlacesEditor() {
     return vs.find((v) => v.id === selVisit[p.id]) ?? vs[0];
   }
   function whoOfVisit(v: Visit): Who {
-    // Exactly one participant means that person; anything else means everyone. That is
-    // what solo_profile's null meant, in a form that can also describe three.
-    const on = visitPeople.get(v.id) ?? [];
-    return whoKey(on.length === 1 ? on[0] : null, meId);
+    // THE PARTICIPANT ROWS, whole. This used to reduce them to "exactly one participant
+    // means that person, anything else means everyone" because the control had three
+    // words to say it in — so a visit with three of us read as the same answer as a visit
+    // with two, and saving from that reading wrote the difference away.
+    return visitPeople.get(v.id) ?? [];
   }
-  // Place-level fallback (no visits): from who has contributed anything here.
+  /** A place with NO VISITS has no day to attribute, so the row falls back to who has
+   *  contributed anything here at all. It writes through `set_place_solo`, which holds
+   *  ONE name — see `setWho` below. */
   function whoOfPlace(id: string): Who {
-    const set = placePeople.get(id) ?? new Set<string>();
-    if (people.length > 0 && people.every((x) => set.has(x.id))) return 'both';
-    const only = others.find((x) => set.has(x.id) && !(meId && set.has(meId)));
-    if (only) return only.id;
-    return 'mine';
+    return [...(placePeople.get(id) ?? new Set<string>())];
   }
-  // Union of everyone across a place's visits: a visit with a solo profile counts
-  // only that person; a null solo (no override) means "both".
+  // Union of everyone across a place's visits, straight from the participant rows.
   function peopleUnion(visits: Visit[]): Set<string> {
     const set = new Set<string>();
     for (const vv of visits) {
-      // Straight from the participant rows now — no interpretation of a null needed.
       for (const id of visitPeople.get(vv.id) ?? []) set.add(id);
     }
     return set;
   }
 
-  async function setWho(p: Place, key: Who) {
-    const profileId = whoProfileId(key, meId);
+  async function setWho(p: Place, ids: Who) {
     const v = selectedVisit(p);
     setRowStatus(p.id, 'saving');
     try {
       if (v) {
-        const outcome = await setVisitSolo(v.id, profileId ?? null);
+        // A VISIT HOLDS THE WHOLE LIST — `set_visit_participants`, the function
+        // `set_visit_solo` has been a one-element wrapper around since 0243. Nothing is
+        // collapsed on the way to the database here.
+        const on = whoForWrite(ids, meId);
+        const outcome = await setVisitParticipants(v.id, on);
         announceWho(outcome, people);
-        // ASKED IS NOT THERE. Reflecting the pick locally when the answer is still
-        // pending would put somebody on a visit they have not agreed to (0240/0243).
-        if (outcome.asked.length) {
-          setRowStatus(p.id, 'saved');
-          return;
-        }
-        // Update the edited visit AND recompute the place's aggregate people as the
-        // UNION across ALL its visits — editing one visit must never replace people
-        // contributed by other visits.
-        // Reflect the change in the participant map, which is what everything reads.
+        // ASKED IS NOT THERE. Reflecting the pick locally while the answer is still
+        // pending would put somebody on a visit they have not agreed to (0240/0243), so
+        // only the people actually on it now go into the local map.
+        const applied = on.filter((id) => !outcome.asked.includes(id));
         setVisitPeople((cur) => {
           const next = new Map(cur);
-          next.set(v.id, profileId ? [profileId] : people.map((x) => x.id));
+          next.set(v.id, applied);
           return next;
         });
+        // The place's aggregate people are the UNION across ALL its visits — editing one
+        // visit must never replace people contributed by another.
         const updated = visitsByPlace.get(p.id) ?? [];
         setVisitsByPlace((cur) => {
           const next = new Map(cur);
@@ -311,10 +306,18 @@ export default function PlacesEditor() {
           next.set(p.id, peopleUnion(updated));
           return next;
         });
+        if (outcome.asked.length) {
+          setRowStatus(p.id, 'saved');
+          return;
+        }
       } else {
-        // Place-level attribution (no specific visit) sets the whole place — and asks
-        // once about it, rather than once per visit (0242).
-        const outcome = await setPlaceSolo(p.id, profileId ?? null);
+        // NO VISIT TO ATTRIBUTE, so this is the place-level write — and it holds ONE
+        // name: `set_place_solo(p_place, p_profile)` takes a single profile id. That is
+        // why this row's picker is `capacity="one"`, and why `whoSingle` throws rather
+        // than keep the first of two if that ever stops being true. It also asks ONCE
+        // about the place rather than once per visit (0242).
+        const profileId = whoSingle(ids, meId);
+        const outcome = await setPlaceSolo(p.id, profileId);
         announceWho(outcome, people);
         if (outcome.asked.length) {
           setRowStatus(p.id, 'saved');
@@ -322,10 +325,7 @@ export default function PlacesEditor() {
         }
         setPlacePeople((cur) => {
           const next = new Map(cur);
-          const set = new Set<string>();
-          if (key === 'both') for (const x of people) set.add(x.id);
-          else if (profileId) set.add(profileId);
-          next.set(p.id, set);
+          next.set(p.id, new Set(profileId ? [profileId] : []));
           return next;
         });
       }
@@ -551,23 +551,28 @@ export default function PlacesEditor() {
           onChange={(e) => setQ(e.target.value)}
           className="pe-search"
         />
-        {/* GENERATED, INCLUDING THE EVERYONE PILL. This row used to build itself from
-            `whoOptions` with `both` pulled OUT of it, and then re-add that pill at the
-            end with the word "Together" typed in by hand — so it read "All · Just me ·
-            Just Josh · Together" while every picker on a card reads "Together · Just me ·
-            Just Josh", and with a third member the hand-typed pill went on saying
-            "Together" while the cards correctly said "Everyone". One list, one order. */}
+        {/* THE FILTER IS THE SAME PICKER AS THE ROWS, asking the other question. It used
+            to be four pills — a row whose everyone-pill was re-added at the end with the
+            word typed in by hand, so it read one vocabulary while every card read another
+            and neither could describe two people out of three. Picking names has one
+            rule and needs no vocabulary at all; picking nobody narrows nothing, which is
+            the answer the retired word "Anyone" used to carry. */}
         <div className="pe-personfilter">
-          {filterOptions.map((c) => (
-            <button
-              key={c.key}
-              className={person === c.key ? 'on' : ''}
-              onClick={() => setPerson(c.key)}
-              type="button"
-            >
-              {c.label}
+          <WhoPicker
+            people={people}
+            meId={meId}
+            value={person}
+            onChange={setPerson}
+            heading="Whose places?"
+            note="Show only the places everyone you tick has been to. Tick nobody to show them all."
+            emptyLabel="Who"
+            saveLabel="Show these"
+          />
+          {person.length > 0 && (
+            <button type="button" onClick={() => setPerson([])}>
+              Clear
             </button>
-          ))}
+          )}
         </div>
         <span className="label">{filtered.length} places</span>
       </div>
@@ -701,13 +706,21 @@ export default function PlacesEditor() {
                     )}
                   </td>
                   <td className="pe-col-who">
-                    <select value={who} onChange={(e) => void setWho(p, e.target.value as Who)}>
-                      {whoOptions.map((c) => (
-                        <option key={c.key} value={c.key}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
+                    {/* CAPACITY FOLLOWS THE RECORD BEING WRITTEN, per row: the selected
+                        VISIT takes the whole list, and a place with no visits at all is
+                        written through `set_place_solo`, which holds one name. */}
+                    <WhoPicker
+                      people={people}
+                      meId={meId}
+                      value={who}
+                      capacity={sv ? 'many' : 'one'}
+                      onChange={(ids) => void setWho(p, ids)}
+                      note={
+                        sv
+                          ? undefined
+                          : 'This place has no visits, so it is recorded against one name. Nobody ticked means it was just you.'
+                      }
+                    />
                   </td>
                   <td className="pe-col-photos">
                     <button type="button" className="pe-add" onClick={() => openPhotos(p)}>

@@ -664,7 +664,8 @@ export async function fetchMapPeople(): Promise<MapPerson[]> {
 }
 
 /** place_id → set of profile ids who contributed (added it, hiked it, or have a
- *  photo there). Drives the "Just me / Just Josh / Both" place filter. */
+ *  photo there). Drives the people filter on /places/edit, which narrows to the places
+ *  everybody you pick contributed to. */
 export async function fetchPlacePeople(): Promise<Map<string, Set<string>>> {
   const { data, error } = await supabase.rpc('place_people');
   const out = new Map<string, Set<string>>();
@@ -962,26 +963,48 @@ const VISIT_COLS =
   // is on its way out — nothing should start reading it again in the meantime.
   'id, place_id, start_date, end_date, note, trip_marked, status, solo_override, created_at';
 
-/** Manually set who a visit belongs to (null = both). Sticks across rebuilds.
+// `setVisitSolo()` IS GONE (2026-08-30). It took `string | null` and spent the null on
+// `set_visit_solo`, where null means "every profile with an account" — the null-person
+// scope §0.2 retired, and a reading that could never describe three people. Every caller
+// now names the participants, which is what the picker collects and what the RPC below
+// has always taken. `set_visit_solo` itself stays in the database as the wrapper it is.
+
+/**
+ * Who was on a visit, as the whole list — the write path behind the people picker.
  *
- *  RETURNS WHAT HAPPENED (0243), because since 0240 naming somebody else is a QUESTION and
- *  not a fact: `{ stated, asked, removed }`. A caller that drops it will show the person a
- *  change that has not happened yet. */
-export async function setVisitSolo(visitId: string, profileId: string | null): Promise<WhoOutcome> {
-  const { data, error } = await supabase.rpc('set_visit_solo', {
+ * `set_visit_solo` has been a one-element wrapper around this since 0243
+ * (`set_visit_participants(p_visit, array[p_profile])`), so this is not a new door into
+ * the database: it is the same door, opened with the argument it always took. It is the
+ * ONLY one of the three attribution writers that accepts a list — `set_place_solo` and
+ * `set_activity_solo` take a single profile id — which is why the picker on a place or an
+ * outing ticks one name and the picker on a visit does not have to.
+ *
+ * Your own presence is STATED; everybody else is ASKED, and they are not on the visit
+ * until they answer (0240). Read `{ stated, asked, removed }` rather than assuming — see
+ * lib/whoWasThere.
+ */
+export async function setVisitParticipants(
+  visitId: string,
+  profileIds: string[],
+): Promise<WhoOutcome> {
+  const { data, error } = await supabase.rpc('set_visit_participants', {
     p_visit: visitId,
-    p_profile: sqlNull(profileId), // null = both
+    p_profiles: profileIds,
   });
   if (error) throw error;
   return asOutcome(data);
 }
 
-/** Set who a whole (leaf) place belongs to — sets all its visits. null = both.
- *  Naming somebody else raises ONE question about the place (0240/0242). */
+/** Set who a whole (leaf) place belongs to — sets all its visits. ONE profile id: the
+ *  place-level writer cannot hold a list, which is the limit the picker's `capacity="one"`
+ *  exists to state rather than paper over. */
 export async function setPlaceSolo(placeId: string, profileId: string | null): Promise<WhoOutcome> {
   const { data, error } = await supabase.rpc('set_place_solo', {
     p_place: placeId,
-    p_profile: sqlNull(profileId), // null = both
+    // A null here means every profile with an account — the null-person scope §0.2
+    // retired. The picker never sends one: `whoSingle()` resolves an empty tagging to
+    // YOU, so the null is only still reachable by a caller that hands one in deliberately.
+    p_profile: sqlNull(profileId),
   });
   if (error) throw error;
   return asOutcome(data);
@@ -1238,8 +1261,8 @@ export async function addVisit(
  * recreates every non-manual visit, and all live visits are manual=false, so a
  * plain update would be silently wiped the next time anything touched the place.
  *
- * Editors and the owner can both do this (same rule as visits_write). Attribution
- * — Just me / Just Josh / Both — records who was there and never gates editing.
+ * Editors and the owner can both do this (same rule as visits_write). Attribution —
+ * the people tagged on the visit — records who was there and never gates editing.
  */
 export async function setVisitDates(id: string, start: string, end: string): Promise<Visit> {
   const { data, error } = await supabase.rpc('set_visit_dates', {
