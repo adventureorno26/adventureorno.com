@@ -4489,6 +4489,78 @@ Neither was noise, and neither would have been caught by reading the diff.
 
 ---
 
+### 6g. `backup-freshness` was measuring age from the wrong thing
+
+Reported *"27h old"* for a backup taken 13 hours earlier, because it read the date out of
+the `db/YYYY-MM-DD/` key prefix and measured from **midnight of that day** rather than the
+object's timestamp. It only ever overstated, so it never hid a gap — but a number that can
+be a full day out is a number nobody trusts, and this is the check that answers "am I
+covered?". It now reads R2's `last_modified`, with the folder date as fallback.
+
+The second bug in the same three lines was the dangerous one. When a key did not match the
+expected shape, `day` was `undefined`, `new Date("undefinedT00:00:00Z")` gave NaN, and
+`NaN > MAX_AGE_HOURS` is **false** — so a bucket whose keys had been renamed would report
+**"covered"**. That is precisely the silence the file opens by saying it exists to prevent:
+*"the dangerous failure is SILENCE… nothing goes red because nothing runs."* An age that
+cannot be read is now a failure, not a pass.
+
+Backups themselves were fine throughout: daily, succeeding, 14 generations retained, 364
+objects mirrored — the check was misreporting, not the backup misbehaving.
+
+### 6e. THE PERFORMANCE ADVISORS, first read 2026-08-29
+
+§6c has tracked the **security** advisors since 2026-08-07. The **performance** list had
+never been opened. It had **181 findings**, and re-checking it is the same call with
+`/advisors/performance` instead of `/advisors/security`.
+
+| Level | Name | before | after `0275` | Status |
+| ----- | ---- | ------ | ------------ | ------ |
+| WARN | `auth_rls_initplan` | 6 | **0** | **CLOSED** — bare `auth.uid()` in a policy is re-evaluated per row scanned; `(select auth.uid())` hoists it to an InitPlan |
+| WARN | `duplicate_index` | 1 | **0** | **CLOSED** — `location_pings` carried two identical indexes; `pings_profile_idx` dropped |
+| WARN | `multiple_permissive_policies` | 114 | 114 | Mostly noise: counted once per role, and most name roles nobody authenticates as (`dashboard_user`, `authenticator`, `cli_login_postgres`) |
+| INFO | `unindexed_foreign_keys` | 53 | 53 | Real, and its own piece of work — not a one-liner on a database this size |
+| INFO | `unused_index` | 5 | 5 | Leave. "Unused" here means "not used yet"; dropping an index on read patterns this young is guessing |
+| INFO | `no_primary_key` | 2 | 2 | `trip_migration_exceptions`, `place_membership_exceptions`. Small operator-facing exception lists; adding a key to a table whose rows are matched by content is a data-model decision, not a performance fix |
+
+**Total 181 → 174.**
+
+`auth.uid()` is STABLE, so hoisting it cannot change a result — but "cannot change a result"
+is exactly the sort of claim that is true until it isn't, so it was measured: all six
+policies rewritten inside a transaction, `count(*)` on all five affected tables as each of
+the three accounts, then rolled back. **Fifteen comparisons, fifteen identical.**
+
+| table | Erica | Josh | Test bot |
+| ----- | ----- | ---- | -------- |
+| `activities` | 480 | 431 | 293 |
+| `activity_reactions` | 0 | 0 | 0 |
+| `memory_people` | 1000 | 797 | 303 |
+| `memory_subjects` | 836 | 632 | 293 |
+| `people` | 4 | 4 | 3 |
+
+The migration asserts the rewrite stuck, that no bare `auth.uid()` survives, **and that every
+`ALL` policy kept its `with check` half** — dropping that half does not fail a read test, it
+quietly widens writes, which is the way this change could have gone wrong unnoticed.
+
+### 6f. THE DEPLOYED APP, hit-tested 2026-08-29
+
+`scripts/audit-live.mjs` drives the real production build, signed in, across 13 routes × 3
+viewports. It needs no password: `app/e2e/fixtures.ts` mints a test-bot session from the
+service key via `generate_link` + `verify`, and the same few lines work standalone.
+
+**112 findings, and none of them in a category that means something is broken.** No console
+errors, no failed requests, no blank pages, no horizontal overflow, no broken images —
+anywhere. What it found was `tiny-target` (81) and `obscured-control` (31), which are the two
+categories the script's own header lists as known and deliberately left for a human:
+map attribution, the `/places/edit` bulk table on a phone, and touch-target sizing which is
+Phase 4 work.
+
+Two clusters in there are **not** on that known list and are worth a human eye before anyone
+calls them defects — `visit-row` on `/settings` reported as covered on all three viewports,
+and the memory card on `/` covered by a nav tab on desktop. Several read like the hit-test
+finding an element "covered" by its own ancestor (`covered by settings-page`), which is
+normal and not a fault. Repositioning chrome is a locked design decision per the same header,
+so nothing was changed.
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
