@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
   deletePlace,
@@ -8,12 +8,15 @@ import {
   fetchMapPeople,
   fetchPlacePeople,
   fetchPlaces,
+  fetchUndatedPhotoPlaces,
+  placeNeeds,
+  repairablePlaces,
   restorePlace,
   setPlaceSolo,
   setVisitSolo,
   updatePlace,
 } from '../lib/data';
-import type { MapPerson } from '../lib/data';
+import type { MapPerson, PlaceNeed } from '../lib/data';
 import {
   assignPhotoToPlace,
   deletePhoto,
@@ -37,6 +40,43 @@ import {
   whoProfileId,
 } from '../lib/participants';
 import { announceWho } from '../lib/whoWasThere';
+
+/**
+ * ARRIVING FROM A REPAIR TILE, SHOWING ONLY WHAT IT COUNTED.
+ *
+ * "Name them" for 10 unnamed places used to open this table with all 168 rows and
+ * no filter, sort or highlight, so the button appeared to do nothing (measured
+ * live, 2026-08-30). `?needs=` narrows the table to exactly the rows the tile
+ * counted — the place predicates come from `lib/data`, the same ones the count
+ * uses, so the number on the tile and the rows here cannot disagree.
+ *
+ * `photo-dates` is the odd one out and deliberately so: it is not a fact about a
+ * place, it is "this place holds photos with no capture time" — and the repair for
+ * those IS here (open Photos on the row, tick them, Set date), which is why it
+ * lands here rather than anywhere else.
+ */
+type NeedsFilter = PlaceNeed | 'photo-dates';
+const NEEDS: Record<NeedsFilter, { heading: string; how: string }> = {
+  unnamed: {
+    heading: 'places still waiting for a name',
+    how: 'Type over “New place” in the Name column — it saves as you leave the field.',
+  },
+  untagged: {
+    heading: 'places with no tags',
+    how: 'Add a tag in the Tags column so they show the right marker and review section.',
+  },
+  undated: {
+    heading: 'places with no visit date',
+    how: 'Pick the visit in the Visit column, or add one from the place’s own card.',
+  },
+  'photo-dates': {
+    heading: 'places holding photos with no date',
+    how: 'Open Photos on the row, tick the ones with no date, then Set date. Photos that are not on the map at all are in Sort photos instead.',
+  },
+};
+function asNeeds(v: string | null): NeedsFilter | null {
+  return v && v in NEEDS ? (v as NeedsFilter) : null;
+}
 
 /** ANYONE_KEY | 'both' | 'mine' | a profile id — built from the real members. */
 type PersonKey = string;
@@ -72,6 +112,11 @@ export default function PlacesEditor() {
   const [selVisit, setSelVisit] = useState<Record<string, string>>({});
   const [q, setQ] = useState('');
   const [person, setPerson] = useState<PersonKey>(ANYONE_KEY);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const needs = asNeeds(searchParams.get('needs'));
+  /** place id → how many of its photos have no capture time. Only loaded when the
+   *  filter that needs it is on — this table is heavy enough already. */
+  const [undatedPhotos, setUndatedPhotos] = useState<Map<string, number>>(new Map());
   const [status, setStatus] = useState<Record<string, RowStatus>>({});
   const [note, setNote] = useState<string | null>(null);
 
@@ -115,6 +160,16 @@ export default function PlacesEditor() {
       .catch(() => undefined);
   }
   useEffect(load, []);
+  useEffect(() => {
+    if (needs !== 'photo-dates') return;
+    let live = true;
+    fetchUndatedPhotoPlaces()
+      .then((m) => live && setUndatedPhotos(m))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [needs]);
 
   const meId = profile?.id ?? null;
   const whoOptions = useMemo(() => whoChoices(people, meId), [people, meId]);
@@ -126,7 +181,14 @@ export default function PlacesEditor() {
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return places.filter((p) => {
+    // The repair filter runs FIRST and over the same set the tile counted.
+    const base =
+      needs === null
+        ? places
+        : needs === 'photo-dates'
+          ? places.filter((p) => (undatedPhotos.get(p.id) ?? 0) > 0)
+          : repairablePlaces(places).filter((p) => placeNeeds(p, needs));
+    return base.filter((p) => {
       if (s) {
         const hay = `${p.name} ${p.city ?? ''} ${p.admin1 ?? ''} ${p.country ?? ''}`.toLowerCase();
         if (!hay.includes(s)) return false;
@@ -140,7 +202,7 @@ export default function PlacesEditor() {
       if (person === 'both') return people.every((x) => set.has(x.id));
       return set.has(person);
     });
-  }, [places, q, person, placePeople, meId, people]);
+  }, [places, q, person, placePeople, meId, people, needs, undatedPhotos]);
 
   function setRowStatus(id: string, s: RowStatus) {
     setStatus((cur) => ({ ...cur, [id]: s }));
@@ -446,7 +508,7 @@ export default function PlacesEditor() {
   if (!canEdit) {
     return (
       <div className="page" style={{ maxWidth: 760 }}>
-        <Link className="back-bar" to="/settings">
+        <Link className="back-bar" to="/settings/data/manage">
           <span>Settings</span>
         </Link>
         <p>Only editors can bulk-edit places.</p>
@@ -456,14 +518,31 @@ export default function PlacesEditor() {
 
   return (
     <div className="places-editor">
-      <Link className="back-bar" to="/settings">
-        <span>Settings</span>
+      {/* BACK TO WHERE YOU CAME FROM. Arriving from a repair tile and being offered
+          "Settings" is the wrong door — the queue you were working through is the
+          one you want to return to. */}
+      <Link className="back-bar" to={needs ? '/settings/data/attention' : '/settings/data/manage'}>
+        <span>{needs ? 'Needs attention' : 'Settings'}</span>
       </Link>
       <h1>Edit all places</h1>
-      <p className="label" style={{ margin: '0 0 12px' }}>
-        Change any field — it saves as you go. Pick which visit you’re editing to set who was there
-        that day. Photos opens what’s already saved, where you can delete or add more.
-      </p>
+      {needs ? (
+        <div className="pe-needs" role="status">
+          <b>
+            {filtered.length} {NEEDS[needs].heading}
+          </b>
+          <span className="label">{NEEDS[needs].how}</span>
+          <button type="button" onClick={() => setSearchParams({}, { replace: true })}>
+            {/* NOT "Show all" — "All" is a retired scope word (§0.2, 2026-08-30) and
+                this row sits inches from the who-was-there filter that used to say it. */}
+            Show every place ({places.length})
+          </button>
+        </div>
+      ) : (
+        <p className="label" style={{ margin: '0 0 12px' }}>
+          Change any field — it saves as you go. Pick which visit you’re editing to set who was
+          there that day. Photos opens what’s already saved, where you can delete or add more.
+        </p>
+      )}
 
       <div className="pe-controls">
         <input

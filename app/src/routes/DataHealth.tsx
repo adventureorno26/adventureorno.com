@@ -78,7 +78,7 @@ export default function DataHealth() {
 
   return (
     <div className="page" style={{ maxWidth: 720 }}>
-      <Link className="back-bar" to="/settings">
+      <Link className="back-bar" to="/settings/data/manage">
         <span>Settings</span>
       </Link>
       <h1>Data health</h1>
@@ -86,7 +86,7 @@ export default function DataHealth() {
           One verb per screen (§3e Step 5): this one only tells you what is true. */}
       <p className="label" style={{ marginTop: -6 }}>
         What is here and what is broken. Nothing on this screen changes anything — the work waiting
-        for a decision is on <Link to="/attention">Needs attention</Link>.
+        for a decision is on <Link to="/settings/data/attention">Needs attention</Link>.
       </p>
       {h === undefined ? (
         <p className="label">Loading…</p>
@@ -134,7 +134,7 @@ export default function DataHealth() {
               The places, the outings, or the whole archive — each says what it contains before you
               download it.
             </p>
-            <Link to="/export" className="as-button">
+            <Link to="/settings/data/export" className="as-button">
               Export &amp; backup
             </Link>
           </div>

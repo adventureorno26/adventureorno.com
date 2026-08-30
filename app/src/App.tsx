@@ -224,8 +224,12 @@ export default function App() {
                 </RequireAuth>
               }
             />
+            {/* SETTINGS HAS EXACTLY THREE DESTINATIONS (approved 2026-08-20, ruled
+                definitive 2026-08-30): Account | Integrations | Data & Privacy.
+                `/settings` itself is not one of them — it lands on Account. */}
+            <Route path="/settings" element={<Navigate to="/settings/account" replace />} />
             <Route
-              path="/settings"
+              path="/settings/account"
               element={
                 <RequireAuth>
                   <Settings />
@@ -233,7 +237,33 @@ export default function App() {
               }
             />
             <Route
-              path="/trash"
+              path="/settings/integrations"
+              element={
+                <RequireAuth>
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+            {/* Data & Privacy is ONE destination and ONE continuous page. The three
+                routes below it are its deeper screens, not sub-tabs. */}
+            <Route
+              path="/settings/data"
+              element={
+                <RequireAuth>
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings/data/manage"
+              element={
+                <RequireAuth>
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings/data/trash"
               element={
                 <RequireAuth>
                   <Trash />
@@ -241,13 +271,16 @@ export default function App() {
               }
             />
             <Route
-              path="/attention"
+              path="/settings/data/attention"
               element={
                 <RequireAuth>
                   <AttentionDashboard />
                 </RequireAuth>
               }
             />
+            {/* "Old routes redirect until links and saved URLs have migrated." */}
+            <Route path="/trash" element={<Navigate to="/settings/data/trash" replace />} />
+            <Route path="/attention" element={<Navigate to="/settings/data/attention" replace />} />
             <Route
               path="/albums"
               element={
@@ -284,15 +317,17 @@ export default function App() {
             {/* Export & backup. Settings and Data health each offered an "export" that
                 was 162 places and said it was everything; both now point here, where
                 the places, the outings and the whole archive are three separate things
-                that each say what they contain (§3e Step 7). */}
+                that each say what they contain (§3e Step 7). It sits under Data &
+                Privacy in the approved route table; /export still works. */}
             <Route
-              path="/export"
+              path="/settings/data/export"
               element={
                 <RequireAuth>
                   <ExportPage />
                 </RequireAuth>
               }
             />
+            <Route path="/export" element={<Navigate to="/settings/data/export" replace />} />
             {/* One person's memories — a target route in the approved navigation, and the
                 other half of §8b-i: tagging without retrieval is half a feature. */}
             <Route
@@ -307,7 +342,7 @@ export default function App() {
             {/* /inbox redirects to the REPAIR screen. It used to land on /add, which is where
                 the cards happened to be embedded — a link named for reviewing that opened the
                 page named for creating. One verb per screen (2026-08-20). */}
-            <Route path="/inbox" element={<Navigate to="/attention" replace />} />
+            <Route path="/inbox" element={<Navigate to="/settings/data/attention" replace />} />
             {/* A visit is a thing you can open: what you did, its photos, a note,
                 and the corrections for when something landed in the wrong place. */}
             <Route

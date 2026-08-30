@@ -111,7 +111,7 @@ export default function SmartAlbums() {
 
   return (
     <div className="page" style={{ maxWidth: 720 }}>
-      <Link className="back-bar" to="/settings">
+      <Link className="back-bar" to="/settings/data/manage">
         <span>Settings</span>
       </Link>
       <h1>Smart albums</h1>

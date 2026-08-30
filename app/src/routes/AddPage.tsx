@@ -57,7 +57,7 @@ export default function AddPage() {
           itself happens on the one screen that owns repairing. */}
       {typeof waiting === 'number' && waiting > 0 && (
         <div className="add-actions">
-          <Link className="add-action" to="/attention">
+          <Link className="add-action" to="/settings/data/attention">
             <b>
               {waiting} {waiting === 1 ? 'card is' : 'cards are'} waiting for you
             </b>

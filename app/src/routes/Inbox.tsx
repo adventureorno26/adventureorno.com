@@ -34,6 +34,7 @@ import {
   type SuggestionOption,
 } from '../lib/inbox';
 import { showSnack } from '../lib/snackbar';
+import { whyItFailed } from '../lib/whyItFailed';
 import AuthedImg from '../components/AuthedImg';
 import {
   fetchMemoryTagsToConfirm,
@@ -90,6 +91,15 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
 
   const [cards, setCards] = useState<InboxCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // WHAT WENT WRONG, AND WHERE — kept on the card rather than only in a snackbar.
+  //
+  // Measured on the live site, 2026-08-30: an RPC that failed left the card exactly
+  // where it was and said nothing a person could act on, so pressing the button
+  // looked identical to the button doing nothing. A six-second toast is also the
+  // wrong shape for this: the evidence disappears while the thing it is about is
+  // still on the screen. The message sits beside the control that failed, stays
+  // until the next attempt, and says whether anything was changed.
+  const [problems, setProblems] = useState<Record<string, string>>({});
   // Per-card, per-field: which option id is picked (or CUSTOM), and the typed words.
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [typed, setTyped] = useState<Record<string, string>>({});
@@ -142,7 +152,9 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
       for (const c of rows) for (const ph of c.photos ?? []) photos[ph.id] = true;
       setPickedPhotos((p) => ({ ...photos, ...p }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the inbox');
+      setError(
+        whyItFailed('Couldn’t load what is waiting for you', e, { online: navigator.onLine }),
+      );
     }
   }, []);
 
@@ -151,6 +163,32 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   }, [load]);
 
   const visible = (cards ?? []).filter((c) => !skipped.has(c.group_key));
+
+  /** Say it failed, say why, and leave it said. Both channels on purpose: the
+   *  snackbar is how the app already speaks, the inline copy is what is still there
+   *  six seconds later when she looks back at the card that did not move. */
+  function report(key: string, tried: string, e: unknown) {
+    const message = whyItFailed(tried, e, { online: navigator.onLine });
+    setProblems((p) => ({ ...p, [key]: message }));
+    showSnack({ message });
+  }
+
+  /** A new attempt clears the last verdict — otherwise a stale reason sits under a
+   *  control that has since worked. */
+  function clearProblem(key: string) {
+    setProblems((p) => (key in p ? { ...p, [key]: '' } : p));
+  }
+
+  /** The inline copy. `role="alert"` so a screen reader hears it without hunting. */
+  function problem(key: string) {
+    const message = problems[key];
+    if (!message) return null;
+    return (
+      <p className="ic-problem" role="alert">
+        {message}
+      </p>
+    );
+  }
 
   async function onApprove(card: InboxCard) {
     const fields = [...new Set(card.fields.map((f) => f.field))];
@@ -180,6 +218,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     if (!Object.keys(choices).length) return;
 
     setBusy(card.group_key);
+    clearProblem(card.group_key);
     try {
       const token = await approveCard(card.group_key, choices);
       setCards((cs) => (cs ?? []).filter((c) => c.group_key !== card.group_key));
@@ -200,14 +239,16 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             await undoApproval(token);
             showSnack({ message: 'Put back.' });
             await load();
-          } catch {
-            showSnack({ message: 'Could not undo that.' });
+          } catch (e) {
+            showSnack({
+              message: whyItFailed('Couldn’t undo that', e, { online: navigator.onLine }),
+            });
           }
         },
       });
     } catch (e) {
       // A stale card fails whole rather than half-applying — reload and let her retry.
-      showSnack({ message: e instanceof Error ? e.message : 'Could not save that.' });
+      report(card.group_key, 'Couldn’t save that card', e);
       await load();
     } finally {
       setBusy(null);
@@ -223,6 +264,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     const opt = card.fields.find((f) => f.field === 'shared_group_id');
     if (!opt) return;
     setBusy(card.group_key);
+    clearProblem(card.group_key);
     try {
       const token = await approveCard(card.group_key, {
         shared_group_id: { suggestion_id: opt.id },
@@ -237,13 +279,15 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             await undoApproval(token);
             showSnack({ message: 'Put back.' });
             await load();
-          } catch {
-            showSnack({ message: 'Could not undo that.' });
+          } catch (e) {
+            showSnack({
+              message: whyItFailed('Couldn’t undo that', e, { online: navigator.onLine }),
+            });
           }
         },
       });
     } catch (e) {
-      showSnack({ message: e instanceof Error ? e.message : 'Could not link those.' });
+      report(card.group_key, 'Couldn’t link those two outings', e);
       await load();
     } finally {
       setBusy(null);
@@ -255,13 +299,14 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
     const opt = card.fields.find((f) => f.field === 'shared_group_id');
     if (!opt) return;
     setBusy(card.group_key);
+    clearProblem(card.group_key);
     try {
       await rejectSuggestion(opt.id);
       setCards((cs) => (cs ?? []).filter((c) => c.group_key !== card.group_key));
       setDupes((d) => (d ? { ...d, count: Math.max(0, d.count - 1) } : d));
       showSnack({ message: 'Kept as two separate outings.' });
     } catch (e) {
-      showSnack({ message: e instanceof Error ? e.message : 'Could not do that.' });
+      report(card.group_key, 'Couldn’t keep those as two separate outings', e);
     } finally {
       setBusy(null);
     }
@@ -270,6 +315,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   /** Yes or no to one outing somebody else says you were on. */
   async function onAnswerTag(t: TagToConfirm, accept: boolean) {
     setBusy(t.claim_id);
+    clearProblem('tags');
     try {
       await respondToTag(t.claim_id, accept);
       setTags((ts) => ts.filter((x) => x.claim_id !== t.claim_id));
@@ -279,7 +325,11 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
           : 'Removed. Your own recording of that day, if you have one, is untouched.',
       });
     } catch (e) {
-      showSnack({ message: e instanceof Error ? e.message : 'Could not answer that.' });
+      report(
+        'tags',
+        accept ? 'Couldn’t add that to your outings' : 'Couldn’t remove you from that',
+        e,
+      );
     } finally {
       setBusy(null);
     }
@@ -288,6 +338,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   /** Yes or no to a photograph somebody says you are in. */
   async function onAnswerPhotoTag(t: MemoryTagToConfirm, accept: boolean) {
     setBusy(t.subject_id);
+    clearProblem('photo-tags');
     try {
       await respondToMemoryTag(t.subject_id, accept);
       setPhotoTags((ts) => ts.filter((x) => x.subject_id !== t.subject_id));
@@ -295,7 +346,11 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
         message: accept ? 'Confirmed it’s you.' : 'Removed you from that photo.',
       });
     } catch (e) {
-      showSnack({ message: e instanceof Error ? e.message : 'Could not answer that.' });
+      report(
+        'photo-tags',
+        accept ? 'Couldn’t confirm that it’s you' : 'Couldn’t remove you from that photo',
+        e,
+      );
     } finally {
       setBusy(null);
     }
@@ -304,6 +359,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   /** Answer all of them at once — still his decision, said once instead of 44 times. */
   async function onAnswerAllTags(accept: boolean) {
     setBusy('tags');
+    clearProblem('tags');
     try {
       const n = await respondToAllTags(accept);
       setTags([]);
@@ -314,7 +370,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
       });
       await load();
     } catch (e) {
-      showSnack({ message: e instanceof Error ? e.message : 'Could not answer those.' });
+      report('tags', 'Couldn’t answer those', e);
     } finally {
       setBusy(null);
     }
@@ -323,6 +379,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
   /** Say yes to every import duplicate at once, and offer to put them all back. */
   async function onLinkAllDuplicates() {
     setBusy('bulk');
+    clearProblem('bulk');
     try {
       const { linked, undoToken } = await approveImportDuplicates();
       if (!linked) {
@@ -337,27 +394,30 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
               await undoApproval(undoToken);
               showSnack({ message: 'Put them all back.' });
               await load();
-            } catch {
-              showSnack({ message: 'Could not undo that.' });
+            } catch (e) {
+              showSnack({
+                message: whyItFailed('Couldn’t put them back', e, { online: navigator.onLine }),
+              });
             }
           },
         });
       }
       await load();
     } catch (e) {
-      showSnack({ message: e instanceof Error ? e.message : 'Could not link those.' });
+      report('bulk', 'Couldn’t link those', e);
     } finally {
       setBusy(null);
     }
   }
 
-  async function onReject(option: SuggestionOption) {
+  async function onReject(groupKey: string, option: SuggestionOption) {
+    clearProblem(groupKey);
     try {
       await rejectSuggestion(option.id);
       showSnack({ message: `Won't suggest "${option.proposed}" again.` });
       await load();
-    } catch {
-      showSnack({ message: 'Could not do that.' });
+    } catch (e) {
+      report(groupKey, `Couldn’t stop “${option.proposed}” being suggested`, e);
     }
   }
 
@@ -402,6 +462,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             ))}
           </ul>
           {photoTags.length > 12 && <p className="muted">…and {photoTags.length - 12} more.</p>}
+          {problem('photo-tags')}
         </div>
       )}
 
@@ -463,6 +524,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             ))}
           </ul>
           {tags.length > 12 && <p className="muted">…and {tags.length - 12} more.</p>}
+          {problem('tags')}
         </div>
       )}
 
@@ -487,6 +549,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
               Not now — I’ll read them
             </button>
           </div>
+          {problem('bulk')}
         </div>
       )}
 
@@ -505,8 +568,12 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
                   setOffer(null);
                   showSnack({ message: `Routes around there will be called ${offer.name}.` });
                   await load();
-                } catch {
-                  showSnack({ message: 'Could not save that rule.' });
+                } catch (e) {
+                  showSnack({
+                    message: whyItFailed('Couldn’t save that rule', e, {
+                      online: navigator.onLine,
+                    }),
+                  });
                 }
               }}
             >
@@ -659,6 +726,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
                     </Link>
                   )}
                 </div>
+                {problem(card.group_key)}
               </section>
             ) : null}
 
@@ -687,7 +755,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
                           <button
                             type="button"
                             className="ic-never"
-                            onClick={() => void onReject(o)}
+                            onClick={() => void onReject(card.group_key, o)}
                             aria-label={`Never suggest ${o.proposed} again`}
                           >
                             Never
@@ -759,6 +827,7 @@ export default function Inbox({ embedded = false }: { embedded?: boolean }) {
             {/* A duplicate card answers itself with "link them" / "not the same"; a second
                 generic Save underneath it is the redundancy she named. Skip stays on both:
                 it writes nothing and the card comes back. */}
+            {!card.counterpart && problem(card.group_key)}
             <footer className="ic-actions">
               {!card.counterpart && (
                 <button

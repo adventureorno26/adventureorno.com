@@ -3,7 +3,7 @@ import type { Json } from './database.types';
 import { applyCategories } from './categories';
 import { duplicatePairs } from './duplicatePlaces';
 import { asOutcome, type WhoOutcome } from './whoWasThere';
-import type { Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
+import type { Activity, Entry, NewEntry, NewPlace, Place, PlaceDay, Visit } from './types';
 
 /** Load categories/tags from the DB into the runtime registry (call once at boot). */
 export async function loadCategories(): Promise<void> {
@@ -685,6 +685,37 @@ export async function matchPhoto(
   return (data ?? []) as PhotoSuggestion[];
 }
 
+// ONE DEFINITION PER TILE, read by the count AND by the screen it sends you to.
+//
+// Until now the count lived here and the destination was `/places/edit` with no
+// filter at all — so "Name them" for 10 unnamed places opened a 168-row table with
+// nothing named, sorted or highlighted, and the button looked broken (measured
+// live, 2026-08-30). The rows and the number now come from the same predicate, so
+// they cannot disagree the way Settings' 17 Trips and Insights' 56 did.
+export type PlaceNeed = 'unnamed' | 'untagged' | 'undated';
+
+/** The places a repair tile is entitled to count: saved, not a bucket-list wish,
+ *  not a container that only holds other places. */
+export function repairablePlaces(places: Place[]): Place[] {
+  return places.filter((p) => p.saved && !p.bucket && !p.holds_children);
+}
+
+/** Does this place need that particular repair? */
+export function placeNeeds(p: Place, need: PlaceNeed): boolean {
+  switch (need) {
+    case 'unnamed':
+      return !p.name || p.name.trim() === '' || p.name === 'New place';
+    case 'untagged':
+      return (
+        (p.categories?.length ?? 0) === 0 &&
+        (p.activity_categories?.length ?? 0) === 0 &&
+        !p.is_trail
+      );
+    case 'undated':
+      return !p.first_visit;
+  }
+}
+
 export interface Attention {
   unassignedPhotos: number;
   photosNoDate: number;
@@ -692,7 +723,6 @@ export interface Attention {
   missingCategories: number;
   missingDates: number;
   activitiesNoPlace: number;
-  suggestedTrips: number;
   /** Places that might be the same place. Repair lived only at /duplicates, reachable from
    *  Settings, so the repair queue never mentioned it and the only way to find out whether
    *  anything needed merging was to go and look. */
@@ -710,18 +740,10 @@ export interface Attention {
 /** Counts for the "needs attention" dashboard (all RLS-scoped to what you can see). */
 export async function fetchAttention(): Promise<Attention> {
   const places = await fetchPlaces().catch(() => [] as Place[]);
-  const saved = places.filter((p) => p.saved && !p.bucket && !p.holds_children);
-  const unnamedPlaces = saved.filter(
-    (p) => !p.name || p.name.trim() === '' || p.name === 'New place',
-  ).length;
-  const missingCategories = saved.filter(
-    (p) =>
-      (p.categories?.length ?? 0) === 0 &&
-      (p.activity_categories?.length ?? 0) === 0 &&
-      !p.is_trail,
-  ).length;
-  const missingDates = saved.filter((p) => !p.first_visit).length;
-  const suggestedTrips = places.filter((p) => p.suggested).length;
+  const saved = repairablePlaces(places);
+  const unnamedPlaces = saved.filter((p) => placeNeeds(p, 'unnamed')).length;
+  const missingCategories = saved.filter((p) => placeNeeds(p, 'untagged')).length;
+  const missingDates = saved.filter((p) => placeNeeds(p, 'undated')).length;
   // Counted with the SAME function /duplicates lists with, over the places already loaded
   // above — so the number on the dashboard and the rows on the repair screen cannot
   // disagree. A failed dismissal read counts every pair, which over-reports rather than
@@ -761,9 +783,66 @@ export async function fetchAttention(): Promise<Attention> {
     missingCategories,
     missingDates,
     activitiesNoPlace: actNoPlace.count ?? 0,
-    suggestedTrips,
     duplicatePlaces,
   };
+}
+
+/** Places holding at least one photo with no capture time, and how many.
+ *
+ *  The "Photos with no date" tile pointed at the unfiltered places table, which
+ *  neither shows a photo nor knows about a date — it was the tile furthest from the
+ *  work it named. `/places/edit` DOES have the repair (open Photos on a row, tick
+ *  them, Set date); it just had no way to find the rows. This is that way. */
+export async function fetchUndatedPhotoPlaces(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const { data, error } = await supabase
+    .from('photos')
+    .select('place_id')
+    .is('taken_at', null)
+    .not('place_id', 'is', null);
+  if (error) return out;
+  for (const row of (data ?? []) as { place_id: string | null }[]) {
+    if (!row.place_id) continue;
+    out.set(row.place_id, (out.get(row.place_id) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** The outings that are not attached to any place — the rows the repair queue
+ *  counts. It used to answer "Open map", which is the whole map and none of them. */
+export async function fetchPlacelessActivities(limit = 200): Promise<Activity[]> {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('id, type, name, distance, start_date, local_date, lat, lng')
+    .is('place_id', null)
+    .order('start_date', { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) return [];
+  return (data ?? []) as unknown as Activity[];
+}
+
+/** One import, as the ledger recorded it. Members may read `ingest_runs` (0202). */
+export interface ImportRun {
+  id: string;
+  source: string;
+  method: string | null;
+  status: string;
+  ok: number;
+  failed: number;
+  started_at: string;
+  finished_at: string | null;
+}
+
+/** Import history for Settings › Integrations — the approved contract names it, and
+ *  until now the ledger every import writes to had no screen at all. */
+export async function fetchImportRuns(limit = 25): Promise<ImportRun[]> {
+  const { data, error } = await supabase
+    .from('ingest_runs')
+    .select('id, source, method, status, ok, failed, started_at, finished_at')
+    .order('started_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as ImportRun[];
 }
 
 export interface TimelineDay {

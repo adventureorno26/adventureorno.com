@@ -36,7 +36,7 @@ export default function Trash() {
 
   return (
     <div className="page" style={{ maxWidth: 720 }}>
-      <Link className="back-bar" to="/settings">
+      <Link className="back-bar" to="/settings/data">
         <span>Settings</span>
       </Link>
       <h1>Trash</h1>
