@@ -50,16 +50,36 @@ if (db.length === 0) {
   problems.push("NO database backup exists in R2 at all.");
 } else {
   const newest = db[0];
+
+  // AGE COMES FROM THE OBJECT, NOT THE FOLDER NAME. This used to read the date out of
+  // the `db/YYYY-MM-DD/` prefix and measure from MIDNIGHT of that day, so the nightly
+  // 07:17 UTC backup reported as "27h old" at 02:33 the next morning when it was 13
+  // hours old. It only ever overstated, so it never hid a gap — but a number that can
+  // be a day out is a number nobody trusts, and this is the check that answers "am I
+  // covered?". R2 returns `last_modified`; the folder date is the fallback.
   const day = (newest.key.match(/db\/(\d{4}-\d{2}-\d{2})\//) || [])[1];
-  const ageH = (Date.now() - new Date(`${day}T00:00:00Z`).getTime()) / 3.6e6;
+  const stamp = newest.last_modified ?? (day ? `${day}T00:00:00Z` : null);
+  const ageH = stamp ? (Date.now() - new Date(stamp).getTime()) / 3.6e6 : NaN;
   const size = Number(newest.size ?? 0);
   console.log(
-    `newest database backup: ${newest.key} (${(size / 1e6).toFixed(2)} MB, ${ageH.toFixed(0)}h old)`,
+    `newest database backup: ${newest.key} (${(size / 1e6).toFixed(2)} MB, ${
+      Number.isFinite(ageH) ? `${ageH.toFixed(1)}h old` : "age UNKNOWN"
+    })`,
   );
   console.log(`generations retained: ${db.length}`);
-  if (ageH > MAX_AGE_HOURS)
+
+  // AN AGE THAT CANNOT BE READ IS A FAILURE, NOT A PASS. The old code did
+  // `new Date(`${undefined}T00:00:00Z`)` whenever a key did not match the expected
+  // shape, got NaN, and `NaN > MAX_AGE_HOURS` is false — so a bucket full of
+  // unparseable keys reported "covered". That is precisely the silence this file
+  // opens by saying it exists to prevent.
+  if (!Number.isFinite(ageH))
     problems.push(
-      `newest backup is ${ageH.toFixed(0)}h old (max ${MAX_AGE_HOURS}h).`,
+      `cannot determine the age of ${newest.key} — no last_modified and no date in the key.`,
+    );
+  else if (ageH > MAX_AGE_HOURS)
+    problems.push(
+      `newest backup is ${ageH.toFixed(1)}h old (max ${MAX_AGE_HOURS}h).`,
     );
   if (size < MIN_BYTES)
     problems.push(`newest backup is only ${size} bytes — suspiciously small.`);
