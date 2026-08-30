@@ -234,6 +234,98 @@ above are approved. Event and messaging screen previews are still required befor
 is implemented. Database/RLS contracts come first; then generated types/RPCs; then approved
 UI; then production verification.
 
+## APPROVED 2026-08-30 — THE ORDER OF WORK, AND WHAT THE FOUR-WAY AUDIT FOUND
+
+Erica approved this on 2026-08-30 after a four-way audit run in parallel against **this
+file, the live database, the live site and the infrastructure** — with the standing
+instruction *"do not make any assumptions. Even if something is checked off, make sure it
+was actually built and is functioning."*
+
+**It supersedes the 2026-08-28 ordering below. It supersedes nothing else.**
+
+### THE DISCIPLINE FOR THIS RUN, in her words
+
+> *"Make sure the plan is updated in STATE.md before you start, and that you update it
+> after each build by checking to make sure it is live and working."*
+
+So: plan first, then build, then **verify against production**, then write the result here.
+A tick in this section means *Live-verified* — the §"How to read a tick" scale at the top of
+this file, not "the code is written". This is the same discipline the 08-28 audit had to
+invent after finding ✅s on components that had never been written.
+
+### A RULING THAT WAS OUTSTANDING
+
+Two approved instructions contradicted each other and neither had been retired:
+
+- **2026-08-11** (verified live at the time): *"Settings is the gear wheel, not a nav pill.
+  One continuous page … **No section labels** — not 'Account', not 'People'."*
+- **2026-08-20** (the commercial directive): Settings has **exactly three destinations** —
+  `Account | Integrations | Data & Privacy`.
+
+**Erica's ruling, 2026-08-30: use the 08-20 three-destination plan.** The 08-11 "no section
+labels" instruction is hereby retired and must not be cited again.
+
+### CHECK-IN: ASKED FOR, THEN REPLACED BY SOMETHING SIMPLER
+
+A `checkins` table was proposed and **rejected**. Her actual requirement:
+
+> *"my vision is more that I can click on my location on the map and the place I am at will
+> be suggested in the add card we already built. ie, if I am at a restaurant the name of the
+> restaurant will already be in the card after I hit add, then I can change it as needed."*
+
+This needs **no new table and no schema change** — which is the whole reason the check-in
+table was proposed, since `visits.start_date` is a `date` with no time-of-day. It becomes a
+prefill on the existing Add card, and it simultaneously answers her other complaint
+(*"I don't understand why official details look up name and website is on the card"*): the
+manual **Official details → Look up name & website** button is deleted and becomes the
+automatic prefill.
+
+**The trap, found by testing it live rather than reading the code:** `fetchPoiDetails`
+(`app/src/lib/data.ts:910-943`) is Nominatim **reverse** geocoding at zoom 18, and reverse
+geocoding returns the *enclosing area*. A pin dropped on a Kansas highway offered
+`Use name: Coffey County · Type: boundary/administrative`. For "I am at a restaurant" it
+must prefer a genuinely named POI and **leave the field blank when it has nothing
+confident** — a wrong prefill the user has to notice and delete is worse than an empty one.
+
+### WHAT THE AUDIT FOUND THAT NOBODY HAD REPORTED
+
+Every line below was measured, not inferred. None of it was in any prior list.
+
+| # | Finding | Evidence |
+| - | ------- | -------- |
+| 1 | **The Add card's name field and star rating render OFF-SCREEN and cannot be reached.** You cannot see or type a place name when adding a place | `.panel-hero.panel-hero-empty` → `height: 0px; overflow: hidden`; `.hero-title` → `position: absolute; top: -61px`; `.hero-name-input` rect `top -40, bottom -9`, `elementFromPoint` hit-test **FALSE**. Identical on iPhone 430×932, iPhone 390×844 **and desktop 1440×900**. `panel.scrollTop` is already 0 and cannot go negative. Saved cards are fine — their hero is 190px |
+| 2 | **56 outings are double-counted in stats today** | `activities_of_type[_for_people]`, `race_stats[_for_people]`, `races_list[_for_people]` filter on `coalesce(shared_group_id, id)` but then aggregate raw rows. Run 279/247 (+32), Hike 152/137 (+15), Walk 130/121 (+9). `mileage_by_person_for_people` and `wander_stats_for_people` do it correctly with `distinct on` — three readers were missed when `0260` claimed all nine shared one rule |
+| 3 | **The app's own numbers disagree with each other** | Settings ▸ Stats says **17 Trips**; `/insights` says **56 Trips** for the same account. Place counts: home **136**, Insights **136**, `/health` **151**, `/places/edit` **168** |
+| 4 | **Four of the six Needs Attention tiles are the same link.** "Name them", "Tag them", "Add dates" and "Review" all point at `/places/edit` unfiltered — a 168-row table with no filter, sort or highlight | Hrefs captured live. The queue cards themselves ARE wired (`reject_suggestion`, `approve_card`), but **when an RPC fails the UI shows nothing at all** — no toast, no error, card unmoved. That silence is what "does not function at all" looks like from the outside |
+| 5 | **"Who was there" is four pickers with three vocabularies** | "Together" on cards · "All" in the `/places/edit` filter · "Both" in Settings and `/bucket`. **"Just me" is missing from the two visit editors** (add-a-visit form, per-visit list) where it matters most. There is **no "Anyone" option anywhere** in the UI |
+| 6 | **The memory on the home screen is pure text — zero `<img>`** | `.memory-banner` renders *"6 years ago today you were in Appalachian Trail, Virginia · +1 more memory"*. The place it links to has **28 photos**, none surfaced. "+1 more memory" is plain text with no next control, so the second memory is unreachable. Meanwhile `OnThisDay` — the **photo-based** memory — is mounted at `MapView.tsx:1571` and works |
+| 7 | **Photo tagging is fully built and has never once run** | `tag_person_on_photo`, `photo_people`, `respond_to_memory_tag` all exist; `memory_subjects` has 572 `outing` + 557 `visit` subjects and **0 `photo`** against 180 photos |
+| 8 | **An accountless person cannot appear in any stat** | `people_memory_keys` resolves them only for `kind='photo'`; the `outing` and `visit` branches both require `linked_profile is not null`. The contract promises `visit_people` "for children, pets and companions without accounts" — that table has **0 rows** and nothing reads it |
+| 9 | **The household is hardcoded in the WRITE path by a name regex** | `set_visit_solo` resolves "Together" as `select id from profiles where role in ('owner','editor') and coalesce(display_name,'') !~* '(test\|bot)'`. The READ path is already general (`p_people uuid[]` + ALL/ANY) |
+| 10 | **Read side keys on PEOPLE, write side keys on PROFILES** | `people_memory_keys(p_people uuid[])` vs `create_visit(..., p_profiles uuid[])`. You can filter for someone without an account but cannot record them as present |
+| 11 | **`auth_leaked_password_protection` is not "a simple toggle"** | `PATCH /config/auth {"password_hibp_enabled":true}` → **HTTP 402 Payment Required**. It is gated behind a paid Supabase plan. A billing decision, not a setting |
+| 12 | STATE.md's own scale claim for the spaces migration is wrong | Claimed *"58 tables, 97 policies and 230 functions"*. Measured: **57** tables, **81** policies, **201** SECURITY DEFINER functions. Smaller than advertised; still one indivisible migration |
+| 13 | Genuinely healthy | **Zero console errors, zero failed requests, zero horizontal overflow across 15 routes.** R2 and the database agree exactly: 366 objects, 366 referenced keys, 0 orphans, 0 missing |
+
+### THE APPROVED ORDER
+
+Erica: *"that order is fine."* Items 1–3 are in flight as of 2026-08-30.
+
+| # | Work | Status |
+| - | ---- | ------ |
+| 1 | **The Add card** — fix the off-screen name/rating (finding 1), prefill the date (today, or the photo's taken-at, or Google Photos metadata; editable), prefill the place name from a nearby **named POI**, delete the "Official details" button, and delete the text `MemoryBanner` so the photo-based `OnThisDay` stands alone | ⏳ in flight |
+| 2 | **Dedupe the three stat readers** (finding 2) | ⏳ in flight |
+| 3 | **Settings stats dropdowns** — they never close, they are redundant three ways, and two labels are ellipsis-clipped at 430px; plus restore inline place editing in the photo sorter (`PlaceQuickEdit` is 208 lines, fully written, imported nowhere) | ⏳ in flight |
+| 4 | **Unify "who was there"** (finding 5) — one picker, one vocabulary, `whoChoices()` everywhere, "Just me" restored to the visit editors | queued |
+| 5 | **Reconcile the disagreeing numbers** (finding 3) | queued |
+| 6 | **Needs Attention** (finding 4) — filtered destinations per tile, and real error feedback when an RPC fails | queued |
+| 7 | **Multi-user tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam | queued |
+| 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | queued |
+| 9 | **Spaces, friends, public profiles** (Phase 3b) — the gate on everything social. One indivisible migration | queued |
+| 10 | **Settings' three destinations** — `Account \| Integrations \| Data & Privacy`, per the 08-20 ruling above | queued |
+
+---
+
 ## APPROVED 2026-08-28 — FINISH THE CARD, IN THIS ORDER
 
 Erica approved this on 2026-08-28 after an audit of both prior sessions against the live
