@@ -25,7 +25,19 @@ const ALLOWED = new Map([
 
 // Directories that are not ours to police: dependencies, build output, generated test
 // artifacts, and the data-recovery manifests written beside a snapshot before a deletion.
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'test-results', '.wrangler', '.backup-work']);
+// `.claude` holds agent worktrees — each is a full checkout of this repo, so each carries
+// its own CLAUDE.md and docs/STATE.md. Walking into them reports six phantom "second
+// planning documents" that are really one file seen four times. They are ephemeral working
+// copies, never committed (see .gitignore), and the real STATE.md is still checked here.
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'test-results',
+  '.wrangler',
+  '.backup-work',
+  '.claude',
+]);
 const ALLOWED_PATTERNS = [
   // A snapshot MANIFEST records what was captured before a destructive cleanup, so it can
   // be restored. It is evidence, not a plan, and it must never be swept up with the docs.

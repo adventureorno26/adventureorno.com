@@ -59,3 +59,6 @@ NewClaude.md
 
 # Claude Code local session settings — machine-specific, not shared.
 .claude/settings.local.json
+
+# Agent worktrees — full checkouts of this repo, created and removed per session.
+.claude/worktrees/

@@ -234,6 +234,98 @@ above are approved. Event and messaging screen previews are still required befor
 is implemented. Database/RLS contracts come first; then generated types/RPCs; then approved
 UI; then production verification.
 
+## APPROVED 2026-08-30 — THE ORDER OF WORK, AND WHAT THE FOUR-WAY AUDIT FOUND
+
+Erica approved this on 2026-08-30 after a four-way audit run in parallel against **this
+file, the live database, the live site and the infrastructure** — with the standing
+instruction *"do not make any assumptions. Even if something is checked off, make sure it
+was actually built and is functioning."*
+
+**It supersedes the 2026-08-28 ordering below. It supersedes nothing else.**
+
+### THE DISCIPLINE FOR THIS RUN, in her words
+
+> *"Make sure the plan is updated in STATE.md before you start, and that you update it
+> after each build by checking to make sure it is live and working."*
+
+So: plan first, then build, then **verify against production**, then write the result here.
+A tick in this section means *Live-verified* — the §"How to read a tick" scale at the top of
+this file, not "the code is written". This is the same discipline the 08-28 audit had to
+invent after finding ✅s on components that had never been written.
+
+### A RULING THAT WAS OUTSTANDING
+
+Two approved instructions contradicted each other and neither had been retired:
+
+- **2026-08-11** (verified live at the time): *"Settings is the gear wheel, not a nav pill.
+  One continuous page … **No section labels** — not 'Account', not 'People'."*
+- **2026-08-20** (the commercial directive): Settings has **exactly three destinations** —
+  `Account | Integrations | Data & Privacy`.
+
+**Erica's ruling, 2026-08-30: use the 08-20 three-destination plan.** The 08-11 "no section
+labels" instruction is hereby retired and must not be cited again.
+
+### CHECK-IN: ASKED FOR, THEN REPLACED BY SOMETHING SIMPLER
+
+A `checkins` table was proposed and **rejected**. Her actual requirement:
+
+> *"my vision is more that I can click on my location on the map and the place I am at will
+> be suggested in the add card we already built. ie, if I am at a restaurant the name of the
+> restaurant will already be in the card after I hit add, then I can change it as needed."*
+
+This needs **no new table and no schema change** — which is the whole reason the check-in
+table was proposed, since `visits.start_date` is a `date` with no time-of-day. It becomes a
+prefill on the existing Add card, and it simultaneously answers her other complaint
+(*"I don't understand why official details look up name and website is on the card"*): the
+manual **Official details → Look up name & website** button is deleted and becomes the
+automatic prefill.
+
+**The trap, found by testing it live rather than reading the code:** `fetchPoiDetails`
+(`app/src/lib/data.ts:910-943`) is Nominatim **reverse** geocoding at zoom 18, and reverse
+geocoding returns the *enclosing area*. A pin dropped on a Kansas highway offered
+`Use name: Coffey County · Type: boundary/administrative`. For "I am at a restaurant" it
+must prefer a genuinely named POI and **leave the field blank when it has nothing
+confident** — a wrong prefill the user has to notice and delete is worse than an empty one.
+
+### WHAT THE AUDIT FOUND THAT NOBODY HAD REPORTED
+
+Every line below was measured, not inferred. None of it was in any prior list.
+
+| # | Finding | Evidence |
+| - | ------- | -------- |
+| 1 | **The Add card's name field and star rating render OFF-SCREEN and cannot be reached.** You cannot see or type a place name when adding a place | `.panel-hero.panel-hero-empty` → `height: 0px; overflow: hidden`; `.hero-title` → `position: absolute; top: -61px`; `.hero-name-input` rect `top -40, bottom -9`, `elementFromPoint` hit-test **FALSE**. Identical on iPhone 430×932, iPhone 390×844 **and desktop 1440×900**. `panel.scrollTop` is already 0 and cannot go negative. Saved cards are fine — their hero is 190px |
+| 2 | **56 outings are double-counted in stats today** | `activities_of_type[_for_people]`, `race_stats[_for_people]`, `races_list[_for_people]` filter on `coalesce(shared_group_id, id)` but then aggregate raw rows. Run 279/247 (+32), Hike 152/137 (+15), Walk 130/121 (+9). `mileage_by_person_for_people` and `wander_stats_for_people` do it correctly with `distinct on` — three readers were missed when `0260` claimed all nine shared one rule |
+| 3 | **The app's own numbers disagree with each other** | Settings ▸ Stats says **17 Trips**; `/insights` says **56 Trips** for the same account. Place counts: home **136**, Insights **136**, `/health` **151**, `/places/edit` **168** |
+| 4 | **Four of the six Needs Attention tiles are the same link.** "Name them", "Tag them", "Add dates" and "Review" all point at `/places/edit` unfiltered — a 168-row table with no filter, sort or highlight | Hrefs captured live. The queue cards themselves ARE wired (`reject_suggestion`, `approve_card`), but **when an RPC fails the UI shows nothing at all** — no toast, no error, card unmoved. That silence is what "does not function at all" looks like from the outside |
+| 5 | **"Who was there" is four pickers with three vocabularies** | "Together" on cards · "All" in the `/places/edit` filter · "Both" in Settings and `/bucket`. **"Just me" is missing from the two visit editors** (add-a-visit form, per-visit list) where it matters most. There is **no "Anyone" option anywhere** in the UI |
+| 6 | **The memory on the home screen is pure text — zero `<img>`** | `.memory-banner` renders *"6 years ago today you were in Appalachian Trail, Virginia · +1 more memory"*. The place it links to has **28 photos**, none surfaced. "+1 more memory" is plain text with no next control, so the second memory is unreachable. Meanwhile `OnThisDay` — the **photo-based** memory — is mounted at `MapView.tsx:1571` and works |
+| 7 | **Photo tagging is fully built and has never once run** | `tag_person_on_photo`, `photo_people`, `respond_to_memory_tag` all exist; `memory_subjects` has 572 `outing` + 557 `visit` subjects and **0 `photo`** against 180 photos |
+| 8 | **An accountless person cannot appear in any stat** | `people_memory_keys` resolves them only for `kind='photo'`; the `outing` and `visit` branches both require `linked_profile is not null`. The contract promises `visit_people` "for children, pets and companions without accounts" — that table has **0 rows** and nothing reads it |
+| 9 | **The household is hardcoded in the WRITE path by a name regex** | `set_visit_solo` resolves "Together" as `select id from profiles where role in ('owner','editor') and coalesce(display_name,'') !~* '(test\|bot)'`. The READ path is already general (`p_people uuid[]` + ALL/ANY) |
+| 10 | **Read side keys on PEOPLE, write side keys on PROFILES** | `people_memory_keys(p_people uuid[])` vs `create_visit(..., p_profiles uuid[])`. You can filter for someone without an account but cannot record them as present |
+| 11 | **`auth_leaked_password_protection` is not "a simple toggle"** | `PATCH /config/auth {"password_hibp_enabled":true}` → **HTTP 402 Payment Required**. It is gated behind a paid Supabase plan. A billing decision, not a setting |
+| 12 | STATE.md's own scale claim for the spaces migration is wrong | Claimed *"58 tables, 97 policies and 230 functions"*. Measured: **57** tables, **81** policies, **201** SECURITY DEFINER functions. Smaller than advertised; still one indivisible migration |
+| 13 | Genuinely healthy | **Zero console errors, zero failed requests, zero horizontal overflow across 15 routes.** R2 and the database agree exactly: 366 objects, 366 referenced keys, 0 orphans, 0 missing |
+
+### THE APPROVED ORDER
+
+Erica: *"that order is fine."* Items 1–3 are in flight as of 2026-08-30.
+
+| # | Work | Status |
+| - | ---- | ------ |
+| 1 | **The Add card** — fix the off-screen name/rating (finding 1), prefill the date (today, or the photo's taken-at, or Google Photos metadata; editable), prefill the place name from a nearby **named POI**, delete the "Official details" button, and delete the text `MemoryBanner` so the photo-based `OnThisDay` stands alone | ⏳ in flight |
+| 2 | **Dedupe the stat readers** (finding 2) | ✅ **LIVE-VERIFIED 2026-08-30** — `0278`, PR #170. It was **six** readers, not three: reading every body from production first found `activities_of_type`, `race_stats` and `races_list` (the non-people variants) had the same defect. Verified independently of the agent that made it, three ways: every function's returned count now equals `count(distinct coalesce(shared_group_id, id))` for both real accounts (6/6 match); `anon` cannot execute any of them; and through the app's own PostgREST path the test bot returns Run 165 / Hike 41 / Walk 74, matching the post-fix numbers. Erica 216→200 Run, 139→134 Hike, 115→106 Walk; Josh 248→216, 71→56, 105→98. `activity_lines` stays non-deduping **on purpose** and the migration asserts it, so a later pass has to argue with a `raise` rather than quietly "fix" it. |
+| 3 | **Settings stats dropdowns** — they never close, they are redundant three ways, and two labels are ellipsis-clipped at 430px; plus restore inline place editing in the photo sorter (`PlaceQuickEdit` is 208 lines, fully written, imported nowhere) | ⏳ in flight |
+| 4 | **Unify "who was there"** (finding 5) — one picker, one vocabulary, `whoChoices()` everywhere, "Just me" restored to the visit editors | queued |
+| 5 | **Reconcile the disagreeing numbers** (finding 3) | queued |
+| 6 | **Needs Attention** (finding 4) — filtered destinations per tile, and real error feedback when an RPC fails | queued |
+| 7 | **Multi-user tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam | queued |
+| 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | queued |
+| 9 | **Spaces, friends, public profiles** (Phase 3b) — the gate on everything social. One indivisible migration | queued |
+| 10 | **Settings' three destinations** — `Account \| Integrations \| Data & Privacy`, per the 08-20 ruling above | queued |
+
+---
+
 ## APPROVED 2026-08-28 — FINISH THE CARD, IN THIS ORDER
 
 Erica approved this on 2026-08-28 after an audit of both prior sessions against the live
@@ -4647,6 +4739,109 @@ finding an element "covered" by its own ancestor (`covered by settings-page`), w
 normal and not a fault. Repositioning chrome is a locked design decision per the same header,
 so nothing was changed.
 
+### 6k. 2026-08-30 — THE BLANK CARD FILLS ITSELF IN (and the name field comes back on screen)
+
+Four sentences of Erica's, and what each one changed on the new-place card
+(`app/src/components/NewPlaceDraft.tsx`).
+
+1. **"The date should always be pre-filled to the date I am adding the card, or the date the
+   picture being added was taken... and I should be able to edit the dates."** The date field
+   opened EMPTY. It now opens on today — built from LOCAL date parts, never
+   `toISOString().slice(0, 10)`, which is tomorrow's date after 8pm on the east coast (§8) —
+   and moves to the first photo's EXIF capture day the moment photos are added, unless she has
+   already set a date herself. Still a plain date input: type over it, or clear it, and with no
+   date no visit is logged, exactly as before. The label dropped "(optional)", which described
+   the empty field. Logic in `app/src/lib/draftPrefill.ts`, tested in `draftPrefill.test.ts`.
+   **Google Photos is covered only via EXIF**: `lib/googlePhotos.ts` downloads the original
+   bytes (`=d`) so the capture time is still in them, but Google's own
+   `mediaFileMetadata.creationTime` is not requested and the `File` it builds carries no
+   timestamp — a photo whose EXIF was stripped before Google got it keeps today's date.
+2. **"I don't understand why official details look up name and website is on the card."** The
+   "Official details" heading and its "Look up name & website" button are gone.
+3. **"if I am at a restaurant the name of the restaurant will already be in the card after I
+   hit add, then I can change it as needed."** The card now asks OpenStreetMap ONCE, on open,
+   and fills the name and website in by itself. **`layer=poi` is what makes this honest**:
+   plain reverse geocoding answers with the area you are inside — a pin on a Kansas highway
+   returned "Coffey County" on the live site, which is not a place anyone wants named on their
+   card. Measured 2026-08-30 through the real component in a headless browser: Katz's
+   Delicatessen → "Katz's Delicatessen" + its website; Buckingham Palace → "Buckingham
+   Palace"; the Kansas highway and a Colorado forest track → nothing at all. `draftPrefill`
+   discards anything whose OSM class is a boundary, road, suburb, rail line or landuse, and a
+   suggestion NEVER lands on top of something she has typed. (The MapTiler reverse geocode
+   that has always supplied a fallback name is untouched — the POI answer overrides it when
+   there is one.)
+4. **"I wanted the memory function to be photos, not a random description."** Two memory
+   surfaces were mounted on the map at once. The text one is deleted; see the register below.
+
+**And the bug none of that would have survived.** A live audit found the new-place card's NAME
+INPUT AND STAR RATING RENDERING ABOVE THE TOP OF THE SCREEN, unreachable, on 430×932, 390×844
+and 1440×900 alike: `.panel.npd-card` is a scrolling flex COLUMN, its content is taller than
+its 92vh cap, and `.panel-hero` is `overflow: hidden` — so its automatic minimum height was 0
+and it was squashed from 190px to nothing, taking its absolutely-positioned title with it to
+`top: -61px`. `scrollTop` cannot go negative, so it could not be scrolled back. One line
+(`flex: none`) fixes it. Reproduced and then re-measured in headless Chromium at all three
+viewports: hero 190px, input top 150, `elementFromPoint` hit-test true, typing works.
+### 6j. SIX READERS COUNTED THE SAME OUTING TWICE — `0278`, 2026-08-30
+
+The canonical key of an outing is **`coalesce(shared_group_id, id)`**, not `id`. Two people
+recording the same run make two `activities` rows tied by `shared_group_id` (0140/0141), and
+a reader that does not collapse to that key reports the number of *recordings* while the
+screen says *outings*.
+
+`mileage_by_person_for_people` has collapsed since it was written. **Six readers did not**,
+and `0261` carried five of them across to the people-aware variants verbatim — its own note
+says *"the bodies are otherwise untouched"*, which was true and is exactly how the defect
+propagated:
+
+    activities_of_type_for_people · race_stats_for_people · races_list_for_people
+    activities_of_type            · race_stats            · races_list
+
+**Exposure, measured 2026-08-30:** 572 activities, 91 in a `shared_group_id`, 31 groups with
+more than one member — so **57 rows are second recordings** of an outing already in the set.
+By type: Run 279 rows / 247 canonical (+32), Hike 152 / 137 (+15), Walk 130 / 121 (+9). Ride,
+Swim and Workout have none.
+
+Row counts in `activities` are not the same claim as rows a person sees — `visible_activities`
+is per-viewer — so each reader was called as each of the three accounts inside a rolled-back
+transaction, before and after:
+
+| reader | | Erica | Josh | Test bot |
+| ------ | - | ----- | ---- | -------- |
+| `activities_of_type_for_people('Run', '{}', 'all')` | | 216 → **200** | 248 → **216** | 168 → **165** |
+| …`'Hike'` | | 139 → **134** | 71 → **56** | 41 → 41 |
+| …`'Walk'` | | 115 → **106** | 105 → **98** | 79 → **74** |
+| `activities_of_type('Run', <account>)` | | 143 → **128** | 163 → **145** | 0 → 0 |
+| …`'Hike'` | | 139 → **134** | 30 → **20** | 0 → 0 |
+| …`'Walk'` | | 115 → **106** | 26 → 26 | 0 → 0 |
+| `activities_of_type('Run', null)` | | 27 → **26** | 27 → **26** | 10 → 10 |
+| …`'Hike'` / `'Walk'` | | 17 / 11 unchanged | 17 / 11 unchanged | 0 / 0 |
+
+Every one fell or held; **none rose**. No other reader moved: `mileage_by_person_for_people`
+still counts 450 / 376 / 285 outings and `activity_lines*` still draws 480 / 431 / 293 lines,
+identical to the digit.
+
+**The race readers are fixed with zero effect today, and that is worth saying plainly rather
+than dressing up as a win.** Four activities qualify as races and none is in a multi-member
+group, so `race_stats*` and `races_list*` return exactly what they returned before — 4 / 2 / 1
+races and 66.650 / 30.037 / 10.105 miles. The defect was in the code and not yet in the data.
+Fixing it now is what stops the first jointly-recorded race counting as two, which nobody
+would notice because a race count of 2 looks like a race count of 2.
+
+**`activity_lines` and `activity_lines_for_people` are deliberately left non-deduping.** Their
+own body says why: the representative of a group may be the copy *without* a route, and a
+missing line on the map is a worse error than two drawn on top of each other. `0278` asserts
+they still do **not** contain a `distinct on`, so a later pass that "finishes the job" has to
+argue with a raise rather than slip through.
+
+Each of the six keeps its `RETURNS TABLE` signature, `SECURITY DEFINER` and pinned
+`search_path`; all eight functions are asserted non-executable by `anon` (0274's lesson: a
+definer function's grant is asserted, never assumed). The migration's behaviour block calls
+the readers for real and compares against a canonical count taken from the same tables, and
+**returns with a notice when `profiles` is empty** — so it replays against a fresh schema in
+`scripts/db-test.sh` instead of failing on an "expected exactly N" that CI can never satisfy.
+That mistake has been made twice in this repo; this is the form that does not make it.
+
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
@@ -4668,6 +4863,8 @@ lost work and can be restored in minutes.
 | `security/advisor-baseline.md`                                                                           | 2026-08-28 | The last markdown outside this file. Its content is **re-measured and folded into §6c**, not merely moved — the baseline had drifted from 83 findings to 188                                                    | §6c above; the file itself was untracked                                                                                                                                  |
 | **Two visits claiming evidence that was not there** — Leesburg `2024-10-22` and Great Falls `2026-07-19`                                                                                                     | 2026-08-29 | Both machine-created on 2026-07-22, `source='evidence'`, no note, no `created_by`, and **nothing at their place inside their dates**. `delete_visit` returned `"evidence": []` for both — the same answer the two `2026-12-25` visits gave in §7c. Erica's explicit yes. What was on those days sat elsewhere: Leesburg's only record is one activity at *North Street Northeast*; Great Falls' day is at Claytor Lake, the Washington Monument and Leesburg VA, plus 438 unplaced pings | **The two undo snapshots below** — `delete_visit`'s own return value, which is everything needed to put each row back |
 | `ingest_tokens` row **"Josh iPhone — photos"** (revoked, not deleted)                                     | 2026-08-29 | Business rule #7: *"no ingest token is ever issued to him."* It had been live since 2026-07-25 and used once, the day it was made. Revoking is reversible and keeps the row and its history                     | `update public.ingest_tokens set revoked_at = null where id = '91ed38b3-6e6c-48a9-917a-35a5ac94a104'`                                                                       |
+| **The TEXT memory banner** — `app/src/components/MemoryBanner.tsx`, `app/src/lib/memories.ts`, its mount on the map and its CSS | 2026-08-30 | Erica: *"I wanted the memory function to be photos, not a random description."* Two memory surfaces were mounted on the map at once: `OnThisDay` (photographs, `rpc('on_this_day')`) and this one, a sentence — *"2 years ago today you were in Lisbon"* — with no image in it. It also read EVERY visit row with no date filter and no limit, and filtered month/day in JavaScript. `OnThisDay` is untouched. | git history for this commit; `.memory-banner` / `.memory-main` / `.memory-spark` / `.memory-x` CSS went with it, and phone row 2 (`--map-phone-row-2`) is free again |
+| **"Official details" on the blank card** — the heading and its "Look up name & website" button | 2026-08-30 | Erica: *"I don't understand why official details look up name and website is on the card."* It asked her to press a button to be told the name of the place she was standing in. The card does it by itself now — see §6g | git history for this commit; `fetchPoiDetails` is still there and is what the automatic prefill calls |
 
 #### The two undo snapshots, 2026-08-29
 
