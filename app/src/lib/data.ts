@@ -907,8 +907,20 @@ export interface PoiDetails {
   wikipedia: string | null; // "en:Article Title" form from OSM
   category: string | null; // OSM class/type, e.g. "tourism/museum"
 }
-/** Look up a place's official details from OpenStreetMap (Nominatim reverse with
- *  extra tags). Suggestions only — the caller confirms before applying. */
+/** Look up the NAMED PLACE at a point from OpenStreetMap (Nominatim reverse).
+ *  Suggestions only — the caller decides whether to apply them.
+ *
+ *  `layer=poi` is the whole difference between this being useful and being wrong.
+ *  Without it, reverse geocoding answers with the area you are INSIDE: a pin dropped
+ *  on a highway in Kansas came back "Coffey County", which is not a place anyone
+ *  wants named on their card. With it, Nominatim answers with the point of interest
+ *  or nothing at all — measured 2026-08-30: Katz's Delicatessen returns
+ *  "Katz's Delicatessen" + its website, and the Kansas highway returns "Unable to
+ *  geocode", i.e. null. The caller (lib/draftPrefill) still discards roads, suburbs
+ *  and boundaries, because `layer=poi` also admits bus stops and rail platforms.
+ *
+ *  Nominatim is a free, rate-limited service used courteously: one request per
+ *  opened card, no polling, no retry loop. */
 export async function fetchPoiDetails(lat: number, lng: number): Promise<PoiDetails | null> {
   try {
     const url =
@@ -919,6 +931,7 @@ export async function fetchPoiDetails(lat: number, lng: number): Promise<PoiDeta
         format: 'json',
         extratags: '1',
         namedetails: '1',
+        layer: 'poi',
         zoom: '18',
       });
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -929,7 +942,11 @@ export async function fetchPoiDetails(lat: number, lng: number): Promise<PoiDeta
       class?: string;
       type?: string;
       extratags?: Record<string, string>;
+      // "Unable to geocode" — a 200 with nothing in it, which is the honest answer
+      // for a point with no point of interest anywhere near it.
+      error?: string;
     };
+    if (d.error) return null;
     const ex = d.extratags ?? {};
     return {
       name: d.namedetails?.name || d.name || null,

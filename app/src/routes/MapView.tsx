@@ -52,7 +52,6 @@ import PeopleFilter, { type PeopleSelection } from '../components/PeopleFilter';
 import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
 import FilterChips from '../components/FilterChips';
 import SearchPalette from '../components/SearchPalette';
-import MemoryBanner from '../components/MemoryBanner';
 import { showSnack } from '../lib/snackbar';
 
 const SOURCE_ID = 'places';
@@ -1723,8 +1722,11 @@ export default function MapView() {
         />
       </div>
 
-      {!selectedPlace && !addMode && !drawMode && <MemoryBanner />}
-
+      {/* THE TEXT MEMORY WAS DELETED HERE ON 2026-08-30. Erica: "I wanted the memory
+          function to be photos, not a random description." Two memory surfaces were
+          mounted on this map at once — `OnThisDay` above, which is photographs, and a
+          `MemoryBanner` here, which was a sentence ("2 years ago today you were in
+          Lisbon"). The sentence is gone, with its component and lib/memories.ts. */}
       {addMode && (
         <div className="add-bar">
           <input

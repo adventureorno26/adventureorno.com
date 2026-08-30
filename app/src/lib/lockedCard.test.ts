@@ -276,10 +276,16 @@ describe('the blank card asks the trail question once', () => {
   });
 
   it('lets a trail exist before it has been walked', () => {
-    // A trail you have not walked yet is a normal thing to record. The date is
-    // therefore optional, and with no date no visit is logged — which is exactly what
-    // the plan says: "create a first visit only when the user supplies an outing date".
-    expect(BLANK).toMatch(/Date you walked it \(optional\)/);
+    // A trail you have not walked yet is a normal thing to record. The date can still
+    // be cleared, and with no date no visit is logged — which is exactly what the plan
+    // says: "create a first visit only when the user supplies an outing date".
+    //
+    // The label lost "(optional)" on 2026-08-30, when the field started arriving
+    // filled in with today's date (Erica: "The date should always be pre-filled to the
+    // date I am adding the card"). Calling a pre-filled field optional described the
+    // old empty one.
+    expect(BLANK).toMatch(/<span>\{isTrail \? 'Date you walked it' : 'Date'\}<\/span>/);
+    expect(BLANK).toMatch(/visitDate && !files\.length \? \{ date: visitDate/);
   });
 
   it('offers the reference route, and draws it the one existing way', () => {

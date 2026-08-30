@@ -8,8 +8,9 @@ import {
   type PoiDetails,
 } from '../lib/data';
 import type { MapPerson } from '../lib/data';
-import { mapPool, uploadPhoto } from '../lib/photos';
+import { mapPool, readTakenAt, uploadPhoto } from '../lib/photos';
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
+import { localDateOf, prefill, suggestedPlaceName, todayLocalDate } from '../lib/draftPrefill';
 import { googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { haversineMeters } from '../lib/geo';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
@@ -86,7 +87,14 @@ export default function NewPlaceDraft({
   const [country, setCountry] = useState<string | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
-  const [visitDate, setVisitDate] = useState('');
+  // PRE-FILLED TO THE DAY YOU ARE ADDING THE CARD, and to the day the first photo was
+  // taken as soon as there is one. Still a plain date input: type over it, or clear it.
+  const [visitDate, setVisitDate] = useState(() => todayLocalDate());
+  // What the card filled in, so the footer can tell a prefill apart from work she
+  // entered — otherwise Cancel would ask "discard everything you've entered?" on a
+  // card she has not touched.
+  const prefilledDate = useRef(visitDate);
+  const dateEdited = useRef(false);
   const [who, setWho] = useState<Who>('both');
   const [website, setWebsite] = useState<string | null>(null);
   // Staged like every other field on this card — nothing is written until Save.
@@ -98,10 +106,16 @@ export default function NewPlaceDraft({
   // Asked once, here only (§0.6): "Is this a trail with sections?" — and having said
   // yes, the offer to draw its reference route straight away.
   const [drawAfter, setDrawAfter] = useState(false);
-  const [poi, setPoi] = useState<PoiDetails | null>(null);
-  const [poiChecked, setPoiChecked] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // A name she typed is hers; a name the card guessed is not. Anything that fills the
+  // field for her (the reverse geocode, the OpenStreetMap lookup) checks this first.
+  // A name handed in by the caller — she searched for it and picked it — counts as
+  // typed, so the lookup below leaves it alone.
+  const nameEdited = useRef(!!presetName);
+  // Nominatim is asked ONCE per opened card and never in a loop (rate limits, and it
+  // is a free service). The ref also survives StrictMode's double effect in dev.
+  const poiAsked = useRef(false);
   const choices = whoChoices(people, meId);
   // Idempotency keys per save action (reused on retry, reset on success). One for
   // the "create new place" action, one for "add to an existing (duplicate) place".
@@ -137,6 +151,32 @@ export default function NewPlaceDraft({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // THE PLACE YOU ARE AT, SUGGESTED — no button to press.
+  //
+  // Erica, 2026-08-30: "if I am at a restaurant the name of the restaurant will
+  // already be in the card after I hit add, then I can change it as needed." This
+  // replaces the "Official details / Look up name & website" section, which asked her
+  // to press a button to be told the name of the place she was standing in.
+  //
+  // It is deliberately quiet: one request, no spinner over the card, and NOTHING at
+  // all when OpenStreetMap has no named place there or the request fails. A wrong
+  // name she has to notice and delete is worse than a blank field, so
+  // `suggestedPlaceName` throws away roads, suburbs and county boundaries.
+  useEffect(() => {
+    if (poiAsked.current) return;
+    poiAsked.current = true;
+    let live = true;
+    void fetchPoiDetails(lat, lng).then((d: PoiDetails | null) => {
+      if (!live || !d) return;
+      setName((n) => prefill(n, suggestedPlaceName(d), nameEdited.current));
+      setWebsite((w) => w ?? d.website);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Possible duplicates: saved places within a type-aware radius of this spot.
   const radius = dupeRadius(tags);
   const dupes = useMemo(
@@ -161,17 +201,31 @@ export default function NewPlaceDraft({
     setAdmin1(r.admin1);
     setCountry(r.country);
     setAddress(r.address);
-    setPoi(null);
-    setPoiChecked(false);
+    // She searched and picked this one: the name is now a choice, not a guess.
+    nameEdited.current = true;
     setEditingAddress(false);
   }
 
-  async function lookupPoi() {
-    setBusy('Looking up on OpenStreetMap…');
-    const d = await fetchPoiDetails(lat, lng);
-    setPoi(d);
-    setPoiChecked(true);
-    setBusy(null);
+  // Photos carry the day they were taken, and that is a better answer than today.
+  // It is applied only while the date is still the one the card filled in — once she
+  // has set a date, adding photos does not move it.
+  //
+  // The date is read from the file's own EXIF, which is why this also covers Google
+  // Photos: lib/googlePhotos downloads the ORIGINAL bytes (`=d`), so the capture time
+  // is still in them. Google's own `mediaFileMetadata.creationTime` is NOT threaded
+  // through — the Picker request in lib/googlePhotos.ts (downloadSession) asks only
+  // for `mediaFile`, and the File it builds carries no timestamp — so a photo whose
+  // EXIF was stripped before it reached Google keeps today's date.
+  function addFiles(added: File[]) {
+    if (added.length === 0) return;
+    setFiles((cur) => [...cur, ...added]);
+    if (dateEdited.current) return;
+    void readTakenAt(added[0]).then((takenAt) => {
+      const day = localDateOf(takenAt);
+      if (!day || dateEdited.current) return;
+      prefilledDate.current = day;
+      setVisitDate(day);
+    });
   }
 
   async function save() {
@@ -290,13 +344,15 @@ export default function NewPlaceDraft({
   // card shows category TAGS AS PILLS, and on a blank card every one of them is still a
   // choice, so the whole palette is offered and each pill toggles itself.
 
-  // Guard against losing entered work: confirm before closing a dirty draft.
+  // Guard against losing ENTERED work: confirm before closing a dirty draft. What the
+  // card filled in by itself — today's date, a suggested name, a website found on
+  // OpenStreetMap — is not work she would mind losing, and treating it as such would
+  // put a "discard everything?" prompt in front of every Cancel.
   const dirty =
-    !!name.trim() ||
+    (nameEdited.current && !!name.trim()) ||
     files.length > 0 ||
-    !!visitDate ||
+    visitDate !== prefilledDate.current ||
     tags.length > 0 ||
-    !!website ||
     rating != null;
   function requestCancel() {
     if (busy) return;
@@ -347,7 +403,10 @@ export default function NewPlaceDraft({
             <input
               className="title-input hero-name-input"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                nameEdited.current = true;
+                setName(e.target.value);
+              }}
               placeholder="Name this place"
               aria-label="Name this place"
             />
@@ -460,8 +519,17 @@ export default function NewPlaceDraft({
         ) : (
           <div className="npd-visit-one">
             <label className="npd-field">
-              <span>{isTrail ? 'Date you walked it (optional)' : 'Date'}</span>
-              <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+              {/* No longer "(optional)": it arrives filled in, and clearing it is a
+                  deliberate act rather than the default state. */}
+              <span>{isTrail ? 'Date you walked it' : 'Date'}</span>
+              <input
+                type="date"
+                value={visitDate}
+                onChange={(e) => {
+                  dateEdited.current = true;
+                  setVisitDate(e.target.value);
+                }}
+              />
             </label>
             <div className="npd-field">
               <span>Who was there</span>
@@ -492,7 +560,7 @@ export default function NewPlaceDraft({
                 void pickFromGooglePhotos((s) => setBusy(s))
                   .then((f) => {
                     setBusy(null);
-                    setFiles((cur) => [...cur, ...f]);
+                    addFiles(f);
                   })
                   .catch(() => setBusy(null))
               }
@@ -510,7 +578,7 @@ export default function NewPlaceDraft({
             onChange={(e) => {
               const f = e.target.files ? Array.from(e.target.files) : [];
               e.target.value = '';
-              setFiles((cur) => [...cur, ...f]);
+              addFiles(f);
             }}
           />
         </div>
@@ -546,32 +614,17 @@ export default function NewPlaceDraft({
         <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
         <div className="npd-fill">Write a note or review — once this first visit is saved</div>
 
-        {/* Official details sit last: they enrich a place that already has a name, and on
-            the locked card nothing about them belongs above the sections. */}
-        <div className="npd-field" style={{ marginTop: 18 }}>
-          <span>Official details</span>
-          <button type="button" onClick={() => void lookupPoi()} disabled={!!busy}>
-            Look up name &amp; website
-          </button>
-          {poi && (poi.name || poi.website || poi.category) ? (
-            <div className="npd-poi">
-              {poi.name && poi.name !== name && (
-                <button type="button" className="npd-dupe" onClick={() => setName(poi.name!)}>
-                  Use name: {poi.name}
-                </button>
-              )}
-              {poi.website && (
-                <button type="button" className="npd-dupe" onClick={() => setWebsite(poi.website)}>
-                  Use website: {poi.website}
-                </button>
-              )}
-              {poi.category && <div className="label">Type: {poi.category}</div>}
-            </div>
-          ) : poiChecked ? (
-            <div className="label">No extra details found for this place.</div>
-          ) : null}
-          {website && <div className="npd-current label">Website: {website}</div>}
-        </div>
+        {/* "OFFICIAL DETAILS" WAS DELETED HERE ON 2026-08-30. Erica: "I don't understand
+            why official details look up name and website is on the card." It was a
+            heading and a "Look up name & website" button that asked her to press
+            something to be told the name of the place she was standing in. The card
+            does that by itself now, the moment it opens (see the effect above), and the
+            website it finds is simply shown. */}
+        {website && (
+          <div className="npd-current label" style={{ marginTop: 18 }}>
+            Website: {website}
+          </div>
+        )}
 
         {/* 7. THE FOOTER. On the blank card: Save · Cancel. */}
         {busy && <div className="label">{busy}</div>}

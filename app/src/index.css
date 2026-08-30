@@ -1,9 +1,10 @@
 :root {
   /* THE TOP OF A PHONE SCREEN HAS TWO FREE ROWS, and only two. Row 1 is just under the
      search/+Add row; row 2 is under row 1. Anything fixed to the top on a phone takes one of
-     them by name — `.layers-control` has row 1, `.memory-banner` has row 2 — because when
-     both were written as `calc(84px + env(safe-area-inset-top))` in separate places, the
-     wide one covered the small one and nobody noticed until an audit screenshotted it. */
+     them by name — `.layers-control` has row 1; row 2 is free since the text memory
+     banner was deleted (2026-08-30) — because when two of them were both written as
+     `calc(84px + env(safe-area-inset-top))` in separate places, the wide one covered the
+     small one and nobody noticed until an audit screenshotted it. */
   --map-phone-row-1: calc(84px + env(safe-area-inset-top));
   --map-phone-row-2: calc(126px + env(safe-area-inset-top));
   /* Sleek modern blue theme */
@@ -3258,6 +3259,16 @@ button.panel-hero-slot:hover {
 /* The cover's corners follow the card's. */
 .panel.npd-card .panel-hero {
   border-radius: 15px 15px 0 0;
+  /* THE NAME FIELD USED TO BE OFF THE TOP OF THE SCREEN (fixed 2026-08-30).
+     `.panel.npd-card` is a scrolling flex COLUMN, and the card's content is taller
+     than its 92vh cap, so every flex item was shrinkable — and the hero, being
+     `overflow: hidden`, has an automatic minimum height of 0. It collapsed from
+     190px to 0px, taking its absolutely-positioned children with it: `.hero-title`
+     sat at top -61px, so the name input and the star rating rendered ABOVE the top
+     edge of the card and failed a hit test. Measured on 430x932, 390x844 and
+     1440x900 — you could not see or type the name of the place you were adding.
+     A cover is a fixed 190px band, never a flexible one. */
+  flex: none;
 }
 /* The name is typed straight onto the cover, so it must read as the title rather than as
    a form field sitting on a photograph. */
@@ -3391,12 +3402,6 @@ button.panel-hero-slot:hover {
   font-size: 13px;
   cursor: pointer;
   padding: 2px 0;
-}
-.npd-poi {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 4px;
 }
 .ps-who-toggle {
   display: inline-flex;
@@ -4653,74 +4658,6 @@ textarea {
 .trips-section-head h2 {
   margin: 0;
   font-size: 18px;
-}
-
-/* "On this day" memory banner on the map */
-.memory-banner {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  z-index: 6;
-}
-/* On a phone the bottom is crowded (gear, Add Trail, Search, person filter, zoom),
-   so the wide "On this day" pill overlapped them. Move it to the top, below the
-   search row, where it's clear.
-
-   AND THEN IT COVERED THE LAYERS CONTROL. Fog/Heat/None had been moved to exactly the same
-   line — `top: calc(84px + …)` — by a rule fifteen hundred lines away, written to dodge a
-   different collision with the stats bar. Neither rule knew about the other, and the banner
-   is nearly full width, so on a 390px screen it sat straight on top of Fog and Heat.
-   Two things cannot share a row. The layers control keeps the first line because it is small
-   and pinned right; the banner takes the second. Both are named below so the next rule that
-   wants the top of a phone screen has to pick one. */
-@media (max-width: 640px) {
-  .memory-banner {
-    bottom: auto;
-    top: var(--map-phone-row-2);
-    max-width: calc(100vw - 24px);
-  }
-}
-.memory-banner {
-  display: flex;
-  align-items: stretch;
-  max-width: min(520px, calc(100vw - 28px));
-  background: var(--panel-glass);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(2, 8, 23, 0.35);
-  overflow: hidden;
-}
-.memory-main {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: none;
-  background: none;
-  color: var(--text);
-  padding: 10px 8px 10px 16px;
-  font-size: 13.5px;
-  text-align: left;
-  cursor: pointer;
-}
-.memory-main:hover {
-  background: var(--accent-soft);
-}
-.memory-spark {
-  font-size: 15px;
-}
-.memory-x {
-  border: none;
-  background: none;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  padding: 0 14px;
-  cursor: pointer;
-}
-.memory-x:hover {
-  color: var(--text);
 }
 
 /* Join request rows in Settings */
