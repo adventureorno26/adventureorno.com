@@ -5,10 +5,13 @@ import {
   createPlaceAtomic,
   dateNightPick,
   fetchBucketPlaces,
+  fetchMapPeople,
   fetchWishes,
   toggleWish,
+  type MapPerson,
   type WishInfo,
 } from '../lib/data';
+import { everyoneLabel } from '../lib/participants';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import { categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import type { Place } from '../lib/types';
@@ -25,7 +28,14 @@ export default function BucketList() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [wishes, setWishes] = useState<Record<string, WishInfo>>({});
-  const [onlyBoth, setOnlyBoth] = useState(false);
+  const [onlyEveryone, setOnlyEveryone] = useState(false);
+  // THE WORD FOR "ALL OF US" IS NOT TYPED ON THIS PAGE. It said "Both" — the word retired
+  // on 2026-08-15 (*"the view is Together so investigate why you are saying Both"*) —
+  // twice, in the filter and on every row, and with a third member both of them lied.
+  // `everyoneLabel()` is the one place that decides it: Together for two, Everyone for
+  // three or more. The members are only needed for that count.
+  const [people, setPeople] = useState<MapPerson[]>([]);
+  const everyone = everyoneLabel(people);
 
   function load() {
     fetchBucketPlaces()
@@ -33,6 +43,9 @@ export default function BucketList() {
       .catch(() => setMsg('Could not load your bucket list'));
     fetchWishes()
       .then(setWishes)
+      .catch(() => undefined);
+    fetchMapPeople()
+      .then(setPeople)
       .catch(() => undefined);
   }
   useEffect(load, []);
@@ -67,16 +80,17 @@ export default function BucketList() {
     setMsg(null);
     const id = await dateNightPick();
     if (id) navigate(`/place/${id}`);
-    else setMsg('Pick a place you both want to go first — tap “Want to go” on a few.');
+    // "you both" was the same retired two-person assumption in prose.
+    else setMsg('Pick a place you all want to go first — tap “Want to go” on a few.');
   }
 
-  const bothCount = Object.values(wishes).filter((w) => w.everyone).length;
+  const everyoneCount = Object.values(wishes).filter((w) => w.everyone).length;
 
   // Group by US state, or by country for everywhere else; both sorted A→Z.
   const groups = useMemo(() => {
     const map = new Map<string, { items: Place[]; isState: boolean }>();
     for (const p of places ?? []) {
-      if (onlyBoth && !wishes[p.id]?.everyone) continue;
+      if (onlyEveryone && !wishes[p.id]?.everyone) continue;
       const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
       const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
       if (!map.has(key)) map.set(key, { items: [], isState: Boolean(isUS) });
@@ -92,7 +106,7 @@ export default function BucketList() {
         label,
         items: g.items.sort((x, y) => x.name.localeCompare(y.name)),
       }));
-  }, [places, onlyBoth, wishes]);
+  }, [places, onlyEveryone, wishes]);
 
   // Search → add a want-to-go place (flagged bucket = true; distinct map pin).
   async function addFromSearch(r: SearchResult) {
@@ -137,15 +151,35 @@ export default function BucketList() {
       <BucketMap places={places ?? []} onAdded={load} />
 
       <div className="bucket-toolbar">
-        <button className="primary spin-btn" onClick={() => void spin()} disabled={bothCount === 0}>
+        <button
+          className="primary spin-btn"
+          onClick={() => void spin()}
+          disabled={everyoneCount === 0}
+        >
           🎲 Date night — surprise us
         </button>
-        <button
-          className={`chip-toggle ${onlyBoth ? 'on' : ''}`}
-          onClick={() => setOnlyBoth((v) => !v)}
-        >
-          Both want to go{bothCount > 0 ? ` (${bothCount})` : ''}
-        </button>
+        {/* THE SAME TWO ANSWERS AS /places/edit's filter, in the same words and the same
+            order: ANYONE (do not narrow it) and the everyone-word. It was one chip
+            reading "Both want to go", which is the retired word AND a third vocabulary
+            for a question the rest of the app asks with pills. */}
+        <span className="label">Want to go</span>
+        <div className="pe-personfilter">
+          <button
+            type="button"
+            className={onlyEveryone ? '' : 'on'}
+            onClick={() => setOnlyEveryone(false)}
+          >
+            Anyone
+          </button>
+          <button
+            type="button"
+            className={onlyEveryone ? 'on' : ''}
+            onClick={() => setOnlyEveryone(true)}
+          >
+            {everyone}
+            {everyoneCount > 0 ? ` (${everyoneCount})` : ''}
+          </button>
+        </div>
       </div>
 
       {canEdit && (
@@ -186,7 +220,9 @@ export default function BucketList() {
                         ))}
                       </span>
                     </Link>
-                    {w?.everyone && <span className="both-badge">Both want to go</span>}
+                    {/* Keeps the `both-badge` class on purpose — the styling is written
+                        against that name — while the WORD comes from everyoneLabel(). */}
+                    {w?.everyone && <span className="both-badge">{everyone}</span>}
                     {canEdit && (
                       <button
                         className={`want-btn ${mine ? 'on' : ''}`}

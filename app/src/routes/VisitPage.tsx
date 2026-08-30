@@ -28,6 +28,7 @@ import {
 } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
 import { announceWho } from '../lib/whoWasThere';
+import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
 import { useAuth } from '../auth/AuthProvider';
 import type { Place } from '../lib/types';
 import AuthedImg from '../components/AuthedImg';
@@ -344,21 +345,27 @@ export default function VisitPage() {
               className="attribution-select"
               // From the participant ROWS: exactly one person means that person, anything
               // else means everyone. That is what solo_profile's null used to mean, said
-              // in a way that can also describe three (§0.3).
-              value={d.people.length === 1 ? d.people[0].id : ''}
+              // in a way that can also describe three (§0.3). `whoKey` is that same
+              // reading; this line used to spell it out and then re-derive "Everyone /
+              // Together" a second time below, one of the four private copies of the
+              // control that lib/participants exists to end.
+              value={whoKey(d.people.length === 1 ? d.people[0].id : null, profile?.id)}
               aria-label="Who was here"
               onChange={(e) =>
                 void run('Saving…', async () => {
                   // Naming somebody else asks them; it does not put them on the day
                   // (0240). The reload below shows what is actually true.
-                  announceWho(await setVisitSolo(v.id, e.target.value || null), people);
+                  const outcome = await setVisitSolo(
+                    v.id,
+                    whoProfileId(e.target.value, profile?.id),
+                  );
+                  announceWho(outcome, people);
                 })
               }
             >
-              <option value="">{people.length > 2 ? 'Everyone' : 'Together'}</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+              {whoChoices(people, profile?.id).map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
                 </option>
               ))}
             </select>

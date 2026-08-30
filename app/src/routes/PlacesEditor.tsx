@@ -29,10 +29,16 @@ import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
 import PhotoMatchReview from '../components/PhotoMatchReview';
 import AuthedImg from '../components/AuthedImg';
 import type { Photo, Place, Visit } from '../lib/types';
-import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
+import {
+  ANYONE_KEY,
+  whoChoices,
+  whoFilterChoices,
+  whoKey,
+  whoProfileId,
+} from '../lib/participants';
 import { announceWho } from '../lib/whoWasThere';
 
-/** 'all' | 'both' | 'mine' | a profile id — built from the real members. */
+/** ANYONE_KEY | 'both' | 'mine' | a profile id — built from the real members. */
 type PersonKey = string;
 type Who = string;
 type RowStatus = 'saving' | 'saved' | 'error' | undefined;
@@ -65,7 +71,7 @@ export default function PlacesEditor() {
   const [visitPeople, setVisitPeople] = useState<Map<string, string[]>>(new Map());
   const [selVisit, setSelVisit] = useState<Record<string, string>>({});
   const [q, setQ] = useState('');
-  const [person, setPerson] = useState<PersonKey>('all');
+  const [person, setPerson] = useState<PersonKey>(ANYONE_KEY);
   const [status, setStatus] = useState<Record<string, RowStatus>>({});
   const [note, setNote] = useState<string | null>(null);
 
@@ -112,6 +118,9 @@ export default function PlacesEditor() {
 
   const meId = profile?.id ?? null;
   const whoOptions = useMemo(() => whoChoices(people, meId), [people, meId]);
+  /** The same words in the same order, plus the one answer a filter has and an
+   *  attribution does not: ANYONE. */
+  const filterOptions = useMemo(() => whoFilterChoices(people, meId), [people, meId]);
   /** Everyone except the signed-in member, in the order they appear. */
   const others = useMemo(() => people.filter((x) => x.id !== meId), [people, meId]);
 
@@ -122,7 +131,7 @@ export default function PlacesEditor() {
         const hay = `${p.name} ${p.city ?? ''} ${p.admin1 ?? ''} ${p.country ?? ''}`.toLowerCase();
         if (!hay.includes(s)) return false;
       }
-      if (person === 'all') return true;
+      if (person === ANYONE_KEY) return true;
       const set = placePeople.get(p.id) ?? new Set<string>();
       const hasMe = meId ? set.has(meId) : false;
       if (person === 'mine') return hasMe;
@@ -463,26 +472,23 @@ export default function PlacesEditor() {
           onChange={(e) => setQ(e.target.value)}
           className="pe-search"
         />
+        {/* GENERATED, INCLUDING THE EVERYONE PILL. This row used to build itself from
+            `whoOptions` with `both` pulled OUT of it, and then re-add that pill at the
+            end with the word "Together" typed in by hand — so it read "All · Just me ·
+            Just Josh · Together" while every picker on a card reads "Together · Just me ·
+            Just Josh", and with a third member the hand-typed pill went on saying
+            "Together" while the cards correctly said "Everyone". One list, one order. */}
         <div className="pe-personfilter">
-          {[{ key: 'all', label: 'All' }, ...whoOptions.filter((c) => c.key !== 'both')].map(
-            (c) => (
-              <button
-                key={c.key}
-                className={person === c.key ? 'on' : ''}
-                onClick={() => setPerson(c.key)}
-                type="button"
-              >
-                {c.label}
-              </button>
-            ),
-          )}
-          <button
-            className={person === 'both' ? 'on' : ''}
-            onClick={() => setPerson('both')}
-            type="button"
-          >
-            Together
-          </button>
+          {filterOptions.map((c) => (
+            <button
+              key={c.key}
+              className={person === c.key ? 'on' : ''}
+              onClick={() => setPerson(c.key)}
+              type="button"
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
         <span className="label">{filtered.length} places</span>
       </div>

@@ -58,7 +58,7 @@ import RouteMiniMap from './RouteMiniMap';
 import OsmCredit from './OsmCredit';
 import { pluralLabel } from '../lib/plural';
 import { byYear, visitDates } from '../lib/visitDates';
-import { everyoneLabel } from '../lib/participants';
+import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
 import StarRating from './StarRating';
 
 interface Props {
@@ -159,7 +159,10 @@ export default function PlacePanel({
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
-  const [vWho, setVWho] = useState(''); // '' = both; else a profile id
+  // A CHOICE KEY, never a raw profile id: 'both' | 'mine' | a profile id. `whoProfileId`
+  // turns it into the id the write API takes, which is the same translation every other
+  // "who was there" control in the app does.
+  const [vWho, setVWho] = useState('both');
   const visitKeyRef = useRef<string | null>(null); // idempotency key per visit submit
   // Editing a visit's dates — "stretch a visit into a trip by adding more days".
   const [editingVisit, setEditingVisit] = useState<string | null>(null);
@@ -229,6 +232,10 @@ export default function PlacePanel({
       .then(setPeople)
       .catch(() => undefined);
   }, []);
+  /** ONE list for both "who was there" controls on this card — the visit row and the
+   *  add-a-visit form. They used to build their own, which is how the row and the form
+   *  could disagree about what the choices even were. */
+  const whoOptions = useMemo(() => whoChoices(people, profile?.id), [people, profile?.id]);
 
   useEffect(() => {
     setReview(place.review ?? '');
@@ -644,13 +651,17 @@ export default function PlacePanel({
       await addExperience(
         visitKeyRef.current,
         { id: place.id },
-        { date: start, end_date: end < start ? start : end, who: vWho || undefined },
+        {
+          date: start,
+          end_date: end < start ? start : end,
+          who: whoProfileId(vWho, profile?.id) ?? undefined,
+        },
       );
       visitKeyRef.current = null;
       setAddingVisit(false);
       setVStart('');
       setVEnd('');
-      setVWho('');
+      setVWho('both');
       await reloadVisits();
       showSnack({ message: 'Visit logged.' });
     } catch (e) {
@@ -1673,21 +1684,35 @@ export default function PlacePanel({
                     row keeps its control and an activity row does not — you open
                     the visit, which is where that outing lives. */}
                 {canEdit && people.length >= 2 && r.target.type === 'visit' && (
+                  /* THE COMMENT THAT USED TO SIT HERE SAID: *"Not 'Together' — Erica
+                     asked for that word out of the Visits section entirely … 'Both' is
+                     the word the app already uses for it."* It was true when it was
+                     written and has been superseded TWICE since, so it is recorded
+                     rather than obeyed:
+
+                       - 2026-08-15, Erica: *"the view is Together so investigate why you
+                         are saying Both"*. #94 changed this very line to
+                         `everyoneLabel()` that day; only the comment was left behind, so
+                         it has contradicted the code it sits on ever since.
+                       - 2026-08-17, asked directly because the ban was hers — *"Does 'no
+                         together in the visit section' still stand, now that the words
+                         sit on a control you press?"* — **"Fine on a control."**
+                         `erica-asked-for.spec.ts` now strips every control before
+                         checking, so the ban is on ASSERTING it, not on saying it here.
+
+                     A <select> is a control you press. The words stay. */
                   <select
                     className="attribution-select visit-who"
-                    value={r.solo ?? ''}
+                    value={whoKey(r.solo ?? null, profile?.id)}
                     title="Who was here"
                     onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => void setRowSolo(r.target, e.target.value || null)}
+                    onChange={(e) =>
+                      void setRowSolo(r.target, whoProfileId(e.target.value, profile?.id))
+                    }
                   >
-                    {/* Not "Together" — Erica asked for that word out of the
-                                  Visits section entirely; it now means tagging someone
-                                  in a shared group. This control only says who was here, and
-                                  "Both" is the word the app already uses for it. */}
-                    <option value="">{everyoneLabel(people)}</option>
-                    {people.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                    {whoOptions.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
                       </option>
                     ))}
                   </select>
@@ -1890,10 +1915,9 @@ export default function PlacePanel({
                       value={vWho}
                       onChange={(e) => setVWho(e.target.value)}
                     >
-                      <option value="">{everyoneLabel(people)}</option>
-                      {people.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.id === profile?.id ? 'Just me' : `Just ${p.display_name}`}
+                      {whoOptions.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.label}
                         </option>
                       ))}
                     </select>
@@ -1906,7 +1930,7 @@ export default function PlacePanel({
                   <button
                     onClick={() => {
                       setAddingVisit(false);
-                      setVWho('');
+                      setVWho('both');
                     }}
                   >
                     Cancel
