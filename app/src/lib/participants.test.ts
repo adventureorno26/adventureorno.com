@@ -17,6 +17,8 @@ import {
   whoKey,
   whoProfileId,
 } from './participants';
+import { isOurStats, myStats, ourStats, scopeLabel, scopeNames, scopeSentence } from './statsScope';
+import type { PersonContact } from './memoryPeople';
 import type { MapPerson } from './data';
 
 const person = (id: string, display_name: string): MapPerson => ({ id, display_name }) as MapPerson;
@@ -24,6 +26,22 @@ const person = (id: string, display_name: string): MapPerson => ({ id, display_n
 const ME = person('me-id', 'Erica');
 const JOSH = person('josh-id', 'Josh');
 const THIRD = person('third-id', 'Sam');
+
+/** The same three, as CONTACTS — what `my_people` returns, which is what a scope is made
+ *  of. A scope is about PEOPLE (public.people ids), never about profiles: only two of
+ *  these have an account and all three can be in Our Stats. */
+const contact = (id: string, display_name: string, is_me = false): PersonContact => ({
+  id,
+  display_name,
+  linked_profile: null,
+  favourite: false,
+  is_me,
+});
+const CONTACTS: PersonContact[] = [
+  contact('me-id', 'Erica', true),
+  contact('josh-id', 'Josh'),
+  contact('sam-id', 'Sam'),
+];
 
 describe('who was there', () => {
   it('reads exactly as it did before, with two members', () => {
@@ -297,6 +315,166 @@ describe('every stats screen takes its scope from the same place', () => {
       .filter(([, src]) => /['"](My|Our) Stats['"]/.test(strip(src)))
       .map(([path]) => path);
     expect(offenders, 'use scopeLabel() rather than typing the word').toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE CONTROL OFFERS TWO SCOPES AND NOBODY'S NAME — §0.2, and the defect that produced it.
+//
+// Measured on production 2026-08-30 the map's bottom control read:
+//
+//     [My Stats]  [Josh]
+//
+// which is half of the new model and a pill of the old one. `My Stats` is a SCOPE and
+// `Josh` is a PERSON, so one control offered two different kinds of answer and neither of
+// them was Our Stats — the very scope §0.2 approved. Erica saw it and objected.
+//
+// §0.2 on the third scope: a person's own history is *"seen by opening their profile —
+// never a pill on my map."* So the control renders exactly two buttons, and choosing WHO
+// Our Stats is about is a separate act in its own picker.
+// ---------------------------------------------------------------------------
+describe('the scope control', () => {
+  const file = (name: string) => Object.entries(RAW).find(([p]) => p.endsWith(name))?.[1] ?? '';
+
+  it('renders the two scope words and nothing else you can press to pick a scope', () => {
+    const code = strip(file('components/PeopleFilter.tsx'));
+    expect(code.length, 'app/src/components/PeopleFilter.tsx should be readable').toBeGreaterThan(
+      500,
+    );
+    // The words come from lib, so the guard above stays true and the three screens cannot
+    // drift apart.
+    expect(code, 'render MY_STATS from lib/statsScope').toMatch(/\{MY_STATS\}/);
+    expect(code, 'render OUR_STATS from lib/statsScope').toMatch(/\{OUR_STATS\}/);
+    // THE PILL. It mapped every contact to a button, which is how a person's name got onto
+    // a control about me. Nothing in the control may iterate the OTHER people any more —
+    // only the picker inside the sheet may, and it is behind `picking`.
+    expect(code, 'the scope row must not map people to buttons').not.toMatch(
+      /people-filter[\s\S]{0,600}others\.map\(/,
+    );
+  });
+
+  it('cannot show Our Stats until somebody has been picked', () => {
+    // With nobody picked, "Our Stats" would silently be My Stats under the other word —
+    // one question with two answers, which is the class of defect 0280 exists to end.
+    const code = strip(file('components/PeopleFilter.tsx'));
+    expect(code, 'the apply button is disabled while the pick is empty').toMatch(
+      /disabled=\{draft\.length === 0\}/,
+    );
+    // And the library refuses too, so a second caller cannot get there another way.
+    expect(ourStats(CONTACTS, [])).toBeNull();
+  });
+
+  it('a person is reachable from their profile, not from the map', () => {
+    // The third scope has a route and this is it. If it ever goes, this fails rather than
+    // the pill quietly coming back as the only way to ask the question.
+    expect(strip(file('App.tsx'))).toMatch(/path="\/people\/:personId"/);
+    expect(file('routes/PersonPage.tsx').length).toBeGreaterThan(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE RETIRED WORDS CANNOT COME BACK — §0.2's list, checked on each surface by name.
+//
+//     Just me   Just Josh   Just Erica   Together   Both   All   Anyone
+//     the ALL / ANY operator
+//
+// NAMED INDIVIDUALLY, like the `whoChoices()` guard above, and for the same reason: a rule
+// written as "somewhere in the app" is one a new screen is born outside of. `/bucket` kept
+// the retired word "Both" for a year under a guard that only ever read `Settings.tsx`.
+//
+// COMMENTS ARE STRIPPED FIRST. §0.2 bans these words in comments too, but a file has to be
+// able to record WHICH word it retired — `PeopleFilter.tsx` keeps that ledger deliberately
+// — and a guard that made the ledger illegal would be deleted rather than obeyed.
+// ---------------------------------------------------------------------------
+describe('the retired scope words stay retired', () => {
+  const file = (name: string) => Object.entries(RAW).find(([p]) => p.endsWith(name))?.[1] ?? '';
+
+  // Every surface that renders a scope, a scope's name, or the people in one. The glob
+  // keys this file's own directory as `./`, so the lib entry carries no `lib/` prefix.
+  const SURFACES = [
+    'statsScope.ts',
+    'components/PeopleFilter.tsx',
+    'components/FilterChips.tsx',
+    'components/StatsBar.tsx',
+    'routes/MapView.tsx',
+    'routes/Insights.tsx',
+    'routes/Settings.tsx',
+    'routes/PersonPage.tsx',
+  ];
+
+  // Each pattern is the word AS A LABEL OR AN OPERATOR, not as ordinary English: prose may
+  // still say "both of us went", and a MapLibre filter may still be `['all', …]`.
+  const RETIRED: [string, RegExp][] = [
+    ['Just me', /\bJust me\b/],
+    ['a member named in a scope label', /\bJust (?:\$\{|[A-Z])/],
+    ['Together', /\bTogether\b/],
+    ['Both', /\bBoth\b/],
+    ['Anyone', /\bAnyone\b/],
+    ['the ANY operator', /'any'/],
+    ['All of them / Any of them', /\b(?:All|Any) of them\b/],
+    ['a bare All / Any label', /['"](?:All|Any)['"]/],
+    ['ANYONE_KEY', /\bANYONE_KEY\b/],
+  ];
+
+  for (const name of SURFACES) {
+    it(`${name} says none of them`, () => {
+      const src = file(name);
+      expect(src.length, `app/src/${name} should be readable`).toBeGreaterThan(500);
+      const code = strip(src);
+      const found = RETIRED.filter(([, re]) => re.test(code)).map(([label]) => label);
+      expect(found, `§0.2 retired these — use My Stats / Our Stats`).toEqual([]);
+    });
+  }
+
+  it('and the operator cannot be expressed in a type either', () => {
+    // The strongest form of the rule: not "no screen writes ANY" but "no screen CAN".
+    expect(strip(file('/statsScope.ts')), 'PeopleSelection.mode is pinned').toMatch(
+      /mode:\s*'all';/,
+    );
+    expect(strip(file('/memoryPeople.ts')), 'the memories reader is pinned too').not.toMatch(
+      /mode:\s*'all'\s*\|\s*'any'/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The three scopes, as behaviour rather than as source text.
+// ---------------------------------------------------------------------------
+describe('the three scopes', () => {
+  it('My Stats is me, and only me', () => {
+    expect(myStats(CONTACTS)).toEqual({ people: ['me-id'], mode: 'all' });
+    expect(scopeLabel(myStats(CONTACTS)!, CONTACTS)).toBe('My Stats');
+    expect(scopeSentence(myStats(CONTACTS)!, CONTACTS)).toBe('Every card you are tagged on.');
+  });
+
+  it('Our Stats always contains me, however it was asked for', () => {
+    // Picking Josh asks what HE AND I both did. A set without me is a question about
+    // somebody else, and that question belongs on their profile.
+    expect(ourStats(CONTACTS, ['josh-id'])!.people).toEqual(['me-id', 'josh-id']);
+    expect(ourStats(CONTACTS, ['me-id', 'josh-id'])!.people).toEqual(['me-id', 'josh-id']);
+  });
+
+  it('three people means the overlap of three, in the order the contacts came', () => {
+    expect(ourStats(CONTACTS, ['sam-id', 'josh-id'])!.people).toEqual([
+      'me-id',
+      'josh-id',
+      'sam-id',
+    ]);
+    expect(scopeNames(ourStats(CONTACTS, ['sam-id', 'josh-id'])!, CONTACTS)).toBe('Josh and Sam');
+    expect(scopeSentence(ourStats(CONTACTS, ['sam-id', 'josh-id'])!, CONTACTS)).toBe(
+      'Only the cards you and Josh and Sam are all tagged on.',
+    );
+  });
+
+  it('an empty pick is not Our Stats under another name', () => {
+    expect(ourStats(CONTACTS, [])).toBeNull();
+    expect(ourStats(CONTACTS, ['nobody-i-know'])).toBeNull();
+    expect(isOurStats(myStats(CONTACTS)!, CONTACTS)).toBe(false);
+    expect(isOurStats(ourStats(CONTACTS, ['josh-id'])!, CONTACTS)).toBe(true);
+  });
+
+  it('the label follows the scope, not the caller', () => {
+    expect(scopeLabel(ourStats(CONTACTS, ['josh-id'])!, CONTACTS)).toBe('Our Stats');
   });
 });
 

@@ -258,9 +258,11 @@ export default function MapView() {
   );
   const fogLoaded = useRef(false);
   const pingsLoaded = useRef(false);
-  // THE SCOPE — §0.2. **The map opens on My Stats**: every card I am tagged on. Adding a
-  // name intersects, which is Our Stats. There is no fourth answer any more: "Anyone" was
-  // the default until 0280 and it only ever meant "everyone in this household".
+  // THE SCOPE — §0.2. **The map opens on My Stats**: every card I am tagged on. The only
+  // other answer the control offers is Our Stats, the overlap with the people picked in its
+  // sheet. The map has no per-person answer any more — that is the third scope and it lives
+  // on `/people/:personId`, because asking about Josh on the screen about me is what the
+  // `[My Stats] [Josh]` row shipped and Erica objected to on 2026-08-30.
   //
   // Null until the contacts arrive, so the map never paints the retired everybody-set and
   // then quietly drops four pins.
@@ -375,7 +377,8 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The two people, for the "just me" filter + attribution.
+  // The people on the map, for attribution on a card. NOT for the scope control — since
+  // 2026-08-30 that offers My Stats and Our Stats and no per-person answer (§0.2).
   useEffect(() => {
     void fetchMapPeople()
       .then(setPeople)
@@ -902,9 +905,10 @@ export default function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Which leaf places belong to the current person view (attribution + cutoff).
-  // "Both" = only places with a post-2025-12-21 joint visit; a person = their solo
-  // + joint visits. Containers (trails/trips) roll up and aren't visit-filtered.
+  // Which leaf places belong to the current SCOPE (attribution + cutoff). My Stats is
+  // every place I am tagged on; Our Stats is the overlap of everybody picked, which for
+  // two of us is only the places with a post-2025-12-21 joint visit. Containers
+  // (trails/trips) roll up and are not visit-filtered.
   const [viewSet, setViewSet] = useState<Set<string> | null>(null);
   useEffect(() => {
     if (!peopleSel) return;
@@ -959,9 +963,7 @@ export default function MapView() {
     return !filterCat || effectiveCategories(p).includes(filterCat);
   });
 
-  // Show the person filter once both people exist (test/bot excluded server-side).
-
-  // Keep the source in sync once both map and data are ready (idle → syncMarkers).
+  // Keep the source in sync once the map and the data are ready (idle → syncMarkers).
   useEffect(() => {
     if (ready) syncSource(visiblePlaces);
   }, [ready, visiblePlaces, syncSource]);

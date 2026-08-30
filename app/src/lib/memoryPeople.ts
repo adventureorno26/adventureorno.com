@@ -133,9 +133,15 @@ export interface PersonMemory {
  *
  *  Verified against production the day it shipped: 375 outings for her, 127 for him, 55
  *  together and 447 for either — which adds up exactly (375 + 127 − 55 = 447). */
+/** Everything these people are on. `mode` is PINNED to `'all'` — the intersection.
+ *
+ *  It used to take `'all' | 'any'`, and §0.2 retired the operator on 2026-08-30: ANY asks
+ *  for the memories at least one of them was on, which is two histories shuffled together
+ *  rather than a shared one. The wire still carries `p_mode` because the database function
+ *  still takes it; the TYPE is what stops a caller expressing the retired question. */
 export async function fetchMemoriesWithPeople(
   personIds: string[],
-  mode: 'all' | 'any' = 'all',
+  mode: 'all' = 'all',
   from?: string,
   to?: string,
 ): Promise<PersonMemory[]> {
