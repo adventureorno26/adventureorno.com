@@ -404,10 +404,50 @@ it.describe('the card — what she asked for, on the live site', () => {
     await expect(page.getByPlaceholder(/Name this place/i)).toBeVisible();
     await expect(page.getByText(/Add a cover photo/i)).toBeVisible();
     await expect(page.getByText(/this is visit one/i)).toBeVisible();
-    await expect(page.getByText(/Added once this first visit is saved/i).first()).toBeVisible();
     // Not a chooser, and not the parent picker she deleted.
     await expect(page.getByText(/what are you adding/i)).toHaveCount(0);
     await expect(page.getByText(/Part of a trail/i)).toHaveCount(0);
+  });
+
+  // REWRITTEN 2026-08-30 under rule 4 at the top of this file, and it is a RULING
+  // rather than a drift.
+  //
+  //   WAS (the approved preview, 2026-08-11): the blank card's Routes and Restaurants
+  //       read "Added once this first visit is saved", because an activity attaches to
+  //       a VISIT and a blank card has no visit until Save. docs/STATE.md carried it as
+  //       an OPEN question that needed her, from 2026-08-12.
+  //   IS  (2026-08-30): "I also think Add should lead to a card where I can add an
+  //       activity, restaurant, notes, etc — it should be FULLY EDITABLE."
+  //
+  // Everything is STAGED and written in one go on Save, which is the promise the card
+  // already made about the name, the rating, the tags, the date and the photos. The old
+  // words are still on the card where they are still true — somewhere to go later has
+  // no visit, and neither does a card whose date has been cleared.
+  it('"it should be fully editable" — a route, a restaurant and a note before Save', async ({
+    page,
+  }) => {
+    await ready(page, '/add');
+    await page.getByRole('button', { name: /Add a place, visit or activity/i }).click();
+    await expect(page.locator('.panel.npd-card')).toBeVisible();
+    // The positive first: the real card, with its fillable sections.
+    await expect(page.getByRole('combobox', { name: /Add a route/i })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Add a restaurant/i })).toBeVisible();
+    // The note form is the saved card's own — Title, Rating, Notes, Date, Link.
+    const notes = page.locator('.npd-card form.entry');
+    await expect(notes).toHaveCount(1);
+    await expect(notes.getByRole('combobox').first()).toBeVisible();
+
+    // STAGE A NOTE, and see it held on the card rather than saved.
+    await notes.locator('input').first().fill('A thought before saving');
+    await notes.getByRole('button', { name: /^Save$/ }).click();
+    await expect(page.locator('.npd-staged-row')).toHaveCount(1);
+    await expect(page.getByText('A thought before saving')).toBeVisible();
+
+    // …and CANCEL leaves nothing behind. The confirm is the card asking, which is
+    // itself the proof that it knows it is holding work.
+    page.once('dialog', (d) => void d.accept());
+    await page.getByRole('button', { name: /^Cancel$/ }).click();
+    await expect(page.locator('.panel.npd-card')).toHaveCount(0);
   });
 });
 

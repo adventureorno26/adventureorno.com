@@ -258,7 +258,16 @@ describe('the blank card asks the trail question once', () => {
     expect(visibleText(BLANK), 'the parent picker was deleted on 2026-08-28').not.toMatch(
       /Part of a trail/i,
     );
-    expect(visibleText(BLANK), 'and the part_of it wrote went with it').not.toMatch(/part_of:/);
+    // REWRITTEN 2026-08-30. It used to forbid `part_of:` outright, which said the same
+    // thing while the card could only write one: its own parent. The card now stages
+    // RESTAURANTS, and a restaurant review is a place grouped under the place being
+    // created — `part_of: [placeId]`, the saved card's own `addNote` — so the blunt
+    // version would fail on the feature rather than on the picker. What must not come
+    // back is a part_of on the place THIS CARD IS CREATING, which is the parent picker.
+    const parents = [...visibleText(BLANK).matchAll(/part_of:\s*([^,\n]+)/g)].map((m) =>
+      m[1].trim(),
+    );
+    expect(parents, 'the only part_of on this card groups a staged review').toEqual(['[placeId]']);
   });
 
   it('asks it ONCE — the tag list must not ask the same thing again', () => {
@@ -285,7 +294,16 @@ describe('the blank card asks the trail question once', () => {
     // date I am adding the card"). Calling a pre-filled field optional described the
     // old empty one.
     expect(BLANK).toMatch(/<span>\{isTrail \? 'Date you walked it' : 'Date'\}<\/span>/);
-    expect(BLANK).toMatch(/visitDate && !files\.length \? \{ date: visitDate/);
+    // REWRITTEN 2026-08-30. The literal it used to match — `visitDate && !files.length ?
+    // { date: visitDate` — spelled the WHOLE rule out inline, and the rule gained a
+    // clause when Routes and Restaurants became fillable: a staged route hangs off a
+    // visit id, so a card holding one asks for the visit outright. The decision moved
+    // into `needsVisitRow`, which is a pure function and is tested for real in
+    // draftStaging.test.ts, including the case this check is named after.
+    expect(BLANK, 'the card must ask, not decide inline').toMatch(
+      /const logsAVisit = needsVisitRow\(\{/,
+    );
+    expect(BLANK).toMatch(/logsAVisit \? \{ date: visitDate/);
   });
 
   it('offers the reference route, and draws it the one existing way', () => {
@@ -394,8 +412,77 @@ describe('the blank card is the card with its fields empty', () => {
     expect(BLANK).toMatch(/this is visit one/);
   });
 
-  it('says what Routes and Restaurants are waiting for', () => {
-    expect(BLANK).toMatch(/Added once this first visit is saved/);
+  // REWRITTEN 2026-08-30 under rule 4 of app/e2e/erica-asked-for.spec.ts, and it is a
+  // RULING rather than a drift.
+  //
+  //   WAS (2026-08-11 preview): Routes and Restaurants read "Added once this first
+  //                             visit is saved", because an activity attaches to a
+  //                             VISIT and a blank card has no visit until Save.
+  //   IS  (2026-08-30): Erica — "I also think Add should lead to a card where I can add
+  //                     an activity, restaurant, notes, etc — it should be fully
+  //                     editable." STATE.md had carried this as an OPEN question needing
+  //                     her since 2026-08-12. She answered it.
+  //
+  // The waiting words survive where they are still TRUE — somewhere to go later has no
+  // visit, and neither does a card whose date has been cleared — so this checks the
+  // fillable controls AND the honest fallback.
+  it('lets you add a route, a restaurant and a note before the place exists', () => {
+    expect(BLANK, 'the Routes section takes a route').toMatch(/only="route"/);
+    expect(BLANK, 'the Restaurants section takes a restaurant').toMatch(/only="place"/);
+    expect(BLANK, "and the note form is the saved card's own").toMatch(/<EntryEditor/);
+    expect(BLANK).toMatch(/from '\.\/AddActivity'/);
+    expect(BLANK).toMatch(/from '\.\/EntryEditor'/);
+  });
+
+  it('says what Routes and Restaurants are waiting for when there is no visit', () => {
+    expect(BLANK).toMatch(/a route or a restaurant belongs to a visit/);
+    expect(BLANK).toMatch(/Somewhere to go later has no visit yet/);
+  });
+
+  it('stages them — none of the three is written before Save', () => {
+    // The whole promise, checked mechanically: every call that writes must sit inside
+    // `save()` or `addToExisting()`. If a staging handler ever calls one directly, a
+    // cancelled draft starts leaving rows behind and this goes red.
+    const WRITES = [
+      'addExperience(',
+      'updatePlace(',
+      'setPlaceSolo(',
+      'uploadPhoto(',
+      'createEntry(',
+      'createPlaceAtomic(',
+      'addActivityToVisit(',
+      'addPlaceToVisit(',
+      'writeStaged(',
+    ];
+    /** The [start, end) of a function body, by brace matching from its header. */
+    function body(header: string): [number, number] {
+      const at = BLANK.indexOf(header);
+      expect(at, `${header} is missing from the blank card`).toBeGreaterThan(-1);
+      const i = BLANK.indexOf('{', at);
+      let depth = 0;
+      for (let j = i; j < BLANK.length; j++) {
+        if (BLANK[j] === '{') depth++;
+        else if (BLANK[j] === '}' && --depth === 0) return [at, j + 1];
+      }
+      throw new Error(`unbalanced braces after ${header}`);
+    }
+    // `stagingWriters` NAMES the writes; it does not perform them — it is the object
+    // `writeStaged` is handed, and `writeStaged` is only called from the two below.
+    const allowed = [
+      body('async function save()'),
+      body('async function addToExisting('),
+      body('function stagingWriters('),
+    ];
+    const strays: string[] = [];
+    for (const call of WRITES) {
+      for (let at = BLANK.indexOf(call); at !== -1; at = BLANK.indexOf(call, at + 1)) {
+        const line = BLANK.slice(BLANK.lastIndexOf('\n', at) + 1, BLANK.indexOf('\n', at));
+        // The import list and the comments that explain the rule are not calls.
+        if (/^\s*(\/\/|\*|import\b)/.test(line) || /^\s{2}[a-zA-Z]+,$/.test(line)) continue;
+        if (!allowed.some(([s0, e0]) => at >= s0 && at < e0)) strays.push(line.trim());
+      }
+    }
+    expect(strays, `a write outside Save:\n${strays.join('\n')}`).toEqual([]);
   });
 
   it('offers the categories as PILLS, not a dropdown', () => {

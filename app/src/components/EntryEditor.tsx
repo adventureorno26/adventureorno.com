@@ -7,13 +7,23 @@ interface Props {
   placeId: string;
   existing?: Entry;
   defaultDate?: string; // pre-fill the date for a new note (e.g. from the main card)
+  /** Off on the BLANK card: the field you land on there is the place's own name, and
+   *  this form sits five sections below it. */
+  autoFocusTitle?: boolean;
   onSave: (draft: NewEntry) => Promise<void>;
   onCancel: () => void;
 }
 
 /** Inline add/edit form for a spot. Its "Kind" is a category tag (Dining,
  *  Winery, …) which auto-tags the place; 'note' is a plain note. */
-export default function EntryEditor({ placeId, existing, defaultDate, onSave, onCancel }: Props) {
+export default function EntryEditor({
+  placeId,
+  existing,
+  defaultDate,
+  autoFocusTitle = true,
+  onSave,
+  onCancel,
+}: Props) {
   const [kind, setKind] = useState<string>(existing?.kind ?? 'dining');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
@@ -47,6 +57,20 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
         lat,
         lng,
       });
+      // ADDING leaves the form ready for the next one; EDITING is closed by its caller.
+      // Without this the "add" form stayed disabled with the text still in it after a
+      // successful save — permanently, on the destination card, which keeps this form
+      // mounted. You could write one note per page load.
+      if (!existing) {
+        setTitle('');
+        setBody('');
+        setRating(null);
+        setUrl('');
+        setAddress('');
+        setLat(null);
+        setLng(null);
+        setBusy(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save entry.');
       setBusy(false);
@@ -66,7 +90,7 @@ export default function EntryEditor({ placeId, existing, defaultDate, onSave, on
       </select>
 
       <label>Title</label>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+      <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={autoFocusTitle} />
 
       <label hidden>Address</label>
       <input

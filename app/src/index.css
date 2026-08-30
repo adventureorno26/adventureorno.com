@@ -3372,6 +3372,36 @@ button.panel-hero-slot:hover {
   font-size: 13px;
   min-width: 96px;
 }
+/* WHAT THE BLANK CARD IS HOLDING — the routes, restaurants and notes staged on it,
+   listed under their own heading exactly where the saved rows will appear once it is
+   saved. Deliberately the quiet weight of a `.label`: they are not rows yet. */
+.npd-staged {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 8px;
+}
+.npd-staged-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(19, 31, 54, 0.4);
+  font-size: 13px;
+}
+.npd-staged-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.npd-staged-row .link-btn {
+  flex: none;
+  font-size: 12px;
+}
 .npd-visit-one {
   display: flex;
   flex-direction: column;
