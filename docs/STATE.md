@@ -4448,6 +4448,33 @@ And one standing operational fact, not a task: **there is no live location inges
 has never delivered a ping and Timeline stopped on 2026-07-19. Nothing is broken in a way
 that logs — it simply never ran.
 
+### Two tripwires fired, and both were right
+
+Neither was noise, and neither would have been caught by reading the diff.
+
+- **`0190_the_count_was_a_leftover.test.sql`** asserted that `visit_count` *drifts*, and
+  said in its own comment: *"if a later change adds a trigger and the column starts keeping
+  up, THIS TEST SHOULD FAIL and be deleted along with the workaround it documents."* `0273`
+  added that trigger and it failed, by design, in CI. Section 1 is now its inverse and is a
+  stronger test than before: the hand-written backfill is gone, so the INSERT side is proved
+  through `create_visit` instead of assumed. Sections 2–4 are untouched.
+  `0126_visit_counts_are_visits_not_days.test.sql` independently confirms the design choice
+  — it already asserted `visit_count = count(*) from public.visits` everywhere, which is why
+  `0273` counts plain `visits` and **not** `accepted_visits`; the other choice would have
+  started failing `0126`.
+- **`0154_authz_matrix.test.sql`** caught `0273` handing `anon` EXECUTE on a SECURITY DEFINER
+  function. Postgres default-grants EXECUTE on a new function to PUBLIC, and `0273` did not
+  revoke it. **This is a repeat and the repo already warned about it** — `scripts/lockdown.sql`
+  opens with *"run after EVERY migration deploy … this happened in 0101"*, and `db-test.sh`
+  prints *"run scripts/lockdown.sql after the offending migration (and revoke anon in it)."*
+  Fixed in `0274`. It was never actually exploitable — calling a plpgsql trigger function
+  directly raises immediately, since `tg_op`/`old`/`new` do not exist outside a trigger — but
+  "harmless this time" is a judgement someone has to re-make every time, and 0101 is what
+  that costs. **A new SECURITY DEFINER function needs its revoke in the same migration.**
+  Verified after the revoke that the trigger still fires for `authenticated` through the real
+  `create_visit`/`delete_visit` path: Postgres checks EXECUTE when a trigger is CREATED, not
+  when it fires.
+
 ### The two mistakes worth keeping
 
 - **A migration is replayed from nothing, so its guard cannot assert today's production.**
