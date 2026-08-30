@@ -14,7 +14,8 @@
 // become history."*
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import PeopleFilter, { type PeopleSelection } from '../components/PeopleFilter';
+import PeopleFilter from '../components/PeopleFilter';
+import { myStats, scopeLabel, scopeSentence, type PeopleSelection } from '../lib/statsScope';
 import PlacesList from './PlacesList';
 import Timeline from './Timeline';
 import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
@@ -38,13 +39,21 @@ export default function Insights() {
   const [params, setParams] = useSearchParams();
   const tab: Tab = isTab(params.get('tab')) ? (params.get('tab') as Tab) : 'overview';
 
-  // ANYONE, like the Map. The old default was SHARED — only what both of them were on —
-  // and the approved control opens on everything you can see.
-  const [people, setPeople] = useState<PeopleSelection>({ people: [], mode: 'any' });
+  // MY STATS, like the Map and like Settings ▸ Stats — §0.2, and the whole point of 0280.
+  // This opened on "Anyone" and Settings opened on the old reader's null, which means the
+  // OPPOSITE thing: 56 Trips here, 17 there, same account, same moment.
+  //
+  // NULL UNTIL THE CONTACTS LOAD. Guessing the scope as "no people" would show the retired
+  // everybody-number for a frame and then correct itself, which reads as the number moving
+  // while you look at it.
+  const [people, setPeople] = useState<PeopleSelection | null>(null);
   const [contacts, setContacts] = useState<PersonContact[]>([]);
   useEffect(() => {
     fetchMyPeople()
-      .then(setContacts)
+      .then((c) => {
+        setContacts(c);
+        setPeople(myStats(c));
+      })
       .catch(() => setContacts([]));
   }, []);
 
@@ -60,7 +69,7 @@ export default function Insights() {
 
       {/* THE SCOPE, ABOVE THE TABS, because it applies to all of them. Putting it inside a
           tab would say it belongs to that tab. */}
-      <PeopleFilter people={contacts} value={people} onChange={setPeople} inline />
+      {people && <PeopleFilter people={contacts} value={people} onChange={setPeople} inline />}
 
       <div className="insights-tabs" role="tablist" aria-label="Insights">
         {TABS.map((t) => (
@@ -77,7 +86,7 @@ export default function Insights() {
       </div>
 
       <div className="insights-body">
-        {tab === 'overview' && <Overview people={people} contacts={contacts} />}
+        {tab === 'overview' && people && <Overview people={people} contacts={contacts} />}
         {/* The two screens that were destinations of their own until 2026-08-22. `embedded`
             The only thing that changed in them is that their back-bar and their heading
             went with the route they belonged to: the live page read "Map ▸ Places" and
@@ -111,14 +120,10 @@ function Overview({ people, contacts }: { people: PeopleSelection; contacts: Per
 
   const raceCount = useMemo(() => (races ?? []).reduce((n, r) => n + Number(r.n), 0), [races]);
 
-  const who = useMemo(() => {
-    if (!people.people.length) return 'Anyone';
-    const names = people.people.map(
-      (id) => contacts.find((c) => c.id === id)?.display_name ?? 'them',
-    );
-    if (names.length === 1) return names[0];
-    return names.join(people.mode === 'all' ? ' and ' : ' or ');
-  }, [people, contacts]);
+  // THE WORDS COME FROM THE SAME PLACE THE SCOPE DOES, so Settings ▸ Stats cannot label
+  // this number differently from Insights while both are reading it from one reader.
+  const label = scopeLabel(people, contacts);
+  const sentence = scopeSentence(people, contacts);
 
   return (
     <>
@@ -142,11 +147,8 @@ function Overview({ people, contacts }: { people: PeopleSelection; contacts: Per
           </div>
         </div>
         <p className="label" style={{ margin: '10px 0 0' }}>
-          {who === 'Anyone'
-            ? 'Everything you can see.'
-            : `Only what ${who} ${people.people.length > 1 && people.mode === 'all' ? 'were all' : 'was'} on.`}{' '}
-          A place counts once however many times you went; an outing counts once however many
-          recordings of it exist.
+          <b>{label}</b> — {sentence} A place counts once however many times you went; an outing
+          counts once however many recordings of it exist.
         </p>
       </div>
 

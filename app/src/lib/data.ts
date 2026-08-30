@@ -460,18 +460,12 @@ export async function fetchTripContents(visitId: string): Promise<TripContent[]>
   return (data ?? []) as TripContent[];
 }
 
-/**
- * Occasions for the current view: a trip week is ONE, however much you did inside
- * it. The places you visited during it still count as places, just not as extra
- * visits.
- */
-export async function fetchOccasionCount(profileId?: string | null): Promise<number> {
-  const { data, error } = await supabase.rpc('occasion_count', {
-    p_profile: profileId ?? undefined,
-  });
-  if (error) return 0;
-  return (data as number) ?? 0;
-}
+// `fetchOccasionCount` was removed here (0280). It wrapped `occasion_count(p_profile)` —
+// a reader whose null means "only the visits we were BOTH on" — and NOTHING had called it
+// for as long as the audit could see. A p_profile wrapper sitting unused is the next
+// screen's 17-versus-56: it typechecks, it reads plausibly, and its argument means the
+// opposite of the identically-shaped argument next door. The database function stays;
+// dropping one is a separate and riskier change.
 
 export async function fetchItemCounts(): Promise<{ entries: number; visits: number }> {
   const [e, v] = await Promise.all([
@@ -481,9 +475,18 @@ export async function fetchItemCounts(): Promise<{ entries: number; visits: numb
   return { entries: e.count ?? 0, visits: v.count ?? 0 };
 }
 
-export async function fetchSettingsStats(personId?: string | null): Promise<SettingsStats | null> {
-  const { data, error } = await supabase.rpc('settings_stats', {
-    p_profile: personId ?? undefined,
+/** The four category pills on Settings ▸ Stats, for a scope (§0.2, migration 0280).
+ *
+ *  This used to be `settings_stats(p_profile)`, where a null meant "only the places we were
+ *  BOTH on" — while /insights asked the same question of the newer reader, where an empty
+ *  list means no filter at all. Same word, opposite meanings, and 17 Trips beside 56. */
+export async function fetchSettingsStatsForPeople(
+  personIds: string[],
+  mode: 'all' = 'all',
+): Promise<SettingsStats | null> {
+  const { data, error } = await supabase.rpc('settings_stats_for_people', {
+    p_people: personIds,
+    p_mode: mode,
   });
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
@@ -515,26 +518,49 @@ export interface ClimbingStats {
   total_ft: number;
   everests: number;
 }
-/** Total vertical climbed + Everests, from per-activity elevation gain. */
-export async function fetchClimbingStats(personId?: string | null): Promise<ClimbingStats> {
-  const { data, error } = await supabase.rpc('climbing_stats', {
-    p_profile: personId ?? undefined,
+/** Total vertical climbed + Everests, for a scope. One outing counted once (§0.2). */
+export async function fetchClimbingStatsForPeople(
+  personIds: string[],
+  mode: 'all' = 'all',
+): Promise<ClimbingStats> {
+  const { data, error } = await supabase.rpc('climbing_stats_for_people', {
+    p_people: personIds,
+    p_mode: mode,
   });
   if (error) return { total_ft: 0, everests: 0 };
   const row = (Array.isArray(data) ? data[0] : data) ?? {};
   return { total_ft: Number(row.total_ft ?? 0), everests: Number(row.everests ?? 0) };
 }
 
-/** Summits reached — matched from hike GPS tracks against OSM peaks. */
-export async function fetchPeaksBagged(personId?: string | null): Promise<Peak[]> {
-  const { data, error } = await supabase.rpc('peaks_bagged', { p_profile: personId ?? undefined });
+/** Summits reached — matched from hike GPS tracks against OSM peaks, scoped by the
+ *  OUTING each was bagged on. The old reader scoped by `peak_bags.profile_id`, and the
+ *  six production rows that carry none were handed to everybody. */
+export async function fetchPeaksBaggedForPeople(
+  personIds: string[],
+  mode: 'all' = 'all',
+): Promise<Peak[]> {
+  const { data, error } = await supabase.rpc('peaks_bagged_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
   if (error) return [];
   return (data ?? []) as Peak[];
 }
 
-/** How many US states / world countries we've actually set foot in (not bucket). */
-export async function fetchGeoCoverage(personId?: string | null): Promise<GeoCoverage | null> {
-  const { data, error } = await supabase.rpc('geo_coverage', { p_profile: personId ?? undefined });
+/** How many US states / world countries we've actually set foot in (not bucket).
+ *
+ *  Scoped by the places you were ON A VISIT to — the set `place_ids_for_people` gives the
+ *  map's markers. The old reader scoped by `place_people()`, which answers who TOUCHED the
+ *  record (created it, uploaded a photo, has an activity there), so Settings could report a
+ *  state the map showed no pin in. */
+export async function fetchGeoCoverageForPeople(
+  personIds: string[],
+  mode: 'all' = 'all',
+): Promise<GeoCoverage | null> {
+  const { data, error } = await supabase.rpc('geo_coverage_for_people', {
+    p_people: personIds,
+    p_mode: mode,
+  });
   if (error) return null;
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
@@ -1067,38 +1093,14 @@ export async function fetchSpatialMembers(containerId: string): Promise<string[]
   );
 }
 
-/** Place ids that should show for a person view (null = Both, post-cutoff only). */
-/**
- * Per-place visit counts FOR THE ACTIVE VIEW (map badge).
- *
- * The badge used to read `places.visit_count`, which is global, so it showed the
- * same number in Just me / Just Josh / Both — Potomac Station advertised 67 visits
- * in Erica's view although every one of them is Josh's. This RPC applies exactly
- * the same filter as `place_ids_for_view`, so the badge can never disagree with
- * which pins are on the map.
- *
- * `null` = the Both view (visits attributed to both); a profile id = that person's
- * visits plus the Both ones.
- */
-export async function fetchPlaceVisitCounts(
-  profileId: string | null,
-): Promise<Map<string, number>> {
-  const { data, error } = await supabase.rpc('place_visit_counts', {
-    p_profile: profileId ?? undefined,
-  });
-  if (error) throw error;
-  const out = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ place_id: string; visits: number }>) {
-    out.set(row.place_id, row.visits);
-  }
-  return out;
-}
+// `fetchPlaceVisitCounts(profileId)` was removed here (0280) — the map has read
+// `place_visit_counts_for_people` since 0260 and nothing else called it.
 
 /**
  * Visits per place, BY ANYBODY (0190).
  *
- * Not the same question as `fetchPlaceVisitCounts`, which answers "in this view" and
- * whose null means SHARED visits. Two screens are not asking from inside a view:
+ * Not the same question as the map badge, which answers "in this scope". Two screens are
+ * not asking from inside a scope at all:
  * which of two duplicate places should survive a merge, and whether we have been
  * somewhere more than once. Both read `places.visit_count` for want of anything else,
  * and that column is a mirror nobody refreshes when a VISIT changes — production had
@@ -1122,7 +1124,7 @@ export async function fetchPlaceVisitTotals(): Promise<Map<string, number>> {
  *  is now `all` with both selected: the same set, one tap, no longer the default. */
 export async function fetchPlaceIdsForPeople(
   personIds: string[],
-  mode: 'all' | 'any' = 'all',
+  mode: 'all' = 'all',
 ): Promise<Set<string>> {
   const { data, error } = await supabase.rpc('place_ids_for_people', {
     p_people: personIds,
@@ -1138,7 +1140,7 @@ export async function fetchPlaceIdsForPeople(
 
 export async function fetchPlaceVisitCountsForPeople(
   personIds: string[],
-  mode: 'all' | 'any' = 'all',
+  mode: 'all' = 'all',
 ): Promise<Map<string, number>> {
   const { data, error } = await supabase.rpc('place_visit_counts_for_people', {
     p_people: personIds,
@@ -1151,17 +1153,8 @@ export async function fetchPlaceVisitCountsForPeople(
   return out;
 }
 
-export async function fetchPlaceIdsForView(profileId: string | null): Promise<Set<string>> {
-  const { data, error } = await supabase.rpc('place_ids_for_view', {
-    p_profile: profileId ?? undefined,
-  });
-  if (error) throw error;
-  return new Set(
-    (data ?? []).map((r: { place_ids_for_view: string } | string) =>
-      typeof r === 'string' ? r : r.place_ids_for_view,
-    ),
-  );
-}
+// `fetchPlaceIdsForView(profileId)` was removed here (0280) — superseded by
+// `fetchPlaceIdsForPeople` in 0260 and uncalled since.
 
 /** Every visit across all places (for the bulk editor's per-visit dropdowns). */
 export async function fetchAllVisits(): Promise<Visit[]> {
