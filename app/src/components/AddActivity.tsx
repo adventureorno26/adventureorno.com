@@ -37,11 +37,31 @@ export default function AddActivity({
   startDate,
   endDate,
   onAdded,
+  onStage,
+  only,
+  addLabel = '+ Add an activity',
 }: {
-  visitId: string;
+  /** The visit to write to. Omitted on the BLANK card, which has no visit yet. */
+  visitId?: string;
   startDate: string;
   endDate?: string | null;
-  onAdded: () => void | Promise<void>;
+  onAdded?: () => void | Promise<void>;
+  /**
+   * THE BLANK CARD. Given this, the control STAGES instead of writing: the picked
+   * option is handed back and nothing reaches the database until that card's Save.
+   * It is the same dropdown and the same little form — one control, two homes —
+   * because two of them is how the two stop looking the same.
+   */
+  onStage?: (staged: {
+    option: ActivityOption;
+    name: string;
+    distanceMeters: number | null;
+  }) => void;
+  /** Show only routes, or only places. The blank card's Routes and Restaurants
+   *  sections are separate headings, so each offers only what belongs under it. */
+  only?: 'route' | 'place';
+  /** The dropdown's own first line. */
+  addLabel?: string;
 }) {
   const [options, setOptions] = useState<ActivityOption[] | null>(null);
   /** The option being filled in, or one of the two actions. */
@@ -113,6 +133,19 @@ export default function AddActivity({
       showSnack({ message: `Give the ${picked.label.toLowerCase()} a name.` });
       return;
     }
+    // STAGED (the blank card): hand it back and write nothing. This return is the
+    // whole of the promise — every write below it is unreachable without a visit.
+    if (onStage) {
+      const mi = Number(miles);
+      onStage({
+        option: picked,
+        name: trimmed,
+        distanceMeters: Number.isFinite(mi) && mi > 0 ? mi * 1609.344 : null,
+      });
+      reset();
+      return;
+    }
+    if (!visitId) return;
     setBusy(true);
     try {
       if (picked.kind === 'route') {
@@ -136,7 +169,7 @@ export default function AddActivity({
       }
       keyRef.current = newExperienceKey();
       reset();
-      await onAdded();
+      await onAdded?.();
     } catch (e) {
       // Never silent: a save that vanishes looks exactly like one that worked.
       showSnack({
@@ -178,7 +211,7 @@ export default function AddActivity({
         : parseActivityFile(await file.text(), file.name);
       if (!parsed) throw new Error('that file did not contain a route');
       const out = await importFileActivity(parsed);
-      await onAdded();
+      await onAdded?.();
       // Say what actually happened. "Imported" for a file we already had is how a person
       // ends up importing the same run four times looking for the one that stuck.
       showSnack({
@@ -199,6 +232,10 @@ export default function AddActivity({
   }
 
   const last = endDate || startDate;
+  // What this instance offers. IMPORT and "add a new activity" both write the moment
+  // they are chosen — a file becomes an activities row, a new option becomes an
+  // activity_options row — so neither is offered while staging.
+  const offered = (options ?? []).filter((o) => !only || o.kind === only);
 
   return (
     <div className="add-activity">
@@ -220,16 +257,16 @@ export default function AddActivity({
           value=""
           disabled={busy || options === null}
           onChange={(e) => choose(e.target.value)}
-          aria-label="Add an activity"
+          aria-label={addLabel.replace(/^\+\s*/, '')}
         >
-          <option value="">+ Add an activity</option>
-          {(options ?? []).map((o) => (
+          <option value="">{addLabel}</option>
+          {offered.map((o) => (
             <option key={o.slug} value={o.slug}>
               {o.label}
             </option>
           ))}
-          <option value="__import">Import activity</option>
-          <option value="__new">Add a new activity</option>
+          {!onStage && <option value="__import">Import activity</option>}
+          {!onStage && <option value="__new">Add a new activity</option>}
         </select>
       )}
 
@@ -258,16 +295,21 @@ export default function AddActivity({
               />
             </label>
           )}
-          <label>
-            <span>Date</span>
-            <input
-              type="date"
-              value={day}
-              min={startDate}
-              max={last}
-              onChange={(e) => setDay(e.target.value)}
-            />
-          </label>
+          {/* A blank card's first visit is ONE day — the date in its Visits section —
+              so there is no day to choose between and the field would be a control
+              with a single value. */}
+          {!onStage && (
+            <label>
+              <span>Date</span>
+              <input
+                type="date"
+                value={day}
+                min={startDate}
+                max={last}
+                onChange={(e) => setDay(e.target.value)}
+              />
+            </label>
+          )}
           <div className="aa-actions">
             <button type="button" disabled={busy} onClick={() => void save()}>
               {busy ? 'Saving…' : 'Save'}

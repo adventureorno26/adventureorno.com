@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  addActivityToVisit,
   addExperience,
+  addPlaceToVisit,
+  createEntry,
+  createPlaceAtomic,
   fetchPoiDetails,
   newExperienceKey,
   setPlaceSolo,
   updatePlace,
+  type ActivityOption,
   type PoiDetails,
 } from '../lib/data';
 import type { MapPerson } from '../lib/data';
+import {
+  needsVisitRow,
+  writeStaged,
+  type StagedNote,
+  type StagedOuting,
+} from '../lib/draftStaging';
 import { mapPool, readTakenAt, uploadPhoto } from '../lib/photos';
 import { reverseGeocode, type SearchResult } from '../lib/maptiler';
 import { localDateOf, prefill, suggestedPlaceName, todayLocalDate } from '../lib/draftPrefill';
@@ -20,8 +31,10 @@ import { announceWho } from '../lib/whoWasThere';
 import MapSearch from './MapSearch';
 import CardCover from './CardCover';
 import StarRating from './StarRating';
+import AddActivity from './AddActivity';
+import EntryEditor from './EntryEditor';
 import { useDialog } from '../lib/useDialog';
-import type { Place } from '../lib/types';
+import type { NewEntry, Place } from '../lib/types';
 
 /** 'both' | 'mine' | a profile id — built from the real members (lib/participants). */
 type Who = string;
@@ -107,6 +120,15 @@ export default function NewPlaceDraft({
   // yes, the offer to draw its reference route straight away.
   const [drawAfter, setDrawAfter] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  // ROUTES, RESTAURANTS AND NOTES, STAGED — the answer to the question STATE.md had
+  // recorded as open since 2026-08-12 (Erica, 2026-08-30: "it should be fully
+  // editable"). They live here until Save, exactly as the name, rating, tags, date and
+  // photos already do, so Cancel leaves nothing behind.
+  const [outings, setOutings] = useState<StagedOuting[]>([]);
+  const [notes, setNotes] = useState<StagedNote[]>([]);
+  // The staged items already written, so a Save retried after a failure halfway down
+  // the list finishes it instead of doing the whole thing twice.
+  const wrote = useRef<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement | null>(null);
   // A name she typed is hers; a name the card guessed is not. Anything that fills the
   // field for her (the reverse geocode, the OpenStreetMap lookup) checks this first.
@@ -134,9 +156,97 @@ export default function NewPlaceDraft({
     if (!yes) setDrawAfter(false);
   }
 
+  function stageOuting(picked: {
+    option: ActivityOption;
+    name: string;
+    distanceMeters: number | null;
+  }) {
+    setOutings((cur) => [
+      ...cur,
+      {
+        key: newExperienceKey(),
+        slug: picked.option.slug,
+        label: picked.option.label,
+        kind: picked.option.kind,
+        name: picked.name,
+        distanceMeters: picked.distanceMeters,
+      },
+    ]);
+  }
+  /** The note form hands back a full NewEntry; the place id in it is a placeholder,
+   *  because the place does not exist yet. Save fills the real one in. */
+  function stageNote(draft: NewEntry): Promise<void> {
+    setNotes((cur) => [
+      ...cur,
+      {
+        key: newExperienceKey(),
+        draft: {
+          kind: draft.kind,
+          title: draft.title,
+          body: draft.body,
+          rating: draft.rating,
+          url: draft.url,
+          date: draft.date,
+          address: draft.address,
+          lat: draft.lat,
+          lng: draft.lng,
+        },
+      },
+    ]);
+    return Promise.resolve();
+  }
+
   // Map the tri-state Who selector to the create_experience `who` param.
   function whoParam(): string | undefined {
     return whoProfileId(who, meId) ?? undefined; // 'both' — leave attribution unset
+  }
+
+  // DOES THIS SAVE LOG A VISIT ROW? It always did with a date and no photos. A staged
+  // route or restaurant now asks for one outright, because both attach to a visit id
+  // and the photo-derived visit does not exist yet at the moment Save runs. See
+  // lib/draftStaging for why that does not double-count.
+  const logsAVisit = needsVisitRow({
+    wanted,
+    visitDate,
+    photoCount: files.length,
+    stagedOutings: outings.length,
+  });
+  // PICKING A NEARBY DUPLICATE is "add my visit here" whichever mode the card is in —
+  // that path has never asked whether this was somewhere to go later, because choosing
+  // an existing place you have been to is the answer to that question.
+  const logsAVisitOnExisting = needsVisitRow({
+    wanted: false,
+    visitDate,
+    photoCount: files.length,
+    stagedOutings: outings.length,
+  });
+
+  /** The writes `writeStaged` performs, bound to the place this save just created.
+   *  They are the SAME calls the saved card makes — a note is an entry, a review of a
+   *  restaurant is a place grouped under this one (PlacePanel's `addNote`), a route is
+   *  an activity on the visit, a restaurant picked from the list is a place on it. */
+  function stagingWriters(placeId: string) {
+    return {
+      createEntry,
+      createChildPlace: (draft: Omit<NewEntry, 'place_id'>) =>
+        createPlaceAtomic(
+          {
+            name: draft.title,
+            country,
+            admin1,
+            lat: draft.lat ?? lat,
+            lng: draft.lng ?? lng,
+            address: draft.address ?? null,
+            categories: [draft.kind],
+            saved: true,
+            part_of: [placeId],
+            review: draft.body ?? null,
+          },
+          { date: draft.date || undefined, rating: draft.rating ?? null },
+        ),
+      addActivityToVisit,
+      addPlaceToVisit,
+    };
   }
 
   // Name/region from the coordinates, unless the caller preset a name.
@@ -228,8 +338,18 @@ export default function NewPlaceDraft({
     });
   }
 
+  // A route or a restaurant hangs off a VISIT, and with no date there is no visit. The
+  // card says so rather than dropping them on the floor at Save.
+  const outingsNeedADate = outings.length > 0 && !visitDate;
+  function refuseWithoutADate(): boolean {
+    if (!outingsNeedADate) return false;
+    showSnack({ message: 'Give this visit a date — a route or a restaurant belongs to a visit.' });
+    return true;
+  }
+
   async function save() {
     if (busy) return;
+    if (refuseWithoutADate()) return;
     setBusy('Saving…');
     try {
       if (!keyNew.current) keyNew.current = newExperienceKey();
@@ -252,7 +372,7 @@ export default function NewPlaceDraft({
           // "make this a trail" control any more.
           is_trail: tags.includes('trail'),
         },
-        !wanted && visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
+        logsAVisit ? { date: visitDate, who: whoParam() } : {},
       );
       const placeId = res.place_id;
 
@@ -278,6 +398,28 @@ export default function NewPlaceDraft({
           });
       }
 
+      // EVERYTHING THE CARD WAS HOLDING, in one place and only here. Before the
+      // photos, because these are quick and a photo upload is the slow part.
+      if (outings.length || notes.length) {
+        setBusy('Adding what you wrote…');
+        const { skipped } = await writeStaged({
+          placeId,
+          visitId: res.visit_id,
+          day: visitDate || null,
+          outings,
+          notes,
+          done: wrote.current,
+          writers: stagingWriters(placeId),
+        });
+        if (skipped > 0) {
+          showSnack({
+            message: `Saved, but ${skipped} route${skipped === 1 ? '' : 's'} or restaurant${
+              skipped === 1 ? '' : 's'
+            } needed a visit and could not be added.`,
+          });
+        }
+      }
+
       if (files.length) {
         setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
@@ -301,16 +443,31 @@ export default function NewPlaceDraft({
   // then open it. (Attribution here is per-visit, matching the model.)
   async function addToExisting(p: Place) {
     if (busy) return;
+    if (refuseWithoutADate()) return;
     setBusy('Adding your visit…');
     try {
       if (!keyExisting.current) keyExisting.current = newExperienceKey();
       // Same atomic path against an existing place; manual visit only when there
       // are no photos (photos derive their own visit).
-      await addExperience(
+      const res = await addExperience(
         keyExisting.current,
         { id: p.id },
-        visitDate && !files.length ? { date: visitDate, who: whoParam() } : {},
+        logsAVisitOnExisting ? { date: visitDate, who: whoParam() } : {},
       );
+      // The routes, restaurants and notes go where the visit went. Picking a duplicate
+      // has never thrown away what you entered, and this is more of what you entered.
+      if (outings.length || notes.length) {
+        setBusy('Adding what you wrote…');
+        await writeStaged({
+          placeId: p.id,
+          visitId: res.visit_id,
+          day: visitDate || null,
+          outings,
+          notes,
+          done: wrote.current,
+          writers: stagingWriters(p.id),
+        });
+      }
       if (files.length) {
         setBusy(`Adding ${files.length} photo${files.length === 1 ? '' : 's'}…`);
         const takenAt = visitDate ? `${visitDate}T12:00:00Z` : undefined;
@@ -353,13 +510,48 @@ export default function NewPlaceDraft({
     files.length > 0 ||
     visitDate !== prefilledDate.current ||
     tags.length > 0 ||
-    rating != null;
+    rating != null ||
+    outings.length > 0 ||
+    notes.length > 0;
   function requestCancel() {
     if (busy) return;
     if (dirty && !confirm('Discard this new place and everything you’ve entered?')) return;
     onCancel();
   }
   const cardRef = useDialog<HTMLDivElement>(requestCancel);
+
+  // The staged lists, split into the two sections that hold them.
+  const routeRows = outings.filter((o) => o.kind === 'route');
+  const placeRows = outings.filter((o) => o.kind === 'place');
+  // Both hang off the first visit, so both need one. Bucket places never have a visit;
+  // a cleared date means no visit either (a trail can exist before it is walked).
+  const canAddOutings = !wanted && !!visitDate;
+  const outingsWaitOn = wanted
+    ? 'Somewhere to go later has no visit yet — add one after you have been.'
+    : 'Give this visit a date above — a route or a restaurant belongs to a visit.';
+  function renderStaged(rows: StagedOuting[]) {
+    if (rows.length === 0) return null;
+    return (
+      <div className="npd-staged">
+        {rows.map((o) => (
+          <div key={o.key} className="npd-staged-row">
+            <span className="npd-staged-name">{o.name || o.label}</span>
+            <span className="label">
+              {o.label}
+              {o.distanceMeters ? ` · ${(o.distanceMeters / 1609.344).toFixed(1)} mi` : ''}
+            </span>
+            <button
+              className="link-btn"
+              aria-label={`Remove ${o.name || o.label}`}
+              onClick={() => setOutings((cur) => cur.filter((x) => x.key !== o.key))}
+            >
+              remove
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -371,8 +563,17 @@ export default function NewPlaceDraft({
       {/* THE BLANK CARD IS THE CARD WITH ITS FIELDS EMPTY (rebuilt 2026-08-28).
           §"THE CARD — LOCKED": "The blank (new) card is the same card with the fields
           empty... Its Visits section says 'this is visit one', because saving a new place
-          IS its first visit. Routes and Restaurants say 'Added once this first visit is
-          saved'."
+          IS its first visit."
+
+          ROUTES, RESTAURANTS AND NOTES BECAME FILLABLE ON 2026-08-30. They read "Added
+          once this first visit is saved" until then, which is what the 2026-08-11
+          preview showed and what STATE.md recorded as an OPEN question — an activity
+          attaches to a visit, and a blank card has no visit until Save. Erica answered
+          it: "I also think Add should lead to a card where I can add an activity,
+          restaurant, notes, etc — it should be fully editable." So they are staged, like
+          every other field here, and written in `save()` once the place and its first
+          visit exist. The old words survive only where they are still TRUE: somewhere to
+          go later has no visit, and neither does a card whose date has been cleared.
 
           It used to be a dialog of label-and-input rows — Name, Location, Official details,
           Visit date, What is it? — with no sections at all, and none of that copy anywhere
@@ -583,8 +784,10 @@ export default function NewPlaceDraft({
           />
         </div>
 
-        <h3 style={{ marginTop: 22 }}>Routes</h3>
-        {isTrail ? (
+        <h3 style={{ marginTop: 22 }}>
+          Routes{routeRows.length > 0 && <span className="label"> ({routeRows.length})</span>}
+        </h3>
+        {isTrail && (
           <div className="npd-field">
             <span>Its route</span>
             <div className="ps-who-toggle">
@@ -604,15 +807,65 @@ export default function NewPlaceDraft({
               </button>
             </div>
           </div>
+        )}
+        {renderStaged(routeRows)}
+        {canAddOutings ? (
+          <AddActivity
+            only="route"
+            addLabel="+ Add a route"
+            startDate={visitDate}
+            onStage={stageOuting}
+          />
         ) : (
-          <div className="npd-fill">Added once this first visit is saved</div>
+          <div className="npd-fill">{outingsWaitOn}</div>
         )}
 
-        <h3 style={{ marginTop: 22 }}>Restaurants</h3>
-        <div className="npd-fill">Added once this first visit is saved</div>
+        <h3 style={{ marginTop: 22 }}>
+          Restaurants{placeRows.length > 0 && <span className="label"> ({placeRows.length})</span>}
+        </h3>
+        {renderStaged(placeRows)}
+        {canAddOutings ? (
+          <AddActivity
+            only="place"
+            addLabel="+ Add a restaurant"
+            startDate={visitDate}
+            onStage={stageOuting}
+          />
+        ) : (
+          <div className="npd-fill">{outingsWaitOn}</div>
+        )}
 
         <h3 style={{ marginTop: 22 }}>NOTES AND REVIEWS</h3>
-        <div className="npd-fill">Write a note or review — once this first visit is saved</div>
+        {notes.length > 0 && (
+          <div className="npd-staged">
+            {notes.map((n, i) => (
+              <div key={n.key} className="npd-staged-row">
+                <span className="npd-staged-name">{n.draft.title}</span>
+                <span className="label">
+                  {n.draft.kind === 'note' ? 'Note' : categoryLabel(n.draft.kind)}
+                  {n.draft.rating ? ` · ${'★'.repeat(n.draft.rating)}` : ''}
+                </span>
+                <button
+                  className="link-btn"
+                  aria-label={`Remove ${n.draft.title}`}
+                  onClick={() => setNotes((cur) => cur.filter((_, j) => j !== i))}
+                >
+                  remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* The SAME form the saved card puts at the bottom of this section. Its Kind is
+            what decides the model — a plain note is an entry on this place, and a
+            Restaurant is a place of its own grouped under it. Staged either way. */}
+        <EntryEditor
+          placeId=""
+          defaultDate={visitDate || todayLocalDate()}
+          autoFocusTitle={false}
+          onSave={stageNote}
+          onCancel={() => undefined}
+        />
 
         {/* "OFFICIAL DETAILS" WAS DELETED HERE ON 2026-08-30. Erica: "I don't understand
             why official details look up name and website is on the card." It was a
