@@ -265,3 +265,32 @@ export async function fetchAllMediaKeys(env: Env): Promise<Set<string>> {
   }
   return keys;
 }
+
+/**
+ * Rows in `purged_media` whose R2 object has not been deleted yet (0277). Each is a key
+ * whose owning `photos` row was hard-deleted by `purge_trash()` 30 days after it went to
+ * trash — SQL cannot reach R2, so the object outlived the row that named it.
+ */
+export interface PurgedMediaRow {
+  id: string;
+  media_key: string;
+}
+export async function fetchPurgedMediaOwed(env: Env, limit = 500): Promise<PurgedMediaRow[]> {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/purged_media?select=id,media_key&deleted_from_r2_at=is.null&order=purged_at.asc&limit=${limit}`,
+    { headers: restHeaders(env) },
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as PurgedMediaRow[];
+}
+
+/** Stamp `deleted_from_r2_at` once the object is actually gone from R2. */
+export async function markPurgedMediaDeleted(env: Env, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const list = ids.map((i) => `"${i}"`).join(',');
+  await fetch(`${env.SUPABASE_URL}/rest/v1/purged_media?id=in.(${list})`, {
+    method: 'PATCH',
+    headers: restHeaders(env),
+    body: JSON.stringify({ deleted_from_r2_at: new Date().toISOString() }),
+  });
+}

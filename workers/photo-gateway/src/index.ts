@@ -13,6 +13,8 @@ import {
   deletePhotoRow,
   deleteVideoRow,
   fetchAllMediaKeys,
+  fetchPurgedMediaOwed,
+  markPurgedMediaDeleted,
   findPhotoByHash,
   recomputePlace,
   getPhoto,
@@ -450,6 +452,54 @@ async function handleVideoDelete(
   return json({ ok: true }, 200, cors);
 }
 
+// DRAIN — the destructive half of reconciliation, and the only place in this Worker that
+// deletes an object no longer named by any row. Everything about it is deliberately narrow.
+//
+// It deletes ONLY keys recorded in `purged_media` (0277), i.e. keys whose owning `photos`
+// row was hard-deleted by `purge_trash()` 30 days after going to trash. It does not scan
+// R2 for orphans and delete what it finds: an object with no row could equally be a row
+// that failed to insert, and guessing wrong destroys a photo permanently.
+//
+// THE GUARD THAT MATTERS: every candidate is re-checked against the live media keys before
+// deletion. `purged_media` says "this key should be gone", but a key can legitimately come
+// back — rule #6 allows a deliberate manual re-upload of a deleted photo, which writes a new
+// row that may reference the same key. If the key is live, it is skipped and left recorded,
+// never deleted. The ledger is a claim; the live table is the truth.
+async function handleDrain(
+  env: Env,
+  cors: Record<string, string>,
+  limit: number,
+): Promise<Response> {
+  const owed = await fetchPurgedMediaOwed(env, limit);
+  if (owed.length === 0) {
+    return json({ ok: true, drained: 0, skipped_still_referenced: 0, note: 'nothing owed' }, 200, cors);
+  }
+
+  const liveKeys = await fetchAllMediaKeys(env);
+  const deletable = owed.filter((r) => !liveKeys.has(r.media_key));
+  const skipped = owed.filter((r) => liveKeys.has(r.media_key));
+
+  // R2 delete accepts up to 1000 keys per call; chunk defensively.
+  const deletedIds: string[] = [];
+  for (let i = 0; i < deletable.length; i += 100) {
+    const batch = deletable.slice(i, i + 100);
+    await env.PHOTOS.delete(batch.map((r) => r.media_key));
+    deletedIds.push(...batch.map((r) => r.id));
+  }
+  await markPurgedMediaDeleted(env, deletedIds);
+
+  return json(
+    {
+      ok: true,
+      drained: deletedIds.length,
+      skipped_still_referenced: skipped.length,
+      skipped_sample: skipped.slice(0, 20).map((r) => r.media_key),
+    },
+    200,
+    cors,
+  );
+}
+
 // R2↔DB reconciliation — DRY RUN. Lists every R2 object and diffs it against the DB's
 // referenced media keys: ORPHAN objects (in R2, no DB row → safe to purge) and MISSING
 // objects (DB row, no R2 object → broken media). Reports counts + samples only; deletes
@@ -553,6 +603,16 @@ export default {
         const caller = await session();
         if (caller?.role !== 'owner') return json({ error: 'owner required' }, 403, cors);
         return handleReconcile(env, cors);
+      }
+
+      // --- Drain the purged-media ledger (DESTRUCTIVE, owner-only, POST) ----
+      // POST rather than GET so it can never be triggered by a link, a prefetch or a
+      // crawler. Owner-only for the same reason /reconcile is.
+      if (path === '/reconcile/drain' && req.method === 'POST') {
+        const caller = await session();
+        if (caller?.role !== 'owner') return json({ error: 'owner required' }, 403, cors);
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? '500') || 500, 1000);
+        return handleDrain(env, cors, limit);
       }
 
       if (path === '/health') return json({ ok: true }, 200, cors);
