@@ -33,6 +33,11 @@ const SKIP = new Set([
   ".wrangler",
   "migrations",
   "coverage",
+  // `.claude` holds agent worktrees, each a full checkout of this repo — including a copy
+  // of THIS FILE, whose own fixtures name deleted documents. Walking into them reports
+  // this test's examples as real pointers and fails on itself. Added 2026-08-30, when
+  // three parallel worktrees turned that into eight phantom findings.
+  ".claude",
 ]);
 const EXT = /\.(ts|tsx|js|mjs|cjs|sh|toml|json|yml|yaml|css|sql|md)$/;
 
