@@ -20,11 +20,13 @@ import PlacesList from './PlacesList';
 import Timeline from './Timeline';
 import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
 import {
+  fetchMileageForPeople,
   fetchRaceStatsForPeople,
   fetchWanderStatsForPeople,
   type RaceStat,
   type WanderStats,
 } from '../lib/strava';
+import type { MileageRow } from '../lib/types';
 
 type Tab = 'overview' | 'places' | 'timeline';
 const TABS: { id: Tab; label: string }[] = [
@@ -102,21 +104,36 @@ export default function Insights() {
 function Overview({ people, contacts }: { people: PeopleSelection; contacts: PersonContact[] }) {
   const [wander, setWander] = useState<WanderStats | null>(null);
   const [races, setRaces] = useState<RaceStat[] | null>(null);
+  // MILES COME FROM `mileage_by_person_for_people`, the same reader the map's stats bar
+  // uses — and NOT from wander_stats, which requires `a.place_id is not null` and so drops
+  // any outing that was never attached to a place. Measured on production 2026-08-30 as
+  // Erica: wander_stats said 2108.5 for My Stats where the approved figure in §0.2 is
+  // 2135.6. One question, one reader, on every screen that asks it.
+  const [mileage, setMileage] = useState<MileageRow[] | null>(null);
 
   useEffect(() => {
     let live = true;
     setWander(null);
     setRaces(null);
+    setMileage(null);
     fetchWanderStatsForPeople(people.people, people.mode)
       .then((w) => live && setWander(w))
       .catch(() => live && setWander(null));
     fetchRaceStatsForPeople(people.people, people.mode)
       .then((r) => live && setRaces(r))
       .catch(() => live && setRaces([]));
+    fetchMileageForPeople(people.people, people.mode)
+      .then((m) => live && setMileage(m))
+      .catch(() => live && setMileage([]));
     return () => {
       live = false;
     };
   }, [people]);
+
+  const miles = useMemo(
+    () => (mileage ?? []).reduce((sum, r) => sum + Number(r.miles), 0),
+    [mileage],
+  );
 
   const raceCount = useMemo(() => (races ?? []).reduce((n, r) => n + Number(r.n), 0), [races]);
 
@@ -134,7 +151,18 @@ function Overview({ people, contacts }: { people: PeopleSelection; contacts: Per
             <span className="label">Places</span>
           </div>
           <div className="dh-stat">
-            <b>{wander ? Math.round(wander.miles).toLocaleString() : '…'}</b>
+            {/* ONE DECIMAL, like the map's pill. §0.2 approved 2135.6 mi for My Stats and
+                481.6 for Our Stats; rounding to a whole number here would put 2,136 beside
+                the map's 2135.6 and invite the same "two numbers, one question" reading
+                this whole scope model exists to end. */}
+            <b>
+              {mileage
+                ? miles.toLocaleString(undefined, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  })
+                : '…'}
+            </b>
             <span className="label">Miles</span>
           </div>
           <div className="dh-stat">

@@ -8,10 +8,12 @@
 // `/people/:personId` is a target route in the approved navigation, and this is it.
 //
 // WHAT IT ANSWERS, precisely: everything THAT PERSON did which you are allowed to see —
-// which includes things they did on their own. It is not "what we did together": that is the
-// people multi-select with ALL/ANY, which §8b-i also asks for and which is not built. The
-// first version of this page had a "Miles together" tile summing exactly this list, which
-// reads as one fact and is another.
+// including the things they did on their own. **This is the third scope in §0.2** — *"a
+// person's own stats: all of theirs, including the cards we share"* — and this page is the
+// only place it is asked, because asking it beside my own numbers is what the retired
+// per-person map pill did. It is not the overlap: the overlap is Our Stats, and it lives on
+// the map, on Insights and in Settings. The first version of this page had a shared-miles
+// tile summing exactly this list, which reads as one fact and is another.
 //
 // TWO THINGS IT WILL NOT DO. It never sums a photograph with an outing — §8b-i names that one
 // ("photo presence not silently promoted to outing participation"), so being in a picture
@@ -51,11 +53,13 @@ export default function PersonPage() {
   const [person, setPerson] = useState<PersonContact | null | undefined>(undefined);
   const [everyone, setEveryone] = useState<PersonContact[]>([]);
   const [rows, setRows] = useState<PersonMemory[] | null | undefined>(undefined);
-  // ALSO WITH. §8b-i: "Together is a people query with ALL selected" — so the multi-select
-  // is the real control and one person is the degenerate case. `all` is the default because
-  // "and also Mum" nearly always means "the ones with both of them in".
+  // ALSO WITH — narrowing this person's history to the memories somebody else is on too.
+  //
+  // NO OPERATOR. It carried an `All of them / Any of them` switch, and §0.2 retired that on
+  // 2026-08-30: the intersection is the only question worth asking of a set of people, and
+  // the other setting returned a list nobody was all on. Adding a name here can only make
+  // the list shorter, exactly as Our Stats does on the other three screens.
   const [also, setAlso] = useState<string[]>([]);
-  const [mode, setMode] = useState<'all' | 'any'>('all');
 
   useEffect(() => {
     if (!personId) return;
@@ -70,10 +74,10 @@ export default function PersonPage() {
   useEffect(() => {
     if (!personId) return;
     setRows(undefined);
-    fetchMemoriesWithPeople([personId, ...also], also.length ? mode : 'any')
+    fetchMemoriesWithPeople([personId, ...also], 'all')
       .then(setRows)
       .catch(() => setRows(null));
-  }, [personId, also, mode]);
+  }, [personId, also]);
 
   const counts = useMemo(() => {
     const c = { photo: 0, outing: 0, visit: 0, pending: 0, miles: 0 };
@@ -97,7 +101,8 @@ export default function PersonPage() {
       <h1>{person === undefined ? '…' : name}</h1>
 
       {/* ALSO WITH — the multi-select §8b-i asks for, in the one place a person is already
-          the subject. Its permanent home is the Map's `People: Anyone` drawer. */}
+          the subject. The map's control asks a different question and does not offer this
+          one: picking people there means Our Stats (§0.2). */}
       {everyone.length > 1 && (
         <div className="also-with">
           <span className="label">Also with</span>
@@ -116,16 +121,6 @@ export default function PersonPage() {
                 {p.is_me ? 'Me' : p.display_name}
               </button>
             ))}
-          {also.length > 0 && (
-            <span className="also-mode">
-              <button className={mode === 'all' ? 'on' : ''} onClick={() => setMode('all')}>
-                All of them
-              </button>
-              <button className={mode === 'any' ? 'on' : ''} onClick={() => setMode('any')}>
-                Any of them
-              </button>
-            </span>
-          )}
         </div>
       )}
 
@@ -161,28 +156,26 @@ export default function PersonPage() {
               </div>
               <div className="dh-stat">
                 <b>{Math.round(counts.miles / MILES).toLocaleString()}</b>
-                {/* NOT "miles together". This page answers "what did Josh do that I can
-                    see", which includes outings he recorded on his own — so summing them
-                    and calling the total time spent together would be a number that reads
-                    as one fact and is another. The people multi-select (ALL/ANY) is what
-                    will answer "with", and it is not built. */}
+                {/* NOT shared miles. This page answers "what did this person do that I can
+                    see", which includes the outings they recorded on their own — so summing
+                    them and calling the total time spent with them would be a number that
+                    reads as one fact and is another. The overlap has its own name and its
+                    own control: Our Stats (§0.2). */}
                 <span className="label">{also.length ? 'Miles' : 'Their miles'}</span>
               </div>
             </div>
             <p className="label" style={{ margin: '10px 0 0' }}>
               {/* THE SENTENCE FOLLOWS THE FILTER. It said "including things they did on their
-                  own" whatever was selected — and with "Also with: Me / All of them" that is
-                  the opposite of what is on screen. Same failure as the "Miles together" tile
-                  it shipped beside: text that reads as one fact and is another. */}
+                  own" whatever was picked — the opposite of what is on screen once somebody
+                  has been added to it. Same failure as the miles tile it shipped beside:
+                  text that reads as one fact and is another. */}
               {also.length === 0 ? (
                 <>
                   Everything here is {name}&rsquo;s, and only what you can see — including things
                   they did on their own.
                 </>
-              ) : mode === 'all' ? (
-                <>Only the ones everybody selected was on, and only what you can see.</>
               ) : (
-                <>Anything involving at least one of the people selected, that you can see.</>
+                <>Only the ones everybody picked was on, and only what you can see.</>
               )}{' '}
               An outing counts once however many recordings of it exist. Photos are counted apart
               from outings and add nothing to the miles: being in a picture taken during a run is

@@ -92,7 +92,7 @@ export default function StatsBar({ places, onFilterCategory, peopleSel, viewSet 
   //
   // This used to filter on the place-level `solo_profile` column, which was null
   // for 129 of 132 places — so nothing was ever excluded and the Army Ten Miler
-  // showed up under "Just Josh". Attribution lives on the VISIT (docs/STATE.md §0.3),
+  // showed up under the wrong person. Attribution lives on the VISIT (docs/STATE.md §0.3),
   // so the list now uses place_ids_for_view: the same filter as the map markers
   // and the headline count, which is why they agree.
   const visited = places.filter(
@@ -156,10 +156,9 @@ export default function StatsBar({ places, onFilterCategory, peopleSel, viewSet 
       .catch(() => setMileage([]));
   }, [places.length, peopleSel]); // refresh on data change or scope change
 
-  // Headline places + miles come from the visit-level model (wander_stats): each
-  // place counted once, miles/trips per person, one cutoff. The drill-down lists
-  // above stay as-is (they're the detail view). Falls back to the local tallies
-  // if the RPC hasn't answered yet.
+  // The headline PLACES count comes from the visit-level model (wander_stats): each place
+  // counted once, one cutoff. Miles do not — see the note beside `totalMiles` below.
+  // Falls back to the local tally until the RPC answers.
   const [wander, setWander] = useState<WanderStats | null>(null);
   useEffect(() => {
     if (!peopleSel) return;
@@ -195,7 +194,19 @@ export default function StatsBar({ places, onFilterCategory, peopleSel, viewSet 
   const closeType = () => setTypeList(null);
 
   const placesHeadline = wander ? wander.places_count : placesTotal;
-  const totalMiles = wander ? wander.miles : mileage.reduce((sum, r) => sum + Number(r.miles), 0);
+  // MILES COME FROM THE READER THE DRILL-DOWN LISTS, and that is a fix, not a preference.
+  //
+  // The pill read `wander_stats_for_people` and the list underneath it reads
+  // `mileage_by_person_for_people`. Those two do not answer the same question: wander_stats
+  // requires `a.place_id is not null`, so an activity not attached to a place is in the list
+  // and not in the total above it. Measured on production 2026-08-30 as Erica: the pill said
+  // **2108.5** and the rows under it summed to **2135.6** — 27 miles that were on screen and
+  // not in the headline, the same "one question, two numbers" defect §0.2 and migration 0280
+  // exist to end, this time inside a single control.
+  //
+  // 2135.6 is also the number §0.2 approved for My Stats, and 481.6 for Our Stats — where
+  // the two readers happen to agree, because those outings all have places.
+  const totalMiles = mileage.reduce((sum, r) => sum + Number(r.miles), 0);
   const animated = useCountUp(totalMiles);
 
   return (

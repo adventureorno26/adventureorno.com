@@ -7683,16 +7683,93 @@ button.mi-row:hover {
   background: var(--accent, #3b82f6);
   color: #06121f;
 }
-.also-mode {
-  display: inline-flex;
-  gap: 4px;
-  margin-left: 6px;
-  padding-left: 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.18);
-}
+/* `.people-filter .people-mode` went with the All / Any operator (0280), and `.also-mode`
+   went with the last one on 2026-08-30 (§0.2). Our Stats — and "also with" on a profile —
+   is the overlap, always; there is no second answer for a pair of buttons to switch
+   between. */
 
-/* `.people-filter .people-mode` went with the All / Any operator (0280). Our Stats is the
-   overlap, always — there is no second answer for the pair to switch between. */
+/* ---------- Who is in Our Stats — the scope picker ---------- */
+/* A sheet rather than more pills in the control. The control carries the two SCOPES and
+   nobody's name (§0.2); picking the people is a separate act with room to say what it
+   costs, and it is the same bottom-sheet shape as the map's category sheet. */
+.scope-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(4, 8, 18, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.scope-picker {
+  width: min(460px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px 20px 0 0;
+  /* CLEARS THE FLOATING NAV, and this was measured rather than assumed: at 390×844 with
+     `calc(20px + safe-area)` the "Show Our Stats" button was under `nav.primary-nav` and
+     Playwright's click landed on the Settings tab instead — the exact defect
+     `e2e/nav-obstruction.spec.ts` exists for, on a sheet that paints above the nav's
+     backdrop but below the nav. `--pnav-clearance` is the shared answer. */
+  padding: 16px 16px var(--pnav-clearance);
+  box-shadow: var(--shadow);
+  animation: sheet-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.scope-picker-head {
+  font-weight: 600;
+  margin: 2px 2px 6px;
+}
+.scope-picker-note {
+  margin: 0 2px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.scope-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.scope-pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  /* A row you tap on a phone, not a chip: 44px is the touch target the audit asks for. */
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: rgba(19, 31, 54, 0.5);
+  border: 1px solid var(--border-soft);
+  font-weight: 600;
+  text-align: left;
+}
+.scope-pick.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.scope-pick-tick {
+  color: var(--accent);
+  font-weight: 700;
+}
+.scope-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.scope-picker-actions .primary {
+  background: var(--accent);
+  color: #061018;
+  font-weight: 600;
+}
+.scope-picker-actions .primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* ---------- Insights (/insights) ---------- */
 /* Overview | Places | Timeline under one people/time scope. The two older screens keep

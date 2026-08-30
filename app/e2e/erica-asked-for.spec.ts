@@ -604,6 +604,45 @@ it.describe('the rest of the app — what she asked for', () => {
     await expect(page.locator('.visits-summary')).toContainText(/Visits\s*\(\d+\)/);
   });
 
+  // ADDED 2026-08-30 under rule 1 at the top of this file, for a request she made after
+  // seeing the half-migrated control on production.
+  //
+  //   MEASURED, live, as Erica: the map's bottom control read `[My Stats]  [Josh]`.
+  //   §0.2: *"There are exactly three scopes and no operator"* — My Stats, Our Stats, and
+  //   a person's own, the last of which is *"seen by opening their profile — never a pill
+  //   on my map."*
+  //
+  // NOTHING IS REWRITTEN HERE, and that is checked rather than assumed: no check in this
+  // file ever asserted the map's scope vocabulary — which is how it shipped half-migrated.
+  // The one check that names "Together / Just me / Just <name>" (the visit section, above)
+  // is about ATTRIBUTION — who was on a visit — which §0.2 does not re-word, so it stands
+  // as she last left it. The words §0.2 DID retire are recorded surface by surface in
+  // `app/src/lib/participants.test.ts`, with the instruction each one supersedes.
+  //
+  // WHAT THIS CAN AND CANNOT PROVE. `verify:live` signs in as the TEST BOT, and the bot has
+  // recorded nobody, so on its account the control correctly renders nothing at all — a
+  // control with one possible answer is noise. So the strong form of this rule (the two
+  // words, the picker, no per-person pill) is enforced at source in `participants.test.ts`,
+  // and what runs HERE is the part a bot can still falsify: wherever the control does
+  // render, every button on it is a scope and none of them is a person.
+  it('the map scope control offers scopes, never a person', async ({ page }) => {
+    await ready(page, '/');
+    // The map's own chrome first — otherwise "no person pill" is also true of a blank page,
+    // which is the trap noted at the top of this file.
+    await expect(page.locator('.stats-bar')).toBeVisible();
+
+    const scope = page.locator('.person-filter');
+    const buttons = (await scope.locator('button').allTextContents()).map((t) => t.trim());
+    // Two scopes, in this order, or an account with nobody to share anything with.
+    expect(buttons.length === 0 || buttons.join(' | ') === 'My Stats | Our Stats').toBe(true);
+
+    // AND NO NAME, whoever is signed in. A pill here is the third scope asked on the screen
+    // about me, which is the thing she objected to.
+    for (const label of buttons) {
+      expect(['My Stats', 'Our Stats']).toContain(label);
+    }
+  });
+
   it('"I did not want Trips in the toggle on the main page, I wanted it under Stats"', async ({
     page,
   }) => {
