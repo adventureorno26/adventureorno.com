@@ -4566,6 +4566,24 @@ wired up leaves no trace in any test, any advisor or any lint. The only thing th
 is comparing what production *does* against what the repo *says*. That is what an audit is
 for, and it is why "the code is correct" and "the system does it" are different claims.
 
+**And the watchtower could not have caught this, by construction.** `0197` watches the jobs
+in `cron.job` and reports `has never run` when a job has no run history — good, and it does
+work: the moment `0276` scheduled the pruner, the next health sweep reported
+`cron:prune-service-health · ok=false · "has never run"`, exactly as designed. But before
+`0276` the job **did not exist in `cron.job` at all**, so there was nothing to watch and
+the ledger was silently green. `service_health` shows it: one check for that service in 24
+hours, the one after it was scheduled.
+
+So the monitor covers *scheduled jobs that stop running*. It cannot cover *a job that was
+never scheduled* — that is the blind spot, and it is not fixable by adding a check to the
+same list, because the list is built from `cron.job`. What would catch it is asserting that
+every maintenance function has a caller. Worth doing if a fourth one of these turns up;
+recording the shape here so the next session does not have to rediscover it.
+
+It self-resolves once the job fires: `ok` requires a successful run inside the freshness
+window (25h by default until three runs give it a median), so after 04:40 UTC the entry
+goes green and stays green. Read from `0197`'s SQL rather than assumed.
+
 ### 6f. THE DEPLOYED APP, hit-tested 2026-08-29
 
 `scripts/audit-live.mjs` drives the real production build, signed in, across 13 routes × 3
