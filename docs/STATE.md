@@ -388,6 +388,65 @@ Erica loses 305 participant rows on visits she can still see.
 So this is no longer a standalone fix. It is a **precondition folded into item 9**, and the
 SQL is written and reviewed before the partition rather than invented during it.
 
+### THE PARTITION — decided 2026-08-30, and the split needs no invention
+
+Erica: *"Josh has a space. I have a space… Frankly, I don't give a shit about how the
+historical data gets split and if you have to invent information to do it. The information
+is correct as it stands."*
+
+**We do not have to invent anything, and I would rather not.** The existing tags already
+determine the split completely — measured 2026-08-30, every row accounted for:
+
+| | Erica's space | Josh's space | tagged BOTH → materialised in **both** | unattributed |
+| --- | --- | --- | --- | --- |
+| **visits** (557) | 349 | 100 | 108 | **0** |
+| **activities** (572) | 351 | 165 | 56 | **0** |
+| **photos** (180) | 146 | 34 | — | **0** |
+| **places** (168) | 110 carry a creator; the other 58 follow their visits, which are all tagged | | | **0** |
+
+So the rule is simply: **a row goes to the space of whoever is tagged on it, and a row
+tagged with both is materialised into both spaces** — which is exactly what she asked for,
+arrived at from the data rather than from a guess.
+
+#### Places are duplicated, and that is correct
+
+A place carries **personal** judgements — rating, review, categories, favourite, bucket,
+`is_home`. Those are not facts about the world, they are one person's opinion of it. So each
+space gets its own place row for a place both have visited. The Appalachian Trail existing
+in two spaces with two ratings is right; one shared row with one rating would be wrong.
+
+What this defers: there is no canonical cross-space identity for a place yet, so "who else
+has been here?" cannot be asked. That is a **later** addition (a canonical place link), not a
+reason to share the row now.
+
+#### Her decisions, 2026-08-30
+
+| | |
+| --- | --- |
+| **Two spaces** | Erica has one, Josh has one |
+| **Both-tagged rows** | Materialised into **both** spaces |
+| **Going forward** | **Everyone uses the tagging system — including Erica and Josh.** Nothing is shared by being in the same household, because there is no household |
+| **Test Bot** | Stays in Erica's space |
+| **Sign-up** | **Invite code first**, not open registration |
+| **What a new user sees** | Whatever each user has chosen to make public. Public information is public; nothing else is |
+| **Abort criteria** | Any row count that changes for either of them, on any screen, that cannot be explained |
+
+#### How it will be done
+
+1. **Rehearse on a Supabase branch** — branching is available and confirmed. Run the whole
+   migration on a real copy, diff every table's row counts and every screen's numbers against
+   production. **Nothing touches production until the rehearsal is clean.**
+2. Fresh backup with a **tested restore** immediately before.
+3. **One transaction.** A half-partitioned database is worse than an unpartitioned one,
+   because it looks safe. 58 tables, 81 policies, 205 SECURITY DEFINER functions, and
+   **44 policies calling `is_member()`** that become `is_member(space_id)`.
+4. **28 tables have no ownership column at all** and each needs `space_id` added and
+   backfilled. That is the bulk of the work and where mistakes will hide.
+5. The three definer views fold in here, with the explicit `WHERE` clauses written and
+   reviewed beforehand.
+6. CI must replay the whole chain from an **empty schema** — the check that caught two
+   migration mistakes on 2026-08-30 alone.
+
 ### What still has to be built for this to mean anything
 
 Ordered, because each depends on the one above it.
