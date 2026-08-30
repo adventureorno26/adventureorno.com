@@ -318,7 +318,7 @@ Erica: *"that order is fine."* Items 1–3 are in flight as of 2026-08-30.
 | 2 | **Dedupe the stat readers** (finding 2) | ✅ **LIVE-VERIFIED 2026-08-30** — `0278`, PR #170. It was **six** readers, not three: reading every body from production first found `activities_of_type`, `race_stats` and `races_list` (the non-people variants) had the same defect. Verified independently of the agent that made it, three ways: every function's returned count now equals `count(distinct coalesce(shared_group_id, id))` for both real accounts (6/6 match); `anon` cannot execute any of them; and through the app's own PostgREST path the test bot returns Run 165 / Hike 41 / Walk 74, matching the post-fix numbers. Erica 216→200 Run, 139→134 Hike, 115→106 Walk; Josh 248→216, 71→56, 105→98. `activity_lines` stays non-deduping **on purpose** and the migration asserts it, so a later pass has to argue with a `raise` rather than quietly "fix" it. |
 | 3 | **Settings stats dropdowns + inline place editing** | ✅ **LIVE-VERIFIED 2026-08-30** — PR #173. **The suspected cause was wrong and saying so is the point.** `overflow:hidden` on the summary does NOT break `<details>`; native toggling was never broken, proven in Chromium and WebKit. The real defect: the rule removed `list-style` *and* the webkit marker and supplied no replacement, so `::before`/`::after` were `none` in **both** states — the summary rendered identically open and shut. Nothing said it was a control, or that an open panel could be closed. Verified on production at 390×844: all 22 summaries show a marker when closed; opening a second panel **closes the first**; re-clicking an open one **closes it**. `PlaceQuickEdit` reused unmodified behind a "Fix this place" disclosure, so the default stays "just the visit" (2026-07-26) with correction one click away. |
 | 4 | **Unify "who was there"** (finding 5) | 🟡 **BUILT, NOT YET LIVE-VERIFIED — PR #176.** All seven surfaces now read one list. The three that did not — the card's per-visit row, the card's add-a-visit form and `/visit/:id` — each re-implemented `whoChoices()` by hand, and their "Just me" branch (`p.id === profile?.id`) only fired when the signed-in profile was itself a row in `map_people`, which is why the audit read the list back as "Together · Just Erica · Just Josh". It is always the second choice now. **"Anyone" is added and is deliberately NOT merged into "Together"**: a filter's *do not narrow this* and an attribution's *all of us* are different answers, and merging them would hide rows — `/places/edit` lists a place nobody has recorded a visit to under `all` and never under `both`. `whoFilterChoices()` = `ANYONE_KEY` + exactly `whoChoices()`, so the distinction is explicit rather than accidental; the word is the one §8b-i approved and the Map has used since 0260. `/places/edit`'s filter had been re-adding its everyone pill with "Together" typed in by hand, so it read "All · Just me · Just Josh · Together" and went on saying "Together" for three people; `/bucket` said the retired word **"Both"** twice, in the filter and on every row, long after 2026-08-15 retired it. **The comment at `PlacePanel.tsx:1683` was two instructions out of date and is recorded rather than obeyed**: it asks for "Both", but 2026-08-15 (*"the view is Together so investigate why you are saying Both"*) changed that very line to `everyoneLabel()` the same day and left the comment behind, and 2026-08-17 settled the wider ban — *"Fine on a control."* Obeying it would have put "Both" back on the live site. Dead `components/PersonFilter.tsx` deleted (32 lines, zero importers). The source guard that only ever read Settings.tsx now names **all seven** surfaces, which is how `/bucket` kept the retired word for a year. Presentation only — `set_visit_solo` still takes one profile id, so **no surface here can say "two of us three"**; that stays item 7. |
-| 5 | **Reconcile the disagreeing numbers** (finding 3) | queued |
+| 5 | **Reconcile the disagreeing numbers** (finding 3) | 🟡 **BUILT, NOT YET LIVE-VERIFIED — migration `0280`, §6e.** The 17-versus-56 is one wiring fault: `null` means the OPPOSITE thing in the two generations of reader, and Settings called the old one while Insights called the new one. Given the SAME scope the two agree exactly (`trips_list(erica)` = `trips_list_for_people([erica])` = 43), which is what makes it wiring and not arithmetic. All three stats screens now share one scope control and open on **My Stats**; the fourteen `p_profile` wrappers are deleted from the app and a guard fails the build if a screen calls one of those RPCs again. **The place counts were three different questions and are documented as such rather than forced together** — 132 places you have BEEN, 151 saved place RECORDS, 168 rows a bulk editor can edit. |
 | 6 | **Needs Attention** (finding 4) — filtered destinations per tile, and real error feedback when an RPC fails | queued |
 | 7 | **Multi-user tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam | queued |
 | 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | queued |
@@ -4843,6 +4843,129 @@ the readers for real and compares against a canonical count taken from the same 
 That mistake has been made twice in this repo; this is the form that does not make it.
 
 
+## 6e. 2026-08-30 — ONE NUMBER PER QUESTION (finding 3, item 5)
+
+The app showed two different numbers for the same thing on two screens one tap apart.
+Measured live, signed in as Erica, at the same moment:
+
+| | Settings ▸ Stats | /insights |
+| --- | --- | --- |
+| Trips | **17** | **56** |
+| Places | **55** | **136** |
+| Miles | **481.2** | **2680.6** |
+
+**Neither screen was miscounting.** There are two generations of stat reader and `null`
+means the OPPOSITE thing in each:
+
+* the older `trips_list(p_profile uuid)` reads `p_profile is null` as *only the visits we
+  were BOTH on* — it calls `is_shared_visit`;
+* the newer `trips_list_for_people(p_people uuid[], p_mode text)` reads an EMPTY array as
+  *no filter at all*.
+
+Settings called the first with a null and labelled it plainly **"Trips"**. Insights called
+the second with an empty list and labelled it plainly **"Trips"**. Both were doing exactly
+what they were asked.
+
+**Given the same scope the two generations agree exactly**, which is what makes this a
+wiring fault and not an arithmetic one. Measured, same session:
+
+| | old reader | new reader |
+| --- | --- | --- |
+| My Stats (Erica) | `trips_list(erica)` = **43** | `trips_list_for_people([erica])` = **43** |
+| Our Stats | `trips_list(null)` = **17** | `trips_list_for_people([erica, josh])` = **17** |
+
+### The old generation did not even agree with ITSELF
+
+Fourteen readers take a `p_profile`. **Eleven** treat a null as *shared*; **three —
+`geo_coverage`, `climbing_stats`, `peaks_bagged` — treat it as no filter at all.** All four
+of the Settings ▸ Stats cards sat under one toggle, so on its default **Trips meant "us"
+while Vertical, Summits and States meant "everybody"**, in the same section, with nothing
+saying so. Nobody reported it because nothing about it looks wrong.
+
+### What was done
+
+* Migration **`0280`** adds the four missing people-aware siblings —
+  `settings_stats_for_people`, `geo_coverage_for_people`, `climbing_stats_for_people`,
+  `peaks_bagged_for_people` — each `SECURITY DEFINER`, `search_path` pinned, revoked from
+  `public, anon` and **asserted non-executable by `anon`** in `supabase/tests/0280_…`
+  (0274's lesson: a definer function's grant is asserted, never assumed).
+* Two of the four are deliberately **not** line-for-line copies.
+  `geo_coverage_for_people` scopes by the places you were on a VISIT to — the very set
+  `place_ids_for_people` gives the map's markers — where the old one scoped by
+  `place_people()`, which answers who *touched* the record (created it, uploaded a photo,
+  has an activity there). That is why Settings could report a state the map showed no pin
+  in. `peaks_bagged_for_people` scopes by the OUTING a peak was bagged on: all 61
+  `peak_bags` rows carry an `activity_id` and **six carry no `profile_id`**, and the old
+  function handed those six to everybody.
+* **`app/src/lib/statsScope.ts`** is now the only definition of a scope. `myStats()` says
+  what every screen opens on; `scopeLabel()` / `scopeSentence()` say what to call it. A
+  screen may render a scope; it may not define one.
+* **Settings ▸ Stats, /insights and the map share one control**, and all three open on
+  **My Stats**. `PeopleFilter`'s retired answers are gone: **Anyone** (it only ever meant
+  "everyone in this household", and it was the default), **Together** (it never named who
+  and stopped being true at three people), and the **All / Any** operator.
+  `PeopleSelection.mode` is typed `'all'`, so no caller can express the retired one.
+* **`whoFilterChoices()` and `ANYONE_KEY` are untouched.** `/places/edit` filters place
+  RECORDS by attribution, which is a different question from "whose numbers are these" —
+  item 4's reasoning still holds there, and merging the two is what made this bug possible.
+* **The `p_profile` wrappers were deleted from the app** — `fetchTripsList`,
+  `fetchWanderStats`, `fetchSettingsStats`, `fetchRaceStats`, `fetchRacesList`,
+  `fetchMileage`, `fetchActivitiesOfType`, `fetchActivityLines`, `fetchPlaceIdsForView`,
+  `fetchPlaceVisitCounts`, `fetchGeoCoverage`, `fetchClimbingStats`, `fetchPeaksBagged`, and
+  `fetchOccasionCount`, **which nothing had called for as long as the audit could see.** A
+  guard in `participants.test.ts` now fails the build if any screen calls one of those
+  fourteen RPCs directly, and a second one fails if a screen writes its own selection
+  literal (`people: []` is the retired everybody-scope, `mode: 'any'` the retired operator).
+* **No database function was dropped.** Fourteen are now uncalled by the app; dropping them
+  is a separate and riskier change, and `0260`'s equivalence test still compares against
+  them. Listed in §7 as removal candidates, not removed.
+
+### Before and after, measured both ways
+
+Erica (`ca941ae8`), her own person row `411d6a13`; Josh (`12ef0b67`), `1a0682e9`.
+
+| | Erica before (Settings / Insights) | Erica after (My / Our) | Josh before (Settings / Insights) | Josh after (My / Our) |
+| --- | --- | --- | --- | --- |
+| Trips | 17 / 56 | **43 / 17** | 17 / 56 | **30 / 17** |
+| Places | 55 / 136 | **132 / 55** | 55 / 136 | **61 / 55** |
+| Miles | 481.2 / 2680.6 | **2108.5 / 481.6** | 481.2 / 2267.1 | **1468.4 / 535.1** |
+| Trails taken | 30 | **75 / 30** | 30 | **36 / 30** |
+| US states | 13 | **13 / 8** | 13 | **8 / 8** |
+| Vertical (ft) | 202,955 | **182,735 / 30,991** | 120,647 | **73,882 / 33,740** |
+| Summits | 49 | **38 / 6** | 49 | **6 / 6** |
+
+The "before" column has one number for the last four rows because that screen had a single
+answer for all its cards; the split is what the fix introduces.
+
+### THE PLACE COUNTS ARE THREE DIFFERENT QUESTIONS, and two of them were already right
+
+The audit reported home map chip **136**, `/insights` **136**, `/health` **151** and
+`/places/edit` **168**. Only the first pair was a scope defect:
+
+| Screen | Number | The question it actually answers |
+| --- | --- | --- |
+| Map chip and /insights | 136 → **132** | Places you have **been** — a place with an accepted visit, `counts_as_place`, in scope. 136 was the retired everybody-scope; My Stats is 132. **The chip and Insights never disagreed with each other**, only with the scope model |
+| /health | **151** | Place **records** that are saved, not bucket, not trashed. A diagnostics screen counting rows, which also prints 11 drafts, 5 bucket and 1 trashed beside it. A saved place nobody has recorded a visit to is a real row and not a place you have been |
+| /places/edit | **168** | Every place row the editor can edit: 151 + 11 drafts + 5 bucket + **1 trashed**. A bulk editor over records, not a stat |
+
+**These are not forced together.** 132 and 151 differ by the saved places with no accepted
+visit in scope, which is information rather than error. The one genuine — and tiny — fault
+is that `/places/edit` includes the single trashed row: `fetchPlaces()` selects `places` with
+no `deleted_at` filter and the editor's `filtered` memo adds none, so its header reads 168
+where `/health` accounts for 167 live records plus 1 in the trash. **Left as found**, because
+whether a trashed place is editable there is a product decision and `/trash` already owns it.
+
+### Two things measured on the way, neither introduced here
+
+* `wander_stats(null)` says **481.2** miles where `wander_stats_for_people([both], 'all')`
+  says **481.6**. `0260`'s equivalence test compares the pair on fixtures that have no data,
+  so it has never seen the 0.4. Pre-dates this work.
+* **Our Stats miles differ by who is asking** — 481.6 for Erica, 535.1 for Josh, for the same
+  strict intersection. `visible_activities` is RLS-scoped, so each sees a different set of
+  recordings of the same joint outings and the deduplicated representative differs. The
+  *place* and *trip* counts are identical for both, as they must be. Worth a look; not this
+  change.
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
@@ -4866,6 +4989,8 @@ lost work and can be restored in minutes.
 | `ingest_tokens` row **"Josh iPhone — photos"** (revoked, not deleted)                                     | 2026-08-29 | Business rule #7: *"no ingest token is ever issued to him."* It had been live since 2026-07-25 and used once, the day it was made. Revoking is reversible and keeps the row and its history                     | `update public.ingest_tokens set revoked_at = null where id = '91ed38b3-6e6c-48a9-917a-35a5ac94a104'`                                                                       |
 | **The TEXT memory banner** — `app/src/components/MemoryBanner.tsx`, `app/src/lib/memories.ts`, its mount on the map and its CSS | 2026-08-30 | Erica: *"I wanted the memory function to be photos, not a random description."* Two memory surfaces were mounted on the map at once: `OnThisDay` (photographs, `rpc('on_this_day')`) and this one, a sentence — *"2 years ago today you were in Lisbon"* — with no image in it. It also read EVERY visit row with no date filter and no limit, and filtered month/day in JavaScript. `OnThisDay` is untouched. | git history for this commit; `.memory-banner` / `.memory-main` / `.memory-spark` / `.memory-x` CSS went with it, and phone row 2 (`--map-phone-row-2`) is free again |
 | **"Official details" on the blank card** — the heading and its "Look up name & website" button | 2026-08-30 | Erica: *"I don't understand why official details look up name and website is on the card."* It asked her to press a button to be told the name of the place she was standing in. The card does it by itself now — see §6g | git history for this commit; `fetchPoiDetails` is still there and is what the automatic prefill calls |
+| **The fourteen `p_profile` stat wrappers in the app** — `fetchTripsList`, `fetchWanderStats`, `fetchSettingsStats`, `fetchRaceStats`, `fetchRacesList`, `fetchMileage`, `fetchActivitiesOfType`, `fetchActivityLines`, `fetchPlaceIdsForView`, `fetchPlaceVisitCounts`, `fetchGeoCoverage`, `fetchClimbingStats`, `fetchPeaksBagged`, `fetchOccasionCount` | 2026-08-30 | Each took `string \| null` and handed the null to a reader that reads it as *only what we were BOTH on*, beside an identically-shaped sibling where empty means *no filter*. That is the 17-versus-56 in §6e, and there was no way to see it at a call site. Every one was either repointed at its `_for_people` sibling or (`fetchOccasionCount`, `fetchPlaceIdsForView`, `fetchPlaceVisitCounts`) already uncalled. **The DATABASE functions were NOT dropped** — that is a separate and riskier change, and `0260`'s equivalence test still compares against them | git history for this commit. The fourteen SQL functions are still in production and still recorded; a guard in `participants.test.ts` is what stops a screen calling them again |
+
 
 #### The two undo snapshots, 2026-08-29
 

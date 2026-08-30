@@ -3862,6 +3862,13 @@ export type Database = {
           total_ft: number
         }[]
       }
+      climbing_stats_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
+        Returns: {
+          everests: number
+          total_ft: number
+        }[]
+      }
       cluster_now: { Args: never; Returns: Json }
       cluster_unassigned: { Args: never; Returns: Json }
       consume_oauth_state: {
@@ -4091,6 +4098,16 @@ export type Database = {
       forget_rule: { Args: { p_id: string }; Returns: Json }
       geo_coverage: {
         Args: { p_profile?: string }
+        Returns: {
+          countries: string[]
+          country_count: number
+          has_dc: boolean
+          us_state_count: number
+          us_states: string[]
+        }[]
+      }
+      geo_coverage_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           countries: string[]
           country_count: number
@@ -4448,6 +4465,15 @@ export type Database = {
       }
       peaks_bagged: {
         Args: { p_profile?: string }
+        Returns: {
+          ele_ft: number
+          id: string
+          name: string
+          place_id: string
+        }[]
+      }
+      peaks_bagged_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           ele_ft: number
           id: string
@@ -4986,6 +5012,15 @@ export type Database = {
       }
       settings_stats: {
         Args: { p_profile?: string }
+        Returns: {
+          camping: number
+          dining: number
+          trails_taken: number
+          winery: number
+        }[]
+      }
+      settings_stats_for_people: {
+        Args: { p_mode?: string; p_people: string[] }
         Returns: {
           camping: number
           dining: number

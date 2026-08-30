@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { MileageRow, Place } from '../lib/types';
-import type { PeopleSelection } from './PeopleFilter';
+import type { PeopleSelection } from '../lib/statsScope';
 import {
   fetchActivitiesOfTypeForPeople,
   fetchMileageForPeople,
@@ -18,11 +18,14 @@ import { fetchAllEntries } from '../lib/data';
 interface Props {
   places: Place[];
   onFilterCategory: (slug: string | null) => void;
-  // WHO the numbers are about (0261). The same selection the markers use, so the two can
-  // never say different things about the same screen — with "Anyone" chosen the map would
-  // otherwise show 135 places while the miles beside them counted the 54 they had been to
-  // together, each correct alone and the pair of them a lie.
-  peopleSel?: PeopleSelection;
+  // WHO the numbers are about (0261, and the scope model in 0280). The same selection the
+  // markers use, so the two can never say different things about the same screen — the map
+  // would otherwise show 136 places while the miles beside them counted the 55 they had
+  // been to together, each correct alone and the pair of them a lie.
+  //
+  // NULL while the scope is still resolving. Every fetch below waits for it rather than
+  // asking the retired everybody-question first and correcting itself.
+  peopleSel: PeopleSelection | null;
   // Place ids in the current person view, from place_ids_for_view — the SAME
   // filter the map and wander_stats use. Null while it is still loading.
   viewSet?: Set<string> | null;
@@ -84,12 +87,7 @@ function useCountUp(target: number): number {
   return value;
 }
 
-export default function StatsBar({
-  places,
-  onFilterCategory,
-  peopleSel = { people: [], mode: 'any' },
-  viewSet = null,
-}: Props) {
+export default function StatsBar({ places, onFilterCategory, peopleSel, viewSet = null }: Props) {
   // Only saved, non-bucket places count, and only those in the current view.
   //
   // This used to filter on the place-level `solo_profile` column, which was null
@@ -152,10 +150,11 @@ export default function StatsBar({
 
   const [mileage, setMileage] = useState<MileageRow[]>([]);
   useEffect(() => {
+    if (!peopleSel) return;
     fetchMileageForPeople(peopleSel.people, peopleSel.mode)
       .then(setMileage)
       .catch(() => setMileage([]));
-  }, [places.length, peopleSel]); // refresh on data change or person toggle
+  }, [places.length, peopleSel]); // refresh on data change or scope change
 
   // Headline places + miles come from the visit-level model (wander_stats): each
   // place counted once, miles/trips per person, one cutoff. The drill-down lists
@@ -163,6 +162,7 @@ export default function StatsBar({
   // if the RPC hasn't answered yet.
   const [wander, setWander] = useState<WanderStats | null>(null);
   useEffect(() => {
+    if (!peopleSel) return;
     fetchWanderStatsForPeople(peopleSel.people, peopleSel.mode)
       .then(setWander)
       .catch(() => setWander(null));
@@ -173,6 +173,7 @@ export default function StatsBar({
   const [raceStats, setRaceStats] = useState<RaceStat[]>([]);
   const [racesList, setRacesList] = useState<RaceRow[]>([]);
   useEffect(() => {
+    if (!peopleSel) return;
     fetchRaceStatsForPeople(peopleSel.people, peopleSel.mode)
       .then(setRaceStats)
       .catch(() => setRaceStats([]));
@@ -185,6 +186,7 @@ export default function StatsBar({
   // Tapping an activity-type row (e.g. "123 runs") drills into the actual list of
   // those activities, newest first — each links to its day.
   function openType(type: string) {
+    if (!peopleSel) return;
     setTypeList({ type, rows: [] });
     fetchActivitiesOfTypeForPeople(type, peopleSel.people, peopleSel.mode)
       .then((rows) => setTypeList({ type, rows }))

@@ -191,7 +191,12 @@ describe('every who-was-there control is generated', () => {
     'routes/VisitPage.tsx',
     'routes/PlacesEditor.tsx', // the per-row "Who was there"
     'routes/PhotoSorter.tsx',
-    'routes/Settings.tsx', // the Stats scope
+    // routes/Settings.tsx IS NO LONGER ONE OF THESE (0280). Its Stats section does not ask
+    // "who was on this visit" — it asks "whose numbers are these", which is a SCOPE, and a
+    // scope is not an attribution. Keeping it here is what let the two look interchangeable:
+    // whoChoices()'s everyone-answer resolves to a null profile, the old readers take a null
+    // as "only what we were BOTH on", and Settings printed 17 Trips beside /insights' 56.
+    // The scope guard below is the replacement, and it covers all three stats screens.
   ];
 
   for (const name of ATTRIBUTION) {
@@ -227,30 +232,71 @@ describe('every who-was-there control is generated', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Settings › Stats had the LAST hand-written one. Its person toggle rendered a
-// literal "Both" button and then one button per member labelled from display_name —
-// a fifth private implementation of this control, and the one place the retired word
-// survived. It is `whoChoices()` now, like everywhere else.
+// ONE SCOPE, THREE SCREENS — §0.2, and the reason migration 0280 exists.
+//
+// Settings › Stats, /insights and the Map each show numbers about the same account, and
+// each used to decide privately what "everyone" meant. Settings' pills resolved to a null
+// profile and /insights' to an empty people list, which are OPPOSITE instructions to the
+// two generations of reader: 17 Trips and 56 Trips, live, at the same moment.
+//
+// So no screen may define a scope. It comes from lib/statsScope, whose `myStats()` is the
+// one place that says what everything opens on, and it is spent through the people-aware
+// readers only. A fourth stats screen joins this list rather than starting a fifth answer.
 // ---------------------------------------------------------------------------
-describe('the stats toggle in Settings is generated', () => {
-  const src = Object.entries(RAW).find(([p]) => p.endsWith('/routes/Settings.tsx'))?.[1] ?? '';
+describe('every stats screen takes its scope from the same place', () => {
+  const file = (name: string) => Object.entries(RAW).find(([p]) => p.endsWith(name))?.[1] ?? '';
+  const SCREENS = ['routes/Settings.tsx', 'routes/Insights.tsx', 'routes/MapView.tsx'];
 
-  it('can read Settings.tsx', () => {
-    expect(src.length, 'app/src/routes/Settings.tsx should be readable').toBeGreaterThan(1000);
+  for (const name of SCREENS) {
+    it(`${name} opens on myStats() from lib/statsScope`, () => {
+      const src = file(name);
+      expect(src.length, `app/src/${name} should be readable`).toBeGreaterThan(500);
+      expect(strip(src), 'import myStats from lib/statsScope').toMatch(
+        /myStats[\s\S]{0,120}from '\.\.\/lib\/statsScope'/,
+      );
+      expect(strip(src), 'render the shared PeopleFilter').toMatch(/<PeopleFilter/);
+    });
+
+    it(`${name} does not build a scope of its own`, () => {
+      // A literal selection is a screen answering the question lib/statsScope answers.
+      // `{ people: [], ... }` is the retired everybody-scope; `mode: 'any'` is the retired
+      // operator, which asks for things at least ONE of us did — two histories shuffled
+      // together rather than a shared one.
+      const code = strip(file(name));
+      expect(code, 'the empty selection is the retired everybody-scope').not.toMatch(
+        /people:\s*\[\s*\]/,
+      );
+      expect(code, 'the ANY operator is retired - Our Stats is the overlap').not.toMatch(
+        /mode:\s*'any'/,
+      );
+    });
+  }
+
+  it('no screen still calls a p_profile reader', () => {
+    // The app-side wrappers were deleted in 0280 precisely so this cannot be typed again:
+    // they took `string | null` and handed the null to a reader that reads it as "shared".
+    const offenders = Object.entries(RAW)
+      .filter(([path]) => !/\.test\.tsx?$/.test(path))
+      .filter(([, src]) =>
+        /\brpc\('(trips_list|wander_stats|settings_stats|race_stats|races_list|mileage_by_person|activities_of_type|activity_lines|place_ids_for_view|place_visit_counts|occasion_count|geo_coverage|climbing_stats|peaks_bagged)'/.test(
+          strip(src),
+        ),
+      )
+      .map(([path]) => path);
+    expect(offenders, 'call the _for_people sibling with a scope instead').toEqual([]);
   });
 
-  it('builds its choices from the real members', () => {
-    // whoChoices names them; whoProfileId turns the chosen key back into the profile
-    // the stats are filtered by. Reading `people` and labelling by hand is the bug.
-    expect(src).toMatch(/whoChoices\(/);
-    expect(src).toMatch(/whoProfileId\(/);
-  });
-
-  it('does not write the retired word "Both" as a button', () => {
-    // Erica, 2026-08-15: "the view is Together so investigate why you are saying Both".
-    // everyoneLabel() decides that word — Together for two, Everyone for three.
-    const code = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(code).not.toMatch(/>\s*Both\s*</);
+  it('the scope words are written once, in lib/statsScope', () => {
+    // "My Stats" and "Our Stats" name the same thing on every screen or they name nothing.
+    const scope = file('/statsScope.ts');
+    expect(scope).toMatch(/'My Stats'/);
+    expect(scope).toMatch(/'Our Stats'/);
+    const offenders = Object.entries(RAW)
+      .filter(([path]) => !/statsScope\.ts$/.test(path))
+      .filter(([path]) => !/\.test\.tsx?$/.test(path))
+      .filter(([, src]) => /['"](My|Our) Stats['"]/.test(strip(src)))
+      .map(([path]) => path);
+    expect(offenders, 'use scopeLabel() rather than typing the word').toEqual([]);
   });
 });
 

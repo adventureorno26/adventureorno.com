@@ -9,16 +9,16 @@ import {
 } from '../lib/basemap';
 import {
   addCategory,
-  fetchClimbingStats,
-  fetchGeoCoverage,
+  fetchClimbingStatsForPeople,
+  fetchGeoCoverageForPeople,
   fetchMapPeople,
-  fetchPeaksBagged,
-  fetchPlacePeople,
+  fetchPeaksBaggedForPeople,
+  fetchPlaceIdsForPeople,
   type MapPerson,
   type Peak,
   fetchMapProjection,
   fetchPlaces,
-  fetchSettingsStats,
+  fetchSettingsStatsForPeople,
   fetchTrackingStatus,
   setMapProjection,
   triggerGeocode,
@@ -36,14 +36,16 @@ import {
 } from '../lib/tracking';
 import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
-import { whoChoices, whoProfileId } from '../lib/participants';
+import PeopleFilter from '../components/PeopleFilter';
+import { myStats, scopeLabel, scopeSentence, type PeopleSelection } from '../lib/statsScope';
+import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
 import { nextOpenPanel, panelIsOpen, type OpenPanel } from '../lib/disclosure';
 import type { Place } from '../lib/types';
 import { showSnack } from '../lib/snackbar';
 import {
   backfillPage,
   beginStravaLink,
-  fetchTripsList,
+  fetchTripsListForPeople,
   isMyStravaConnected,
   type TripRow,
 } from '../lib/strava';
@@ -349,31 +351,36 @@ function StatsPanel({
   return sub ? details : <div className="card">{details}</div>;
 }
 
-/** Our stats — same pill style as the map. National Parks lands with that feature. */
-function OurStatsCard({
-  personId,
+/** The stats pills — the same reader, the same scope and the same words as /insights.
+ *
+ *  UNTIL 0280 THIS CARD CALLED `trips_list(p_profile)` with a null and printed **17
+ *  Trips**, while /insights called `trips_list_for_people('{}')` and printed **56**. Live,
+ *  the same account, the same moment. Neither was miscounting: a null there means "only
+ *  what we were BOTH on" and an empty list here means "no filter", so the two screens were
+ *  answering opposite questions under one label. */
+function StatsCard({
+  scope,
+  contacts,
   panelKey,
   open,
   onToggle,
-}: { personId: string | null } & PanelProps) {
+}: { scope: PeopleSelection; contacts: PersonContact[] } & PanelProps) {
   const [s, setS] = useState<SettingsStats | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [showTrips, setShowTrips] = useState(false);
   useEffect(() => {
-    fetchTripsList(personId)
-      .then(setTrips)
-      .catch(() => setTrips([]));
-  }, [personId]);
-  useEffect(() => {
-    // Discard a stale response if the person toggle changed before it resolved.
+    // Discard a stale response if the scope changed before it resolved.
     let live = true;
-    fetchSettingsStats(personId)
+    fetchTripsListForPeople(scope.people, scope.mode)
+      .then((r) => live && setTrips(r))
+      .catch(() => live && setTrips([]));
+    fetchSettingsStatsForPeople(scope.people, scope.mode)
       .then((r) => live && setS(r))
       .catch(() => live && setS(null));
     return () => {
       live = false;
     };
-  }, [personId]);
+  }, [scope]);
   if (!s) return null;
   const pills = [
     { label: 'Trails Taken', value: s.trails_taken },
@@ -382,7 +389,13 @@ function OurStatsCard({
     { label: 'Wineries', value: s.winery },
   ];
   return (
-    <StatsPanel panelKey={panelKey} open={open} onToggle={onToggle} summary="Stats">
+    <StatsPanel
+      panelKey={panelKey}
+      open={open}
+      onToggle={onToggle}
+      summary={scopeLabel(scope, contacts)}
+      meta={scopeSentence(scope, contacts)}
+    >
       <>
         <div className="our-stats">
           {/* TRIPS LIVES HERE, not in the map's toggle row (Erica, 2026-08-11).
@@ -444,14 +457,18 @@ function OurStatsCard({
 /** Cities & States — the geography count that used to sit in the map stats bar.
  *  Each state/country is a dropdown listing the cities (places) within it. */
 function PlacesByStateCard({
-  personId,
-  placePeople,
+  scope,
+  scopePlaceIds,
   panelKey,
   open,
   onToggle,
 }: {
-  personId: string | null;
-  placePeople: Map<string, Set<string>>;
+  scope: PeopleSelection;
+  /** The places in the current scope — `place_ids_for_people`, the very set the map draws
+   *  pins for. This used to be `place_people()`, which answers who TOUCHED the record
+   *  (created it, uploaded a photo, has an activity there) rather than who was there, so
+   *  this list and the map could disagree about the same state. Null while loading. */
+  scopePlaceIds: Set<string> | null;
 } & PanelProps) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [cov, setCov] = useState<GeoCoverage | null>(null);
@@ -462,20 +479,26 @@ function PlacesByStateCard({
     fetchPlaces()
       .then((r) => live && setPlaces(r))
       .catch(() => live && setPlaces([]));
-    fetchGeoCoverage(personId)
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    let live = true;
+    fetchGeoCoverageForPeople(scope.people, scope.mode)
       .then((r) => live && setCov(r))
       .catch(() => live && setCov(null));
     return () => {
       live = false;
     };
-  }, [personId]);
-  if (!places) return null;
+  }, [scope]);
+  if (!places || !scopePlaceIds) return null;
 
   // Top-level, saved, non-bucket places grouped by state (US) or country.
   const groups = new Map<string, { isState: boolean; cities: Place[] }>();
   for (const p of places) {
     if (p.bucket || !p.saved) continue;
-    if (personId && !(placePeople.get(p.id)?.has(personId) ?? false)) continue;
+    if (!scopePlaceIds.has(p.id)) continue;
     const isUS = (p.country ?? '').match(/^(United States|USA|US)$/i);
     const key = isUS ? (p.admin1 ?? 'United States') : (p.country ?? 'Other');
     if (!groups.has(key)) groups.set(key, { isState: Boolean(isUS), cities: [] });
@@ -545,14 +568,12 @@ function PlacesByStateCard({
  *  "national park". `places.park` is set by a spatial join against the park
  *  boundaries (trg_place_park), and it is the truth. */
 function NationalParksCard({
-  personId,
-  placePeople,
+  scopePlaceIds,
   panelKey,
   open,
   onToggle,
 }: {
-  personId: string | null;
-  placePeople: Map<string, Set<string>>;
+  scopePlaceIds: Set<string> | null;
 } & PanelProps) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   useEffect(() => {
@@ -560,14 +581,10 @@ function NationalParksCard({
       .then(setPlaces)
       .catch(() => setPlaces([]));
   }, []);
-  if (!places) return null;
+  if (!places || !scopePlaceIds) return null;
 
   const inside = places.filter(
-    (p) =>
-      p.saved &&
-      !p.bucket &&
-      Boolean(p.park) &&
-      (!personId || (placePeople.get(p.id)?.has(personId) ?? false)),
+    (p) => p.saved && !p.bucket && Boolean(p.park) && scopePlaceIds.has(p.id),
   );
   // One row per PARK, listing the places you have been inside it.
   const byPark = new Map<string, Place[]>();
@@ -730,26 +747,21 @@ function TrackingCard({ myId }: { myId: string }) {
 }
 
 /** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
-function PeaksCard({
-  personId,
-  panelKey,
-  open,
-  onToggle,
-}: { personId: string | null } & PanelProps) {
+function PeaksCard({ scope, panelKey, open, onToggle }: { scope: PeopleSelection } & PanelProps) {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
   const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
   useEffect(() => {
     let live = true;
-    fetchPeaksBagged(personId)
+    fetchPeaksBaggedForPeople(scope.people, scope.mode)
       .then((r) => live && setPeaks(r))
       .catch(() => live && setPeaks([]));
-    fetchClimbingStats(personId)
+    fetchClimbingStatsForPeople(scope.people, scope.mode)
       .then((r) => live && setClimb(r))
       .catch(() => live && setClimb(null));
     return () => {
       live = false;
     };
-  }, [personId]);
+  }, [scope]);
   if (!peaks) return null;
   return (
     <StatsPanel panelKey={panelKey} open={open} onToggle={onToggle} summary="Peaks & climbing">
@@ -850,60 +862,64 @@ function MapAppearanceSection() {
   );
 }
 
-/** The whole Stats section: one who-was-there toggle driving every pill (each card
- *  refetches/refilters for the selected person), and one dropdown GROUP below it. */
+/** The whole Stats section: ONE scope control driving every pill.
+ *
+ *  IT IS THE SAME CONTROL THE MAP AND /INSIGHTS USE, and that is the fix (§0.2, 0280).
+ *  This section used to have a private one — `whoChoices()` pills whose "everyone" answer
+ *  resolved to a null profile, which the old readers take as *only what we were BOTH on*.
+ *  The identical-looking control on /insights resolved to an empty people list, which the
+ *  new readers take as *no filter*. So the two screens sat one tap apart in the same app
+ *  reporting 17 Trips and 56 Trips for the same account, and nothing on either screen said
+ *  they were answering different questions.
+ *
+ *  Now there is one control, one vocabulary and one generation of reader, so the numbers
+ *  cannot drift apart again without the control itself being wrong. */
 function StatsSection() {
-  const { profile } = useAuth();
-  const meId = profile?.id ?? null;
-  const [people, setPeople] = useState<MapPerson[]>([]);
-  const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
-  // 'both' | 'mine' | a profile id — the canonical keys, never a nickname.
-  const [who, setWho] = useState<string>('both');
+  const [contacts, setContacts] = useState<PersonContact[]>([]);
+  // Null until the contacts arrive — see myStats(). A scope guessed as "no people" is the
+  // retired everybody-question, and showing its answer for a frame is how a number appears
+  // to change while you are reading it.
+  const [scope, setScope] = useState<PeopleSelection | null>(null);
+  // The places in the current scope, fetched ONCE for the two cards that group places
+  // themselves. Both used to filter client-side against `place_people()`.
+  const [scopePlaceIds, setScopePlaceIds] = useState<Set<string> | null>(null);
   // ONE panel open at a time across the whole row (lib/disclosure). Four independent
   // <details> that never shut each other is the state Erica was looking at.
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   useEffect(() => {
-    fetchMapPeople()
-      .then(setPeople)
-      .catch(() => undefined);
-    fetchPlacePeople()
-      .then(setPlacePeople)
-      .catch(() => undefined);
+    fetchMyPeople()
+      .then((c) => {
+        setContacts(c);
+        setScope(myStats(c));
+      })
+      .catch(() => setContacts([]));
   }, []);
-  const real = people.filter((p) => p.display_name !== 'Test Bot');
-  // The label is GENERATED — "Together" for two, "Everyone" for three or more, and
-  // each member named from their own display_name. This row used to hard-code the
-  // word "Both" and then list every member including me under my display name, which
-  // is the two things lib/participants exists to stop: "Both" was retired in favour
-  // of the generated word (2026-08-15), and a member's name belongs to the record,
-  // not to the markup.
-  const choices = whoChoices(real, meId);
-  const person = whoProfileId(who, meId);
+  useEffect(() => {
+    if (!scope) return;
+    let live = true;
+    setScopePlaceIds(null);
+    fetchPlaceIdsForPeople(scope.people, scope.mode)
+      .then((r) => live && setScopePlaceIds(r))
+      .catch(() => live && setScopePlaceIds(new Set()));
+    return () => {
+      live = false;
+    };
+  }, [scope]);
   const toggle = (key: string) => setOpenPanel((cur) => nextOpenPanel(cur, key));
   const panel = (key: string) => ({
     panelKey: key,
     open: panelIsOpen(openPanel, key),
     onToggle: toggle,
   });
+  if (!scope) return null;
   return (
     <>
-      <div className="stats-toggle">
-        {choices.map((c) => (
-          <button
-            key={c.key}
-            className={who === c.key ? 'on' : ''}
-            onClick={() => setWho(c.key)}
-            type="button"
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
+      <PeopleFilter people={contacts} value={scope} onChange={setScope} inline />
       <div className="stats-row">
-        <OurStatsCard personId={person} {...panel('stats')} />
-        <PlacesByStateCard personId={person} placePeople={placePeople} {...panel('places')} />
-        <NationalParksCard personId={person} placePeople={placePeople} {...panel('parks')} />
-        <PeaksCard personId={person} {...panel('peaks')} />
+        <StatsCard scope={scope} contacts={contacts} {...panel('stats')} />
+        <PlacesByStateCard scope={scope} scopePlaceIds={scopePlaceIds} {...panel('places')} />
+        <NationalParksCard scopePlaceIds={scopePlaceIds} {...panel('parks')} />
+        <PeaksCard scope={scope} {...panel('peaks')} />
         <Link className="card stat-navcard" to="/wrapped">
           Years
         </Link>

@@ -1,25 +1,22 @@
-// People, on the map.
+// The scope control — §0.2, approved 2026-08-30. What a scope IS lives in lib/statsScope;
+// this is only how you change it.
 //
-// §8b-i: *"A lightweight `People: Anyone` control opens a multi-select drawer"*, and
-// *"Remove `Together / Just me / Just Josh` as the permanent model; Together is a people
-// query with ALL selected."*
+//   My Stats           every card I am tagged on. Everything opens here.
+//   Our Stats          only the cards ALL the selected people AND I are tagged on.
 //
-// So this replaces the three-button toggle with a selection, and the old three answers are
-// still one tap each — `Anyone` is nothing selected, `Together` selects everybody, and a
-// single name is that person. What is new is everything the two-person model could not say:
-// two of three people, or somebody who has no account here at all.
+// WHAT THIS CONTROL USED TO SAY, AND WHY NONE OF IT SURVIVED:
 //
-// TOGETHER SURVIVES AS A SHORTCUT, not as the model. §8b-i allows exactly that — *"a partner
-// may be a favourite shortcut"* — and it is the button she has been pressing for months.
+//   Anyone      gone outright. It only ever meant "everyone in this household", and there
+//               is no household. It was also the DEFAULT, which is how /insights came to
+//               report 56 trips while Settings ▸ Stats reported 17 — see migration 0280.
+//   Together    it did not name who, and it stopped being true at three people.
+//   All / Any   the operator is gone. Our Stats is the overlap, always.
 //
-// AND `Anyone` IS THE DEFAULT NOW, which the old `null` was not: `null` meant SHARED, so the
-// map opened on the places they had both been to. It opens on everything you can see.
+// A PERSON'S OWN STATS ARE NOT HERE. §0.2: *"Seen by opening their profile — never a pill
+// on my map."* Selecting Josh alone would answer a question about Josh on a screen that is
+// about me, so this control cannot express it and /person/:id still can.
 import type { PersonContact } from '../lib/memoryPeople';
-
-export interface PeopleSelection {
-  people: string[];
-  mode: 'all' | 'any';
-}
+import { othersInScope, type PeopleSelection } from '../lib/statsScope';
 
 export default function PeopleFilter({
   people,
@@ -30,35 +27,26 @@ export default function PeopleFilter({
   people: PersonContact[];
   value: PeopleSelection;
   onChange: (v: PeopleSelection) => void;
-  /** The Map pins this control to the bottom-left; Insights puts it in the page flow above
-   *  its tabs, because there it is the scope for everything below rather than an overlay on
-   *  something. Same control, same rule, two placements. */
+  /** The Map pins this control to the bottom-left; Insights and Settings put it in the page
+   *  flow above what it scopes, because there it is the scope for everything below rather
+   *  than an overlay on something. Same control, same rule, two placements. */
   inline?: boolean;
 }) {
-  // With nobody but yourself recorded there is nothing to choose between.
-  if (people.length < 2) return null;
+  const me = people.find((p) => p.is_me);
+  const others = people.filter((p) => p.id !== me?.id);
+  // With nobody but yourself recorded there is only My Stats, and a control with one
+  // answer is a control you have to read for no reason.
+  if (!me || others.length === 0) return null;
 
-  const linked = people.filter((p) => p.linked_profile);
   const selected = new Set(value.people);
+  const mine = othersInScope(value, people).length === 0;
 
+  // ADDING A NAME INTERSECTS; removing the last one lands back on My Stats. I am never
+  // removable, because "Our" is what the second scope means.
   const toggle = (id: string) => {
-    // PRESSING A NAME MEANS THAT PERSON. The first version was a plain multi-select toggle,
-    // so from "Together" — where everybody is selected — pressing "Me" REMOVED me and left
-    // Josh, and the screen answered a question nobody asked. The old control was three
-    // radio buttons and "Me" always meant just me; that has to survive.
-    //
-    //   part of a wider selection → narrow to this one
-    //   the only one selected     → let go of it, back to Anyone
-    //   not selected              → add, and two names means both of them
-    const next = selected.has(id) ? (value.people.length > 1 ? [id] : []) : [...value.people, id];
-    onChange({ people: next, mode: next.length > 1 ? value.mode : 'any' });
+    const next = selected.has(id) ? value.people.filter((x) => x !== id) : [...value.people, id];
+    onChange({ people: next.includes(me.id) ? next : [me.id, ...next], mode: 'all' });
   };
-
-  const isTogether =
-    linked.length > 1 &&
-    value.mode === 'all' &&
-    value.people.length === linked.length &&
-    linked.every((p) => selected.has(p.id));
 
   return (
     // KEEPS `person-filter` as well as its own class on purpose: every rule that positions
@@ -66,49 +54,24 @@ export default function PeopleFilter({
     // against that name, and renaming it would quietly drop all of them.
     <div className={`people-filter ${inline ? 'people-filter-inline' : 'person-filter'}`}>
       <button
-        className={value.people.length === 0 ? 'on' : ''}
-        onClick={() => onChange({ people: [], mode: 'any' })}
+        className={mine ? 'on' : ''}
+        onClick={() => onChange({ people: [me.id], mode: 'all' })}
       >
-        Anyone
+        My Stats
       </button>
 
-      {linked.length > 1 && (
-        <button
-          className={isTogether ? 'on' : ''}
-          onClick={() => onChange({ people: linked.map((p) => p.id), mode: 'all' })}
-        >
-          Together
-        </button>
-      )}
-
-      {people.map((p) => (
+      {others.map((p) => (
         <button
           key={p.id}
-          className={selected.has(p.id) && !isTogether ? 'on' : ''}
+          className={selected.has(p.id) ? 'on' : ''}
           onClick={() => toggle(p.id)}
+          // WHAT THE SECOND SCOPE COSTS, said out loud. Adding a name can only ever make
+          // the number smaller, and a control that silently shrinks a total looks broken.
+          title={`Our Stats — only what ${p.display_name} and I were both there for`}
         >
-          {p.is_me ? 'Me' : p.display_name}
+          {p.display_name}
         </button>
       ))}
-
-      {/* Only when the answer could differ. For one person it cannot, and a control that
-          changes nothing is a control you have to think about for no reason. */}
-      {value.people.length > 1 && !isTogether && (
-        <span className="people-mode">
-          <button
-            className={value.mode === 'all' ? 'on' : ''}
-            onClick={() => onChange({ ...value, mode: 'all' })}
-          >
-            All
-          </button>
-          <button
-            className={value.mode === 'any' ? 'on' : ''}
-            onClick={() => onChange({ ...value, mode: 'any' })}
-          >
-            Any
-          </button>
-        </span>
-      )}
     </div>
   );
 }

@@ -48,7 +48,8 @@ import PlacePanel from '../components/PlacePanel';
 import UnassignedTray from '../components/UnassignedTray';
 import MapSearch from '../components/MapSearch';
 import OnThisDay from '../components/OnThisDay';
-import PeopleFilter, { type PeopleSelection } from '../components/PeopleFilter';
+import PeopleFilter from '../components/PeopleFilter';
+import { myStats, type PeopleSelection } from '../lib/statsScope';
 import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
 import FilterChips from '../components/FilterChips';
 import SearchPalette from '../components/SearchPalette';
@@ -257,16 +258,20 @@ export default function MapView() {
   );
   const fogLoaded = useRef(false);
   const pingsLoaded = useRef(false);
-  // "Just me / Just Josh / Both" filter (null = both).
-  // WHO, as a selection rather than one of three answers (0260/0261). An empty list is
-  // "Anyone" — everything you can see — where the old single-profile filter's null meant
-  // SHARED, i.e. only the places they had both been to. Together is now one tap, not the
-  // default the map opens on.
-  const [peopleSel, setPeopleSel] = useState<PeopleSelection>({ people: [], mode: 'any' });
+  // THE SCOPE — §0.2. **The map opens on My Stats**: every card I am tagged on. Adding a
+  // name intersects, which is Our Stats. There is no fourth answer any more: "Anyone" was
+  // the default until 0280 and it only ever meant "everyone in this household".
+  //
+  // Null until the contacts arrive, so the map never paints the retired everybody-set and
+  // then quietly drops four pins.
+  const [peopleSel, setPeopleSel] = useState<PeopleSelection | null>(null);
   const [myPeople, setMyPeople] = useState<PersonContact[]>([]);
   useEffect(() => {
     fetchMyPeople()
-      .then(setMyPeople)
+      .then((c) => {
+        setMyPeople(c);
+        setPeopleSel(myStats(c));
+      })
       .catch(() => setMyPeople([]));
   }, []);
   const [people, setPeople] = useState<MapPerson[]>([]);
@@ -438,7 +443,7 @@ export default function MapView() {
       Run: '#ff8a3d',
       Ride: '#c98bff',
     };
-    // Both = post-cutoff routes; a person = their full history (pre-cutoff too).
+    if (!peopleSel) return;
     void fetchActivityLinesForPeople(peopleSel.people, peopleSel.mode)
       .then((lines) => {
         const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
@@ -902,6 +907,7 @@ export default function MapView() {
   // + joint visits. Containers (trails/trips) roll up and aren't visit-filtered.
   const [viewSet, setViewSet] = useState<Set<string> | null>(null);
   useEffect(() => {
+    if (!peopleSel) return;
     let active = true;
     fetchPlaceIdsForPeople(peopleSel.people, peopleSel.mode)
       .then((s) => active && setViewSet(s))
@@ -916,6 +922,7 @@ export default function MapView() {
   // showed 67 in Erica's view although all 39 of its visits are Josh's.
   const [visitCounts, setVisitCounts] = useState<Map<string, number>>(new Map());
   useEffect(() => {
+    if (!peopleSel) return;
     let active = true;
     fetchPlaceVisitCountsForPeople(peopleSel.people, peopleSel.mode)
       .then((m) => active && setVisitCounts(m))
@@ -925,8 +932,8 @@ export default function MapView() {
     };
   }, [peopleSel, places.length]);
 
-  // Push new counts into the ref and repaint, so switching Just me / Just Josh /
-  // Both updates the badges immediately.
+  // Push new counts into the ref and repaint, so changing the scope updates the badges
+  // immediately.
   useEffect(() => {
     visitCountsRef.current = visitCounts;
     syncSource(placesRef.current);
@@ -1653,7 +1660,7 @@ export default function MapView() {
         />
       )}
 
-      <PeopleFilter people={myPeople} value={peopleSel} onChange={setPeopleSel} />
+      {peopleSel && <PeopleFilter people={myPeople} value={peopleSel} onChange={setPeopleSel} />}
 
       <StatsBar
         places={places}
@@ -1668,10 +1675,10 @@ export default function MapView() {
         people={myPeople}
         visibleCount={visiblePlaces.length}
         onClearCat={() => setFilterCat(null)}
-        onClearPerson={() => setPeopleSel({ people: [], mode: 'any' })}
+        onClearPerson={() => setPeopleSel(myStats(myPeople))}
         onReset={() => {
           setFilterCat(null);
-          setPeopleSel({ people: [], mode: 'any' });
+          setPeopleSel(myStats(myPeople));
         }}
       />
 
