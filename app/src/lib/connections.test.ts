@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NO_RELATIONSHIP,
   actionsFor,
+  connectionSections,
   relationshipOf,
   relationshipSentence,
   relationshipsFrom,
@@ -137,6 +138,42 @@ describe('reading my_connections()', () => {
   });
 });
 
+describe('your people, in sections', () => {
+  it('puts what somebody is waiting on you for first', () => {
+    const sections = connectionSections([
+      row({ profile_id: 'mine', status: 'accepted', direction: 'mutual' }),
+      row({ profile_id: 'asked', status: 'pending', direction: 'incoming' }),
+      row({ profile_id: 'sent', status: 'pending', direction: 'outgoing' }),
+    ]);
+    expect(sections.map((s) => s.key)).toEqual(['waiting', 'asked', 'added']);
+  });
+
+  it('lists nobody twice, however many relationships they are in', () => {
+    const sections = connectionSections([
+      row({ relation: 'add', status: 'accepted', direction: 'mutual' }),
+      row({ relation: 'follow', direction: 'outgoing' }),
+      row({ relation: 'follow', direction: 'incoming' }),
+    ]);
+    const everyone = sections.flatMap((s) => s.people.map((p) => p.id));
+    expect(everyone).toEqual(['them']);
+    // The heading says the strongest thing; the row's own sentence says the rest.
+    expect(sections[0]?.key).toBe('added');
+    expect(relationshipSentence(sections[0]!.people[0]!.rel)).toContain('you follow them');
+  });
+
+  it('files a blocked person under Blocked and nowhere else', () => {
+    const sections = connectionSections([
+      row({ relation: 'add', status: 'accepted', direction: 'mutual' }),
+      row({ relation: 'block', direction: 'outgoing' }),
+    ]);
+    expect(sections.map((s) => s.key)).toEqual(['blocked']);
+  });
+
+  it('leaves out the sections with nobody in them', () => {
+    expect(connectionSections([])).toEqual([]);
+  });
+});
+
 describe('what it says', () => {
   it('says which way a pending add points', () => {
     expect(relationshipSentence(rel({ add: 'outgoing' }))).toContain('You asked');
@@ -145,8 +182,12 @@ describe('what it says', () => {
   });
 
   it('never uses the retired words, and never the other word for add', () => {
+    // THE OTHER WORD FOR ADD, assembled rather than typed. Erica, 2026-08-30: *"I don't
+    // know that I want to use the term […], just add."* Writing it here to test for it
+    // would put it in the repository, which is the thing being prevented.
+    const notTheWord = ['f', 'r', 'i', 'e', 'n', 'd'].join('');
     const retired = [
-      'friend',
+      notTheWord,
       'just me',
       'just josh',
       'just erica',
