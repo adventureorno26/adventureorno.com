@@ -91,6 +91,34 @@ describe('no member is hardcoded', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Settings › Stats had the LAST hand-written one. Its person toggle rendered a
+// literal "Both" button and then one button per member labelled from display_name —
+// a fifth private implementation of this control, and the one place the retired word
+// survived. It is `whoChoices()` now, like everywhere else.
+// ---------------------------------------------------------------------------
+describe('the stats toggle in Settings is generated', () => {
+  const src = Object.entries(RAW).find(([p]) => p.endsWith('/routes/Settings.tsx'))?.[1] ?? '';
+
+  it('can read Settings.tsx', () => {
+    expect(src.length, 'app/src/routes/Settings.tsx should be readable').toBeGreaterThan(1000);
+  });
+
+  it('builds its choices from the real members', () => {
+    // whoChoices names them; whoProfileId turns the chosen key back into the profile
+    // the stats are filtered by. Reading `people` and labelling by hand is the bug.
+    expect(src).toMatch(/whoChoices\(/);
+    expect(src).toMatch(/whoProfileId\(/);
+  });
+
+  it('does not write the retired word "Both" as a button', () => {
+    // Erica, 2026-08-15: "the view is Together so investigate why you are saying Both".
+    // everyoneLabel() decides that word — Together for two, Everyone for three.
+    const code = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).not.toMatch(/>\s*Both\s*</);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The client stays typed, and the gate stays real.
 // ---------------------------------------------------------------------------
 describe('the generated types actually reach the code', () => {

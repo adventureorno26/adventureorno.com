@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import {
@@ -36,6 +36,8 @@ import {
 } from '../lib/tracking';
 import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
+import { whoChoices, whoProfileId } from '../lib/participants';
+import { nextOpenPanel, panelIsOpen, type OpenPanel } from '../lib/disclosure';
 import type { Place } from '../lib/types';
 import { showSnack } from '../lib/snackbar';
 import {
@@ -289,8 +291,71 @@ function GeocodeCard() {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** What every stats panel needs to sit in its group. */
+interface PanelProps {
+  /** This panel's key within its group. */
+  panelKey: string;
+  open: boolean;
+  onToggle: (key: string) => void;
+}
+
+/**
+ * THE disclosure in the Stats section — the only one.
+ *
+ * There used to be four of these written out longhand, one per card, plus a fifth
+ * spelling (`.spot-cat`) for the states nested inside Cities and states. All of them
+ * were independent: open all four and nothing shut them again, and because the
+ * summaries hid the native marker without drawing a replacement, an open panel looked
+ * exactly like a closed one. Erica, 2026-08-29: "The dropdowns under stats in settings
+ * need work. They don't disappear and are redundant."
+ *
+ * `open` is driven from React rather than left to the browser, because the panels are a
+ * GROUP (lib/disclosure): opening one closes the last, so four can never sit open at
+ * once. That means suppressing the native toggle on click — otherwise the element and
+ * the state disagree — which also keeps Enter/Space working, since the browser fires a
+ * click for those on a summary.
+ */
+function StatsPanel({
+  panelKey,
+  open,
+  onToggle,
+  summary,
+  meta,
+  sub,
+  children,
+}: PanelProps & {
+  summary: string;
+  /** A count shown beside the title, e.g. the number of cities in a state. */
+  meta?: string;
+  /** Second level — the states inside Cities and states. */
+  sub?: boolean;
+  children: ReactNode;
+}) {
+  const details = (
+    <details className={`stats-dropdown${sub ? ' stats-dropdown-sub' : ''}`} open={open}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          onToggle(panelKey);
+        }}
+      >
+        {summary}
+        {meta ? <span className="label"> · {meta}</span> : null}
+      </summary>
+      {children}
+    </details>
+  );
+  // The top level is a card in the stats grid; a nested one is just the control.
+  return sub ? details : <div className="card">{details}</div>;
+}
+
 /** Our stats — same pill style as the map. National Parks lands with that feature. */
-function OurStatsCard({ personId }: { personId: string | null }) {
+function OurStatsCard({
+  personId,
+  panelKey,
+  open,
+  onToggle,
+}: { personId: string | null } & PanelProps) {
   const [s, setS] = useState<SettingsStats | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [showTrips, setShowTrips] = useState(false);
@@ -317,13 +382,20 @@ function OurStatsCard({ personId }: { personId: string | null }) {
     { label: 'Wineries', value: s.winery },
   ];
   return (
-    <div className="card">
-      <details className="stats-dropdown">
-        <summary>Stats</summary>
+    <StatsPanel panelKey={panelKey} open={open} onToggle={onToggle} summary="Stats">
+      <>
         <div className="our-stats">
           {/* TRIPS LIVES HERE, not in the map's toggle row (Erica, 2026-08-11).
               The count comes from the same canonical definition the list does, so
-              they cannot disagree. */}
+              they cannot disagree.
+
+              AND IT STAYS A PILL. This is the one disclosure in the section that is
+              not a `<details>`, which looks like the inconsistency the rest of this
+              change removed — it is not. Erica asked for this exact control twice
+              ("I wanted it under Stats", "clicking on the Trips should pull up a
+              list of trips that I can edit"): a stat pill, sitting in the row of
+              stat pills, that happens to open. Turning it into another summary would
+              lift the number out of the row she asked to have it in. */}
           <button
             className={`stat stat-open ${showTrips ? 'on' : ''}`}
             onClick={() => setShowTrips((v) => !v)}
@@ -364,8 +436,8 @@ function OurStatsCard({ personId }: { personId: string | null }) {
             </Link>
           </div>
         )}
-      </details>
-    </div>
+      </>
+    </StatsPanel>
   );
 }
 
@@ -374,12 +446,17 @@ function OurStatsCard({ personId }: { personId: string | null }) {
 function PlacesByStateCard({
   personId,
   placePeople,
+  panelKey,
+  open,
+  onToggle,
 }: {
   personId: string | null;
   placePeople: Map<string, Set<string>>;
-}) {
+} & PanelProps) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [cov, setCov] = useState<GeoCoverage | null>(null);
+  // The states are their OWN one-open-at-a-time group, nested inside this panel.
+  const [openState, setOpenState] = useState<OpenPanel>(null);
   useEffect(() => {
     let live = true;
     fetchPlaces()
@@ -417,9 +494,8 @@ function PlacesByStateCard({
   const statePct = Math.round((stateCount / 50) * 100);
 
   return (
-    <div className="card">
-      <details className="stats-dropdown">
-        <summary>Cities and states</summary>
+    <StatsPanel panelKey={panelKey} open={open} onToggle={onToggle} summary="Cities and states">
+      <>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{stateCount}</b>{' '}
@@ -436,10 +512,15 @@ function PlacesByStateCard({
           <div className="us-progress-fill" style={{ width: `${statePct}%` }} />
         </div>
         {ordered.map(([label, g]) => (
-          <details key={label} className="spot-cat">
-            <summary>
-              {label} <span className="label">· {g.cities.length}</span>
-            </summary>
+          <StatsPanel
+            key={label}
+            sub
+            panelKey={label}
+            open={panelIsOpen(openState, label)}
+            onToggle={(k) => setOpenState((cur) => nextOpenPanel(cur, k))}
+            summary={label}
+            meta={String(g.cities.length)}
+          >
             <div className="visit-list">
               {g.cities
                 .sort((a, b) => a.name.localeCompare(b.name))
@@ -449,10 +530,10 @@ function PlacesByStateCard({
                   </Link>
                 ))}
             </div>
-          </details>
+          </StatsPanel>
         ))}
-      </details>
-    </div>
+      </>
+    </StatsPanel>
   );
 }
 
@@ -466,10 +547,13 @@ function PlacesByStateCard({
 function NationalParksCard({
   personId,
   placePeople,
+  panelKey,
+  open,
+  onToggle,
 }: {
   personId: string | null;
   placePeople: Map<string, Set<string>>;
-}) {
+} & PanelProps) {
   const [places, setPlaces] = useState<Place[] | null>(null);
   useEffect(() => {
     fetchPlaces()
@@ -499,9 +583,8 @@ function NationalParksCard({
     .sort((a, b) => a.park.localeCompare(b.park));
 
   return (
-    <div className="card">
-      <details className="stats-dropdown">
-        <summary>National Parks</summary>
+    <StatsPanel panelKey={panelKey} open={open} onToggle={onToggle} summary="National Parks">
+      <>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{parks.length}</b> <span className="label">visited</span>
@@ -536,8 +619,8 @@ function NationalParksCard({
             ))}
           </div>
         )}
-      </details>
-    </div>
+      </>
+    </StatsPanel>
   );
 }
 
@@ -647,7 +730,12 @@ function TrackingCard({ myId }: { myId: string }) {
 }
 
 /** Peaks bagged — summits reached, matched from hike GPS tracks against OSM peaks. */
-function PeaksCard({ personId }: { personId: string | null }) {
+function PeaksCard({
+  personId,
+  panelKey,
+  open,
+  onToggle,
+}: { personId: string | null } & PanelProps) {
   const [peaks, setPeaks] = useState<Peak[] | null>(null);
   const [climb, setClimb] = useState<{ total_ft: number; everests: number } | null>(null);
   useEffect(() => {
@@ -664,9 +752,8 @@ function PeaksCard({ personId }: { personId: string | null }) {
   }, [personId]);
   if (!peaks) return null;
   return (
-    <div className="card">
-      <details className="stats-dropdown">
-        <summary>Peaks &amp; climbing</summary>
+    <StatsPanel panelKey={panelKey} open={open} onToggle={onToggle} summary="Peaks & climbing">
+      <>
         <div className="our-stats" style={{ marginBottom: 10 }}>
           <div className="stat">
             <b>{peaks.length}</b> <span className="label">summits</span>
@@ -705,8 +792,8 @@ function PeaksCard({ personId }: { personId: string | null }) {
             )}
           </div>
         )}
-      </details>
-    </div>
+      </>
+    </StatsPanel>
   );
 }
 
@@ -763,12 +850,18 @@ function MapAppearanceSection() {
   );
 }
 
-/** The whole Stats section with one Me / Josh / Both toggle that drives every
- *  pill (each card refetches/refilters for the selected person). */
+/** The whole Stats section: one who-was-there toggle driving every pill (each card
+ *  refetches/refilters for the selected person), and one dropdown GROUP below it. */
 function StatsSection() {
+  const { profile } = useAuth();
+  const meId = profile?.id ?? null;
   const [people, setPeople] = useState<MapPerson[]>([]);
   const [placePeople, setPlacePeople] = useState<Map<string, Set<string>>>(new Map());
-  const [person, setPerson] = useState<string | null>(null); // null = Both
+  // 'both' | 'mine' | a profile id — the canonical keys, never a nickname.
+  const [who, setWho] = useState<string>('both');
+  // ONE panel open at a time across the whole row (lib/disclosure). Four independent
+  // <details> that never shut each other is the state Erica was looking at.
+  const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   useEffect(() => {
     fetchMapPeople()
       .then(setPeople)
@@ -778,32 +871,39 @@ function StatsSection() {
       .catch(() => undefined);
   }, []);
   const real = people.filter((p) => p.display_name !== 'Test Bot');
+  // The label is GENERATED — "Together" for two, "Everyone" for three or more, and
+  // each member named from their own display_name. This row used to hard-code the
+  // word "Both" and then list every member including me under my display name, which
+  // is the two things lib/participants exists to stop: "Both" was retired in favour
+  // of the generated word (2026-08-15), and a member's name belongs to the record,
+  // not to the markup.
+  const choices = whoChoices(real, meId);
+  const person = whoProfileId(who, meId);
+  const toggle = (key: string) => setOpenPanel((cur) => nextOpenPanel(cur, key));
+  const panel = (key: string) => ({
+    panelKey: key,
+    open: panelIsOpen(openPanel, key),
+    onToggle: toggle,
+  });
   return (
     <>
       <div className="stats-toggle">
-        <button
-          className={person === null ? 'on' : ''}
-          onClick={() => setPerson(null)}
-          type="button"
-        >
-          Both
-        </button>
-        {real.map((pp) => (
+        {choices.map((c) => (
           <button
-            key={pp.id}
-            className={person === pp.id ? 'on' : ''}
-            onClick={() => setPerson(pp.id)}
+            key={c.key}
+            className={who === c.key ? 'on' : ''}
+            onClick={() => setWho(c.key)}
             type="button"
           >
-            {pp.display_name ?? 'Me'}
+            {c.label}
           </button>
         ))}
       </div>
       <div className="stats-row">
-        <OurStatsCard personId={person} />
-        <PlacesByStateCard personId={person} placePeople={placePeople} />
-        <NationalParksCard personId={person} placePeople={placePeople} />
-        <PeaksCard personId={person} />
+        <OurStatsCard personId={person} {...panel('stats')} />
+        <PlacesByStateCard personId={person} placePeople={placePeople} {...panel('places')} />
+        <NationalParksCard personId={person} placePeople={placePeople} {...panel('parks')} />
+        <PeaksCard personId={person} {...panel('peaks')} />
         <Link className="card stat-navcard" to="/wrapped">
           Years
         </Link>

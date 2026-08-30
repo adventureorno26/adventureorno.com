@@ -22,6 +22,7 @@ import { reverseGeocode, type SearchResult } from '../lib/maptiler';
 import { cancelGooglePick, googlePhotosEnabled, pickFromGooglePhotos } from '../lib/googlePhotos';
 import { enqueueUpload } from '../lib/uploadQueue';
 import MapSearch from '../components/MapSearch';
+import PlaceQuickEdit from '../components/PlaceQuickEdit';
 import AuthedImg from '../components/AuthedImg';
 import type { Place, Visit } from '../lib/types';
 import { whoChoices, whoProfileId } from '../lib/participants';
@@ -258,6 +259,22 @@ export default function PhotoSorter() {
         cur.map((it) => (it.groupId === groupId ? { ...it, placeId, placeName, reason: '' } : it)),
       ),
     );
+  }
+
+  /**
+   * A place was corrected inline (PlaceQuickEdit already wrote it).
+   *
+   * Two things have to follow it here or the screen contradicts the database: the
+   * `places` list behind both pickers, and the name each item carries — that is what
+   * the group heading reads. Deliberately NOT `reassign`, which regroups and clears
+   * `reason`: the place has not changed, only its name has, so the match explanation
+   * ("same day as your walk") is still true and the stays must not be recomputed.
+   */
+  function placeEdited(p: Place) {
+    setPlaces((cur) =>
+      cur.map((x) => (x.id === p.id ? p : x)).sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    setItems((cur) => cur.map((it) => (it.placeId === p.id ? { ...it, placeName: p.name } : it)));
   }
 
   /**
@@ -686,9 +703,12 @@ export default function PhotoSorter() {
                     </div>
                   </div>
                 ) : (
-                  // JUST the visit — this adds a new visit to the chosen place. The
-                  // place's own info (name/tags/rating from other visits) is NOT
-                  // shown or edited here; only this visit's date + who.
+                  // JUST THE VISIT, still — date and who, in that order, the way Erica
+                  // asked for on 2026-07-26. The place's own fields are one click away
+                  // rather than gone (2026-08-29: put inline place editing back), so
+                  // sorting a batch reads the same as it did, and a photo that landed
+                  // on a misnamed place or the wrong coordinates can be corrected
+                  // without abandoning the sort to go and find the place.
                   <div className="ps-visitform">
                     <label className="ps-field">
                       <span>Place</span>
@@ -733,6 +753,29 @@ export default function PhotoSorter() {
                         </select>
                       </label>
                     </div>
+                    {/* INLINE PLACE EDITING. The same editor the place card uses —
+                        rename, fix the location by address search (the repair for a
+                        photo with no GPS that matched the wrong spot), retag, rate.
+                        `hideWho` because who was there is asked once, above, for the
+                        VISIT: this group's photos. PlaceQuickEdit's own Who writes the
+                        attribution of every visit at the place, which is a different
+                        and much wider question than the one being answered here. */}
+                    {(() => {
+                      const pl = places.find((p) => p.id === g.placeId);
+                      if (!pl) return null;
+                      return (
+                        <details className="ps-placeedit">
+                          <summary>Fix this place</summary>
+                          <PlaceQuickEdit
+                            place={pl}
+                            people={people}
+                            meId={meId}
+                            onUpdated={placeEdited}
+                            hideWho
+                          />
+                        </details>
+                      );
+                    })()}
                     <button className="ps-skip" onClick={() => reassign(g.id, null, '')}>
                       Remove this place
                     </button>
