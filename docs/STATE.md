@@ -4489,6 +4489,49 @@ Neither was noise, and neither would have been caught by reading the diff.
 
 ---
 
+### 6i. A PURGED PHOTO LEAVES ITS BYTES IN R2 — and the first one is due in 8 days
+
+The sharpest thing the 2026-08-29 audit found, because it has a date on it.
+
+Deleting a photo has two paths and only one of them honours business rule #6:
+
+- **Through the Worker's `/delete`** — the R2 objects and the DB row both go, and the hash
+  lands in `deleted_hashes`. Rule #6 exactly.
+- **Through the trash** — `deleted_at` is set, the row and objects stay, and `purge_trash()`
+  (nightly, 04:30) hard-deletes any `photos` row 30 days later. **Nothing deletes its R2
+  objects.** SQL cannot reach R2; `purge_trash` is SQL; and the Worker's `/reconcile` is
+  `dry_run: true` and says so in its own comment — it counts orphans and deletes nothing.
+
+**It has never shown up because it has never fired.** R2 and the database agree exactly
+today — 179 live rows, 358 referenced keys, **0 orphans and 0 missing**, confirmed by
+listing the bucket and diffing on `r2_key`/`thumb_key`. One photo is 22 days into trash. On
+day 30 it becomes the first pair of objects nothing references and nothing will remove.
+
+(The first attempt at that diff compared R2 key UUIDs against `photos.id` and reported 186
+orphans and 179 missing with zero overlap — which is the signature of comparing the wrong
+identifier, not of a broken bucket. The keys are `r2_key` and `thumb_key`. A reconciliation
+that finds *everything* wrong is almost always measuring the wrong thing.)
+
+#### What `0277` does, and what it deliberately refuses to do
+
+It does **not** delete anything from R2, and it schedules nothing that will. Automatically
+and irreversibly destroying the bytes of these photos is not a change to make on an agent's
+judgement: §12d calls this data *"irreplaceable and private"*, and a bug in an automatic
+purger cannot be undone the way a bug in a report can.
+
+Instead it makes the leak **recorded instead of silent**. `purge_trash()` now writes every
+key it is about to orphan into `public.purged_media` before deleting the row that names it —
+after the delete, nothing left in the database knows those keys existed. Deny-all RLS,
+service-role only, `deleted_from_r2_at` null meaning "still in R2, still owed a deletion".
+
+So "which objects should not be there" becomes a query instead of an archaeology exercise
+against a bucket, and draining it is a decision **with a list attached**.
+
+**Erica's call, and the only thing outstanding from this audit:** whether to drain it by
+hand, or to authorise a job that deletes R2 objects for rows in `purged_media`. Until one of
+those happens the objects accumulate — slowly, visibly, and without losing the ability to
+tell which they are.
+
 ### 6g. `backup-freshness` was measuring age from the wrong thing
 
 Reported *"27h old"* for a backup taken 13 hours earlier, because it read the date out of

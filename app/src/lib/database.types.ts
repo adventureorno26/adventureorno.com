@@ -2106,6 +2106,33 @@ export type Database = {
         }
         Relationships: []
       }
+      purged_media: {
+        Row: {
+          deleted_from_r2_at: string | null
+          id: string
+          media_key: string
+          photo_id: string | null
+          purged_at: string
+          sha256: string | null
+        }
+        Insert: {
+          deleted_from_r2_at?: string | null
+          id?: string
+          media_key: string
+          photo_id?: string | null
+          purged_at?: string
+          sha256?: string | null
+        }
+        Update: {
+          deleted_from_r2_at?: string | null
+          id?: string
+          media_key?: string
+          photo_id?: string | null
+          purged_at?: string
+          sha256?: string | null
+        }
+        Relationships: []
+      }
       revealed_area: {
         Row: {
           geom: unknown
