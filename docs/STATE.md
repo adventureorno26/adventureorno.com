@@ -4410,6 +4410,58 @@ Migration `0093`'s lockdown tried to revoke the `st_*` grants and Postgres answe
 check excepts `st_*`, and why its "0 anon-executable SECDEF functions" result is accurate
 for first-party code.
 
+## 6d. 2026-08-29 — THE NIGHT'S WORK, AND WHAT IS LEFT
+
+Five reported problems, all closed, plus four found while closing them. Production ends the
+night at `ac56044` with `check-data-integrity.mjs` reading **"Production data is
+consistent"**, 273 migrations recorded, and **zero** open Dependabot advisories.
+
+### Done
+
+| # | What was wrong | What was done |
+| - | -------------- | ------------- |
+| 1 | **The working copy was not a git repository.** No `.git`: no history, no hooks, nothing to push, OneDrive underneath it | Verified against a fresh clone that every tracked file was byte-identical to `origin/main` @ `9aa0b76` — **nothing was lost** — then repaired in place with `init` + `fetch` + `reset --mixed`, which never touches the working tree. `core.hooksPath` re-set. Session-start check written into the Git & GitHub section |
+| 2 | **`main` had no protections and Dependabot was off** | Ruleset `21818125`: no deletion, no force-push, PR required, `Release gate` required, admin bypass kept. Alerts + automated security fixes enabled. The claim that this plan could not do branch protection was stale — it predated GitHub Pro |
+| 3 | **The Overland device credential was stale** | Worse than stale: **`source='overland'` is zero rows, all time.** Timeline stopped 2026-07-19, Overland never started, so there is no live location ingest at all. Written into §12a step 7, which had read as a finished setup. Josh's ingest token revoked (business rule #7 said one token; there were three) |
+| 4 | **Three data inconsistencies** | Riverpoint Drive Trailhead's count repaired in `0271`; the two evidence-less visits deleted with Erica's yes, **undo snapshots recorded verbatim in §7**. Then `0272`, then `0273` — see the `visit_count` section, this is the one that kept coming back |
+| 5 | **Supabase advisor backlog, 188 findings** | **181.** All six `function_search_path_mutable` pinned and `visible_activities` flipped to `security_invoker` in `0271`. The proof §6c demanded had never been run; it has now, and it says three of the four views are **not** a drop-in flip. Erica's call: left open, documented, with the numbers |
+| 6 | *Found:* **17 Dependabot advisories, 2 critical**, invisible until alerts were switched on | **Zero.** `#158`, `#159`, `#161` landed; the last six were one `wrangler` pin bump (`#163`), because `sharp` and `undici` both arrive only through `wrangler` → `miniflare` |
+| 7 | *Found:* **`places.visit_count` had no maintainer at all** — it drifted three times in one evening, twice from deletes and once from a visit added through the app mid-session | `0273` gives it a trigger, and proves it with a live insert/delete round trip against production inside a rolled-back transaction |
+| 8 | *Found:* **the `@rollup/rollup-linux-x64-gnu` pin was holding nothing** | `rollup` left the tree entirely when Vite 8 moved to rolldown. Pin removed, note rewritten (`#163`) |
+| 9 | *Found:* **GitHub Actions was billing-blocked** — every run failed to start with *"recent account payments have failed or your spending limit needs to be increased"*, the same failure as §7d on 2026-08-16, and nothing could deploy | Cleared by Erica. `main` deployed `d347797` then `ac56044`; `/version.json` confirms |
+
+### Left
+
+**Nothing is blocked and nothing is half-finished.** Three items are open *by decision*, not
+by omission, and each is recorded where the work would start:
+
+1. **The three SECURITY DEFINER views** (`activity_profiles`, `activity_provenance`,
+   `visit_profiles`) — §6c, with the measured row counts per member. Erica's decision was to
+   leave them and revisit **before Phase 3b gives anyone else an account**, which is the
+   moment §6c already names as the one where it stops being survivable.
+2. **`auth_leaked_password_protection`** — one toggle, offered and not taken. §6c.
+3. **Retiring `places.visit_count`** — optional now rather than needed. `0273` made the
+   column correct; deleting it is a tidier end state whenever a reader-migration is worth
+   doing.
+
+And one standing operational fact, not a task: **there is no live location ingest.** Overland
+has never delivered a ping and Timeline stopped on 2026-07-19. Nothing is broken in a way
+that logs — it simply never ran.
+
+### The two mistakes worth keeping
+
+- **A migration is replayed from nothing, so its guard cannot assert today's production.**
+  `0271` and `0272` first said *"expected exactly 1/2 places with a stale visit_count"* —
+  true of production that afternoon, false of the empty schema `db-test.sh` rebuilds, where
+  the count is 0. CI caught it and was right. The guards are now "at most", which still
+  refuses to repair more rows than each file was written for.
+- **The service_role key in `0057`/`0071` was raised as a live exposure. It is not, and this
+  file already said so** — twice, at *"Credentials are clean"* and again in §8's rules.
+  It is confirmed dead, it was rotated long ago, and **the answer is already written down;
+  read it before raising it.** Erica has now said so a third time. Do not ask again.
+
+---
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
@@ -4591,17 +4643,32 @@ in old migrations (`0003`, `0009`, `0010`, `0015`, `0097`, `0117`, `0190`, `0240
 It is a cache that is correct exactly until somebody changes a visit, which is why this
 check keeps finding it.
 
-`0272` repaired the two and deliberately did **not** add a trigger. `visit_count` decides
-which place survives a merge, so giving it a new maintainer is a decision about the data
-model rather than a repair. **The choice is Erica's, and it is one of two:**
+`0272` repaired the two and deliberately did **not** add a trigger, because `visit_count`
+decides which place survives a merge and giving it a maintainer is a decision about the data
+model rather than a repair. The two options were: maintain it with a trigger, or retire the
+column and read `place_visit_totals()` instead.
 
-1. **Maintain it** — a trigger on `visits` (insert/update/delete) that recounts the
-   affected place, plus a one-time backfill. The column becomes trustworthy and the check
-   row can be deleted.
-2. **Retire it** — drop the column, read counts from `place_visit_totals()` where they are
-   needed, and the check row retires with it, exactly as the check's own text predicts.
+**RESOLVED — `0273` takes option one, and the column now has a maintainer.** After the third
+drift in one evening (below), repairing the number a fourth time was not a plan.
+`visits_sync_place_visit_count` is an `after insert or update of place_id or delete` row
+trigger that recounts the affected place — **both** places on an update, since a visit can
+move between them — and writes only when the answer actually changes, so an ordinary visit
+write no longer dirties a `places` row for nothing. It counts `count(*) from public.visits`,
+which is deliberately what `check-data-integrity.mjs` compares against and deliberately not
+`accepted_visits`: two different answers to "how many visits" is how this column became
+untrustworthy in the first place.
 
-Until one of those happens, expect this row to return every time a visit is deleted.
+Retiring the column is still the tidier end state and this does not block it — a column that
+is always correct is strictly easier to delete than one that is not.
+
+**How it was proved**, because "the trigger exists" is not the same claim as "the trigger
+works": the migration asserts zero drift and asserts the trigger is attached for insert,
+delete *and* update (`tgtype` bits 2, 3 and 4 — leave one out and the column drifts through
+whichever one was missed). The live round trip was run **separately**, against production
+inside a rolled-back transaction: insert a visit → mirror goes up by one; delete it → mirror
+goes back. It is not done inside the migration on purpose: `visits` carries four other
+triggers, and a probe row in a migration that COMMITS can leave participant rows behind that
+the delete does not reach.
 
 **It came back forty minutes later, and not from a deletion.** The final check of the
 2026-08-29 session found `Red Iguana stored=1 actual=2`. Nothing in that session touched
@@ -4611,9 +4678,10 @@ un-refreshed on **delete** — **nothing maintains it in either direction**, and
 afternoon of using the app drifts it. That is as close to a live reproduction as this
 question is going to get, and it argues for option 1.
 
-This one is deliberately left unrepaired. Repairing it would be one `update` and would
-hide the evidence a day later; the count is a cache, the visits are correct, and what
-needs fixing is the maintainer, not the number.
+It was left unrepaired at first, on purpose — repairing it would have been one `update`
+that hid the evidence a day later. The evidence is recorded here permanently now, and
+`0273` both backfilled it and stopped it happening again, so the number is correct **and**
+the reason it kept going wrong is fixed.
 
 ## 7d. 2026-08-16 — the day nothing was broken and nothing was live
 
