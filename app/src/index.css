@@ -1707,6 +1707,19 @@ button.panel-hero-slot:hover {
 .cat-filter::-webkit-scrollbar {
   display: none;
 }
+/* THE CATEGORY PILLS USED TO TOUCH (fixed 2026-08-30).
+   `.cat-pills` had no rule at all — it was a bare <div> in NewPlaceDraft and VisitPage, so
+   the pills fell into normal flow with nothing between them. `.cat-pill` already declared
+   `flex: none`, which was inert because nothing ever made the parent a flex container: the
+   pill knew it lived in a flex row and the row did not exist. Measured on a 390px viewport,
+   the gap between "Jeeping" and "Camping" was 0px.
+   Twelve pills always wrap on a phone, so the row gap matters as much as the column gap —
+   `gap` sets both. 8px matches the other wrapping groups on the card. */
+.cat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .cat-pill {
   flex: none;
   padding: 6px 12px;
