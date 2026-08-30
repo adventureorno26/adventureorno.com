@@ -59,6 +59,7 @@ const PersonPage = lazyWithReload(() => import('./routes/PersonPage'));
 const AddPage = lazyWithReload(() => import('./routes/AddPage'));
 const ImportComplete = lazyWithReload(() => import('./routes/ImportComplete'));
 const Settings = lazyWithReload(() => import('./routes/Settings'));
+const InviteCodes = lazyWithReload(() => import('./routes/InviteCodes'));
 const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
 const BucketList = lazyWithReload(() => import('./routes/BucketList'));
 const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
@@ -240,6 +241,17 @@ export default function App() {
               element={
                 <RequireAuth>
                   <Settings />
+                </RequireAuth>
+              }
+            />
+            {/* NOT a fourth destination. Inviting somebody is a deeper screen under
+                Account, the way /settings/data/trash is one under Data & Privacy — the
+                three-destination contract above is untouched. */}
+            <Route
+              path="/settings/account/invites"
+              element={
+                <RequireAuth>
+                  <InviteCodes />
                 </RequireAuth>
               }
             />
