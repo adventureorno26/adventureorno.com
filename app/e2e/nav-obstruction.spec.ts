@@ -289,7 +289,10 @@ test.describe('bottom nav must not obstruct interactive elements', () => {
 // the next collision will be two different numbers that happen to overlap. This measures what
 // is actually on top at the control's own centre point, which is the property that matters.
 test.describe('the top of a phone is not double-booked', () => {
-  test('the map layer control is tappable, not under the memory banner', async ({ page }) => {
+  // The banner that caused this is gone (deleted 2026-08-30 — STATE.md §7), but the
+  // property it broke is the point: whatever takes the top of a phone next must not
+  // land on the layers control. The measurement is deliberately generic.
+  test('the map layer control is tappable, not under anything', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/');
     await page.waitForTimeout(2000);

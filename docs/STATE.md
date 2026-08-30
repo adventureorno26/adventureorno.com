@@ -4739,6 +4739,48 @@ finding an element "covered" by its own ancestor (`covered by settings-page`), w
 normal and not a fault. Repositioning chrome is a locked design decision per the same header,
 so nothing was changed.
 
+### 6k. 2026-08-30 — THE BLANK CARD FILLS ITSELF IN (and the name field comes back on screen)
+
+Four sentences of Erica's, and what each one changed on the new-place card
+(`app/src/components/NewPlaceDraft.tsx`).
+
+1. **"The date should always be pre-filled to the date I am adding the card, or the date the
+   picture being added was taken... and I should be able to edit the dates."** The date field
+   opened EMPTY. It now opens on today — built from LOCAL date parts, never
+   `toISOString().slice(0, 10)`, which is tomorrow's date after 8pm on the east coast (§8) —
+   and moves to the first photo's EXIF capture day the moment photos are added, unless she has
+   already set a date herself. Still a plain date input: type over it, or clear it, and with no
+   date no visit is logged, exactly as before. The label dropped "(optional)", which described
+   the empty field. Logic in `app/src/lib/draftPrefill.ts`, tested in `draftPrefill.test.ts`.
+   **Google Photos is covered only via EXIF**: `lib/googlePhotos.ts` downloads the original
+   bytes (`=d`) so the capture time is still in them, but Google's own
+   `mediaFileMetadata.creationTime` is not requested and the `File` it builds carries no
+   timestamp — a photo whose EXIF was stripped before Google got it keeps today's date.
+2. **"I don't understand why official details look up name and website is on the card."** The
+   "Official details" heading and its "Look up name & website" button are gone.
+3. **"if I am at a restaurant the name of the restaurant will already be in the card after I
+   hit add, then I can change it as needed."** The card now asks OpenStreetMap ONCE, on open,
+   and fills the name and website in by itself. **`layer=poi` is what makes this honest**:
+   plain reverse geocoding answers with the area you are inside — a pin on a Kansas highway
+   returned "Coffey County" on the live site, which is not a place anyone wants named on their
+   card. Measured 2026-08-30 through the real component in a headless browser: Katz's
+   Delicatessen → "Katz's Delicatessen" + its website; Buckingham Palace → "Buckingham
+   Palace"; the Kansas highway and a Colorado forest track → nothing at all. `draftPrefill`
+   discards anything whose OSM class is a boundary, road, suburb, rail line or landuse, and a
+   suggestion NEVER lands on top of something she has typed. (The MapTiler reverse geocode
+   that has always supplied a fallback name is untouched — the POI answer overrides it when
+   there is one.)
+4. **"I wanted the memory function to be photos, not a random description."** Two memory
+   surfaces were mounted on the map at once. The text one is deleted; see the register below.
+
+**And the bug none of that would have survived.** A live audit found the new-place card's NAME
+INPUT AND STAR RATING RENDERING ABOVE THE TOP OF THE SCREEN, unreachable, on 430×932, 390×844
+and 1440×900 alike: `.panel.npd-card` is a scrolling flex COLUMN, its content is taller than
+its 92vh cap, and `.panel-hero` is `overflow: hidden` — so its automatic minimum height was 0
+and it was squashed from 190px to nothing, taking its absolutely-positioned title with it to
+`top: -61px`. `scrollTop` cannot go negative, so it could not be scrolled back. One line
+(`flex: none`) fixes it. Reproduced and then re-measured in headless Chromium at all three
+viewports: hero 190px, input top 150, `elementFromPoint` hit-test true, typing works.
 ### 6j. SIX READERS COUNTED THE SAME OUTING TWICE — `0278`, 2026-08-30
 
 The canonical key of an outing is **`coalesce(shared_group_id, id)`**, not `id`. Two people
@@ -4821,6 +4863,8 @@ lost work and can be restored in minutes.
 | `security/advisor-baseline.md`                                                                           | 2026-08-28 | The last markdown outside this file. Its content is **re-measured and folded into §6c**, not merely moved — the baseline had drifted from 83 findings to 188                                                    | §6c above; the file itself was untracked                                                                                                                                  |
 | **Two visits claiming evidence that was not there** — Leesburg `2024-10-22` and Great Falls `2026-07-19`                                                                                                     | 2026-08-29 | Both machine-created on 2026-07-22, `source='evidence'`, no note, no `created_by`, and **nothing at their place inside their dates**. `delete_visit` returned `"evidence": []` for both — the same answer the two `2026-12-25` visits gave in §7c. Erica's explicit yes. What was on those days sat elsewhere: Leesburg's only record is one activity at *North Street Northeast*; Great Falls' day is at Claytor Lake, the Washington Monument and Leesburg VA, plus 438 unplaced pings | **The two undo snapshots below** — `delete_visit`'s own return value, which is everything needed to put each row back |
 | `ingest_tokens` row **"Josh iPhone — photos"** (revoked, not deleted)                                     | 2026-08-29 | Business rule #7: *"no ingest token is ever issued to him."* It had been live since 2026-07-25 and used once, the day it was made. Revoking is reversible and keeps the row and its history                     | `update public.ingest_tokens set revoked_at = null where id = '91ed38b3-6e6c-48a9-917a-35a5ac94a104'`                                                                       |
+| **The TEXT memory banner** — `app/src/components/MemoryBanner.tsx`, `app/src/lib/memories.ts`, its mount on the map and its CSS | 2026-08-30 | Erica: *"I wanted the memory function to be photos, not a random description."* Two memory surfaces were mounted on the map at once: `OnThisDay` (photographs, `rpc('on_this_day')`) and this one, a sentence — *"2 years ago today you were in Lisbon"* — with no image in it. It also read EVERY visit row with no date filter and no limit, and filtered month/day in JavaScript. `OnThisDay` is untouched. | git history for this commit; `.memory-banner` / `.memory-main` / `.memory-spark` / `.memory-x` CSS went with it, and phone row 2 (`--map-phone-row-2`) is free again |
+| **"Official details" on the blank card** — the heading and its "Look up name & website" button | 2026-08-30 | Erica: *"I don't understand why official details look up name and website is on the card."* It asked her to press a button to be told the name of the place she was standing in. The card does it by itself now — see §6g | git history for this commit; `fetchPoiDetails` is still there and is what the automatic prefill calls |
 
 #### The two undo snapshots, 2026-08-29
 
