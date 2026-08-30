@@ -367,6 +367,27 @@ And separately: `set_visit_participants` and `set_activity_solo` must **retract,
 so that removal is a decision with a record rather than an erasure. Photos are already the
 model to copy.
 
+### THE THREE SECURITY DEFINER VIEWS — decided 2026-08-30
+
+`activity_profiles`, `activity_provenance`, `visit_profiles` answer *"who was on this?"*.
+They are SECURITY DEFINER, so they run as their owner and ignore the permissions of whoever
+asks — which is why every member sees all 627 / 571 / 664 rows. §6c has the measured proof.
+
+**The measurement that framed the decision:** a third account can read **557 visits** but
+would see **0 participants** on any of them, because the RLS on `memory_people` and `people`
+hides everyone else's participation. So flipping to `security_invoker` does not merely
+"return fewer rows" — it makes the app say *you may see the visit, but not who was there*.
+Erica loses 305 participant rows on visits she can still see.
+
+| Question | Erica's answer, 2026-08-30 |
+| -------- | -------------------------- |
+| **Does seeing a memory mean seeing who was on it?** | **YES.** Within a space you already share, a card that hides who was there lies by omission. So the views are **not** flipped to invoker. The bypass is closed by writing the intended visibility explicitly into each view's own `WHERE`, so the rule is readable and reviewable instead of being a side effect of the definer property. Behaviour on screen does not change; the leak does. |
+| **Should the owner see more than an editor?** | **NO.** Roles (`owner \| editor \| viewer`) govern **writes only**. Visibility belongs to the **space boundary**, never to the role. Two parallel visibility systems is how this class of bug gets rebuilt. |
+| **Now, or with the partition?** | **With the partition.** The explicit rule only becomes meaningful once `is_member()` becomes `is_member(space_id)`. Deciding the rule now and landing it with item 9 gives one coherent change to visibility instead of two. **The one thing that must not happen is another person getting an account before it is closed.** |
+
+So this is no longer a standalone fix. It is a **precondition folded into item 9**, and the
+SQL is written and reviewed before the partition rather than invented during it.
+
 ### What still has to be built for this to mean anything
 
 Ordered, because each depends on the one above it.
@@ -480,7 +501,7 @@ Erica: *"that order is fine."* Items 1–3 are in flight as of 2026-08-30.
 | 6 | **Needs Attention** (finding 4) — filtered destinations per tile, and real error feedback when an RPC fails | queued |
 | 7 | **Add / remove / block another user** — a directory, a public profile with a handle, and a connection that can be added, **removed** and **blocked**. Blocking is bidirectional and enforced in RLS, never only in the UI. The word is **add**, not friend (§0.2) | queued — needs item 9 underneath it |
 | 7b | **Cross-account tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam: the read side keys on **people**, the write side on **profiles**, and `set_visit_solo` takes a single profile id | queued |
-| 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | queued |
+| 8 | **The three SECURITY DEFINER views** | **DECIDED 2026-08-30, FOLDED INTO ITEM 9.** Not flipped to `security_invoker` — that would make the app show a visit without showing who was on it (a third account can read 557 visits and would see 0 participants). The bypass is closed instead by writing each view's intended visibility explicitly, against the space boundary, and it **lands with the partition**. See the decision table above. **Still an absolute precondition for anyone else holding an account.** |
 | 9 | **Spaces, friends, public profiles** (Phase 3b) — the gate on everything social. One indivisible migration | queued |
 | 10 | **Settings' three destinations** — `Account \| Integrations \| Data & Privacy`, per the 08-20 ruling above | queued |
 
