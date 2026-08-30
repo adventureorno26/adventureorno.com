@@ -310,6 +310,63 @@ on the canonical key and then aggregated raw rows. Any NEW stat reader must coll
 `coalesce(shared_group_id, id)` before aggregating; `activity_lines` is the one deliberate
 exception, because it draws every recorded route.
 
+### CONNECTING TO SOMEONE — approved 2026-08-30
+
+Two different relationships, and they are not the same button:
+
+| | Direction | They see | You see |
+| --- | --- | --- | --- |
+| **Add** | **Mutual** — both sides agree | What they share with people they have added | Their shared cards can enter **Our Stats** |
+| **Follow** | **One-way** — no approval | Nothing extra | **Only what they have chosen to make public** |
+
+You can **add**, **remove** and **block**. Blocking is bidirectional and enforced in **RLS**,
+never only in the UI — a blocked user must not be able to reach the data by calling the API
+directly.
+
+**Privacy is the user's own choice, not the app's.** Erica, 2026-08-30: *"it's fine for
+users to share their home address and whatever else they want to share."* So there is no
+category the app hides on their behalf. What a person marks public is public; the default is
+private, and the decision is theirs.
+
+### AN ACCEPTED TAG IS MINE — and today it is not
+
+Erica, 2026-08-30: *"we need to figure out a way to keep the stats if I approve a tag someone
+else has made and then they defriend me or untag me."*
+
+**Measured 2026-08-30, and the answer is that nothing survives.** Accepting a tag only flips
+`participation_status` on a row that lives inside the OTHER person's subject:
+
+- `respond_to_memory_tag` updates `memory_people` and creates nothing of my own;
+- `set_visit_participants` and `set_activity_solo` **DELETE** the row outright when someone
+  is removed — they do not mark it retracted;
+- `memory_people.subject_id` is **ON DELETE CASCADE**, so deleting the card deletes every
+  participation on it, mine included.
+
+Photos already behave correctly — `tag_person_on_photo` and `untag_person_on_photo` mark
+**retracted** rather than deleting. Visits and outings do not. That inconsistency is the bug.
+
+The file already states the principle in the other direction (§the people contract):
+*"Declining cannot erase the tagger's private recollection."* **The mirror was never built:
+the tagger's removal currently DOES erase the accepter's recollection.**
+
+#### The approved shape of the fix
+
+**Acceptance materialises my own record.** When I accept a tag on someone's outing, the app
+writes an activity row owned by ME into the same `shared_group_id`. From that moment:
+
+- it is **my** row, so their untag, their block and their deletion cannot reach it;
+- the existing deduper already collapses a `shared_group_id` to one canonical outing, so the
+  15-mile run still counts **once** for me, once for them, and once in Our Stats — no new
+  counting rule is needed, which is the point of doing it this way;
+- **My Stats keeps it. Our Stats loses it**, correctly — they are no longer tagged, so it is
+  no longer a card we are both on;
+- I keep the **facts** — date, distance, place — not their content. Their photos and their
+  route stay theirs.
+
+And separately: `set_visit_participants` and `set_activity_solo` must **retract, not delete**,
+so that removal is a decision with a record rather than an erasure. Photos are already the
+model to copy.
+
 ### What still has to be built for this to mean anything
 
 Ordered, because each depends on the one above it.
@@ -317,10 +374,14 @@ Ordered, because each depends on the one above it.
 1. **Partition the data.** Every read policy ends in `is_member()`, so *add a user* and
    *give them my entire history* are the same button today. One indivisible migration:
    **57 tables, 81 policies, 201 SECURITY DEFINER functions.**
-2. **Add / remove / block.** A directory, public profiles with a handle, and a connection
-   that can be **added, removed and blocked** — blocking bidirectional and enforced in RLS,
-   not in the UI. `profiles` has six columns today and none of them is a handle, an avatar
-   or a visibility setting.
+2. **Add / remove / block, and follow.** A directory, public profiles with a handle, a
+   **mutual** add and a **one-way** follow that exposes only what the person made public,
+   and removal and blocking — blocking bidirectional and enforced in RLS, not in the UI.
+   `profiles` has six columns today and none of them is a handle, an avatar or a visibility
+   setting.
+2b. **An accepted tag becomes the accepter's own record**, per the section above, and
+   removal retracts rather than deletes. Without this, everything a person accepts stays
+   hostage to whoever tagged them.
 3. **Cross-account tagging with acceptance.** The acceptance machinery works, but it is
    keyed to people *inside* one account and the write path takes a single profile id, so
    *"I was out with Maya"* cannot be recorded at all.
