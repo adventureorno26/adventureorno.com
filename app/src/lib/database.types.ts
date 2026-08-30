@@ -525,6 +525,131 @@ export type Database = {
           },
         ]
       }
+      connection_adds: {
+        Row: {
+          decided_at: string | null
+          decided_by: string | null
+          profile_high: string
+          profile_low: string
+          requested_at: string
+          requested_by: string
+          status: string
+        }
+        Insert: {
+          decided_at?: string | null
+          decided_by?: string | null
+          profile_high: string
+          profile_low: string
+          requested_at?: string
+          requested_by: string
+          status?: string
+        }
+        Update: {
+          decided_at?: string | null
+          decided_by?: string | null
+          profile_high?: string
+          profile_low?: string
+          requested_at?: string
+          requested_by?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_adds_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_adds_profile_high_fkey"
+            columns: ["profile_high"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_adds_profile_low_fkey"
+            columns: ["profile_low"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_adds_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connection_blocks: {
+        Row: {
+          blocked: string
+          blocker: string
+          created_at: string
+        }
+        Insert: {
+          blocked: string
+          blocker: string
+          created_at?: string
+        }
+        Update: {
+          blocked?: string
+          blocker?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_blocks_blocked_fkey"
+            columns: ["blocked"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_blocks_blocker_fkey"
+            columns: ["blocker"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connection_follows: {
+        Row: {
+          created_at: string
+          followed: string
+          follower: string
+        }
+        Insert: {
+          created_at?: string
+          followed: string
+          follower: string
+        }
+        Update: {
+          created_at?: string
+          followed?: string
+          follower?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_follows_followed_fkey"
+            columns: ["followed"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connection_follows_follower_fkey"
+            columns: ["follower"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deleted_hashes: {
         Row: {
           deleted_at: string
@@ -2081,25 +2206,49 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
+          bio: string | null
           created_at: string
           display_name: string | null
+          handle: string
+          handle_claimed_at: string | null
           id: string
+          profile_visibility: string
+          public_activity: boolean
+          public_places: boolean
+          public_stats: boolean
           role: string
           share_location: boolean
           share_tagged_outings: boolean
         }
         Insert: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           display_name?: string | null
+          handle: string
+          handle_claimed_at?: string | null
           id: string
+          profile_visibility?: string
+          public_activity?: boolean
+          public_places?: boolean
+          public_stats?: boolean
           role: string
           share_location?: boolean
           share_tagged_outings?: boolean
         }
         Update: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string
           display_name?: string | null
+          handle?: string
+          handle_claimed_at?: string | null
           id?: string
+          profile_visibility?: string
+          public_activity?: boolean
+          public_places?: boolean
+          public_stats?: boolean
           role?: string
           share_location?: boolean
           share_tagged_outings?: boolean
@@ -3496,6 +3645,7 @@ export type Database = {
         Returns: unknown
       }
       _st_within: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      accept_add: { Args: { p_profile: string }; Returns: Json }
       activities_of_type: {
         Args: { p_profile?: string; p_type: string }
         Returns: {
@@ -3765,6 +3915,7 @@ export type Database = {
         Args: { p_activity: string; p_race_name: string; p_race_place?: string }
         Returns: string
       }
+      assign_handle: { Args: { p_id: string; p_name: string }; Returns: string }
       attach_child_visit: {
         Args: { p_child: string; p_parent: string }
         Returns: {
@@ -3826,6 +3977,7 @@ export type Database = {
         }
         Returns: string
       }
+      block_profile: { Args: { p_profile: string }; Returns: Json }
       can_rename_place: {
         Args: { p_caller: string; p_place: string }
         Returns: boolean
@@ -3836,9 +3988,17 @@ export type Database = {
       claim_invite: {
         Args: never
         Returns: {
+          avatar_url: string | null
+          bio: string | null
           created_at: string
           display_name: string | null
+          handle: string
+          handle_claimed_at: string | null
           id: string
+          profile_visibility: string
+          public_activity: boolean
+          public_places: boolean
+          public_stats: boolean
           role: string
           share_location: boolean
           share_tagged_outings: boolean
@@ -3871,6 +4031,7 @@ export type Database = {
       }
       cluster_now: { Args: never; Returns: Json }
       cluster_unassigned: { Args: never; Returns: Json }
+      connections_other_party: { Args: { p_profile: string }; Returns: string }
       consume_oauth_state: {
         Args: { p_provider?: string; p_state: string }
         Returns: string
@@ -3953,6 +4114,7 @@ export type Database = {
         Args: { p_lat?: number; p_lng?: number; p_radius_km?: number }
         Returns: string
       }
+      decline_add: { Args: { p_profile: string }; Returns: Json }
       dedupe_joint_outings: { Args: never; Returns: number }
       dedupe_shared_outings: { Args: never; Returns: number }
       delete_visit: {
@@ -4094,7 +4256,17 @@ export type Database = {
         }
         Returns: string
       }
+      find_profiles: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          avatar_url: string
+          bio: string
+          display_name: string
+          handle: string
+        }[]
+      }
       finish_ingest_run: { Args: { p_run: string }; Returns: undefined }
+      follow_profile: { Args: { p_profile: string }; Returns: Json }
       forget_rule: { Args: { p_id: string }; Returns: Json }
       geo_coverage: {
         Args: { p_profile?: string }
@@ -4227,6 +4399,8 @@ export type Database = {
           reason: string
         }[]
       }
+      handle_from_name: { Args: { p_name: string }; Returns: string }
+      handle_is_reserved: { Args: { p_handle: string }; Returns: boolean }
       import_duplicates_pending: { Args: never; Returns: Json }
       import_file_activity: {
         Args: {
@@ -4261,6 +4435,10 @@ export type Database = {
           p_type?: string
         }
         Returns: Json
+      }
+      is_blocked_between: {
+        Args: { p_a: string; p_b: string }
+        Returns: boolean
       }
       is_editor_or_owner: { Args: never; Returns: boolean }
       is_generic_activity_name: { Args: { p_name: string }; Returns: boolean }
@@ -4430,6 +4608,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      my_connections: {
+        Args: never
+        Returns: {
+          direction: string
+          display_name: string
+          profile_id: string
+          relation: string
+          since: string
+          status: string
+        }[]
       }
       my_memory_tags_to_confirm: {
         Args: never
@@ -4693,6 +4882,7 @@ export type Database = {
         Returns: string
       }
       prune_service_health: { Args: never; Returns: undefined }
+      public_profile: { Args: { p_handle: string }; Returns: Json }
       purge_trash: { Args: never; Returns: undefined }
       race_bucket: { Args: { p_miles: number }; Returns: string }
       race_stats: {
@@ -4763,6 +4953,7 @@ export type Database = {
         Returns: string
       }
       reject_suggestion: { Args: { p_id: string }; Returns: Json }
+      remove_add: { Args: { p_profile: string }; Returns: Json }
       remove_from_container: {
         Args: { p_child: string; p_parent: string }
         Returns: undefined
@@ -4771,6 +4962,7 @@ export type Database = {
         Args: { p_old_name?: string; p_place: string }
         Returns: number
       }
+      request_add: { Args: { p_profile: string }; Returns: Json }
       respond_to_all_tags: {
         Args: { p_accept: boolean; p_limit?: number }
         Returns: Json
@@ -4826,6 +5018,18 @@ export type Database = {
         }
         Returns: string
       }
+      save_public_profile: {
+        Args: {
+          p_activity?: boolean
+          p_avatar_url?: string
+          p_bio?: string
+          p_display_name?: string
+          p_places?: boolean
+          p_stats?: boolean
+          p_visibility?: string
+        }
+        Returns: Json
+      }
       search_photos: {
         Args: { p_filter: Json }
         Returns: {
@@ -4863,6 +5067,7 @@ export type Database = {
         Args: { p_geojson: string; p_kind?: string; p_place: string }
         Returns: undefined
       }
+      set_handle: { Args: { p_handle: string }; Returns: string }
       set_my_rating: {
         Args: { p_place: string; p_rating: number }
         Returns: undefined
@@ -5705,7 +5910,9 @@ export type Database = {
           visit_id: string
         }[]
       }
+      unblock_profile: { Args: { p_profile: string }; Returns: Json }
       undo_approval: { Args: { p_token: string }; Returns: Json }
+      unfollow_profile: { Args: { p_profile: string }; Returns: Json }
       unlockrows: { Args: { "": string }; Returns: number }
       untag_person_on_photo: {
         Args: { p_person: string; p_photo: string }
