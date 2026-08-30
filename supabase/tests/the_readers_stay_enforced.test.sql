@@ -36,6 +36,24 @@ declare
     -- The guard itself. It must read the table to answer questions about it.
     'can_see_activity',
 
+    -- 0283. THE PUBLIC PROFILE, and the one entry here that shows a person something.
+    -- It cannot use `visible_activities`, and the reason is not convenience: that view
+    -- answers "what may the VIEWER see", and a public profile answers "what did the OWNER
+    -- choose to publish". A stranger reading Erica's profile through the view would see
+    -- none of HER OWN Strava recordings, which are precisely the ones she is entitled to
+    -- publish. So the function applies the §7d rule itself, transposed to the profile
+    -- owner rather than the caller:
+    --     and (lower(coalesce(a.original_source,'')) <> 'strava' or a.owner_profile = pr.id)
+    -- Their own Strava recordings are theirs to publish; somebody else's are not ours to
+    -- republish to the world. Publication is opt-in (`profile_visibility` defaults to
+    -- private), and the function reads nothing for a profile that has not opted in.
+    -- OPEN, and it needs Erica: a NON-Strava outing that Josh recorded and Erica is
+    -- accepted on WILL appear on Erica's public profile, because she said a profile shows
+    -- "their whole public stats, including the stats of our combined cards". Josh does not
+    -- separately consent to that publication. If that is wrong, restrict this to
+    -- `a.owner_profile = pr.id` and the exemption gets narrower, not wider.
+    'public_profile',
+
     -- MACHINE JOBS. auth.uid() is NULL for all of them; they compute facts and show
     -- nobody anything.
     'apply_inbox_field',
