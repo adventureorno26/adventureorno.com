@@ -4518,7 +4518,7 @@ never been opened. It had **181 findings**, and re-checking it is the same call 
 | WARN | `auth_rls_initplan` | 6 | **0** | **CLOSED** — bare `auth.uid()` in a policy is re-evaluated per row scanned; `(select auth.uid())` hoists it to an InitPlan |
 | WARN | `duplicate_index` | 1 | **0** | **CLOSED** — `location_pings` carried two identical indexes; `pings_profile_idx` dropped |
 | WARN | `multiple_permissive_policies` | 114 | 114 | Mostly noise: counted once per role, and most name roles nobody authenticates as (`dashboard_user`, `authenticator`, `cli_login_postgres`) |
-| INFO | `unindexed_foreign_keys` | 53 | 53 | Real, and its own piece of work — not a one-liner on a database this size |
+| INFO | `unindexed_foreign_keys` | 53 | 53 | **Noise at this size, not deferred work.** Measured before judging: the largest table is `location_pings` at 17,145 rows / 9 MB, then `service_health` 11,885, then nothing above 1,300. Postgres scans a 168-row `places` faster than it walks an index. 53 new indexes would cost write throughput and storage for no measurable read gain. Revisit if a table passes ~100k rows |
 | INFO | `unused_index` | 5 | 5 | Leave. "Unused" here means "not used yet"; dropping an index on read patterns this young is guessing |
 | INFO | `no_primary_key` | 2 | 2 | `trip_migration_exceptions`, `place_membership_exceptions`. Small operator-facing exception lists; adding a key to a table whose rows are matched by content is a data-model decision, not a performance fix |
 
@@ -4540,6 +4540,49 @@ the three accounts, then rolled back. **Fifteen comparisons, fifteen identical.*
 The migration asserts the rewrite stuck, that no bare `auth.uid()` survives, **and that every
 `ALL` policy kept its `with check` half** — dropping that half does not fail a read test, it
 quietly widens writes, which is the way this change could have gone wrong unnoticed.
+
+### 6h. `prune_service_health()` had never run once
+
+`0194` created the watchtower's health ledger, wrote the pruner, wrote the reason above it
+— *"Keep the ledger from growing without bound; a fortnight is plenty to see a pattern"* —
+and revoked its grants correctly. **It never scheduled it.** Every other maintenance
+function in this database got its `cron.schedule` in the migration that created it
+(`rebuild-revealed-area` 0045, `dedupe-joint-outings` 0079, `purge-trash` 0088,
+`cluster-nightly` 0003). This one was missed, and nothing else called it — not
+`purge_trash`, not the watchtower Worker.
+
+Same shape as §7d's Strava finding and §6c's definer views: **a lock built and fitted
+nowhere.** And found the same way — by asking production how big its tables were, not by
+reading the code. `service_health` was 11,885 rows over 15 days (~792/day), with the oldest
+row already past the 14-day retention the function existed to enforce.
+
+`0276` schedules it at 04:40 UTC, beside the other nightly maintenance and clear of 07:10's
+rebuild, and runs it once to clear the backlog. Not urgent — a slow leak on a database whose
+largest table is 17k rows — but an unbounded log is only cheap until it isn't, and the fix
+is the one line that was missing.
+
+**The general lesson, since this is the third of its kind:** a function written and not
+wired up leaves no trace in any test, any advisor or any lint. The only thing that finds it
+is comparing what production *does* against what the repo *says*. That is what an audit is
+for, and it is why "the code is correct" and "the system does it" are different claims.
+
+**And the watchtower could not have caught this, by construction.** `0197` watches the jobs
+in `cron.job` and reports `has never run` when a job has no run history — good, and it does
+work: the moment `0276` scheduled the pruner, the next health sweep reported
+`cron:prune-service-health · ok=false · "has never run"`, exactly as designed. But before
+`0276` the job **did not exist in `cron.job` at all**, so there was nothing to watch and
+the ledger was silently green. `service_health` shows it: one check for that service in 24
+hours, the one after it was scheduled.
+
+So the monitor covers *scheduled jobs that stop running*. It cannot cover *a job that was
+never scheduled* — that is the blind spot, and it is not fixable by adding a check to the
+same list, because the list is built from `cron.job`. What would catch it is asserting that
+every maintenance function has a caller. Worth doing if a fourth one of these turns up;
+recording the shape here so the next session does not have to rediscover it.
+
+It self-resolves once the job fires: `ok` requires a successful run inside the freshness
+window (25h by default until three runs give it a median), so after 04:40 UTC the entry
+goes green and stays green. Read from `0197`'s SQL rather than assumed.
 
 ### 6f. THE DEPLOYED APP, hit-tested 2026-08-29
 
