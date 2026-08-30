@@ -33,8 +33,9 @@ not deployed; deployed is not verified.
 ## APPROVED COMMERCIAL PRODUCT + UI DIRECTIVE — PEOPLE, EVENTS AND MESSAGING
 
 **Approved by Erica, 2026-08-20. This section supersedes every older statement that makes
-Erica/Josh, Partner, `Together`, `Just me`, `Just Josh`, null-person scope, or household
-membership the permanent product model.** Those descriptions remain useful as history of
+Erica/Josh, Partner, `Together`, `Just me`, `Just Josh`, `Both`, `All`, `Anyone`, an
+ALL/ANY operator, null-person scope, or household membership the permanent product model.**
+**The scope vocabulary that replaces all of them is §0.2 (2026-08-30).** Those descriptions remain useful as history of
 the private prototype, but they are not the commercial design and must not drive new schema,
 statistics, routes or UI.
 
@@ -148,7 +149,7 @@ Statistics use one contract, everywhere:
 ```text
 canonical outings / accepted visits
   -> authorization
-  -> selected people + ALL/ANY
+  -> scope: MY STATS | OUR STATS | a person's own stats
   -> time range
   -> category/activity filters
   -> counts and the exact drill-down rows
@@ -156,7 +157,8 @@ canonical outings / accepted visits
 
 Filter canonical outings before aggregating. Multiple Garmin, Strava, file or person-owned
 recordings still count once. Events stay outside historical totals until an accepted visit
-or outing is explicitly created.
+or outing is explicitly created. **The scope vocabulary is defined once, in §0.2 — there is
+no ALL/ANY operator and no `Together`, `Just me`, `Just Josh`, `Both`, `All` or `Anyone`.**
 
 ### Approved navigation and information architecture
 
@@ -234,6 +236,161 @@ above are approved. Event and messaging screen previews are still required befor
 is implemented. Database/RLS contracts come first; then generated types/RPCs; then approved
 UI; then production verification.
 
+## 0.2 THE STATS MODEL — APPROVED 2026-08-30
+
+Erica: *"This is not a household app. This is a social application."* Everything below
+replaces the household vocabulary. **There are exactly three scopes and no operator.**
+
+| Scope | Means | Measured 30 Aug 2026 |
+| ----- | ----- | -------------------- |
+| **My Stats** | Every card I am tagged on — solo or not. **The map opens here.** | 132 places · 2135.6 mi |
+| **Our Stats** | Only the cards *all* the selected people **and I** are tagged on. The overlap, never the union. Tagging someone means we did it together. | 55 places · 481.6 mi |
+| A person's own stats | **All** of theirs, including the cards we share. Seen by opening their profile — **never a pill on my map.** | Josh: 61 places · 1053.7 mi |
+
+**Three people means three.** Add Josh and Maya and Our Stats is the cards all three of us
+are tagged on. Strict intersection; it gets small quickly and that is correct.
+
+**Only accepted tags count in Our Stats.** A proposed tag is a claim, not shared history.
+
+**Removing a tag does not rewrite my history.** If Josh untags himself the card leaves Our
+Stats and stays in My Stats, because I was still there. The two numbers then disagree on
+purpose.
+
+### RETIRED WORDS — do not reintroduce any of these
+
+```
+Just me      Just Josh     Just Erica     Together     Both     All     Anyone
+ALL / ANY operator         "Both want to go"           null-person scope
+```
+
+`Just me` → **My Stats**. `Together` / `Both` / `All` → **Our Stats**, which also names who.
+`Anyone` is gone outright: it only ever meant *everyone in this household*, and there is no
+household. If a control, a function name, a label or a comment says one of these, it is a
+defect — the guard in `participants.test.ts` names all seven surfaces and fails on it.
+
+**The word for connecting to someone is `add`.** Not *friend*. Erica, 2026-08-30:
+*"I don't know that I want to use the term friend, just add."* You add someone, you can
+remove them, and you can block them.
+
+### This is not only the map
+
+The same three scopes and the same words apply to the **map pill**, **Settings ▸ Stats**
+and **Insights**. A number must not mean one thing on one screen and something else on
+another — which it does today: Settings says **17 Trips** and Insights says **56** for the
+same account, because Settings still calls the older reader where `null` means *"only what
+we did together"* while Insights calls the newer one where empty means *"anyone"*. One
+vocabulary fixes the words; retiring the older readers fixes the numbers.
+
+### ONE OUTING COUNTS ONCE — reviewed 2026-08-30, and it already works
+
+Erica: *"we ran 15 miles together, but for each of us and for Our Stats that should only
+increase our mileage by 15 miles not 30."*
+
+**Both directions are already deduplicated**, and this was measured rather than assumed:
+
+- **My own duplicate uploads** (the same run from Strava *and* Garmin) — `dedupe_shared_outings`.
+- **Two people recording the same outing** — `dedupe_joint_outings`, matched on time
+  proximity and distance similarity, which is why its audit line reads *"Same outing as X —
+  N min apart, N% difference in distance"*.
+
+`dedupe-joint-outings` runs nightly at 04:20 and succeeded on 2026-08-30. Live grouping:
+**95 activities collapsed into 61 outings** out of 572 — **43 groups (56 activities) are one
+person's duplicates and 18 groups (39 activities) are two different people.**
+
+Proof on real rows, showing what a naive sum would have said:
+
+| outing | recordings / people | counted once | naive sum |
+| ------ | ------------------- | ------------ | --------- |
+| Training Run 22 miles | 2 / 2 | **22.10 mi** | 44.11 mi |
+| Purcellville Running | 4 / 2 | **45.12 mi** | 179.26 mi |
+| National Mall | 2 / 2 | **20.18 mi** | 40.35 mi |
+
+**The mechanism was never the problem — the readers were.** `0278` fixed six that filtered
+on the canonical key and then aggregated raw rows. Any NEW stat reader must collapse to
+`coalesce(shared_group_id, id)` before aggregating; `activity_lines` is the one deliberate
+exception, because it draws every recorded route.
+
+### CONNECTING TO SOMEONE — approved 2026-08-30
+
+Two different relationships, and they are not the same button:
+
+| | Direction | They see | You see |
+| --- | --- | --- | --- |
+| **Add** | **Mutual** — both sides agree | What they share with people they have added | Their shared cards can enter **Our Stats** |
+| **Follow** | **One-way** — no approval | Nothing extra | **Only what they have chosen to make public** |
+
+You can **add**, **remove** and **block**. Blocking is bidirectional and enforced in **RLS**,
+never only in the UI — a blocked user must not be able to reach the data by calling the API
+directly.
+
+**Privacy is the user's own choice, not the app's.** Erica, 2026-08-30: *"it's fine for
+users to share their home address and whatever else they want to share."* So there is no
+category the app hides on their behalf. What a person marks public is public; the default is
+private, and the decision is theirs.
+
+### AN ACCEPTED TAG IS MINE — and today it is not
+
+Erica, 2026-08-30: *"we need to figure out a way to keep the stats if I approve a tag someone
+else has made and then they defriend me or untag me."*
+
+**Measured 2026-08-30, and the answer is that nothing survives.** Accepting a tag only flips
+`participation_status` on a row that lives inside the OTHER person's subject:
+
+- `respond_to_memory_tag` updates `memory_people` and creates nothing of my own;
+- `set_visit_participants` and `set_activity_solo` **DELETE** the row outright when someone
+  is removed — they do not mark it retracted;
+- `memory_people.subject_id` is **ON DELETE CASCADE**, so deleting the card deletes every
+  participation on it, mine included.
+
+Photos already behave correctly — `tag_person_on_photo` and `untag_person_on_photo` mark
+**retracted** rather than deleting. Visits and outings do not. That inconsistency is the bug.
+
+The file already states the principle in the other direction (§the people contract):
+*"Declining cannot erase the tagger's private recollection."* **The mirror was never built:
+the tagger's removal currently DOES erase the accepter's recollection.**
+
+#### The approved shape of the fix
+
+**Acceptance materialises my own record.** When I accept a tag on someone's outing, the app
+writes an activity row owned by ME into the same `shared_group_id`. From that moment:
+
+- it is **my** row, so their untag, their block and their deletion cannot reach it;
+- the existing deduper already collapses a `shared_group_id` to one canonical outing, so the
+  15-mile run still counts **once** for me, once for them, and once in Our Stats — no new
+  counting rule is needed, which is the point of doing it this way;
+- **My Stats keeps it. Our Stats loses it**, correctly — they are no longer tagged, so it is
+  no longer a card we are both on;
+- I keep the **facts** — date, distance, place — not their content. Their photos and their
+  route stay theirs.
+
+And separately: `set_visit_participants` and `set_activity_solo` must **retract, not delete**,
+so that removal is a decision with a record rather than an erasure. Photos are already the
+model to copy.
+
+### What still has to be built for this to mean anything
+
+Ordered, because each depends on the one above it.
+
+1. **Partition the data.** Every read policy ends in `is_member()`, so *add a user* and
+   *give them my entire history* are the same button today. One indivisible migration:
+   **57 tables, 81 policies, 201 SECURITY DEFINER functions.**
+2. **Add / remove / block, and follow.** A directory, public profiles with a handle, a
+   **mutual** add and a **one-way** follow that exposes only what the person made public,
+   and removal and blocking — blocking bidirectional and enforced in RLS, not in the UI.
+   `profiles` has six columns today and none of them is a handle, an avatar or a visibility
+   setting.
+2b. **An accepted tag becomes the accepter's own record**, per the section above, and
+   removal retracts rather than deletes. Without this, everything a person accepts stays
+   hostage to whoever tagged them.
+3. **Cross-account tagging with acceptance.** The acceptance machinery works, but it is
+   keyed to people *inside* one account and the write path takes a single profile id, so
+   *"I was out with Maya"* cannot be recorded at all.
+4. **The three scopes**, on the map pill, Settings ▸ Stats and Insights together.
+
+The pills are last because they are the only easy part.
+
+---
+
 ## APPROVED 2026-08-30 — THE ORDER OF WORK, AND WHAT THE FOUR-WAY AUDIT FOUND
 
 Erica approved this on 2026-08-30 after a four-way audit run in parallel against **this
@@ -306,6 +463,7 @@ Every line below was measured, not inferred. None of it was in any prior list.
 | 11 | **`auth_leaked_password_protection` is not "a simple toggle"** | `PATCH /config/auth {"password_hibp_enabled":true}` → **HTTP 402 Payment Required**. It is gated behind a paid Supabase plan. A billing decision, not a setting |
 | 12 | STATE.md's own scale claim for the spaces migration is wrong | Claimed *"58 tables, 97 policies and 230 functions"*. Measured: **57** tables, **81** policies, **201** SECURITY DEFINER functions. Smaller than advertised; still one indivisible migration |
 | 14 | **The category pills touched each other on a phone** — `.cat-pills` had **no CSS rule at all**, so twelve pills fell into normal flow with 0px between them. `.cat-pill`'s `flex: none` had been inert since it was written, because nothing ever made the parent a flex container | Measured 0px between "Jeeping" and "Camping" at 390px. Fixed in PR #174. The other tight rows were checked and left alone — `star-rating`/`primary-nav` at 1px and `ps-who-toggle`/`layers-control` at 2px are segmented controls, tight on purpose |
+| 15 | **Unanswered participation claims were counting in shared stats** — 15 rows sat in `proposed` with `tagged_by`, `rule_id` and real evidence all NULL. They were not person-to-person tags at all but the app's own guess that both members were on a visit, parked where the asking screen could never surface them, because it only shows claims a PERSON raised. Six of the 164 shared keys were among them | Erica, 2026-08-30: *"I do not want you to go back and ask permission for the 55 he is already included on — just mark it that he accepted the tag."* Done in `0279`: **15 → 0 proposed**, 1234 → 1249 accepted. Only `participation_status` changed — `decided_by` stays NULL and `evidence` stays `unknown`, so the record still admits these were never personally confirmed rather than forging a decision. A claim a real person raises is untouched and still has to be answered |
 | 13 | Genuinely healthy | **Zero console errors, zero failed requests, zero horizontal overflow across 15 routes.** R2 and the database agree exactly: 366 objects, 366 referenced keys, 0 orphans, 0 missing |
 
 ### THE APPROVED ORDER
@@ -320,7 +478,8 @@ Erica: *"that order is fine."* Items 1–3 are in flight as of 2026-08-30.
 | 4 | **Unify "who was there"** (finding 5) | 🟡 **BUILT, NOT YET LIVE-VERIFIED — PR #176.** All seven surfaces now read one list. The three that did not — the card's per-visit row, the card's add-a-visit form and `/visit/:id` — each re-implemented `whoChoices()` by hand, and their "Just me" branch (`p.id === profile?.id`) only fired when the signed-in profile was itself a row in `map_people`, which is why the audit read the list back as "Together · Just Erica · Just Josh". It is always the second choice now. **"Anyone" is added and is deliberately NOT merged into "Together"**: a filter's *do not narrow this* and an attribution's *all of us* are different answers, and merging them would hide rows — `/places/edit` lists a place nobody has recorded a visit to under `all` and never under `both`. `whoFilterChoices()` = `ANYONE_KEY` + exactly `whoChoices()`, so the distinction is explicit rather than accidental; the word is the one §8b-i approved and the Map has used since 0260. `/places/edit`'s filter had been re-adding its everyone pill with "Together" typed in by hand, so it read "All · Just me · Just Josh · Together" and went on saying "Together" for three people; `/bucket` said the retired word **"Both"** twice, in the filter and on every row, long after 2026-08-15 retired it. **The comment at `PlacePanel.tsx:1683` was two instructions out of date and is recorded rather than obeyed**: it asks for "Both", but 2026-08-15 (*"the view is Together so investigate why you are saying Both"*) changed that very line to `everyoneLabel()` the same day and left the comment behind, and 2026-08-17 settled the wider ban — *"Fine on a control."* Obeying it would have put "Both" back on the live site. Dead `components/PersonFilter.tsx` deleted (32 lines, zero importers). The source guard that only ever read Settings.tsx now names **all seven** surfaces, which is how `/bucket` kept the retired word for a year. Presentation only — `set_visit_solo` still takes one profile id, so **no surface here can say "two of us three"**; that stays item 7. |
 | 5 | **Reconcile the disagreeing numbers** (finding 3) | queued |
 | 6 | **Needs Attention** (finding 4) — filtered destinations per tile, and real error feedback when an RPC fails | queued |
-| 7 | **Multi-user tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam | queued |
+| 7 | **Add / remove / block another user** — a directory, a public profile with a handle, and a connection that can be added, **removed** and **blocked**. Blocking is bidirectional and enforced in RLS, never only in the UI. The word is **add**, not friend (§0.2) | queued — needs item 9 underneath it |
+| 7b | **Cross-account tagging with acceptance** (findings 8, 9, 10) — a real user lookup, not pills; the tagged person must accept. Requires reconciling the people/profile seam: the read side keys on **people**, the write side on **profiles**, and `set_visit_solo` takes a single profile id | queued |
 | 8 | **The three SECURITY DEFINER views** — `activity_profiles`, `activity_provenance`, `visit_profiles`. §6c has the measured per-member row counts. **Must land before anyone else has an account** | queued |
 | 9 | **Spaces, friends, public profiles** (Phase 3b) — the gate on everything social. One indivisible migration | queued |
 | 10 | **Settings' three destinations** — `Account \| Integrations \| Data & Privacy`, per the 08-20 ruling above | queued |
@@ -3654,13 +3813,20 @@ in their photos/memories, retrieve everything they did with one or several peopl
 that same selection for statistics.
 
 There is no privileged Partner data type. A partner may be a favourite shortcut, but query,
-participation and statistics contracts are identical for every person. Remove `Together / Just me / Just Josh` as the permanent model; Together is a people query with ALL selected.
+participation and statistics contracts are identical for every person.
+
+> **SUPERSEDED, 2026-08-30.** This section used to end *"Together is a people query with ALL
+> selected"*, and the contract used to name an **ALL/ANY** operator. Erica removed both:
+> *"All or Any makes no sense for this."* The scope model is now **§0.2** — My Stats, Our
+> Stats, and a person's own stats — and `Together`, `Just me`, `Just Josh`, `Both`, `All`
+> and `Anyone` are retired words that must not reappear in a control, a function name or a
+> label. Everything else in this section still stands.
 
 The authoritative implementation contract is at the top of this file: owner-scoped private
 contacts and registered users; account access separate from memory/event participation; one
 enforceable memory-person relationship; verification separate from sharing; photo presence
-not silently promoted to outing participation; canonical-outing filters; and one people +
-ALL/ANY + time/category contract for Map, Overview, Places, Timeline and statistics.
+not silently promoted to outing participation; canonical-outing filters; and the §0.2 scope
+contract for Map, Overview, Places, Timeline and statistics.
 
 #### 8b-ii. EVENTS, INVITATIONS AND MESSAGING *(Erica, 2026-08-20 — approved requirements; previews pending)*
 
