@@ -54,15 +54,7 @@ export const NO_RELATIONSHIP: Relationship = {
 };
 
 export type ActionKey =
-  | 'add'
-  | 'accept'
-  | 'decline'
-  | 'remove'
-  | 'cancel'
-  | 'follow'
-  | 'unfollow'
-  | 'block'
-  | 'unblock';
+  'add' | 'accept' | 'decline' | 'remove' | 'cancel' | 'follow' | 'unfollow' | 'block' | 'unblock';
 
 export interface ConnectionAction {
   key: ActionKey;
@@ -253,4 +245,93 @@ const TRIED: Record<ActionKey, string> = {
 
 export function triedSaying(key: ActionKey): string {
   return TRIED[key];
+}
+
+// ---------------------------------------------------------------------------
+// Your connections, in the order they need answering
+// ---------------------------------------------------------------------------
+
+export interface ConnectedPerson {
+  id: string;
+  display_name: string | null;
+  rel: Relationship;
+}
+
+export interface ConnectionSection {
+  key: 'waiting' | 'asked' | 'added' | 'following' | 'followers' | 'blocked';
+  title: string;
+  note: string;
+  people: ConnectedPerson[];
+}
+
+/**
+ * Every connection, in ONE section each, ordered by what is owed.
+ *
+ * A question somebody asked you comes first, because it is the only row on the screen that
+ * another person is waiting on. Nobody appears twice: an add and a follow can both be true,
+ * and listing the same person under two headings makes a list of eight people look like
+ * twelve. The rest of the relationship is said in the row's own sentence.
+ */
+export function connectionSections(rows: ConnectionRow[]): ConnectionSection[] {
+  const rels = relationshipsFrom(rows);
+  const names = new Map<string, string | null>();
+  for (const r of rows) {
+    if (r?.profile_id && !names.has(r.profile_id)) names.set(r.profile_id, r.display_name);
+  }
+
+  const sections: ConnectionSection[] = [
+    {
+      key: 'waiting',
+      title: 'Waiting on you',
+      note: 'They asked to add you. An add is mutual, so nothing is shared until you answer.',
+      people: [],
+    },
+    {
+      key: 'asked',
+      title: 'You asked',
+      note: 'Waiting on their answer. You can take it back.',
+      people: [],
+    },
+    {
+      key: 'added',
+      title: 'Added',
+      note: 'They see what you share with the people you added. Either side can remove it.',
+      people: [],
+    },
+    {
+      key: 'following',
+      title: 'You follow',
+      note: 'One-way. You see only what these people made public.',
+      people: [],
+    },
+    {
+      key: 'followers',
+      title: 'Follows you',
+      note: 'They see only what you made public.',
+      people: [],
+    },
+    {
+      key: 'blocked',
+      title: 'Blocked',
+      note: 'Neither of you can reach the other. Unblocking restores nothing.',
+      people: [],
+    },
+  ];
+  const into = (key: ConnectionSection['key'], person: ConnectedPerson) =>
+    sections.find((s) => s.key === key)?.people.push(person);
+
+  for (const [id, rel] of rels) {
+    const person: ConnectedPerson = { id, display_name: names.get(id) ?? null, rel };
+    if (rel.blocked) into('blocked', person);
+    else if (rel.add === 'incoming') into('waiting', person);
+    else if (rel.add === 'outgoing') into('asked', person);
+    else if (rel.add === 'mutual') into('added', person);
+    else if (rel.followingThem) into('following', person);
+    else if (rel.followsYou) into('followers', person);
+  }
+
+  const byName = (a: ConnectedPerson, b: ConnectedPerson) =>
+    (a.display_name ?? '').localeCompare(b.display_name ?? '');
+  for (const s of sections) s.people.sort(byName);
+  return sections.filter((s) => s.people.length > 0);
 }

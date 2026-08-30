@@ -73,14 +73,29 @@ export async function searchPeople(query: string, limit = 20): Promise<FoundPers
 export async function idsForHandles(handles: string[]): Promise<Map<string, string>> {
   const wanted = handles.filter(Boolean);
   if (wanted.length === 0) return new Map();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, handle')
-    .in('handle', wanted);
+  const { data, error } = await supabase.from('profiles').select('id, handle').in('handle', wanted);
   if (error) throw error;
   const map = new Map<string, string>();
   for (const row of (data ?? []) as { id: string; handle: string | null }[]) {
     if (row.handle) map.set(row.handle, row.id);
+  }
+  return map;
+}
+
+/**
+ * Profile id → handle, for the rows `my_connections()` returns.
+ *
+ * It gives a display name and no handle, and a name is not a link — the profile route is
+ * keyed by handle because that is what a person can type, say out loud and bookmark (0283).
+ */
+export async function handlesForIds(ids: string[]): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids.filter(Boolean))];
+  if (wanted.length === 0) return new Map();
+  const { data, error } = await supabase.from('profiles').select('id, handle').in('id', wanted);
+  if (error) throw error;
+  const map = new Map<string, string>();
+  for (const row of (data ?? []) as { id: string; handle: string | null }[]) {
+    if (row.handle) map.set(row.id, row.handle);
   }
   return map;
 }

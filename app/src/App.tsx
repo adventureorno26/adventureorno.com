@@ -63,6 +63,13 @@ const Wrapped = lazyWithReload(() => import('./routes/Wrapped'));
 const BucketList = lazyWithReload(() => import('./routes/BucketList'));
 const ImportTimeline = lazyWithReload(() => import('./routes/ImportTimeline'));
 const VisitPage = lazyWithReload(() => import('./routes/VisitPage'));
+// Finding people, and one person's public page. Two screens, two questions: `/people` is
+// "who is out there and where do I stand with them", `/profile/:handle` is "who is this".
+// The handle is the path segment because it is the thing a person can type and say out
+// loud — and `profile` and `people` are both in 0283's reserved list, so no handle can
+// ever collide with either route.
+const People = lazyWithReload(() => import('./routes/People'));
+const PublicProfile = lazyWithReload(() => import('./routes/PublicProfile'));
 
 function FullScreenMessage({ children }: { children: React.ReactNode }) {
   return <div className="center-screen">{children}</div>;
@@ -328,6 +335,28 @@ export default function App() {
               }
             />
             <Route path="/export" element={<Navigate to="/settings/data/export" replace />} />
+            {/* SEARCHING FOR PEOPLE, and answering what somebody asked you. `/people` is a
+                static segment, so it is matched ahead of `/people/:personId` below and the
+                two cannot shadow each other. */}
+            <Route
+              path="/people"
+              element={
+                <RequireAuth>
+                  <People />
+                </RequireAuth>
+              }
+            />
+            {/* One person's PUBLIC card, by handle. Not the same page as /people/:personId,
+                which is a person you recorded (they may have no account at all); this one is
+                an account that published itself. */}
+            <Route
+              path="/profile/:handle"
+              element={
+                <RequireAuth>
+                  <PublicProfile />
+                </RequireAuth>
+              }
+            />
             {/* One person's memories — a target route in the approved navigation, and the
                 other half of §8b-i: tagging without retrieval is half a feature. */}
             <Route
