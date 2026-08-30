@@ -11,7 +11,7 @@ import {
   type MapPerson,
   type WishInfo,
 } from '../lib/data';
-import { everyoneLabel } from '../lib/participants';
+import { whoLabel } from '../lib/participants';
 import { retrieveResult, type SearchResult } from '../lib/maptiler';
 import { categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import type { Place } from '../lib/types';
@@ -29,13 +29,14 @@ export default function BucketList() {
   const [busy, setBusy] = useState(false);
   const [wishes, setWishes] = useState<Record<string, WishInfo>>({});
   const [onlyEveryone, setOnlyEveryone] = useState(false);
-  // THE WORD FOR "ALL OF US" IS NOT TYPED ON THIS PAGE. It said "Both" — the word retired
-  // on 2026-08-15 (*"the view is Together so investigate why you are saying Both"*) —
-  // twice, in the filter and on every row, and with a third member both of them lied.
-  // `everyoneLabel()` is the one place that decides it: Together for two, Everyone for
-  // three or more. The members are only needed for that count.
+  // THERE IS NO WORD FOR "ALL OF US" ON THIS PAGE ANY MORE. It said "Both" twice — in the
+  // filter and on every row — long after 2026-08-15 retired that word (*"the view is
+  // Together so investigate why you are saying Both"*); then it said "Together", which
+  // §0.2 retired in turn. Each fix replaced one word with the next, because the badge was
+  // trying to name a GROUP. It names the PEOPLE now, the same way every other control that
+  // used to carry one of those words does (Erica, 2026-08-30: *"yes, people picker"*) —
+  // and a badge reading "You and Josh" cannot go stale when a third person joins.
   const [people, setPeople] = useState<MapPerson[]>([]);
-  const everyone = everyoneLabel(people);
 
   function load() {
     fetchBucketPlaces()
@@ -158,25 +159,20 @@ export default function BucketList() {
         >
           🎲 Date night — surprise us
         </button>
-        {/* THE SAME TWO ANSWERS AS /places/edit's filter, in the same words and the same
-            order: ANYONE (do not narrow it) and the everyone-word. It was one chip
-            reading "Both want to go", which is the retired word AND a third vocabulary
-            for a question the rest of the app asks with pills. */}
+        {/* ONE SWITCH, AND NO WORD FOR A GROUP. This was a chip reading "Both want to
+            go", then a pair reading "Anyone / Together" — three attempts to name the set
+            of us, each retired in turn. Off shows the whole list; on narrows it to the
+            places nobody has said no to, which is a fact about the wishes rather than a
+            scope, and says so in ordinary English. */}
         <span className="label">Want to go</span>
         <div className="pe-personfilter">
           <button
             type="button"
-            className={onlyEveryone ? '' : 'on'}
-            onClick={() => setOnlyEveryone(false)}
-          >
-            Anyone
-          </button>
-          <button
-            type="button"
             className={onlyEveryone ? 'on' : ''}
-            onClick={() => setOnlyEveryone(true)}
+            aria-pressed={onlyEveryone}
+            onClick={() => setOnlyEveryone(!onlyEveryone)}
           >
-            {everyone}
+            Only what we all want
             {everyoneCount > 0 ? ` (${everyoneCount})` : ''}
           </button>
         </div>
@@ -221,8 +217,10 @@ export default function BucketList() {
                       </span>
                     </Link>
                     {/* Keeps the `both-badge` class on purpose — the styling is written
-                        against that name — while the WORD comes from everyoneLabel(). */}
-                    {w?.everyone && <span className="both-badge">{everyone}</span>}
+                        against that name — while the badge itself now names who. */}
+                    {w?.everyone && (
+                      <span className="both-badge">{whoLabel(w.wanters, people, profile?.id)}</span>
+                    )}
                     {canEdit && (
                       <button
                         className={`want-btn ${mine ? 'on' : ''}`}

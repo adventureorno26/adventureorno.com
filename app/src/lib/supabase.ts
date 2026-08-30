@@ -34,8 +34,8 @@ export const supabase = createClient<Database>(url, key, {
  *
  * The type generator describes an argument by its SQL TYPE and never by its
  * NULLABILITY, so a `uuid` argument is typed `string` even when passing NULL is the
- * documented way to use it — `set_visit_solo(null)` means "both", `set_my_rating(null)`
- * clears the rating, `set_photo_visit(null)` lets the photo's own date decide again.
+ * documented way to use it — `set_my_rating(null)` clears the rating and
+ * `set_photo_visit(null)` lets the photo's own date decide again.
  *
  * Named and greppable rather than `as any` scattered about: every use marks a place
  * where NULL is deliberate, not a place where the types were switched off.

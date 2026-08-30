@@ -4,13 +4,10 @@ import { announceWho } from '../lib/whoWasThere';
 import { showSnack } from '../lib/snackbar';
 import type { MapPerson } from '../lib/data';
 import { MANUAL_CATEGORIES, categoryLabel } from '../lib/categories';
-import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
+import { whoSingle } from '../lib/participants';
+import WhoPicker from './WhoPicker';
 import MapSearch from './MapSearch';
 import type { Place } from '../lib/types';
-
-/** 'both' | 'mine' | a profile id. Built from the real members (lib/participants),
- *  never from a hardcoded pair. */
-type Who = string;
 
 /** Compact, place-card-style editor: rename, fix the location with an
  *  address/place search (for photos with no GPS), retag, rate, set who was
@@ -21,28 +18,26 @@ export default function PlaceQuickEdit({
   meId,
   onUpdated,
   hideWho,
-  visitWho,
-  onVisitWho,
-  soloProfile = null,
+  whoProfiles = [],
 }: {
   place: Place;
   people: MapPerson[];
   meId: string | null;
   onUpdated: (p: Place) => void;
   hideWho?: boolean; // hide the who control entirely
-  // When provided, the Who dropdown is wired to a per-VISIT value instead of the
-  // place-level attribution (used by the photo sorter).
-  visitWho?: Who;
-  onVisitWho?: (w: Who) => void;
-  // Attribution DERIVED from this place's visits (place_attribution). There is no
-  // place-level column any more — reading one was why Rehoboth Beach said "Both"
-  // while its visit was correctly Erica's.
-  soloProfile?: string | null;
+  // WHO IS ON THIS PLACE, derived from its visits (place_attribution). There is no
+  // place-level column — reading one was why Rehoboth Beach claimed everyone while its
+  // visit was correctly Erica's.
+  //
+  // The per-VISIT variant of this control went with the dropdown (2026-08-30). It had no
+  // caller: the photo sorter asks who was on the visit ONCE, above its own copy of this
+  // editor, and passes `hideWho` here. Two props nobody set were two ways for the place
+  // question and the visit question to be answered in the same box again.
+  whoProfiles?: string[];
 }) {
   const [name, setName] = useState(place.name);
   const [busy, setBusy] = useState<string | null>(null);
-  const [solo, setSolo] = useState<string | null>(soloProfile);
-  const choices = whoChoices(people, meId);
+  const [who, setWhoLocal] = useState<string[]>(whoProfiles);
 
   async function patch(p: Partial<Place>, label = 'Saving…') {
     setBusy(label);
@@ -60,21 +55,21 @@ export default function PlaceQuickEdit({
     setBusy(null);
   }
 
-  function who(): Who {
-    // Derived from the visits: null = everyone.
-    return whoKey(solo, meId);
-  }
-  async function setWho(k: Who) {
-    const profileId = whoProfileId(k, meId);
+  async function setWho(ids: string[]) {
+    // ONE NAME, because that is what the place-level writer holds:
+    // `set_place_solo(p_place, p_profile)` takes a single profile id. The picker is
+    // `capacity="one"` for exactly this reason — the alternative is a multi-select that
+    // keeps the first name and reports a save it did not make.
+    const profileId = whoSingle(ids, meId);
     setBusy('Saving…');
     try {
       // setPlaceSolo writes every VISIT at this place; the place itself holds no
       // attribution. It also only STATES your own presence — naming somebody else raises
       // one question about the place (0240/0242), so the control must not show them as
       // being there until they have answered it.
-      const outcome = await setPlaceSolo(place.id, profileId ?? null);
+      const outcome = await setPlaceSolo(place.id, profileId);
       announceWho(outcome, people);
-      if (!outcome.asked.length) setSolo(profileId ?? null);
+      if (!outcome.asked.length) setWhoLocal(profileId ? [profileId] : []);
       onUpdated(place);
     } catch (e) {
       showSnack({
@@ -178,26 +173,15 @@ export default function PlaceQuickEdit({
         {!hideWho && (
           <div className="pqe-row pqe-whocol">
             <span>Who</span>
-            {onVisitWho ? (
-              <select
-                value={visitWho ?? 'both'}
-                onChange={(e) => onVisitWho(e.target.value as Who)}
-              >
-                {choices.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select value={who()} onChange={(e) => void setWho(e.target.value as Who)}>
-                {choices.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            )}
+            <WhoPicker
+              people={people}
+              meId={meId}
+              value={who}
+              capacity="one"
+              heading="Who goes to this place?"
+              note="This sets every visit here, and the place-level record holds one name. Nobody ticked means it was just you."
+              onChange={(ids) => void setWho(ids)}
+            />
           </div>
         )}
       </div>

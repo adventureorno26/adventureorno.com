@@ -28,7 +28,7 @@ import {
   setVisitIsTrip,
   type TripContent,
   setVisitDates,
-  setVisitSolo,
+  setVisitParticipants,
   updatePlace,
   type MapPerson,
   type CardView,
@@ -43,7 +43,7 @@ import {
 } from '../lib/types';
 import { CATEGORIES, categoryIcon, categoryLabel, effectiveCategories } from '../lib/categories';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchActivitiesForPlaceTree, fetchMileageForPlaces, setActivitySolo } from '../lib/strava';
+import { fetchActivitiesForPlaceTree, fetchMileageForPlaces } from '../lib/strava';
 import { announceWho } from '../lib/whoWasThere';
 import { photosEnabled } from '../lib/photos';
 import { showSnack } from '../lib/snackbar';
@@ -58,7 +58,8 @@ import RouteMiniMap from './RouteMiniMap';
 import OsmCredit from './OsmCredit';
 import { pluralLabel } from '../lib/plural';
 import { byYear, visitDates } from '../lib/visitDates';
-import { whoChoices, whoKey, whoProfileId } from '../lib/participants';
+import { whoForWrite } from '../lib/participants';
+import WhoPicker from './WhoPicker';
 import StarRating from './StarRating';
 
 interface Props {
@@ -159,10 +160,9 @@ export default function PlacePanel({
   const [addingVisit, setAddingVisit] = useState(false);
   const [vStart, setVStart] = useState('');
   const [vEnd, setVEnd] = useState('');
-  // A CHOICE KEY, never a raw profile id: 'both' | 'mine' | a profile id. `whoProfileId`
-  // turns it into the id the write API takes, which is the same translation every other
-  // "who was there" control in the app does.
-  const [vWho, setVWho] = useState('both');
+  // WHO WAS THERE, as profile ids — the same value every other "who was there" control
+  // in the app holds. Empty means it was just you; nothing is written until Save.
+  const [vWho, setVWho] = useState<string[]>([]);
   const visitKeyRef = useRef<string | null>(null); // idempotency key per visit submit
   // Editing a visit's dates — "stretch a visit into a trip by adding more days".
   const [editingVisit, setEditingVisit] = useState<string | null>(null);
@@ -210,9 +210,11 @@ export default function PlacePanel({
 
   const [mergeAsk, setMergeAsk] = useState<{ keep: string; absorb: string } | null>(null);
   const [mergingVisits, setMergingVisits] = useState(false);
-  /** visit id / activity id → the ONE person on it, or null when everyone was.
-   *  Derived from participant rows; `solo_profile` cannot express three people. */
-  const [soloBy, setSoloBy] = useState<Map<string, string | null>>(new Map());
+  /** visit id / activity id → the people on it, as profile ids. THE WHOLE LIST: this
+   *  used to keep "the one person, or null when everyone was", which is `solo_profile`'s
+   *  reading in a Map — it could not tell a visit with three of us from a visit with two,
+   *  and saving from that reading wrote the difference away. */
+  const [whoBy, setWhoBy] = useState<Map<string, string[]>>(new Map());
   const [name, setName] = useState(place.name);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,10 +234,9 @@ export default function PlacePanel({
       .then(setPeople)
       .catch(() => undefined);
   }, []);
-  /** ONE list for both "who was there" controls on this card — the visit row and the
-   *  add-a-visit form. They used to build their own, which is how the row and the form
-   *  could disagree about what the choices even were. */
-  const whoOptions = useMemo(() => whoChoices(people, profile?.id), [people, profile?.id]);
+  // ONE CONTROL for both "who was there" questions on this card — the visit row and the
+  // add-a-visit form both render `<WhoPicker>`. They used to build their own option
+  // lists, which is how the row and the form could disagree about what the choices were.
 
   useEffect(() => {
     setReview(place.review ?? '');
@@ -268,14 +269,21 @@ export default function PlacePanel({
     // used to read the raw `is_trip` column, which only ever means "someone marked
     // it" — so a week away that nobody thought to mark did not read as a trip.
     setQualifiedTrips(new Set(card.visits.filter((v) => v.is_trip_qualified).map((v) => v.id)));
-    // "Who" on a row is now a QUESTION ABOUT THE PARTICIPANT ROWS: exactly one person
-    // means that person, anything else means everyone. The old `solo_profile` said the
-    // same thing with a null, which is why it could never describe a third member.
-    const solo = new Map<string, string | null>();
-    const only = (people: { id: string }[]) => (people.length === 1 ? people[0].id : null);
-    for (const v of card.visits) solo.set(v.id, only(v.people));
-    for (const r of card.routes) solo.set(r.id, only(r.people));
-    setSoloBy(solo);
+    // "Who" on a row IS the participant rows — carried whole rather than reduced to
+    // "one person, or everyone". The card already returns the list; the control now
+    // takes the list, so nothing has to be inferred back out of a null.
+    const whoOn = new Map<string, string[]>();
+    for (const v of card.visits)
+      whoOn.set(
+        v.id,
+        v.people.map((p) => p.id),
+      );
+    for (const r of card.routes)
+      whoOn.set(
+        r.id,
+        r.people.map((p) => p.id),
+      );
+    setWhoBy(whoOn);
     setVisitStats(
       Object.fromEntries(
         card.visits.map((v) => [
@@ -342,19 +350,20 @@ export default function PlacePanel({
     setTrailActs(await fetchActivitiesForPlaceTree(place.id).catch(() => []));
   }
 
-  // Set who was on a visit row. Activity rows update the activity (visits then
-  // re-infer); visit-only rows set a manual override. Reloads both after.
-  async function setRowSolo(
-    target: { type: 'activity' | 'visit'; id: string },
-    profileId: string | null,
-  ) {
+  // Set who was on a visit row — the whole list, which is what the picker collects and
+  // what `set_visit_participants` stores. Reloads both lists after.
+  //
+  // THE ACTIVITY BRANCH IS GONE with the dropdown (2026-08-30) rather than ported, and
+  // it is worth saying it was already unreachable: the control renders only for
+  // `r.target.type === 'visit'`, because Erica — *"once there was more than one visit to
+  // a place the activities should only be editable in each visit"* — put that question
+  // inside the visit. Porting a `setActivitySolo` call no caller can reach would have
+  // meant carrying its one-name limit into a picker nobody can open.
+  async function setRowWho(visitId: string, ids: string[]) {
     try {
-      // WHAT CAME BACK MATTERS NOW. Naming somebody else is a question, not a fact
+      // WHAT CAME BACK MATTERS. Naming somebody else is a question, not a fact
       // (0236/0240), and the only way this screen can say so is to be told (0243).
-      const outcome =
-        target.type === 'activity'
-          ? await setActivitySolo(target.id, profileId)
-          : await setVisitSolo(target.id, profileId);
+      const outcome = await setVisitParticipants(visitId, whoForWrite(ids, profile?.id));
       announceWho(outcome, people);
       await Promise.all([reloadActs(), reloadVisits()]);
     } catch (e) {
@@ -648,20 +657,28 @@ export default function PlacePanel({
       // Atomic + idempotent: the visit and its attribution log together, and a
       // double-submit/retry with the same key won't create a second visit.
       if (!visitKeyRef.current) visitKeyRef.current = newExperienceKey();
-      await addExperience(
+      const res = await addExperience(
         visitKeyRef.current,
         { id: place.id },
         {
           date: start,
           end_date: end < start ? start : end,
-          who: whoProfileId(vWho, profile?.id) ?? undefined,
+          // `create_experience` takes ONE name and writes it as the visit's participant.
+          // Yours is the one it can write as a fact, so the visit is created as yours and
+          // anyone else you tagged is added below — which is where they become a question
+          // they have to answer (0240) rather than a row the creation quietly asserted.
+          who: 'me',
         },
       );
+      const tagged = whoForWrite(vWho, profile?.id);
+      if (res.visit_id && (tagged.length > 1 || tagged[0] !== profile?.id)) {
+        announceWho(await setVisitParticipants(res.visit_id, tagged), people);
+      }
       visitKeyRef.current = null;
       setAddingVisit(false);
       setVStart('');
       setVEnd('');
-      setVWho('both');
+      setVWho([]);
       await reloadVisits();
       showSnack({ message: 'Visit logged.' });
     } catch (e) {
@@ -1158,7 +1175,7 @@ export default function PlacePanel({
       start: '' as string,
       end: '' as string,
       sort: activityDay(a),
-      solo: soloBy.get(a.id) ?? null,
+      who: whoBy.get(a.id) ?? [],
       // An outing logged on a SECTION of a trail names that section, exactly as a
       // visit does — the segment rides on the row, not on a Sections list.
       seg:
@@ -1208,7 +1225,7 @@ export default function PlacePanel({
       start: v.start_date as string,
       end: v.end_date as string,
       sort: v.start_date,
-      solo: soloBy.get(v.id) ?? null,
+      who: whoBy.get(v.id) ?? [],
       // merge_visits refuses across places, so an offer must not span a trail and
       // one of its sections.
       placeId: v.place_id as string | null,
@@ -1684,38 +1701,35 @@ export default function PlacePanel({
                     row keeps its control and an activity row does not — you open
                     the visit, which is where that outing lives. */}
                 {canEdit && people.length >= 2 && r.target.type === 'visit' && (
-                  /* THE COMMENT THAT USED TO SIT HERE SAID: *"Not 'Together' — Erica
-                     asked for that word out of the Visits section entirely … 'Both' is
-                     the word the app already uses for it."* It was true when it was
-                     written and has been superseded TWICE since, so it is recorded
-                     rather than obeyed:
+                  /* THE LEDGER FOR THIS ONE CONTROL, kept because every instruction here
+                     was superseded rather than wrong, and a line with no history is a line
+                     somebody re-argues:
 
+                       - the original: *"Not 'Together' — Erica asked for that word out of
+                         the Visits section entirely … 'Both' is the word the app already
+                         uses for it."*
                        - 2026-08-15, Erica: *"the view is Together so investigate why you
-                         are saying Both"*. #94 changed this very line to
-                         `everyoneLabel()` that day; only the comment was left behind, so
-                         it has contradicted the code it sits on ever since.
+                         are saying Both"*. #94 changed this very line that day and left
+                         the comment behind, so it contradicted its own code for a fortnight.
                        - 2026-08-17, asked directly because the ban was hers — *"Does 'no
-                         together in the visit section' still stand, now that the words
-                         sit on a control you press?"* — **"Fine on a control."**
-                         `erica-asked-for.spec.ts` now strips every control before
-                         checking, so the ban is on ASSERTING it, not on saying it here.
+                         together in the visit section' still stand, now that the words sit
+                         on a control you press?"* — **"Fine on a control."**
+                       - 2026-08-30, and this is the one in force: §0.2 retired the words
+                         outright, and Erica supplied the replacement — *"yes, people
+                         picker."* There is no everyone-word left to argue about, because
+                         there is no word: the control shows the NAMES on the visit, and
+                         nobody tagged means it was just you.
 
-                     A <select> is a control you press. The words stay. */
-                  <select
-                    className="attribution-select visit-who"
-                    value={whoKey(r.solo ?? null, profile?.id)}
-                    title="Who was here"
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) =>
-                      void setRowSolo(r.target, whoProfileId(e.target.value, profile?.id))
-                    }
-                  >
-                    {whoOptions.map((c) => (
-                      <option key={c.key} value={c.key}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                     `set_visit_participants` stores the list, so the picker is not
+                     collapsing anything on its way to the database. */
+                  <span className="visit-who" onClick={(e) => e.stopPropagation()}>
+                    <WhoPicker
+                      people={people}
+                      meId={profile?.id}
+                      value={r.who}
+                      onChange={(ids) => void setRowWho(r.target.id, ids)}
+                    />
+                  </span>
                 )}
               </div>
 
@@ -1910,17 +1924,7 @@ export default function PlacePanel({
                 {people.length >= 2 && (
                   <>
                     <label>Who was there</label>
-                    <select
-                      className="attribution-select"
-                      value={vWho}
-                      onChange={(e) => setVWho(e.target.value)}
-                    >
-                      {whoOptions.map((c) => (
-                        <option key={c.key} value={c.key}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
+                    <WhoPicker people={people} meId={profile?.id} value={vWho} onChange={setVWho} />
                   </>
                 )}
                 <div className="btn-row">
@@ -1930,7 +1934,7 @@ export default function PlacePanel({
                   <button
                     onClick={() => {
                       setAddingVisit(false);
-                      setVWho('both');
+                      setVWho([]);
                     }}
                   >
                     Cancel
