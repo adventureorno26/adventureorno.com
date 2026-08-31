@@ -42,7 +42,13 @@ import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
 import PeopleFilter from '../components/PeopleFilter';
 import { myStats, scopeLabel, scopeSentence, type PeopleSelection } from '../lib/statsScope';
-import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
+import {
+  fetchMemoryTagsToConfirm,
+  fetchMyPeople,
+  respondToMemoryTag,
+  type MemoryTagToConfirm,
+  type PersonContact,
+} from '../lib/memoryPeople';
 import { nextOpenPanel, panelIsOpen, type OpenPanel } from '../lib/disclosure';
 import type { Place } from '../lib/types';
 import { showSnack } from '../lib/snackbar';
@@ -1004,6 +1010,93 @@ function PublicProfileCard() {
   );
 }
 
+/**
+ * TAG APPROVALS — built 2026-08-30, because the heading above it had been lying.
+ *
+ * §"AN ACCEPTED TAG IS MINE" and §0.2 both turn on a person being ASKED before somebody
+ * else's claim about them counts: *"Only accepted tags count in Our Stats. A proposed tag
+ * is a claim, not shared history."* The whole flow was BUILT and APPLIED — `0248` gives
+ * `my_memory_tags_to_confirm()` and `respond_to_memory_tag()`, and `lib/memoryPeople.ts`
+ * has wrapped them for months.
+ *
+ * IT WAS UNREACHABLE. Its only surface was `routes/Inbox.tsx`, which **nothing imports** —
+ * `App.tsx` mounts no `/inbox` route, and `/inbox` REDIRECTS to `/settings/data/attention`
+ * (measured live 2026-08-30). So the file is dead code, and the one screen that could
+ * answer a tag could not be opened. Meanwhile the section header here has read *"People
+ * and tag approvals"* the whole time and rendered join requests — account access, a
+ * different question entirely — so the page promised a control it did not contain.
+ *
+ * NOT OWNER-GATED, and that is the point. Anybody can be tagged, so anybody must be able
+ * to answer. The join-request card beside it stays owner-only because who may SIGN IN is
+ * the account owner's business; who is in YOUR photograph is yours. §8b-i keeps account
+ * access and memory participation apart on purpose, and this is that line.
+ */
+function TagApprovalsCard() {
+  const [tags, setTags] = useState<MemoryTagToConfirm[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  function load() {
+    fetchMemoryTagsToConfirm()
+      .then(setTags)
+      .catch(() => setTags([]));
+  }
+  useEffect(load, []);
+
+  async function answer(t: MemoryTagToConfirm, accept: boolean) {
+    setBusy(t.subject_id);
+    setErr(null);
+    try {
+      await respondToMemoryTag(t.subject_id, accept);
+      setTags((ts) => (ts ?? []).filter((x) => x.subject_id !== t.subject_id));
+      showSnack({ message: accept ? 'Confirmed it’s you.' : 'Removed you from that.' });
+    } catch (e) {
+      setErr(
+        whyItFailed(accept ? 'Couldn’t confirm that' : 'Couldn’t remove you from that', e, {
+          online: navigator.onLine,
+        }),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Nothing to answer is the normal state, and it says so rather than rendering an
+  // empty box — the same rule the Trips list follows.
+  if (tags === null) return null;
+
+  return (
+    <div className="card tag-approvals">
+      <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+        {tags.length === 0
+          ? 'Nothing to answer. When somebody says you were somewhere, or that you are in a photo, it waits here until you say so.'
+          : 'Somebody says you were part of these. Until you accept, they are their claim and not your history.'}
+      </p>
+      {tags.map((t) => (
+        <div key={t.subject_id} className="tag-approval-row">
+          <span className="tag-approval-what">
+            {t.kind === 'photo' ? 'A photo you are in' : 'An outing you were on'}
+            <span className="label"> · {new Date(t.created_at).toLocaleDateString()}</span>
+          </span>
+          <span className="btn-row">
+            <button
+              className="primary"
+              disabled={busy === t.subject_id}
+              onClick={() => void answer(t, true)}
+            >
+              Yes, that’s me
+            </button>
+            <button disabled={busy === t.subject_id} onClick={() => void answer(t, false)}>
+              No
+            </button>
+          </span>
+        </div>
+      ))}
+      {err && <div className="pub-error">{err}</div>}
+    </div>
+  );
+}
+
 function MapAppearanceSection() {
   const [choice, setChoice] = useState<MapAppearance>(mapAppearance());
 
@@ -1777,12 +1870,21 @@ function DataPrivacyDestination() {
       <h2 style={{ marginTop: 28 }}>Sharing{memberNames ? ` — ${memberNames}` : ''}</h2>
       <SharedHub />
 
+      {/* TAG APPROVALS COME FIRST AND ARE NOT OWNER-GATED. Anybody can be tagged, so
+          anybody must be able to answer — §8b-i keeps account access and memory
+          participation apart, and this is that line. Until 2026-08-30 the only surface
+          for this was `routes/Inbox.tsx`, which nothing imports and whose `/inbox` route
+          redirects away, so the heading below said "tag approvals" over a card that
+          answered join requests instead. */}
+      <h2 style={{ marginTop: 28 }}>Tag approvals</h2>
+      <TagApprovalsCard />
+
       {profile?.role === 'owner' && (
         <>
           {/* TWO DIFFERENT LISTS, and the order says which is which. Membership is who
               can SIGN IN; below it are the people you can TAG, who need no account —
               §8b-i keeps account access and memory participation apart on purpose. */}
-          <h2 style={{ marginTop: 28 }}>People and tag approvals</h2>
+          <h2 style={{ marginTop: 28 }}>People and membership</h2>
           <JoinRequestsCard />
           <PeopleCard meId={profile.id} />
           <h3 style={{ margin: '20px 0 8px' }}>Your people</h3>

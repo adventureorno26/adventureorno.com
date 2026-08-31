@@ -40,11 +40,24 @@ export function matchableBase(route: string): string {
   return route.split('/:')[0];
 }
 
-/** Does the live spec go to this route anywhere? */
+/** Source with its comments removed.
+ *
+ *  A ROUTE NAMED IN A COMMENT IS NOT A CHECKED ROUTE, and the first version of this file
+ *  counted one as covered. On 2026-08-30 a comment explaining that `/inbox` redirects to
+ *  `/settings/data/attention` made THREE listed routes look checked, and the ratchet
+ *  demanded they be struck off the exception list — which would have recorded them as
+ *  covered when nothing asserts anything about them. That is precisely the "checked off
+ *  without being checked" this file exists to stop, arriving inside the guard itself.
+ *  `participants.test.ts` had already learned the same lesson and strips comments before
+ *  applying its rule; so does this now. */
+const stripComments = (src: string) =>
+  src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** Does the live spec actually GO to this route — in code, not in prose? */
 export function isCovered(route: string, specSource: string): boolean {
   const base = matchableBase(route);
   if (!base || base === '/') return true; // the map is the root and every check loads it
-  return specSource.includes(base);
+  return stripComments(specSource).includes(base);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

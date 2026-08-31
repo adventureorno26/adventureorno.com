@@ -1115,4 +1115,28 @@ it.describe('the rest of the app — what she asked for', () => {
       );
     }
   });
+
+  // ALSO RED ON PURPOSE until this deploys — rule 1.
+  //
+  // §"AN ACCEPTED TAG IS MINE" and §0.2 both turn on being ASKED before somebody else's
+  // claim counts: *"Only accepted tags count in Our Stats. A proposed tag is a claim, not
+  // shared history."* The flow was BUILT and APPLIED in 0248 and was UNREACHABLE: its only
+  // surface was `routes/Inbox.tsx`, which nothing imports, and `/inbox` redirects to
+  // `/settings/data/attention` — measured live 2026-08-30. Worse, the section heading on
+  // Data & Privacy read "People and tag approvals" over a card that answered JOIN requests,
+  // which is account access and a different question. The heading promised a control the
+  // page did not contain.
+  it('a tag is a claim until you answer it — and you can answer it', async ({ page }) => {
+    await page.goto('/settings/data');
+    await expect(page.getByRole('heading', { name: /settings/i }).first()).toBeVisible();
+    // The positive first: the section exists, by the name that describes it.
+    await expect(page.getByRole('heading', { name: /^Tag approvals$/i })).toBeVisible();
+    await expect(page.locator('.tag-approvals')).toBeVisible();
+    // It says what a tag IS while there is nothing to answer, rather than drawing a box.
+    await expect(page.locator('.tag-approvals')).toContainText(
+      /Nothing to answer|their claim and not your history/i,
+    );
+    // And the old heading that promised this over the wrong card is gone.
+    await expect(page.getByRole('heading', { name: /People and tag approvals/i })).toHaveCount(0);
+  });
 });

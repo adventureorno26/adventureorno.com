@@ -7996,3 +7996,23 @@ button.mi-row:hover {
   color: var(--danger, #ff6b6b);
   font-size: 13px;
 }
+
+/* ─────────── TAG APPROVALS (Settings ▸ Data & Privacy, 2026-08-30) ───────────
+   One row per thing somebody says you were part of: what it is on the left, the
+   two answers on the right. Text controls only, per her standing preference. */
+.tag-approval-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.tag-approval-row:first-of-type {
+  border-top: none;
+}
+.tag-approval-what {
+  min-width: 0;
+  flex: 1 1 auto;
+}
