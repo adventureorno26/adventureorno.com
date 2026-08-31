@@ -741,6 +741,60 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### THE FOG BELONGED TO NOBODY — `0297` APPLIED 2026-08-31
+
+**Two nightly jobs failed on their first run after the fork**, and reading
+`cron.job_run_details` is what found it — nothing else reports a cron failure:
+
+```
+08-31 04:20  dedupe-joint-outings   failed  null value in column "space_id" of relation "suggestions"
+08-31 07:10  rebuild-revealed-area  failed  null value in column "space_id" of relation "revealed_area"
+```
+
+`0295` fixed the first (a suggestion inherits the space of the activity it is about) and
+**could not fix the second**: `revealed_area` carries no owning profile and no foreign key to
+anything with a space, so nothing on the row can answer the question. `0295`'s header names
+it for exactly that reason.
+
+**The failure was the only thing preventing a leak.** `rebuild_revealed_area()` unioned
+*every* photo, ping and activity in the database into **one row, `id = 1`**, enforced by
+`CHECK (id = 1)` — and that row is filed in Erica's space. Had it succeeded it would have
+drawn Josh's travel as uncovered ground on her map. **A job failing is not a boundary.**
+
+Worth writing down because it is counter-intuitive: the `on conflict (id) do update` does
+NOT rescue it. Postgres evaluates column defaults and NOT NULL on the proposed tuple
+**before** conflict resolution, so the insert dies before `do update` is considered.
+
+**`0297` gives the fog one row per space, each built only from that space's own rows.** The
+read side was already ready and had been since `0290` — the policy is
+`USING (is_member(space_id))` and `revealed_area_geojson()` is SECURITY INVOKER. The only
+things in the way were the single-row CHECK and a hard-coded `where id = 1` in the reader.
+
+**Measured on production, before and after, in a rehearsal that was rolled back:**
+
+| | before | after |
+| --- | --- | --- |
+| Erica's fog | 96,662 km² (built 08-30, from everyone's points) | **95,776 km²** |
+| Josh's fog | — (no row existed) | **9,498 km²** |
+
+She loses **886 km², 0.9%** — the ground only Josh had uncovered, which was never hers. Most
+of his overlaps hers, which is what 108 both-tagged visits should look like. **This is a
+visible change on her map and it is the intended one.** Verified after applying: the nightly
+job runs green (`{"spaces": 2}`), and each account reads its own fog through RLS — Erica
+156KB, Josh 32KB, Test Bot 156KB (he is an editor in her space, so the same as hers).
+
+#### THE RULE THIS LEAVES BEHIND, and it caught its own test
+
+**CI's `default_space()` is not production's, so any test that asserts WHERE A ROW LANDS must
+install production's body itself.** `0292` §8 replaces it inside the branch that forks, and an
+empty schema never forks — so a replay keeps 0289's *"biggest space"* fallback, which fills
+`space_id` **non-null and, with two spaces, wrong**. `0295`'s trigger only fires on NULL, so
+under the fallback it never runs at all.
+
+The first draft of `0297`'s test omitted the preamble and section 3 failed: Ben's ping landed
+in Ann's space, so of course her fog covered his ground. That was CI's schema talking, not
+production's. Both `0295`'s and `0297`'s tests now carry the preamble and say why.
+
 ### THE WRITERS NAME THEIR SPACE NOW — `0293` APPLIED 2026-08-31
 
 **The hole below is measured shut.** `0293_the_writers_name_their_space.sql` is applied to
