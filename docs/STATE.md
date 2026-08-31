@@ -675,6 +675,65 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### THE FORK IS APPLIED — JOSH'S HISTORY IS HIS OWN — 2026-08-30
+
+`0291` (reference tables) and `0292` (the data fork) are **applied to production**, both
+through `apply-migration.mjs`, which prints `self-wrapped: yes (unwrapped and re-wrapped)`
+— the line whose meaning had to be learned the hard way earlier the same night.
+
+**Erica's numbers did not move.** Measured before and after, and then on her own screen:
+**132 places · 2,136.1 miles · 43 trips · 4 races · 38 peaks · Our Stats 55**. No errors.
+
+**Josh's space went from 0 rows to his own history**: **208 visits · 83 places · 61 places
+been-to · 6 peaks · his own 19-category vocabulary**.
+
+#### Her two rulings, 2026-08-30
+
+| | |
+| --- | --- |
+| **Josh's editor membership of Erica's space ends** | *"Let it end — tagging is the link."* Forced by the data as much as chosen: the de-dupe key exists only for outings, so a person in both spaces would count every shared visit and place twice. It matches §"there is no household" |
+| **Reference tables are fixed BEFORE the fork** | So nobody loses data they can see today. That is why `0291` precedes `0292` |
+| **Cover photos** | *"Apply as-is, fix covers after."* Ten of Erica's place cards lose their cover because the photo was Josh's. Nothing is destroyed; picking replacements from her own photos is outstanding |
+
+#### The two catches that made the difference
+
+1. **Making `peaks` global was not sufficient.** All six of Josh's summits are `peak_bags`
+   rows with `profile_id` **NULL**, so the fork's `profile_id = Josh` predicate matched
+   **0 rows** — verified directly: 0 bags by his profile id, exactly 6 with NULL. Without
+   resolving a bag through `coalesce(shared_group_id, id)` instead, the peaks fix would have
+   looked correct and Josh would still have read 0.
+2. **`parks` staying global fixes a regression the fork did not know it caused** —
+   `set_place_park()` is not SECURITY DEFINER, so after the fork every place Josh created
+   would have been stamped `park = null`, silently.
+
+#### The one number that moved, and why
+
+**Josh's miles read 1468.3 after, against 1468.7 before.** Chased rather than waved through:
+**8 shared outings carry two recordings** — hers and his of the same run — that disagree by
+hundredths of a mile, **0.53 miles of spread in total**. The fork gives those outings new
+copies with new ids, so the de-dupe tie-break (`order by … a.id`) now lands on his trace
+where it used to land on hers. No data lost: a different recording of the same run counted.
+Hers did not move because her rows still win the same tie-break.
+
+#### What `check-data-integrity` reports afterwards, and what it is not
+
+Three rows want a person. **None is fork damage**, established by comparing each copy with
+its original: `downtown Leesburg 2026-07-18` has evidence **1** in both spaces;
+`Washington Monument 2026-07-19` has evidence **0** in both — it was evidence-less before
+the fork too. The third is a `visit_count` mirror on the `New place` row whose
+`memory_people` were deleted and rewritten as `proposed` at 22:54 the same day. The script
+is right that these are hers to decide: *"guessing is how the wrong thing gets saved."*
+
+#### Still outstanding after the fork
+
+- Ten of Erica's place cards need a new cover.
+- **60 SECURITY DEFINER *write* paths reach space-owned tables without naming a space.**
+  Nothing yet stops `merge_places_auto` merging a place in one space into another. A writer
+  audit, not a reader one, and it is the next real gate.
+- `mileage_by_person_for_people` (2136.1) and `wander_stats_for_people` (2109.0) disagree by
+  **27.1 miles** on production. The UI was pointed at one; the two were never reconciled.
+  Same class as the 17-vs-56 Trips split, and it will surface again.
+
 ### THE PARTITION IS APPLIED — AND IT WAS APPLIED BY ACCIDENT — 2026-08-30
 
 `0289` (the partition) and `0290` (62 space-scoped readers) are **applied to production**.
