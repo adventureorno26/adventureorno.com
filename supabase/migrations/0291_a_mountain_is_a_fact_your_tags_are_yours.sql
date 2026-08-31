@@ -388,85 +388,102 @@ $seed$;
 --    authorisation gate is the NO-ARGUMENT `is_editor_or_owner()`, which since `0289` means
 --    "you are an editor or owner of SOME space" rather than of the space the row lands in.
 --
---    Bodies are otherwise unchanged — same slugify, same defaults, same sort arithmetic.
+--    Bodies are otherwise unchanged — same slugify, same defaults, same sort arithmetic,
+--    same error messages and errcodes, same "adding one that already exists returns it".
 --    `create or replace` on an existing function keeps its ACL, so no grant moves here.
+--
+--    ⚠️ TWO MORE READERS OF `activity_options` ARE LEFT ALONE, AND NAMED SO THEY ARE NOT
+--       LOST. `add_activity_to_visit()` and `add_place_to_visit()` (current definitions in
+--       `0266_the_participant_tables_become_views.sql`) each do
+--           select * into v_opt from public.activity_options where slug = p_option and active;
+--       with no space clause. From today that can match two rows and plpgsql takes one of
+--       them arbitrarily. It changes NOTHING that anybody sees, because the second row is a
+--       byte-for-byte copy of the first and only `label`, `activity_type` and
+--       `place_category` are read out of it — but it stops being harmless the first time
+--       one space edits an option the other still has. Rewriting two large writers is not
+--       this file's job; scoping them is a small, separate, reviewable change.
 -- ---------------------------------------------------------------------------
 create or replace function public.add_place_category(
-  p_label text, p_icon text default '', p_color text default '#38bdf8', p_review text default null)
-returns public.place_categories
+  p_label text, p_icon text default ''::text, p_color text default '#38bdf8'::text,
+  p_review text default null::text)
+returns text
 language plpgsql security definer set search_path to 'public' as $$
-declare
-  v_space uuid := public.home_space();
-  v_slug  text;
-  v_row   public.place_categories;
+declare s text; v_space uuid;
 begin
-  if v_space is null or not public.is_editor_or_owner(v_space) then
-    raise exception 'not authorized';
-  end if;
-
-  v_slug := regexp_replace(lower(btrim(coalesce(p_label, ''))), '[^a-z0-9]+', '-', 'g');
-  v_slug := btrim(v_slug, '-');
-  if v_slug = '' then
-    raise exception 'a category needs a name';
-  end if;
-
-  insert into public.place_categories
-    (space_id, slug, label, icon, color, review, sort_order, is_custom)
-  values
-    (v_space, v_slug, btrim(p_label), coalesce(p_icon, ''), coalesce(p_color, '#38bdf8'),
-     coalesce(nullif(btrim(coalesce(p_review, '')), ''), btrim(p_label) || ' Reviews'),
-     200, true)
-  on conflict (space_id, slug) do update
-    set label  = excluded.label,
-        icon   = excluded.icon,
-        color  = excluded.color,
-        review = excluded.review
-  returning * into v_row;
-
-  return v_row;
-end;
-$$;
+  -- WAS: `if not public.is_editor_or_owner() then` — the no-argument form, which since 0289
+  -- means "an editor or owner of SOME space". The row has to land in one particular space,
+  -- so the check has to be about that space.
+  v_space := public.home_space();
+  if v_space is null or not public.is_editor_or_owner(v_space) then raise exception 'not authorized'; end if;
+  s := regexp_replace(lower(trim(p_label)), '[^a-z0-9]+', '-', 'g');
+  s := trim(both '-' from s);
+  if s = '' then raise exception 'invalid label'; end if;
+  insert into public.place_categories (space_id,slug,label,icon,color,review,sort_order,is_custom)
+  values (v_space, s, trim(p_label), coalesce(p_icon,''), coalesce(p_color,'#38bdf8'),
+          coalesce(nullif(trim(p_review),''), trim(p_label) || ' Reviews'),
+          200, true)
+  -- WAS: `on conflict (slug)`, which named the global key and let one space overwrite
+  -- another space's label, icon and colour.
+  on conflict (space_id,slug) do update set
+    label = excluded.label, icon = excluded.icon, color = excluded.color, review = excluded.review;
+  return s;
+end $$;
 
 create or replace function public.add_activity_option(
-  p_label text, p_kind text, p_target text)
+  p_label text, p_kind text, p_type text default null::text)
 returns public.activity_options
 language plpgsql security definer set search_path to 'public' as $$
 declare
-  v_space uuid := public.home_space();
-  v_slug  text;
-  v_sort  int;
-  v_row   public.activity_options;
+  v_slug text;
+  v_row  public.activity_options;
+  v_next int;
+  v_space uuid;
 begin
+  v_space := public.home_space();
   if v_space is null or not public.is_editor_or_owner(v_space) then
-    raise exception 'not authorized';
+    raise exception 'not allowed' using errcode = '42501';
   end if;
-  if p_kind not in ('route', 'place') then
-    raise exception 'kind must be route or place';
-  end if;
-
-  v_slug := regexp_replace(lower(btrim(coalesce(p_label, ''))), '[^a-z0-9]+', '-', 'g');
-  v_slug := btrim(v_slug, '-');
-  if v_slug = '' then
-    raise exception 'an activity needs a name';
+  if p_kind not in ('route','place') then
+    raise exception 'an activity is either something you did (route) or somewhere you went (place)';
   end if;
 
-  select coalesce(max(sort), 0) + 10 into v_sort
+  v_slug := regexp_replace(lower(btrim(coalesce(p_label,''))), '[^a-z0-9]+', '_', 'g');
+  v_slug := btrim(v_slug, '_');
+  if v_slug = '' then raise exception 'give the activity a name'; end if;
+
+  -- Adding one that already exists returns it rather than failing: the person's
+  -- intent ("I want a Paddle option") is satisfied either way.
+  -- Every lookup and the `max(sort)` below gain `space_id = v_space`. Without that, adding
+  -- "Paddle" in one space would find another space's row, return it, and add nothing here.
+  select * into v_row from public.activity_options where slug = v_slug and space_id = v_space;
+  if v_row.slug is not null then
+    if not v_row.active then
+      update public.activity_options set active = true
+       where slug = v_slug and space_id = v_space returning * into v_row;
+    end if;
+    return v_row;
+  end if;
+
+  select coalesce(max(sort), 0) + 10 into v_next
     from public.activity_options where space_id = v_space;
 
-  insert into public.activity_options
-    (space_id, slug, label, kind, activity_type, place_category, sort, active, created_by)
-  values
-    (v_space, v_slug, btrim(p_label), p_kind,
-     case when p_kind = 'route' then p_target else null end,
-     case when p_kind = 'place' then p_target else null end,
-     v_sort, true, auth.uid())
-  on conflict (space_id, slug) do update
-    set label = excluded.label, active = true
+  insert into public.activity_options (space_id, slug, label, kind, activity_type, place_category, sort, active, created_by)
+  values (
+    v_space,
+    v_slug,
+    btrim(p_label),
+    p_kind,
+    case when p_kind = 'route'
+         then coalesce(nullif(btrim(coalesce(p_type,'')), ''), initcap(btrim(p_label))) end,
+    case when p_kind = 'place'
+         then coalesce(nullif(btrim(coalesce(p_type,'')), ''), v_slug) end,
+    v_next,
+    true,
+    auth.uid())
   returning * into v_row;
 
   return v_row;
-end;
-$$;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- 7. The peaks readers stop asking a peak_bag which space it is in, and ask the outing.
