@@ -72,14 +72,38 @@ async function ready(page: import('@playwright/test').Page, path: string) {
 /** Settings' Stats card is a <details>; its contents are hidden until it is open —
  *  the same disclosure pattern as the Visits section on a card. */
 async function openStats(page: import('@playwright/test').Page) {
-  // TARGET THE "Stats" DROPDOWN BY NAME. /settings has FOUR `details.stats-dropdown`
-  // — Stats, Cities and states, National Parks, Peaks & climbing — and this helper used
-  // to click the FIRST summary only if NONE of the four was open. So whenever any other
-  // one was open it clicked nothing, the Stats card stayed shut, and the Trips button
-  // inside it was reported as "not visible": a missing feature, according to the file
-  // that decides what Erica has been given. It was never missing.
+  // TARGET THE STATS DROPDOWN BY NAME. /settings has TWENTY `details.stats-dropdown` —
+  // the four cards (the stats card, Cities and states, National Parks, Peaks & climbing)
+  // plus one per state nested inside Cities and states — and this helper used to click
+  // the FIRST summary only if NONE of them was open. So whenever any other one was open
+  // it clicked nothing, the Stats card stayed shut, and the Trips button inside it was
+  // reported as "not visible": a missing feature, according to the file that decides
+  // what Erica has been given. It was never missing.
+  //
+  // REWRITTEN 2026-08-30 under rule 4 at the top of this file. This is a RENAME she
+  // approved, not drift, and it took THREE checks red with it — `:607`, `:626` and
+  // `:686` all open the card through here:
+  //
+  //   WAS: `> summary` matching /^Stats$/ — the card was headed with the bare word
+  //        `Stats`, which named a card rather than the scope its numbers are about.
+  //   IS  (docs/STATE.md §0.2, approved 2026-08-30): *"This is not a household app.
+  //        This is a social application."* — **there are exactly three scopes and no
+  //        operator**, and the bare word `Stats` is not one of them. The card is now
+  //        headed by the scope it is showing, written once in `lib/statsScope`:
+  //        **My Stats** (every card you are tagged on) or **Our Stats** (only the cards
+  //        you and the picked people are all tagged on), then ` · ` and the sentence
+  //        saying what the number counts.
+  //
+  // MEASURED, live, 2026-08-30: the summary reads `My Stats · Every card you are tagged
+  // on.` — so `/^Stats$/` matched none of the twenty and answered 0.
+  //
+  // EITHER WORD, on purpose. Which one the card opens on depends on who the account has
+  // recorded — the test bot has recorded nobody, so it gets My Stats — and both are the
+  // same card. `^` still anchors it, so a state nested inside Cities and states can
+  // never be mistaken for it, and `toHaveCount(1)` below still proves there is exactly
+  // one.
   const stats = page.locator('details.stats-dropdown').filter({
-    has: page.locator('> summary', { hasText: /^Stats$/ }),
+    has: page.locator('> summary', { hasText: /^(My|Our) Stats\b/ }),
   });
   await expect(stats).toHaveCount(1);
   const summary = stats.locator('> summary');
@@ -286,29 +310,121 @@ it.describe('the card — what she asked for, on the live site', () => {
       .slice(0, 12);
     expect(hrefs.length, 'no places to check').toBeGreaterThan(0);
 
-    let found = '';
+    // ───────── WHY THE SAMPLE WAS NOT THE PROBLEM (measured 2026-08-30) ─────────
+    //
+    // This loop used to stop at the FIRST place that rendered a Routes heading and then
+    // demand a map of it. That made the check a coin toss, and it is worth writing down
+    // which side of the toss is the app and which is this file, because the check passed
+    // on one run and was red on the next with nothing deployed in between.
+    //
+    // THE TWO HALVES OF THE SECTION HAVE DIFFERENT SOURCES:
+    //
+    //   the LIST  — `PlacePanel` renders `Routes (n)` from `fetchActivitiesForPlaceTree`,
+    //               which is the place AND its segment children. That is deliberate: the
+    //               W&OD is one place holding its trailheads, and its runs sit on them.
+    //   the MAP   — `RouteMiniMap` reads `fetchActivitiesForPlace`, the place's OWN row
+    //               only, plus its pings, and returns `null` unless something has a
+    //               decodable track. Its own doc says so: *"Renders nothing when there's
+    //               no route data."* `PlacePanel` agrees in a comment beside the heading:
+    //               *"the list must show even when no route has a track to draw."*
+    //
+    // So a place can honestly show a list and no map.
+    //
+    // WHOSE SCREEN THESE NUMBERS ARE. Every figure below was measured AS THE TEST BOT
+    // (`testbot@adventureorno.dev`), because that is who `verify:live` signs in as — and
+    // the card is NOT the same for two accounts, which is the single most important thing
+    // on this page to know before hard-coding anything. Measured 2026-08-30, 15s settle,
+    // San Diego read four times including once with cookies cleared, identical every time:
+    //
+    //   place                                      as the TEST BOT
+    //   /place/0795746e-… (San Diego)              NO Routes section  rows=0  map=NO
+    //   /place/6bffaec6-… (the Appalachian Trail)  Routes (6)         rows=6  map=NO
+    //   /place/eac4216c-…                          Routes (1)         rows=1  map=YES
+    //   /place/c85cbe8d-…                          Routes (1)         rows=1  map=YES
+    //
+    // AND THE SAME SAN DIEGO CARD, READ SIGNED IN AS ERICA the same day, renders
+    // `Routes (6)` WITH a map. That is not a contradiction and neither reading is stale:
+    // the rest of the card is identical on both screens — `Photos and Videos`,
+    // `Beaches (1)`, `Restaurants (2)`, `NOTES AND REVIEWS` — and ONLY Routes differs,
+    // which is what rules out a mis-read id or a half-loaded page. What the bot sees is
+    // `Visits (1)` and no Routes at all.
+    //
+    // The MECHANISM is inferred, not measured, and is written as such: the bot cannot read
+    // those six activities, and the obvious reason is that it is not tagged on them (§0.2
+    // — My Stats is *"every card I am tagged on"*), but that was not isolated here. What IS
+    // measured is the effect, and it repeats: this file's own header calls the Appalachian
+    // Trail *"the one with 62 visits"* and the bot counts 35 on the same card.
+    //
+    // SO THE COUNTS ON A CARD ARE PER-VIEWER, and a check that hard-codes a place is
+    // asserting what THE BOT can see, not what Erica can. San Diego is the sharpest case:
+    // it is the card she designed everything against, it has six routes on her screen, and
+    // pinning this check to it would assert a Routes section that does not exist for the
+    // account the check actually runs as.
+    //
+    // Whenever the sample's first route-having place happened to be one with no drawable
+    // track, the old check demanded a map the app never promised there and reported the
+    // section as broken. It was never broken. That is a defect in this check, not in
+    // Routes — and hard-coding either named place would go red on a working app, San Diego
+    // because the bot sees no Routes section at all and the AT because it draws no map.
+    //
+    // WHAT IT ASSERTS NOW, over the places that HAVE routes rather than over one of them:
+    //
+    //   * every sampled place with a Routes section has a LIST — the half that is
+    //     unconditional, now checked on all of them instead of on one;
+    //   * and the section is a map AND a list on a place that has a track to draw, found
+    //     by looking for one instead of hoping the first one is it.
+    //
+    // THE SETTLE IS EXPLICIT, because "no Routes heading" and "the heading has not
+    // arrived yet" look identical, and reading them apart by timing is what the rule at
+    // the top of this file forbids. `trailActs` starts null and the Visits section prints
+    // `Loading…` while it is, so waiting for that word to go is the app telling us the
+    // routes state is DECIDED. Without it this loop mis-sampled: `c85cbe8d` read as
+    // having no Routes section at 2.5s and one at 12s.
+    it.setTimeout(180_000);
+
+    let withRoutes = 0;
+    let both = '';
     for (const href of hrefs) {
-      if (found) break;
+      if (both) break;
       await ready(page, href);
-      if (
-        (await page
-          .locator('.panel h3')
-          .filter({ hasText: /^Routes/ })
-          .count()) > 0
-      )
-        found = href;
+      // The positive first (openVisits opens it), then the wait for the word to go.
+      await openVisits(page);
+      await expect(page.locator('.visits-details p').filter({ hasText: /^Loading/ })).toHaveCount(
+        0,
+      );
+      const heading = page.locator('.panel h3').filter({ hasText: /^Routes/ });
+      if ((await heading.count()) === 0) continue;
+      withRoutes += 1;
+      // THE LIST, on every place that has the section — never conditional.
+      expect(
+        await page.locator('.route-row').count(),
+        `${href} has a Routes section and no list`,
+      ).toBeGreaterThan(0);
+      // A DRAWN map, not merely a mounted one. `RouteMiniMap` renders its wrapper while
+      // it is still deciding and removes it when there is nothing to draw, so the
+      // wrapper alone would pick places whose map is about to vanish. The canvas exists
+      // only once MapLibre has actually been constructed, which happens on the `hasData`
+      // branch — so it is the honest "this place has a track" signal.
+      if ((await page.locator('.route-mini-canvas canvas').count()) > 0) both = href;
     }
 
     expect(
-      found,
+      withRoutes,
       // `total` DID NOT EXIST. This message only builds when the check has already
       // failed, so the ReferenceError replaced the report with a crash — the one check
       // that was telling the truth could not say what it had found.
       `none of the first ${hrefs.length} places rendered a Routes section — either no ` +
         `place has activities, or the section stopped rendering`,
+    ).toBeGreaterThan(0);
+    expect(
+      both,
+      `${withRoutes} of the first ${hrefs.length} places have a Routes section, but none ` +
+        `of them drew a map. Either every one of them is a container whose routes sit on ` +
+        `its segments, or the mini map stopped rendering`,
     ).not.toBe('');
 
-    // The request itself: the section is a map AND a list, not one or the other.
+    // The request itself, on the place that has both: the section is a map AND a list,
+    // not one or the other. The page is already on it.
     await expect(page.locator('.panel h3').filter({ hasText: /^Routes/ })).toHaveCount(1);
     await expect(page.locator('.route-mini')).toBeVisible();
     expect(await page.locator('.route-row').count(), 'Routes has no list').toBeGreaterThan(0);
@@ -370,7 +486,21 @@ it.describe('the card — what she asked for, on the live site', () => {
     await openVisits(page);
     const first = page.locator('.visit-row').first();
     await expect(first).toBeVisible();
-    await first.click();
+    // CLICK THE ROW'S "Open" LINK, NOT THE ROW. `.visit-row` is a plain `<div>` and is
+    // inert — it has no handler of its own. What it CONTAINS is two controls: a
+    // `<button class="visit-main visit-open">` that expands that visit's editor in
+    // place (dates, who, trip, delete), and an `<a href="/visit/…">Open</a>` that opens
+    // the visit's card. Clicking the div landed on the button, which expanded the editor
+    // and correctly did not navigate, so this waited 15s for a `/visit/` URL against a
+    // card that was working. Measured live 2026-08-30: the Open link goes to
+    // `/visit/7fb3e76f-…` and renders `.panel.visit-card`.
+    //
+    // Only the TARGET was wrong; every assertion below is untouched. The link is located
+    // through the row rather than page-wide, so this is still "a visit row opens the
+    // card" and not "some link somewhere does".
+    const open = first.getByRole('link', { name: /^Open$/ });
+    await expect(open).toBeVisible();
+    await open.click();
     await expect(page).toHaveURL(/\/visit\//);
 
     // The positive first: it is a panel with a cover and the locked sections.
@@ -403,7 +533,24 @@ it.describe('the card — what she asked for, on the live site', () => {
     await expect(page.locator('.npd-card .panel-hero')).toHaveCount(1);
     await expect(page.getByPlaceholder(/Name this place/i)).toBeVisible();
     await expect(page.getByText(/Add a cover photo/i)).toBeVisible();
-    await expect(page.getByText(/this is visit one/i)).toBeVisible();
+    // BOTH PLACES THE CARD SAYS IT, each named. `getByText(/this is visit one/i)` was a
+    // strict-mode violation resolving to 2 elements, because the blank card says it
+    // TWICE — on the coords line (`38.05567, -95.75000 · this is visit one`) and as the
+    // Visits section's own label. Nothing about the card changed and neither element is
+    // wrong; the locator simply never said which of the two it meant, so the check
+    // crashed on a card that was doing exactly what was asked.
+    //
+    // Both are asserted rather than one picked with `.first()`: both are the card's
+    // promise — §"THE CARD — LOCKED", *"Its Visits section says 'this is visit one',
+    // because saving a new place IS its first visit"* — and `lockedCard.test.ts` guards
+    // the same words at source. Naming them is strictly more than the old line proved.
+    await expect(page.locator('.npd-card .npd-coords')).toContainText(/this is visit one/i);
+    await expect(
+      page
+        .locator('.npd-card h3')
+        .filter({ hasText: /^Visits/ })
+        .locator('.label'),
+    ).toHaveText(/this is visit one/i);
     // Not a chooser, and not the parent picker she deleted.
     await expect(page.getByText(/what are you adding/i)).toHaveCount(0);
     await expect(page.getByText(/Part of a trail/i)).toHaveCount(0);
@@ -445,8 +592,19 @@ it.describe('the card — what she asked for, on the live site', () => {
 
     // …and CANCEL leaves nothing behind. The confirm is the card asking, which is
     // itself the proof that it knows it is holding work.
+    //
+    // THE CARD'S OWN CANCEL, named by the footer it sits in. `getByRole('button',
+    // { name: /^Cancel$/ })` was a strict-mode violation resolving to 3 elements: the
+    // blank card carries THREE controls labelled Cancel — the cover's close ✕
+    // (`aria-label="Cancel"`), the note form's own Cancel, and the card's footer Cancel.
+    // The click therefore never happened, on a card where cancelling works. The one this
+    // check means is the card's: the only one that discards the card, and so the only
+    // one the confirm dialog belongs to.
     page.once('dialog', (d) => void d.accept());
-    await page.getByRole('button', { name: /^Cancel$/ }).click();
+    await page
+      .locator('.npd-footer')
+      .getByRole('button', { name: /^Cancel$/ })
+      .click();
     await expect(page.locator('.panel.npd-card')).toHaveCount(0);
   });
 });
@@ -628,12 +786,43 @@ it.describe('the rest of the app — what she asked for', () => {
   }) => {
     await ready(page, '/settings');
     await openStats(page);
-    await page.locator('.stat-open').click();
+    const pill = page.locator('.stat-open');
+    await pill.click();
+
     // A list of trips, each row opening its visit, and a way to add one.
-    const first = page.locator('.trip-row').first();
-    await expect(first).toBeVisible();
-    await expect(first).toHaveAttribute('href', /^\/visit\//); // the ROW is the control
+    //
+    // THE LIST OPENED — the positive first, because only the opened control renders it.
+    const list = page.locator('.trip-list');
+    await expect(list).toBeVisible();
+    // …and the way to add one, which is the half of her request that does not depend on
+    // having been anywhere yet.
     await expect(page.getByRole('link', { name: /add a trip/i })).toBeVisible();
+
+    // WHY THIS NO LONGER DEMANDS A ROW. It used to open the pill and assert
+    // `.trip-row` existed, which asserts the SIGNED-IN ACCOUNT'S DATA rather than the
+    // feature: `verify:live` runs as the test bot, and measured live on 2026-08-30 the
+    // pill reads **"0 Trips"** and the list correctly says *"No trips yet. A visit of
+    // more than one day counts as one."* with the add button under it. The control does
+    // everything she asked for; the bot has simply never been anywhere for two days.
+    //
+    // This file has been caught by the same shape from the other side, and the note is
+    // a few checks above: the browser matrix ran against a seeded database "where that
+    // card has no visits, so the assertion had nothing to read and passed". Here it had
+    // nothing to read and FAILED, and reported a working control as missing.
+    //
+    // So the row assertion is kept exactly where it means something — over the trips
+    // that exist — and the pill's count is tied to the list underneath it, which is a
+    // real claim on any account, empty or not, and one the old check never made. On
+    // Erica's own account (trips > 0) this asserts everything it asserted before.
+    const rows = list.locator('.trip-row');
+    const n = Number((await pill.innerText()).replace(/\D+/g, '') || '0');
+    await expect(rows).toHaveCount(n);
+    if (n === 0) {
+      await expect(list).toContainText(/No trips yet/i);
+    } else {
+      await expect(rows.first()).toBeVisible();
+      await expect(rows.first()).toHaveAttribute('href', /^\/visit\//); // the ROW is the control
+    }
   });
 
   it('"The number of visits to each place should be the count on that dropdown"', async ({
