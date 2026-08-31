@@ -7,6 +7,11 @@ insert into auth.users (id,email) values
 insert into public.profiles (id,role,display_name) values
   ('dddd4444-0000-0000-0000-00000000d001','owner','V131 Erica'),
   ('dddd4444-0000-0000-0000-00000000d002','editor','Josh') on conflict do nothing;
+-- 0298: these actors used to share a space because `ensure_profile_space()` put any
+-- new non-owner into the only one that existed. That heuristic is gone; the fixture
+-- says what it needs instead. See supabase/tests/_prelude.sql.
+select test_support.share_one_space();
+
 set local request.jwt.claims = '{"sub":"dddd4444-0000-0000-0000-00000000d001"}';
 
 -- 1) A plain INSERT with a real name — the shape every client create path uses — is

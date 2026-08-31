@@ -11,6 +11,11 @@ insert into auth.users (id, email) values
 insert into public.profiles (id, role, display_name) values
   ('dddddddd-0000-0000-0000-00000000b001', 'owner',  'V125 Owner'),
   ('dddddddd-0000-0000-0000-00000000b002', 'editor', 'Josh') on conflict do nothing;
+-- 0298: these actors used to share a space because `ensure_profile_space()` put any
+-- new non-owner into the only one that existed. That heuristic is gone; the fixture
+-- says what it needs instead. See supabase/tests/_prelude.sql.
+select test_support.share_one_space();
+
 set local request.jwt.claims = '{"sub":"dddddddd-0000-0000-0000-00000000b001"}';
 
 -- 1) THE CAPE COD CASE. Photos on Aug 2,3,5,6,7 with a blank Aug 4 previously
@@ -142,6 +147,8 @@ declare v uuid; ok boolean := false;
 begin
   insert into auth.users (id,email) values ('dddddddd-0000-0000-0000-00000000b003','v125-viewer@example.test') on conflict do nothing;
   insert into public.profiles (id,role,display_name) values ('dddddddd-0000-0000-0000-00000000b003','viewer','V125 Viewer') on conflict do nothing;
+  -- 0298: a viewer created here gets their own space too, so collapse again.
+  perform test_support.share_one_space();
   select v2.id into v from public.visits v2 join public.places p on p.id=v2.place_id where p.name='V125 Editable' limit 1;
   set local request.jwt.claims = '{"sub":"dddddddd-0000-0000-0000-00000000b003"}';
   begin

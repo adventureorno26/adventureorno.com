@@ -14,6 +14,11 @@ insert into public.profiles (id, role, display_name) values
   ('aaaaaaaa-0000-0000-0000-0000000000e1', 'owner',  'CE Owner'),
   ('aaaaaaaa-0000-0000-0000-0000000000e2', 'editor', 'Josh'),
   ('aaaaaaaa-0000-0000-0000-0000000000e3', 'viewer', 'CE Viewer');
+-- 0298: these actors used to share a space because `ensure_profile_space()` put any
+-- new non-owner into the only one that existed. That heuristic is gone; the fixture
+-- says what it needs instead. See supabase/tests/_prelude.sql.
+select test_support.share_one_space();
+
 set local request.jwt.claims = '{"sub":"aaaaaaaa-0000-0000-0000-0000000000e1"}';
 
 -- 1) San Diego walk: a brand-new walk experience creates exactly ONE place and
