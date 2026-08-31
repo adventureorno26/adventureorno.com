@@ -199,6 +199,8 @@ declare
   v_j_space     uuid;
   v_j_person    uuid;   -- Josh, as a person, inside Josh's space
   v_e_person    uuid;   -- Erica, as a person, inside Josh's space
+  v_e_self      uuid;   -- Erica, as a person, inside Erica's space
+  v_e_josh      uuid;   -- Josh, as a person, inside Erica's space
   n_moved       int;
   n_copied      int;
   n             int;
@@ -250,22 +252,11 @@ begin
   -- do: `visit_profiles` and `activity_profiles` both select `pe.linked_profile AS
   -- profile_id`, and `people_memory_keys` joins them on it. Same question, same answer,
   -- and immune to the duplicates.
-  create temporary table _fork_visit on commit drop as
-  select v.id,
-         exists (select 1 from public.memory_subjects s
-                   join public.memory_people mp on mp.subject_id = s.id
-                   join public.people pe on pe.id = mp.person_id
-                  where s.kind = 'visit' and s.visit_id = v.id
-                    and pe.linked_profile = v_owner
-                    and mp.participation_status = 'accepted') as in_e,
-         exists (select 1 from public.memory_subjects s
-                   join public.memory_people mp on mp.subject_id = s.id
-                   join public.people pe on pe.id = mp.person_id
-                  where s.kind = 'visit' and s.visit_id = v.id
-                    and pe.linked_profile = v_second
-                    and mp.participation_status = 'accepted') as in_j
-    from public.visits v where v.space_id = v_e_space;
-
+  --
+  -- THE ORDER OF THE FOUR TABLES BELOW IS THE DEPENDENCY ORDER AND IT MATTERS: an outing
+  -- and a photograph are classified from their own evidence, a visit from its tags plus the
+  -- outings and photographs attached to it, and a place from all three.
+  --
   -- An activity is reachable from a person three ways, and all three count. `owner_profile`
   -- and `also_profiles` are the Strava import's record of who recorded it; the tag is the
   -- app's. Using only the tag gives 12 both-tagged outings; using all three gives 56, which
@@ -292,6 +283,41 @@ begin
   create temporary table _fork_photo on commit drop as
   select p.id, (p.uploaded_by = v_owner) as in_e, (p.uploaded_by = v_second) as in_j
     from public.photos p where p.space_id = v_e_space;
+
+  -- A VISIT FOLLOWS ITS TAGS *AND* THE OUTINGS AND PHOTOGRAPHS ATTACHED TO IT, and the
+  -- second half of that sentence was added because the assertions in section 10 refused the
+  -- version without it: 8 activities and their visit ended up on opposite sides of the
+  -- boundary. An activity IS an outing at that visit — the schema says so with
+  -- `activities.visit_id` — so a person who was on the outing was at the visit, whatever
+  -- the visit's own tags do or do not say.
+  --
+  -- Resolving it the other way, by cutting the link on whichever side lost the visit, would
+  -- have silently detached 8 outings from their visit on somebody's screen. Widening the
+  -- classification instead means the visit is shared, so EACH side keeps a whole copy and
+  -- nothing is severed. It is also the same rule places already use, applied one level down.
+  create temporary table _fork_visit on commit drop as
+  select v.id,
+         (exists (select 1 from public.memory_subjects s
+                    join public.memory_people mp on mp.subject_id = s.id
+                    join public.people pe on pe.id = mp.person_id
+                   where s.kind = 'visit' and s.visit_id = v.id
+                     and pe.linked_profile = v_owner
+                     and mp.participation_status = 'accepted')
+          or exists (select 1 from public.activities a join _fork_act c on c.id = a.id
+                      where a.visit_id = v.id and c.in_e)
+          or exists (select 1 from public.photos ph join _fork_photo c on c.id = ph.id
+                      where ph.visit_id = v.id and c.in_e)) as in_e,
+         (exists (select 1 from public.memory_subjects s
+                    join public.memory_people mp on mp.subject_id = s.id
+                    join public.people pe on pe.id = mp.person_id
+                   where s.kind = 'visit' and s.visit_id = v.id
+                     and pe.linked_profile = v_second
+                     and mp.participation_status = 'accepted')
+          or exists (select 1 from public.activities a join _fork_act c on c.id = a.id
+                      where a.visit_id = v.id and c.in_j)
+          or exists (select 1 from public.photos ph join _fork_photo c on c.id = ph.id
+                      where ph.visit_id = v.id and c.in_j)) as in_j
+    from public.visits v where v.space_id = v_e_space;
 
   -- A place follows whoever made it or whoever has been there — by visit, by outing or by
   -- photograph. All four routes, because a place reached by only one of them is still a
@@ -324,23 +350,64 @@ begin
   insert into _fork_map select 'visit',    id, gen_random_uuid() from _fork_visit where in_e and in_j;
   insert into _fork_map select 'activity', id, gen_random_uuid() from _fork_act   where in_e and in_j;
 
-  -- ---- 4. TWO PEOPLE FOR JOSH'S SPACE -------------------------------------
+  -- ---- 4. THE PEOPLE EACH SPACE KEEPS -------------------------------------
   -- `my_people()` reads `in_space_people WHERE owner_profile = auth.uid()`, so Josh's space
-  -- needs its own row for him and its own row for Erica or his people picker is empty and
-  -- every `_for_people` reader is asked about a person it cannot see.
+  -- needs a row for him and a row for Erica, or his people picker is empty and every
+  -- `_for_people` reader is asked about a person it cannot see.
   --
-  -- NEW ROWS, not the two unused mirrors that already exist. Moving an existing `people`
-  -- row out of Erica's space would change what SHE sees, and the whole contract of this
-  -- file is that it does not. Erica's five rows are left exactly as they are.
-  insert into public.people (display_name, kind, created_by, owner_profile, linked_profile, space_id)
-  select coalesce(nullif(btrim(pr.display_name), ''), 'Me'), 'person', v_second, v_second, v_second, v_j_space
-    from public.profiles pr where pr.id = v_second
-  returning id into v_j_person;
+  -- THESE ARE NOT NEW ROWS, AND THEY CANNOT BE. `people` carries
+  --
+  --     unique (owner_profile, linked_profile)   -- people_one_link_per_owner
+  --
+  -- with no `space_id` in it, so Josh physically cannot have a second row pointing at
+  -- himself. Discovered by the rehearsal refusing to run, which is the rehearsal doing its
+  -- job — it is not a constraint any reading of the schema would have suggested mattered.
+  --
+  -- It also turns out nothing has to be invented. `people` already holds FIVE rows for
+  -- three humans, in exactly the 2×2 this needs: Erica and Josh each own a row for
+  -- themselves AND a row for the other, and only the two rows owned by the person they
+  -- describe carry any tags. So the pair Josh already owns moves to Josh's space, and the
+  -- pair Erica already owns stays in hers. Test Bot stays with Erica, per her decision.
+  select id into v_j_person from public.people
+   where space_id = v_e_space and owner_profile = v_second and linked_profile = v_second limit 1;
+  select id into v_e_person from public.people
+   where space_id = v_e_space and owner_profile = v_second and linked_profile = v_owner  limit 1;
+  select id into v_e_self   from public.people
+   where space_id = v_e_space and owner_profile = v_owner  and linked_profile = v_owner  limit 1;
+  select id into v_e_josh   from public.people
+   where space_id = v_e_space and owner_profile = v_owner  and linked_profile = v_second limit 1;
 
-  insert into public.people (display_name, kind, created_by, owner_profile, linked_profile, space_id)
-  select coalesce(nullif(btrim(pr.display_name), ''), 'Them'), 'person', v_second, v_second, v_owner, v_j_space
-    from public.profiles pr where pr.id = v_owner
-  returning id into v_e_person;
+  if v_j_person is null or v_e_person is null or v_e_self is null or v_e_josh is null then
+    raise exception '0291: the four person rows the fork needs are not all present '
+                    '(josh/josh %, josh/erica %, erica/erica %, erica/josh %) — '
+                    'refusing to guess which person a tag means',
+                    v_j_person, v_e_person, v_e_self, v_e_josh;
+  end if;
+
+  -- Josh's pair crosses. Erica's pair does not move and is not edited.
+  update public.people set space_id = v_j_space where id in (v_j_person, v_e_person);
+
+  -- Every tag LEFT BEHIND in Erica's space that names one of the two rows that just left
+  -- is repointed at Erica's own row for the same human. This is value-preserving by
+  -- construction and not by hope: `visit_profiles` and `activity_profiles` both project
+  -- `pe.linked_profile AS profile_id`, and `people_memory_keys` joins them on that, so a
+  -- swap between two rows with the SAME `linked_profile` cannot change a single answer.
+  -- What it does change is that Erica's space stops referencing a person who now lives on
+  -- the other side of the boundary.
+  --
+  -- The delete guards the primary key `(subject_id, person_id)`: if a subject somehow
+  -- already carried both rows, the update below would collide. In production today
+  -- Erica's two rows carry no tags at all, so this removes nothing.
+  delete from public.memory_people mp
+   where mp.space_id = v_e_space and mp.person_id in (v_e_josh, v_e_self)
+     and exists (select 1 from public.memory_people o
+                  where o.subject_id = mp.subject_id
+                    and o.person_id = case when mp.person_id = v_e_josh then v_j_person else v_e_person end);
+
+  update public.memory_people set person_id = v_e_josh
+   where space_id = v_e_space and person_id = v_j_person;
+  update public.memory_people set person_id = v_e_self
+   where space_id = v_e_space and person_id = v_e_person;
 
   -- ---- 5. THE ROWS THAT ARE ONLY JOSH'S SIMPLY CHANGE SPACE ---------------
   -- No copy, no new id, nothing to remap: the row was always his, it was merely filed in
@@ -432,23 +499,57 @@ begin
   -- Order is FK order: places, then visits (place_id), then activities (place_id and
   -- visit_id), then the subjects that hang off them, then the tags on the subjects.
 
+  -- ⚠️ TWO TRIGGERS ON `activities` ARE TURNED OFF FOR THE LENGTH OF THE COPY, AND BOTH
+  -- WERE FOUND BY THE REHEARSAL REFUSING TO PRODUCE THE RIGHT ANSWER RATHER THAN BY
+  -- READING THE SCHEMA.
+  --
+  --   `activities_sync_visit` calls `rebuild_place_visits(new.place_id)`, which DERIVES the
+  --   visits for a place from its activities and photos — deleting the ones it no longer
+  --   believes in. Inserting the 56 copied outings rebuilt the places they sit at and
+  --   destroyed 18 of the 107 visits this file had just materialised. Measured: 107 mapped,
+  --   107 inserted, 89 still present one statement later. A derived-data maintainer is
+  --   exactly right in normal operation and exactly wrong in the middle of a fork, because
+  --   here the copies ARE the truth and it has no way to know that.
+  --
+  --   `activities_default_participants` calls `subject_for_activity(new.id)` and writes a
+  --   `memory_people` row of its own invention. The real tags are copied below, with their
+  --   evidence and their decider intact.
+  --
+  -- They are turned off with `alter table ... disable trigger`, not with
+  -- `session_replication_role = replica`. Replica mode would have silenced these two AND
+  -- every foreign key in the database, so a copy that pointed at nothing would have been
+  -- committed without complaint — and referential integrity is the one thing a fork must
+  -- not lose. Two named triggers, off for one section, back on before section 7.
+  --   `photos_sync_visit` is the same maintainer reached from the other side: touching a
+  --   photo's `place_id` or `visit_id` rebuilds that place's visits too, and section 6b
+  --   touches both on every photo of Josh's that sits at a shared place. Same trigger, same
+  --   destruction, found the same way.
+  execute 'alter table public.activities disable trigger activities_sync_visit';
+  execute 'alter table public.activities disable trigger activities_default_participants';
+  execute 'alter table public.photos     disable trigger photos_sync_visit';
+  execute 'alter table public.photos     disable trigger photos_pin_marks_visit';
+  execute 'alter table public.visits     disable trigger visits_default_participants';
+
   -- PLACES. `cover_photo_id` is dropped on the copy — see gap 4 in the header: photos are
   -- not duplicated, so 33 of these covers live in Erica's space and pointing at one would
   -- be a reference across the boundary.
   insert into public.places (
-    id, name, country, admin1, lat, lng, geom, first_visit, last_visit, created_by, created_at,
+    -- `geom` and `counts_as_place` are GENERATED ALWAYS and are therefore absent from this
+    -- list: Postgres recomputes them for the copy from the same lat/lng and the same
+    -- category, so they cannot drift from the original.
+    id, name, country, admin1, lat, lng, first_visit, last_visit, created_by, created_at,
     cover_photo_id, auto, needs_geocode, geocoded_at, visit_count, rating, review, is_home,
     categories, activity_categories, cover_pos_y, address, bucket, website, is_trail, saved,
     favorite, part_of, city, suggested, kind, category, holds_children, boundary, park,
-    deleted_at, name_locked, named_by, name_scope, counts_as_place, space_id)
-  select m.dst, p.name, p.country, p.admin1, p.lat, p.lng, p.geom, p.first_visit, p.last_visit,
+    deleted_at, name_locked, named_by, name_scope, space_id)
+  select m.dst, p.name, p.country, p.admin1, p.lat, p.lng, p.first_visit, p.last_visit,
          p.created_by, p.created_at,
          case when ph.id is not null and ph.space_id = v_j_space then p.cover_photo_id end,
          p.auto, p.needs_geocode, p.geocoded_at, p.visit_count, p.rating, p.review, p.is_home,
          p.categories, p.activity_categories, p.cover_pos_y, p.address, p.bucket, p.website,
          p.is_trail, p.saved, p.favorite, p.part_of, p.city, p.suggested, p.kind, p.category,
          p.holds_children, p.boundary, p.park, p.deleted_at, p.name_locked, p.named_by,
-         p.name_scope, p.counts_as_place, v_j_space
+         p.name_scope, v_j_space
     from _fork_map m
     join public.places p on p.id = m.src
     left join public.photos ph on ph.id = p.cover_photo_id
@@ -488,17 +589,18 @@ begin
   --   * `visit_id` is remapped, and falls to NULL when the visit did not come across. That
   --     happens exactly once in production — see section 10's note.
   insert into public.activities (
-    id, strava_id, type, name, distance, moving_time, elapsed_time, start_date, lat, lng, geom,
+    -- `geom` and `local_date` are GENERATED ALWAYS; Postgres recomputes both for the copy.
+    id, strava_id, type, name, distance, moving_time, elapsed_time, start_date, lat, lng,
     place_id, created_at, summary_polyline, trailhead, athlete_id, shared_group_id, source,
     owner_profile, also_profiles, elevation_gain, source_id, is_race, elevation_profile,
-    start_date_local, local_date, visit_id, original_source, space_id)
+    start_date_local, visit_id, original_source, space_id)
   select m.dst, null, a.type, a.name, a.distance, a.moving_time, a.elapsed_time, a.start_date,
-         a.lat, a.lng, a.geom,
+         a.lat, a.lng,
          coalesce(mp.dst, a.place_id),
          a.created_at, a.summary_polyline, a.trailhead, a.athlete_id,
          coalesce(a.shared_group_id, a.id),
          a.source, a.owner_profile, a.also_profiles, a.elevation_gain, a.source_id, a.is_race,
-         a.elevation_profile, a.start_date_local, a.local_date,
+         a.elevation_profile, a.start_date_local,
          mv.dst,
          a.original_source, v_j_space
     from _fork_map m
@@ -510,29 +612,67 @@ begin
   -- MEMORY SUBJECTS for the copied visits and outings. A copy with no subject has no
   -- participants, and `people_memory_keys` would return nothing for it — the memory would
   -- be in Josh's space and invisible to every stat he has.
+  --
+  -- ⚠️ AND THE INSERTS ABOVE HAVE ALREADY MADE SOME OF THEM. `activities` and `visits` both
+  -- carry an AFTER trigger, `default_participants`, which the rehearsal found the hard way:
+  --
+  --   * for an ACTIVITY it calls `subject_for_activity(new.id)` — which CREATES the subject
+  --     — and then writes a `memory_people` row for the owner, `accepted` / `own_recording`.
+  --     So all 56 copied outings already have a subject, and a manufactured tag on it.
+  --   * for a VISIT it does nothing at all, because it is guarded by `auth.uid() is not
+  --     null` and a migration has no caller. So none of the 107 copied visits has one.
+  --
+  --   Two different behaviours from one trigger, neither of them what this file wants. The
+  --   subjects it did make are filed in ERICA's space, because they were made with no
+  --   caller and `default_space()` still falls back to the biggest space until section 8
+  --   removes it — a subject describing a Josh-space outing, filed in Erica's.
+  --
+  --   (This trigger is also, for the record, the generator the header names: a machine
+  --   writing participation rows with no `tagged_by`. It is not changed here.)
+  --
+  -- So: make the ones that are missing, adopt the ones that exist, and then throw the
+  -- manufactured tags away and copy the real ones. `on conflict do nothing` is what makes
+  -- the first step indifferent to which of the two the trigger did.
   create temporary table _fork_subject (src uuid primary key, dst uuid not null) on commit drop;
 
-  insert into public.memory_subjects (kind, owner_profile, photo_id, activity_id, visit_id, place_id, created_at, space_id)
-  select s.kind, s.owner_profile, null, ma.dst, mv.dst, mpl.dst, s.created_at, v_j_space
-    from public.memory_subjects s
-    left join _fork_map ma  on ma.kind  = 'activity' and ma.src  = s.activity_id
-    left join _fork_map mv  on mv.kind  = 'visit'    and mv.src  = s.visit_id
-    left join _fork_map mpl on mpl.kind = 'place'    and mpl.src = s.place_id
-   where s.space_id = v_e_space
-     and ((s.kind = 'visit'  and mv.dst is not null)
-       or (s.kind = 'outing' and ma.dst is not null));
+  insert into public.memory_subjects (kind, owner_profile, visit_id, created_at, space_id)
+  select 'visit', s.owner_profile, m.dst, s.created_at, v_j_space
+    from _fork_map m
+    join public.memory_subjects s on s.kind = 'visit' and s.visit_id = m.src
+   where m.kind = 'visit'
+  on conflict do nothing;
 
-  -- Recover the pairing. `memory_subjects` has no natural key, so the copies are matched
-  -- back to their originals through the memory they describe, which IS unique per kind.
+  insert into public.memory_subjects (kind, owner_profile, activity_id, created_at, space_id)
+  select 'outing', s.owner_profile, m.dst, s.created_at, v_j_space
+    from _fork_map m
+    join public.memory_subjects s on s.kind = 'outing' and s.activity_id = m.src
+   where m.kind = 'activity'
+  on conflict do nothing;
+
+  -- Whoever made it, a subject describing a copy belongs in the copy's space.
+  update public.memory_subjects d set space_id = v_j_space
+   where exists (select 1 from _fork_map m where m.kind = 'visit'    and m.dst = d.visit_id)
+      or exists (select 1 from _fork_map m where m.kind = 'activity' and m.dst = d.activity_id);
+
+  -- Recover the pairing. `memory_subjects` has no natural key, so a copy is matched back to
+  -- its original through the memory it describes — which is unique per kind, by the four
+  -- `memory_subjects_one_per_*` indexes.
   insert into _fork_subject (src, dst)
-  select s.id, d.id
-    from public.memory_subjects s
-    join _fork_map m on (m.kind = 'visit' and m.src = s.visit_id and s.kind = 'visit')
-                     or (m.kind = 'activity' and m.src = s.activity_id and s.kind = 'outing')
-    join public.memory_subjects d on d.space_id = v_j_space and d.kind = s.kind
-                                 and d.visit_id is not distinct from (case when s.kind = 'visit' then m.dst end)
-                                 and d.activity_id is not distinct from (case when s.kind = 'outing' then m.dst end)
-   where s.space_id = v_e_space;
+  select s.id, d.id from _fork_map m
+    join public.memory_subjects s on s.kind = 'visit' and s.visit_id = m.src
+    join public.memory_subjects d on d.kind = 'visit' and d.visit_id = m.dst
+   where m.kind = 'visit';
+
+  insert into _fork_subject (src, dst)
+  select s.id, d.id from _fork_map m
+    join public.memory_subjects s on s.kind = 'outing' and s.activity_id = m.src
+    join public.memory_subjects d on d.kind = 'outing' and d.activity_id = m.dst
+   where m.kind = 'activity';
+
+  -- THE MANUFACTURED TAGS GO. The record of who was on a memory is the original's tags,
+  -- copied below with their evidence, their decider and their timestamps intact — not a
+  -- trigger's guess written a moment ago during this migration.
+  delete from public.memory_people where subject_id in (select dst from _fork_subject);
 
   -- THE TAGS. `person_id` is rewritten to Josh's space's own person rows, for the reason
   -- given in section 5: the readers key on `linked_profile`, so this preserves the answer
@@ -570,10 +710,10 @@ begin
     from public.activity_sources t join _fork_map m on m.kind = 'activity' and m.src = t.activity_id
    where t.space_id = v_e_space;
 
-  insert into public.place_ratings (place_id, profile_id, rating, updated_at, space_id)
-  select m.dst, t.profile_id, t.rating, t.updated_at, v_j_space
-    from public.place_ratings t join _fork_map m on m.kind = 'place' and m.src = t.place_id
-   where t.space_id = v_e_space and t.profile_id = v_second;
+  -- `place_ratings` is NOT copied here. Josh's rating of a shared place is HIS rating, and
+  -- section 5 has already moved it into his space; the remap below repoints it at his copy
+  -- of the place. Copying as well would have inserted a second row on the same
+  -- `(place_id, profile_id)` key.
 
   insert into public.place_membership (child_id, parent_id, created_at, relationship_type, space_id)
   select mc.dst, mp2.dst, t.created_at, t.relationship_type, v_j_space
@@ -583,6 +723,95 @@ begin
    where t.space_id = v_e_space;
 
   get diagnostics n_copied = row_count;
+
+  -- ---- 6b. THE ROWS THAT MOVED NOW POINT AT THEIR OWN SIDE'S COPY --------
+  -- Section 5 moved Josh's private rows before the copies existed, so a moved row that
+  -- referenced a SHARED place or a SHARED visit is still pointing at the original — which
+  -- stayed in Erica's space. 93 of his visits were in exactly that state, and section 10
+  -- caught it.
+  --
+  -- The rule is one sentence applied everywhere: for any row now in Josh's space, a
+  -- reference to something that was materialised becomes a reference to the materialised
+  -- copy. A reference to something that merely MOVED needs nothing, because moving does not
+  -- change an id — which is why only `_fork_map` appears here.
+  update public.visits t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.visits t set parent_visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.parent_visit_id and t.space_id = v_j_space;
+  update public.activities t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.activities t set visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.visit_id and t.space_id = v_j_space;
+  update public.photos t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.photos t set visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.visit_id and t.space_id = v_j_space;
+  update public.videos t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.videos t set visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.visit_id and t.space_id = v_j_space;
+  update public.entries t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.naming_rules t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.location_pings t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.place_ratings t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.peak_bags t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+  update public.peak_bags t set activity_id = m.dst
+    from _fork_map m where m.kind = 'activity' and m.src = t.activity_id and t.space_id = v_j_space;
+  update public.visit_evidence t set visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.visit_id and t.space_id = v_j_space;
+  update public.activity_sources t set activity_id = m.dst
+    from _fork_map m where m.kind = 'activity' and m.src = t.activity_id and t.space_id = v_j_space;
+  update public.activity_participant_review t set activity_id = m.dst
+    from _fork_map m where m.kind = 'activity' and m.src = t.activity_id and t.space_id = v_j_space;
+  update public.activity_visit_review t set activity_id = m.dst
+    from _fork_map m where m.kind = 'activity' and m.src = t.activity_id and t.space_id = v_j_space;
+  update public.activity_reactions t set activity_id = m.dst
+    from _fork_map m where m.kind = 'activity' and m.src = t.activity_id and t.space_id = v_j_space;
+  update public.visit_participant_review t set visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.visit_id and t.space_id = v_j_space;
+  update public.visit_people t set visit_id = m.dst
+    from _fork_map m where m.kind = 'visit' and m.src = t.visit_id and t.space_id = v_j_space;
+  update public.place_membership t set child_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.child_id and t.space_id = v_j_space;
+  update public.place_membership t set parent_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.parent_id and t.space_id = v_j_space;
+  update public.dup_dismissed t set place_a = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_a and t.space_id = v_j_space;
+  update public.dup_dismissed t set place_b = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_b and t.space_id = v_j_space;
+  update public.memory_subjects t set place_id = m.dst
+    from _fork_map m where m.kind = 'place' and m.src = t.place_id and t.space_id = v_j_space;
+
+  -- COVER PHOTOS THAT NOW CROSS THE BOUNDARY, IN BOTH DIRECTIONS.
+  --
+  -- Photos are not duplicated (header gap 4): each one goes to whoever took it. So a place
+  -- whose cover was taken by the OTHER person now points across the line. The copies were
+  -- handled where they were copied; this catches the rest, and the measurement says the
+  -- remaining 10 are on ERICA's side — her place row, Josh's photograph, which went with
+  -- him.
+  --
+  -- ⚠️ THIS IS THE ONE THING ON ERICA'S SCREEN THAT CHANGES BESIDES HER VIEW OF JOSH.
+  -- 10 of her place cards lose their cover image. It is not a count: `cover_photo_id`
+  -- feeds no stat, no place total, no mileage, no trip and no race — every one of those is
+  -- asserted unchanged in the PR's before/after table. It is a picture, and the picture
+  -- belonged to Josh. The alternatives were to duplicate his photographs into her space,
+  -- which contradicts the rule that a photo has one owner, or to pick her a different cover,
+  -- which is inventing. Neither is better than saying so.
+  update public.places t set cover_photo_id = null
+   where t.cover_photo_id is not null
+     and not exists (select 1 from public.photos ph
+                      where ph.id = t.cover_photo_id and ph.space_id = t.space_id);
+
+  execute 'alter table public.activities enable trigger activities_sync_visit';
+  execute 'alter table public.activities enable trigger activities_default_participants';
+  execute 'alter table public.photos     enable trigger photos_sync_visit';
+  execute 'alter table public.photos     enable trigger photos_pin_marks_visit';
+  execute 'alter table public.visits     enable trigger visits_default_participants';
 
   -- ---- 7. THE ORIGINAL IS TOLD ABOUT ITS COPY -----------------------------
   -- The 23 both-tagged activities whose `shared_group_id` was NULL now get their own id
