@@ -1,7 +1,16 @@
 -- 0292 — the data fork: Josh's history becomes Josh's own.
 --
--- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
--- outside a transaction that was rolled back.
+-- APPLIED TO PRODUCTION. Corrected 2026-08-30 — this header said the opposite and had
+-- gone stale on merge (PR #208, "The fork is applied — Josh's history is his own").
+-- Comments only; not one line of SQL below is touched, because a file production has
+-- already replayed must stay byte-identical in its statements.
+--
+-- IT USED TO SAY: "DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run
+-- against production outside a transaction that was rolled back."
+--
+-- Caught by `scripts/check-draft-migrations.mjs`, which compares every not-applied claim in
+-- a header against production's ledger — the same guard that caught 0290 saying this on the
+-- day it was written. Twice in two days is why the check exists rather than a convention.
 --
 -- This is the half `0289` deliberately left behind. Its header says so in as many words:
 --
