@@ -1,7 +1,18 @@
 -- 0295 — a row with no caller still knows its space.
 --
--- DRAFT — REHEARSED LOCALLY AGAINST THE FULL CHAIN, NOT APPLIED. Nothing in this file has
--- been run against production.
+-- APPLIED TO PRODUCTION 2026-08-31, through `apply-migration.mjs`, which printed
+-- `self-wrapped: yes (unwrapped and re-wrapped)` and recorded version 0295 in the same
+-- transaction. Rehearsed against production first inside a transaction forced to abort,
+-- and the rollback was PROVEN afterwards — 0 functions, 0 triggers, 0 ledger row — rather
+-- than assumed, which is the lesson 0289 left.
+--
+-- IT USED TO SAY: "DRAFT — REHEARSED LOCALLY AGAINST THE FULL CHAIN, NOT APPLIED. Nothing
+-- in this file has been run against production."
+--
+-- Verified after applying: 32 triggers installed; the three writes that failed beforehand
+-- (an ingest-overland ping, a photo-gateway upload, a new person row) were each re-run
+-- inside a rolled-back transaction and each ACCEPTED, landing in the owner's space, with
+-- zero rows left behind.
 --
 -- ---------------------------------------------------------------------------
 -- WHAT IS BROKEN, AND IT IS BROKEN ON PRODUCTION RIGHT NOW
