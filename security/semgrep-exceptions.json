@@ -15,6 +15,12 @@
       "owner": "repository owner",
       "expires": "2026-11-06",
       "reason": "Semgrep's TSX parser reports PartialParsing around line 1615, the JSX attribute `placeholder=\"Trail name (e.g. W&OD — Leesburg segment)\"`. The construct is valid TSX that tsc and Vite both accept; the bare `&` and em dash trip Semgrep's own grammar. The user-facing copy is deliberate (the W&OD trail), so it is not being changed to satisfy a scanner. Consequence: part of MapView.tsx is not covered by Semgrep — tsc, eslint and the Playwright suite still cover it. Revisit when Semgrep's TSX grammar updates."
+    },
+    {
+      "file": "app/src/lib/database.types.ts",
+      "owner": "repository owner",
+      "expires": "2026-11-30",
+      "reason": "GENERATED FILE, never hand-edited: `npm run gen:types` writes it from the live schema. The partition (0289/0290) took it from ~1.5k to ~4.3k lines by adding space_id to 70 tables and 20 in_space_ views, and Semgrep can no longer fully parse it. Nothing here is authored code — it is type declarations with no executable statements, no I/O and no secrets, so the classes of bug Semgrep looks for cannot exist in it. It is still fully covered by tsc, which is the tool that matters for a types file: the app compiles against it on every build and the database gate fails if it drifts from production. Revisit if the file ever stops being generated, or if Semgrep's TS grammar handles it."
     }
   ]
 }
