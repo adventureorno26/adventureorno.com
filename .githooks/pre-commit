@@ -88,6 +88,30 @@ if printf '%s\n' "$staged" | grep -qx 'docs/STATE.md'; then
     echo "     If you really meant it:  AON_SKIP_HOOK=1 git commit ..." >&2
     exit 1
   fi
+
+  #    3b. THE RATIO IS NOT ENOUGH, and 2026-08-31 proved it. A stale copy overwrote the file
+  #    deleting 523 of 7,843 lines — 10%, which is exactly the figure the comment above cites
+  #    as LEGITIMATE, so the quarter-threshold let it through. Tightening the ratio would only
+  #    trade this miss for false alarms on the very section-move that comment is about.
+  #
+  #    So ask a different question. A stale copy LOSES section headings and adds none. A
+  #    section MOVE deletes headings and re-adds the same ones, so the sorted comparison nets
+  #    to zero. Measured on the 08-31 incident: 22 headings removed, 0 added. Measured on the
+  #    08-20 move it is 0 and 0.
+  head_old="$(git show HEAD:docs/STATE.md 2>/dev/null | grep -E '^#{2,6} ' | sort)"
+  head_new="$(git show :docs/STATE.md 2>/dev/null | grep -E '^#{2,6} ' | sort)"
+  gone="$(diff <(printf '%s\n' "$head_old") <(printf '%s\n' "$head_new") | grep -c '^<' || true)"
+  added="$(diff <(printf '%s\n' "$head_old") <(printf '%s\n' "$head_new") | grep -c '^>' || true)"
+  if [ "${gone:-0}" -ge 3 ] && [ "${added:-0}" -eq 0 ]; then
+    echo >&2
+    echo "  ✋ This commit removes $gone section headings from docs/STATE.md and adds none." >&2
+    echo "     That is the shape of a STALE COPY. A section MOVE re-adds what it removes." >&2
+    echo "     The headings that would disappear:" >&2
+    diff <(printf '%s\n' "$head_old") <(printf '%s\n' "$head_new") | grep '^<' | sed 's/^< /         /' >&2
+    echo "     If the file on disk is older than HEAD:  git checkout -- docs/STATE.md" >&2
+    echo "     If you really meant it:  AON_SKIP_HOOK=1 git commit ..." >&2
+    exit 1
+  fi
 fi
 
 # 4. ONE DOCUMENT.

@@ -4,9 +4,13 @@
   // Erica, 2026-08-11: "Use a VS Code workspace with format-on-save, ESLint,
   // TypeScript, test tasks, and an explicit terminal working directory."
   //
-  // The explicit working directory matters more than it sounds: the repo is the
-  // SUBFOLDER `adventureorno-claude-code`, not the parent that OneDrive syncs, and
-  // commands run from the wrong level have cost this project real time.
+  // The explicit working directory matters more than it sounds: commands run from the
+  // wrong level have cost this project real time.
+  //
+  // CORRECTED 2026-08-31: this used to say the repo was a SUBFOLDER called
+  // `adventureorno-claude-code` under a OneDrive parent. It is not, and has not been —
+  // `pwd -P` gives /Users/ericagaffney/Code/adventureorno, which OneDrive does not sync.
+  // A comment naming a path that does not exist sends people to the wrong place.
   "folders": [
     { "name": "adventureorno", "path": "." },
     { "name": "app", "path": "app" },
@@ -24,12 +28,25 @@
     "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
     "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
     "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
-    "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    // MARKDOWN IS NOT FORMATTED ON SAVE, and this is not a style preference.
+    //
+    // docs/STATE.md is 600KB and the only planning document. Prettier realigns every table
+    // pipe in it on every save, so a diff of one real edit arrives buried in a thousand
+    // lines of padding churn. On 2026-08-31 a stale editor buffer overwrote the file,
+    // deleting 523 lines of decisions written the day before, and the reformatting is what
+    // made it hard to see. `[sql]` has been exempt for the same reason since it was written.
+    "[markdown]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": false
+    },
     "[sql]": { "editor.formatOnSave": false },
 
     // ---- ESLint sees the app workspace, where the config lives ----
     "eslint.workingDirectories": [{ "directory": "app", "changeProcessCWD": true }],
     "eslint.validate": ["typescript", "typescriptreact", "javascript"],
+    // app/.eslintrc.cjs is the LEGACY format on ESLint 8. Recent versions of the extension
+    // assume flat config and quietly lint nothing when they do not find one.
+    "eslint.useFlatConfig": false,
 
     // ---- TypeScript: the repo's version, not VS Code's ----
     "typescript.tsdk": "app/node_modules/typescript/lib",
@@ -65,7 +82,8 @@
       "dbaeumer.vscode-eslint",
       "ms-playwright.playwright",
       "vitest.explorer",
-      "supabase.postgrestools"
+      "supabase.postgrestools",
+      "github.vscode-pull-request-github"
     ]
   },
   "tasks": {
@@ -123,6 +141,102 @@
         "dependsOn": ["typecheck", "lint", "test (unit)"],
         "problemMatcher": [],
         "group": { "kind": "build", "isDefault": true }
+      },
+
+      // ---- the database tasks. Each sources .env.local, because none of these scripts
+      // ---- does it for itself — only the root `verify:live` script did, which is why the
+      // ---- missing SUPABASE_ACCESS_TOKEN went unnoticed for so long.
+      {
+        "label": "db: check ledger",
+        "type": "shell",
+        "command": "set -a && . ./.env.local && set +a && npm run check:ledger",
+        "problemMatcher": [],
+        "detail": "Does production's ledger know every migration in this repo? STRICT=1 gates the deploy."
+      },
+      {
+        "label": "db: check drafts (STRICT)",
+        "type": "shell",
+        "command": "set -a && . ./.env.local && set +a && STRICT=1 npm run check:drafts",
+        "problemMatcher": [],
+        "detail": "STRICT=1 is not optional — without it this script exits 0 on every failure path."
+      },
+      {
+        "label": "db: retraction preflight",
+        "type": "shell",
+        "command": "set -a && . ./.env.local && set +a && npm run check:retraction-preflight",
+        "problemMatcher": [],
+        "detail": "Read-only. How many rows the retract-not-delete view predicate would newly hide."
+      },
+      {
+        "label": "db: apply migration to PRODUCTION",
+        "type": "shell",
+        "command": "set -a && . ./.env.local && set +a && npm run db:apply -- ${input:migrationStem}",
+        "problemMatcher": [],
+        "detail": "Applies AND records in one transaction. Apply BEFORE merging — check:ledger gates deploys."
+      },
+      {
+        "label": "db: SQL tests from an empty schema",
+        "type": "shell",
+        "command": "bash scripts/db-test.sh",
+        "problemMatcher": [],
+        "detail": "Same as 'test (SQL)'. Needs `supabase start`."
+      },
+      {
+        "label": "git: prune finished worktrees and merged branches",
+        "type": "shell",
+        "command": "git worktree list && echo '--- merged branches ---' && git branch --merged origin/main | grep -v '^\\*\\|main'",
+        "problemMatcher": [],
+        "detail": "LISTS only. Read it, then remove what you recognise — one worktree holds an open PR."
+      }
+    ],
+    "inputs": [
+      {
+        "id": "migrationStem",
+        "type": "promptString",
+        "description": "Migration stem, e.g. 0293_the_writers_name_their_space (no path, no .sql)"
+      }
+    ]
+  },
+
+  // ---- there were no launch configurations at all, so debugging meant console.log ----
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug Vitest (current file)",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder:app}/node_modules/vitest/vitest.mjs",
+        "args": ["run", "--no-file-parallelism", "${relativeFile}"],
+        "cwd": "${workspaceFolder:app}",
+        "console": "integratedTerminal",
+        "smartStep": true,
+        "skipFiles": ["<node_internals>/**"]
+      },
+      {
+        "name": "Debug a script against production (read-only)",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder:adventureorno}/scripts/${input:scriptName}",
+        "cwd": "${workspaceFolder:adventureorno}",
+        "console": "integratedTerminal",
+        "envFile": "${workspaceFolder:adventureorno}/.env.local",
+        "skipFiles": ["<node_internals>/**"]
+      },
+      {
+        "name": "Attach to the Vite dev server",
+        "type": "chrome",
+        "request": "launch",
+        "url": "http://localhost:5173",
+        "webRoot": "${workspaceFolder:app}/src",
+        "sourceMaps": true
+      }
+    ],
+    "inputs": [
+      {
+        "id": "scriptName",
+        "type": "promptString",
+        "description": "Script filename under scripts/, e.g. check-data-integrity.mjs"
       }
     ]
   }
