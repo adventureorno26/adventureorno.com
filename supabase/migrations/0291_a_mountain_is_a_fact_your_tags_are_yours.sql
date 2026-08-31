@@ -178,6 +178,49 @@
 -- adds two, and the reason is written there and in that file.
 --
 --
+-- ============================================================================
+-- REHEARSED ON PRODUCTION, 2026-08-30, AND VERIFIED ROLLED BACK
+-- ============================================================================
+--
+-- The file's own `begin`/`commit` was STRIPPED exactly as `scripts/apply-migration.mjs`
+-- strips it — the harness printed `self-wrapped: yes (unwrapped and re-wrapped)`, the same
+-- line that script prints — and the payload was then re-wrapped and ended in a deliberate
+-- `raise exception`, so the transaction could only ever abort. Wrapping a self-wrapped file
+-- in `begin … rollback` without stripping is what APPLIED the partition to production by
+-- accident; the inner `commit;` ends the outer transaction and the rollback never runs.
+--
+-- Every number measured AS THE PERSON WHO SEES IT (`set_config('request.jwt.claims', …)`
+-- then `set local role authenticated`), before and after, in one transaction:
+--
+--                    categories  options  settings  peaks  wander(places,miles,trips)  mileage_by_person
+--     ERICA before       19         8         1       38      132 / 2109.0 / 43              2136.1
+--     ERICA after        19         8         1       38      132 / 2109.0 / 43              2136.1
+--     JOSH  before       19         8         1        6       61 / 1468.4 / 30              1468.7
+--     JOSH  after        19         8         1        6       61 / 1468.4 / 30              1468.7
+--
+--     places readable under RLS   168 -> 168 for both.  peaks 49 -> 49.  parks 9 -> 9.
+--
+-- NOT ONE NUMBER MOVED FOR EITHER OF THEM. The only change anywhere:
+--
+--     Josh's space held  categories=0  options=0  settings=0   before
+--                        categories=19 options=8  settings=1   after
+--
+-- which is the entire purpose of the file, and is invisible on his screen because
+-- `home_space()` was already giving him one vocabulary rather than two.
+--
+-- BOTH READERS OF THE MILEAGE ARE QUOTED because they genuinely disagree on production
+-- today: `wander_stats_for_people` says 2109.0 and `mileage_by_person_for_people` says
+-- 2136.1, a 27.1-mile split that PREDATES this branch and `0292`'s alike. Neither moved.
+--
+-- ROLLBACK PROVEN by re-querying afterwards rather than by trusting the absence of an
+-- error — eight independent checks, all still in their BEFORE state:
+--
+--     0291 in the ledger .......... 0 rows      peaks.space_id .............. still there
+--     home_space() ................ absent      parks.space_id .............. still there
+--     in_space_peaks .............. still there place_categories pkey ....... (slug)
+--     Josh's space categories ..... 0           settings pkey ............... (key)
+--
+--
 -- CI. Not one assertion in this file counts rows. `scripts/db-test.sh` replays the chain
 -- from an EMPTY schema where every production count is zero; "expected exactly N" has
 -- broken CI on this repository twice. Everything below is structural, or "at most".
