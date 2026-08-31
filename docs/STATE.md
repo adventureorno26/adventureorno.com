@@ -741,6 +741,65 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### NOBODY JOINS SOMEBODY ELSE'S SPACE — `0298` APPLIED 2026-08-31
+
+Erica, 2026-08-31, asked which of the two ways in should survive the fork:
+*"Retire it — tagging is the link. Nobody ever joins someone else's space."*
+
+**There were two doors and they had stopped doing different things.** An invite **code**
+(`0288`) gates registration and gives the new person their own space — that works and is what
+she decided. An **email invite** (`claim_invite`) was meant to make somebody an editor
+*inside* your space; it inserts only a `profiles` row and never named a space, so the
+membership was always `ensure_profile_space()`'s doing. `approve_join_request()` is identical
+in that respect. **Both were already inert after the fork** and nobody had noticed.
+
+**The hazard underneath, which is dead today and live after any restore.**
+`ensure_profile_space()` ended with a guess:
+
+```sql
+if new.role = 'owner' or (select count(*) from public.spaces) <> 1 then …their own…
+else  select s.id into v_space from public.spaces s limit 1;   -- ← THE space
+      insert into space_memberships (…, 'editor')
+```
+
+So **whenever exactly one space exists, any new non-owner profile is silently made an EDITOR
+of it** — and `limit 1` with no `ORDER BY` does not even decide which. Two spaces exist today
+so it cannot fire; a restore rebuilds from the chain and a fresh schema has exactly one,
+which is the moment nobody is watching. `0298` removes it: every new profile gets its own
+space and owns it. The first-owner branch is kept — a bootstrap replay seeds reference rows
+into an unowned space before any profile exists, and that is not a person joining anybody.
+
+**`claim_invite` and `approve_join_request` are not dropped.** They still decide who may hold
+an account, which is still wanted; they simply grant membership of nobody's space. The
+`invites` table keeps its one historical row.
+
+⚠️ **A UI consequence a migration cannot fix.** Settings ▸ Data & Privacy still renders
+`JoinRequestsCard`, which offers to approve somebody *into* your space. It now gives them
+their own instead — the control does not do what it says, which is the exact defect item 6
+exists to remove. Needs an app change.
+
+#### THE THIRTEEN TESTS, and what they were really saying
+
+Removing the heuristic broke **13 SQL tests**, and that is the more interesting half. Each
+creates an owner, an editor and a viewer and asserts what each may do to the *same* rows —
+which only means anything if the three share a space. **They were relying on the heuristic
+without saying so**, and so testing two things while claiming to test one.
+
+The fix is a test-harness prelude (`supabase/tests/_prelude.sql`, prepended by `db-test.sh`,
+never in the migration chain) offering `test_support.share_one_space()`, and one explicit
+call per test. **It is opt-in on purpose**: the boundary tests (`0289`, `0290`, `0293`,
+`0295`, `0297`, `0298`) need two spaces that stay apart, and calling it would destroy exactly
+what they check. `scripts/seed-e2e-users.mjs` needed the same treatment — `mutating.spec.ts`
+is entirely about owner/editor/viewer against shared rows, and three people in three empty
+spaces would have proved nothing.
+
+**A mistake worth recording.** The apply and the chain replay were run in one command and
+only the tail was read, so `0298` was applied to production **while those 13 tests were
+red**. Production was unaffected — it changes only what happens when a *new* profile is
+created, and the three existing memberships were verified untouched — but the check and the
+irreversible step should never have been in the same breath. Verify, read the result, then
+apply.
+
 ### THE FOG BELONGED TO NOBODY — `0297` APPLIED 2026-08-31
 
 **Two nightly jobs failed on their first run after the fork**, and reading

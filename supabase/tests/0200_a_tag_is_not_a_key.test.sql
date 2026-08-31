@@ -22,6 +22,11 @@ insert into public.profiles (id, display_name, role) values
   ('aaaa0200-0000-0000-0000-000000000001', 'E0200', 'owner'),
   ('aaaa0200-0000-0000-0000-000000000002', 'J0200', 'editor')
 on conflict (id) do update set role = excluded.role;
+-- 0298: these actors used to share a space because `ensure_profile_space()` put any
+-- new non-owner into the only one that existed. That heuristic is gone; the fixture
+-- says what it needs instead. See supabase/tests/_prelude.sql.
+select test_support.share_one_space();
+
 
 do $$
 declare

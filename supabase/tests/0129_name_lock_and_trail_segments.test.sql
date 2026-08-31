@@ -8,6 +8,11 @@ insert into auth.users (id,email) values
 insert into public.profiles (id,role,display_name) values
   ('bbbb2222-0000-0000-0000-00000000f001','owner','V129 Erica'),
   ('bbbb2222-0000-0000-0000-00000000f002','editor','Josh') on conflict do nothing;
+-- 0298: these actors used to share a space because `ensure_profile_space()` put any
+-- new non-owner into the only one that existed. That heuristic is gone; the fixture
+-- says what it needs instead. See supabase/tests/_prelude.sql.
+select test_support.share_one_space();
+
 set local request.jwt.claims = '{"sub":"bbbb2222-0000-0000-0000-00000000f001"}';
 
 -- 1) Naming a place locks it and stops the geocoder.
@@ -60,6 +65,8 @@ declare p uuid; ok boolean := false;
 begin
   insert into auth.users (id,email) values ('bbbb2222-0000-0000-0000-00000000f003','v129-viewer@example.test') on conflict do nothing;
   insert into public.profiles (id,role,display_name) values ('bbbb2222-0000-0000-0000-00000000f003','viewer','V129 Viewer') on conflict do nothing;
+  -- 0298: a viewer created here gets their own space too, so collapse again.
+  perform test_support.share_one_space();
   select id into p from public.places where name = 'Josh''s Ridge';
   set local request.jwt.claims = '{"sub":"bbbb2222-0000-0000-0000-00000000f003"}';
   begin

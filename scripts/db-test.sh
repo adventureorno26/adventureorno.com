@@ -40,7 +40,10 @@ echo "Running ${#FILES[@]} SQL test file(s) ..."
 FAIL=0
 for f in "${FILES[@]}"; do
   name="$(basename "$f")"
-  if OUT="$(psql_db < "$f" 2>&1)"; then
+  # The prelude defines test_support.* helpers in the disposable stack. Prepended rather
+  # than run as its own file so a test can call a helper inside its own transaction; it is
+  # not in the *.test.sql glob, so it is never mistaken for a test.
+  if OUT="$(cat "$TESTS/_prelude.sql" "$f" | psql_db 2>&1)"; then
     # Surface the PASS notice; treat a missing PASS as a silent-failure guard.
     if echo "$OUT" | grep -q 'PASS'; then
       echo "  ok    $name — $(echo "$OUT" | grep 'PASS' | head -1 | sed 's/^psql:.*NOTICE:  //')"

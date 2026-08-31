@@ -13,6 +13,11 @@ insert into public.profiles (id, role, display_name) values
   ('cccccccc-0000-0000-0000-00000000d101','owner','DL Owner'),
   ('cccccccc-0000-0000-0000-00000000d102','editor','DL Editor'),
   ('cccccccc-0000-0000-0000-00000000d103','viewer','DL Viewer');
+-- 0298: these actors used to share a space because `ensure_profile_space()` put any
+-- new non-owner into the only one that existed. That heuristic is gone; the fixture
+-- says what it needs instead. See supabase/tests/_prelude.sql.
+select test_support.share_one_space();
+
 
 -- A SAVED place and an UNSAVED (draft) place, both authored by the owner.
 insert into public.places (id,name,lat,lng,saved,created_by) values
