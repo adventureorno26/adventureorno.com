@@ -602,6 +602,24 @@ jobs:
           STRICT: "1"
         run: npm run check:ledger
 
+      # AND REQUIRE EVERY HEADER TO BE TRUE ABOUT ITSELF.
+      #
+      # `check:drafts` has existed since 2026-08-30, is wired to npm, and was in NO workflow.
+      # It had never run in CI once. On 2026-08-31 it was run by hand for the first time and
+      # immediately found `0292_josh_history_becomes_joshs_own.sql` still saying "DRAFT —
+      # REHEARSED, NOT APPLIED" while production had applied it — the exact thing it exists
+      # to catch, sitting there for a day.
+      #
+      # STRICT=1 IS NOT OPTIONAL. Without it the script exits 0 on EVERY failure path,
+      # including a missing token, so it reports success having proved nothing. That is the
+      # same skip-is-indistinguishable-from-pass defect as `backup-freshness` passing on NaN
+      # and `verify-live` skipping silently, both of which this file already guards against.
+      - name: Require every migration header to be true about itself
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          STRICT: "1"
+        run: npm run check:drafts
+
       - name: Validate deployment target and secrets
         run: |
           for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_MAPTILER_KEY; do
