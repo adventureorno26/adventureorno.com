@@ -2861,7 +2861,7 @@ export type Database = {
           {
             foreignKeyName: "revealed_area_space_fk"
             columns: ["space_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "spaces"
             referencedColumns: ["id"]
           },
