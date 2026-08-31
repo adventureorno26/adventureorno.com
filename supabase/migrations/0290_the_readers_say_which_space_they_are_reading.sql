@@ -1,9 +1,9 @@
--- 0289 — the readers say which space they are reading.
+-- 0290 — the readers say which space they are reading.
 --
 -- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
 -- outside a transaction that was rolled back.
 --
--- The partition — 0288 on this branch, 0281 in PR #185 — makes a space the boundary and
+-- The partition — 0289 on this branch, 0281 in PR #185 — makes a space the boundary and
 -- rewrites 70 POLICIES to name one. It says, in its own header, what it leaves behind:
 --
 --     "The hard part is that the ~60 SECURITY DEFINER stat readers bypass RLS by
@@ -217,7 +217,7 @@
 -- WHAT THIS FILE REQUIRES, AND WHAT IT DOES NOT DO
 -- ============================================================================
 --
--- REQUIRES THE PARTITION — 0288 on this branch, 0281 in PR #185. There is no `space_id`
+-- REQUIRES THE PARTITION — 0289 on this branch, 0281 in PR #185. There is no `space_id`
 -- and no `is_member(uuid)` without it. This file is meaningless applied alone and will not
 -- compile.
 --

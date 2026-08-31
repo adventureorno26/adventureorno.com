@@ -1,8 +1,8 @@
--- 0289 — the readers say which space they are reading.
+-- 0290 — the readers say which space they are reading.
 --
 -- WHY THIS FILE EXISTS, AND WHY THE PRODUCTION REHEARSAL WAS NOT ENOUGH.
 --
--- 0289 was rehearsed against production inside `begin … rollback` as both real accounts:
+-- 0290 was rehearsed against production inside `begin … rollback` as both real accounts:
 -- 98 numbers compared, 0 changed. That is the right measurement and it proves exactly one
 -- thing — that the migration moves nothing today. It CANNOT prove the migration works,
 -- because today every row is in ONE space and both humans are in it, so every
