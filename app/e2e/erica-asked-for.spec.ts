@@ -310,29 +310,96 @@ it.describe('the card — what she asked for, on the live site', () => {
       .slice(0, 12);
     expect(hrefs.length, 'no places to check').toBeGreaterThan(0);
 
-    let found = '';
+    // ───────── WHY THE SAMPLE WAS NOT THE PROBLEM (measured 2026-08-30) ─────────
+    //
+    // This loop used to stop at the FIRST place that rendered a Routes heading and then
+    // demand a map of it. That made the check a coin toss, and it is worth writing down
+    // which side of the toss is the app and which is this file, because the check passed
+    // on one run and was red on the next with nothing deployed in between.
+    //
+    // THE TWO HALVES OF THE SECTION HAVE DIFFERENT SOURCES:
+    //
+    //   the LIST  — `PlacePanel` renders `Routes (n)` from `fetchActivitiesForPlaceTree`,
+    //               which is the place AND its segment children. That is deliberate: the
+    //               W&OD is one place holding its trailheads, and its runs sit on them.
+    //   the MAP   — `RouteMiniMap` reads `fetchActivitiesForPlace`, the place's OWN row
+    //               only, plus its pings, and returns `null` unless something has a
+    //               decodable track. Its own doc says so: *"Renders nothing when there's
+    //               no route data."* `PlacePanel` agrees in a comment beside the heading:
+    //               *"the list must show even when no route has a track to draw."*
+    //
+    // So a CONTAINER can honestly show a list and no map. Measured live, settled for 12s:
+    //
+    //   /place/6bffaec6-… (the Appalachian Trail)  ROUTES (6)  rows=6  map=NO
+    //   /place/eac4216c-…                          ROUTES (1)  rows=1  map=YES
+    //   /place/c85cbe8d-…                          ROUTES (1)  rows=1  map=YES
+    //   /place/0795746e-… (San Diego)              no Routes section at all
+    //
+    // The AT's six routes belong to its segments, so the trail row itself has nothing to
+    // draw — and whenever the sample's first route-having place happened to be one of
+    // those, the old check demanded a map the app never promised there and reported the
+    // section as broken. It was never broken. That is a defect in this check, not in
+    // Routes, and it is why hard-coding San Diego (which has NO Routes section) or the
+    // AT (which has no map) would both go red on a working app.
+    //
+    // WHAT IT ASSERTS NOW, over the places that HAVE routes rather than over one of them:
+    //
+    //   * every sampled place with a Routes section has a LIST — the half that is
+    //     unconditional, now checked on all of them instead of on one;
+    //   * and the section is a map AND a list on a place that has a track to draw, found
+    //     by looking for one instead of hoping the first one is it.
+    //
+    // THE SETTLE IS EXPLICIT, because "no Routes heading" and "the heading has not
+    // arrived yet" look identical, and reading them apart by timing is what the rule at
+    // the top of this file forbids. `trailActs` starts null and the Visits section prints
+    // `Loading…` while it is, so waiting for that word to go is the app telling us the
+    // routes state is DECIDED. Without it this loop mis-sampled: `c85cbe8d` read as
+    // having no Routes section at 2.5s and one at 12s.
+    it.setTimeout(180_000);
+
+    let withRoutes = 0;
+    let both = '';
     for (const href of hrefs) {
-      if (found) break;
+      if (both) break;
       await ready(page, href);
-      if (
-        (await page
-          .locator('.panel h3')
-          .filter({ hasText: /^Routes/ })
-          .count()) > 0
-      )
-        found = href;
+      // The positive first (openVisits opens it), then the wait for the word to go.
+      await openVisits(page);
+      await expect(page.locator('.visits-details p').filter({ hasText: /^Loading/ })).toHaveCount(
+        0,
+      );
+      const heading = page.locator('.panel h3').filter({ hasText: /^Routes/ });
+      if ((await heading.count()) === 0) continue;
+      withRoutes += 1;
+      // THE LIST, on every place that has the section — never conditional.
+      expect(
+        await page.locator('.route-row').count(),
+        `${href} has a Routes section and no list`,
+      ).toBeGreaterThan(0);
+      // A DRAWN map, not merely a mounted one. `RouteMiniMap` renders its wrapper while
+      // it is still deciding and removes it when there is nothing to draw, so the
+      // wrapper alone would pick places whose map is about to vanish. The canvas exists
+      // only once MapLibre has actually been constructed, which happens on the `hasData`
+      // branch — so it is the honest "this place has a track" signal.
+      if ((await page.locator('.route-mini-canvas canvas').count()) > 0) both = href;
     }
 
     expect(
-      found,
+      withRoutes,
       // `total` DID NOT EXIST. This message only builds when the check has already
       // failed, so the ReferenceError replaced the report with a crash — the one check
       // that was telling the truth could not say what it had found.
       `none of the first ${hrefs.length} places rendered a Routes section — either no ` +
         `place has activities, or the section stopped rendering`,
+    ).toBeGreaterThan(0);
+    expect(
+      both,
+      `${withRoutes} of the first ${hrefs.length} places have a Routes section, but none ` +
+        `of them drew a map. Either every one of them is a container whose routes sit on ` +
+        `its segments, or the mini map stopped rendering`,
     ).not.toBe('');
 
-    // The request itself: the section is a map AND a list, not one or the other.
+    // The request itself, on the place that has both: the section is a map AND a list,
+    // not one or the other. The page is already on it.
     await expect(page.locator('.panel h3').filter({ hasText: /^Routes/ })).toHaveCount(1);
     await expect(page.locator('.route-mini')).toBeVisible();
     expect(await page.locator('.route-row').count(), 'Routes has no list').toBeGreaterThan(0);
@@ -694,12 +761,43 @@ it.describe('the rest of the app — what she asked for', () => {
   }) => {
     await ready(page, '/settings');
     await openStats(page);
-    await page.locator('.stat-open').click();
+    const pill = page.locator('.stat-open');
+    await pill.click();
+
     // A list of trips, each row opening its visit, and a way to add one.
-    const first = page.locator('.trip-row').first();
-    await expect(first).toBeVisible();
-    await expect(first).toHaveAttribute('href', /^\/visit\//); // the ROW is the control
+    //
+    // THE LIST OPENED — the positive first, because only the opened control renders it.
+    const list = page.locator('.trip-list');
+    await expect(list).toBeVisible();
+    // …and the way to add one, which is the half of her request that does not depend on
+    // having been anywhere yet.
     await expect(page.getByRole('link', { name: /add a trip/i })).toBeVisible();
+
+    // WHY THIS NO LONGER DEMANDS A ROW. It used to open the pill and assert
+    // `.trip-row` existed, which asserts the SIGNED-IN ACCOUNT'S DATA rather than the
+    // feature: `verify:live` runs as the test bot, and measured live on 2026-08-30 the
+    // pill reads **"0 Trips"** and the list correctly says *"No trips yet. A visit of
+    // more than one day counts as one."* with the add button under it. The control does
+    // everything she asked for; the bot has simply never been anywhere for two days.
+    //
+    // This file has been caught by the same shape from the other side, and the note is
+    // a few checks above: the browser matrix ran against a seeded database "where that
+    // card has no visits, so the assertion had nothing to read and passed". Here it had
+    // nothing to read and FAILED, and reported a working control as missing.
+    //
+    // So the row assertion is kept exactly where it means something — over the trips
+    // that exist — and the pill's count is tied to the list underneath it, which is a
+    // real claim on any account, empty or not, and one the old check never made. On
+    // Erica's own account (trips > 0) this asserts everything it asserted before.
+    const rows = list.locator('.trip-row');
+    const n = Number((await pill.innerText()).replace(/\D+/g, '') || '0');
+    await expect(rows).toHaveCount(n);
+    if (n === 0) {
+      await expect(list).toContainText(/No trips yet/i);
+    } else {
+      await expect(rows.first()).toBeVisible();
+      await expect(rows.first()).toHaveAttribute('href', /^\/visit\//); // the ROW is the control
+    }
   });
 
   it('"The number of visits to each place should be the count on that dropdown"', async ({
