@@ -57,8 +57,27 @@ async function ready(page: import('@playwright/test').Page, path: string) {
   // on that route, for a page that is now correct — the same stale-assertion trap this
   // file was rewritten to fix, arriving in the file's own helper. /settings waits for its
   // heading instead, which is its equivalent proof that the app has booted.
+  //
+  // EITHER SIGNAL, because /settings is not one page. The branch below used to demand a
+  // heading matching /settings/i on anything under /settings, on the strength of the note
+  // above — and that note is only true of `/settings/account`. Measured live 2026-08-30,
+  // `/settings/data/attention`, `/settings/data/export` and `/settings/data/trash` each
+  // carry the full four-link nav and NO settings heading at all: their headings are
+  // `Needs attention`, `Export & backup` and `Trash`. Waiting for a settings heading there
+  // fails on a page that is perfectly correct — the same stale-assertion trap this helper
+  // was rewritten to fix, for the second time.
+  //
+  // Both are proof the app booted, so either will do, and a screen that has both is not
+  // penalised for it.
   if (path.startsWith('/settings')) {
-    await expect(page.getByRole('heading', { name: /settings/i }).first()).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (await page.getByRole('heading', { name: /settings/i }).count()) > 0 ||
+          (await page.locator('nav.primary-nav a').count()) > 0,
+        { timeout: 15_000 },
+      )
+      .toBe(true);
   } else {
     await expect(page.locator('nav.primary-nav a').first()).toBeVisible();
   }
@@ -1064,7 +1083,24 @@ it.describe('the rest of the app — what she asked for', () => {
     // The three things that were missing: a handle to be found by, the one switch that
     // makes you findable, and a sentence saying what a stranger actually sees.
     await expect(page.locator('.pub-profile')).toBeVisible();
-    await expect(page.getByLabel(/^Handle$/)).toBeVisible();
+    // A HANDLE, IN WHICHEVER OF ITS TWO STATES THIS ACCOUNT IS IN — the per-viewer lesson
+    // again. 0283 assigns everybody a handle on sight and freezes it only once CHOSEN, so
+    // an account that has not chosen shows the input and one that has shows the fixed
+    // `@name`. Asserting only the input was wrong twice over: it went red against the
+    // first deploy of this card (which had the predicate backwards and rendered neither),
+    // and it would go red again the day the bot claims one. Either state is the feature.
+    //
+    // WHAT THIS NO LONGER PROVES, said plainly rather than left to look like coverage:
+    // accepting both states means this check PASSES against the deploy that had the
+    // predicate backwards, because that build renders the fixed `@name` for everybody. The
+    // bug it caught — an unclaimed account being unable to choose — is about
+    // `handle_claimed_at`, which lives in the database and no DOM assertion here can read.
+    // It is guarded at source instead: `Settings.tsx` keys `claimed` off
+    // `handle_claimed_at` with the reason written beside it. A check that cannot see the
+    // difference should say so, not imply otherwise.
+    await expect(
+      page.locator('.pub-profile input[aria-label="Handle"], .pub-profile .pub-handle-fixed'),
+    ).toBeVisible();
     await expect(page.getByText(/let people find me/i)).toBeVisible();
     // The outcome is STATED, not left to be added up from the switches.
     await expect(page.locator('.pub-profile')).toContainText(
@@ -1099,6 +1135,12 @@ it.describe('the rest of the app — what she asked for', () => {
   it('the bucket list groups by state and every row can be wanted', async ({ page }) => {
     await ready(page, '/bucket');
     await expect(page.getByRole('heading', { name: /^Bucket List$/i })).toBeVisible();
+    // WAIT FOR THE GROUPS, not just the page title. `Bucket List` is static and renders
+    // before the rows arrive, so reading the group headings straight after it caught the
+    // page mid-load and reported "the bucket list is not grouped" with an EMPTY list —
+    // against a screen that groups perfectly. The title is not the list, exactly as one
+    // visible row is not the list in the Routes check above.
+    await expect(page.locator('h2, h3').first()).toBeVisible();
     // Grouped — the state headings are the grouping, so at least one must exist.
     const heads = await page.locator('h2, h3').allTextContents();
     expect(
@@ -1138,5 +1180,106 @@ it.describe('the rest of the app — what she asked for', () => {
     );
     // And the old heading that promised this over the wrong card is gone.
     await expect(page.getByRole('heading', { name: /People and tag approvals/i })).toHaveCount(0);
+  });
+
+  // ───────── CLOSING THE COVERAGE RATCHET, 2026-08-30 ─────────
+  //
+  // `app/src/lib/liveCheckCoverage.test.ts` recorded 17 of 37 routes as having no live
+  // check, each with the reason it was uncovered, and fails if that list grows. These
+  // eight close most of it. Every string below was MEASURED on production first — the
+  // point of the list was never to hold reasons, it was to be emptied.
+  //
+  // They are deliberately shallow. A check that opens a screen and names the one thing it
+  // is for cannot go stale the way a check that asserts a count can, and it is enough to
+  // catch the failure that actually happens: a route that stops rendering, or renders the
+  // error boundary. Anything deeper belongs in a check of its own, written when she asks
+  // for the thing it would guard.
+
+  it('the old routes still land where they were moved to', async ({ page }) => {
+    // FOUR LEGACY ROUTES, asserted in code rather than described in a comment. This
+    // matters for more than tidiness: the coverage guard reads the spec with comments
+    // STRIPPED, because naming a route in prose is not checking it — a lesson it learned
+    // by wrongly marking these three covered when a comment merely mentioned them.
+    for (const [from, to] of [
+      ['/attention', '/settings/data/attention'],
+      ['/trash', '/settings/data/trash'],
+      ['/export', '/settings/data/export'],
+      ['/inbox', '/settings/data/attention'],
+    ] as const) {
+      await ready(page, from);
+      await expect(page).toHaveURL(new RegExp(`${to}$`));
+    }
+  });
+
+  it('"Edit all places" is the bulk editor, and it says nothing retired', async ({ page }) => {
+    await ready(page, '/places/edit');
+    await expect(page.getByRole('heading', { name: /^Edit all places$/i })).toBeVisible();
+    // §0.2 retired the scope words, and this screen's filter carried them longest — it
+    // read "All · Just me · Just Josh · Together" as recently as item 4.
+    const body = await page.locator('body').innerText();
+    for (const word of ['Just me', 'Just Josh', 'Just Erica', 'Together', 'Both', 'Anyone']) {
+      expect(body, `"${word}" is retired (§0.2) and is on /places/edit`).not.toMatch(
+        new RegExp(`\\b${word}\\b`),
+      );
+    }
+  });
+
+  it('duplicates can be merged or kept apart', async ({ page }) => {
+    await ready(page, '/duplicates');
+    await expect(page.getByRole('heading', { name: /^Duplicate places$/i })).toBeVisible();
+    // Both answers, because offering only "Merge" would make it a one-way door.
+    await expect(page.getByRole('button', { name: /^Merge$/ }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /keep separate/i }).first()).toBeVisible();
+  });
+
+  it('the photo sorter is one door, and it is where she moved it', async ({ page }) => {
+    await ready(page, '/photos/sort');
+    await expect(page.getByRole('heading', { name: /^Sort photos into places$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /choose photos/i })).toBeVisible();
+  });
+
+  it('the smart albums render', async ({ page }) => {
+    // ADDED AFTER A FALSE ALARM, which is why it exists. On one pass of a long sweep this
+    // route came back as the error boundary — "Something went wrong. The app hit an
+    // unexpected error." It was NOT reproducible: four further loads, three of them direct
+    // and one repeating the exact sequence, all rendered `Smart albums` with zero page
+    // errors, so it is recorded as unexplained and NOT as a defect. The check is here so
+    // that if it ever is one, something says so.
+    await ready(page, '/albums');
+    await expect(page.getByRole('heading', { name: /^Smart albums$/i })).toBeVisible();
+    await expect(page.getByText(/Something went wrong/i)).toHaveCount(0);
+  });
+
+  it('Wrapped is a year in travel, and the years are the control', async ({ page }) => {
+    await ready(page, '/wrapped');
+    await expect(page.getByRole('heading', { name: /Year in Travel/i })).toBeVisible();
+    // A year to pick, not a fixed page.
+    await expect(page.getByRole('button', { name: /^20\d\d$/ }).first()).toBeVisible();
+  });
+
+  it('Needs attention lists what is waiting, on its own destination', async ({ page }) => {
+    await ready(page, '/settings/data/attention');
+    await expect(page.getByRole('heading', { name: /^Needs attention$/i })).toBeVisible();
+    await expect(page.getByText(/Something went wrong/i)).toHaveCount(0);
+  });
+
+  it('"Download everything you can take with you" — three formats and an archive', async ({
+    page,
+  }) => {
+    await ready(page, '/settings/data/export');
+    await expect(page.getByRole('heading', { name: /^Export & backup$/i })).toBeVisible();
+    // The two that open somewhere else, and the one you keep.
+    for (const fmt of ['CSV', 'GPX', 'KML']) {
+      await expect(
+        page.getByRole('button', { name: new RegExp(`^${fmt}$`) }).first(),
+      ).toBeVisible();
+    }
+    await expect(page.getByRole('button', { name: /build the archive/i })).toBeVisible();
+  });
+
+  it('the trash holds deletions for 30 days and gives them back', async ({ page }) => {
+    await ready(page, '/settings/data/trash');
+    await expect(page.getByRole('heading', { name: /^Trash$/i })).toBeVisible();
+    await expect(page.getByText(/30 days/i)).toBeVisible();
   });
 });

@@ -870,6 +870,8 @@ function PublicProfileCard() {
 
   useEffect(() => {
     if (!profile) return;
+    // The assigned handle is the honest starting point: it is what people would find you
+    // by right now. `suggestHandle` is only for the case where somehow there is none.
     setHandle(profile.handle ?? suggestHandle(profile.display_name));
     setBio(profile.bio ?? '');
   }, [profile]);
@@ -891,7 +893,16 @@ function PublicProfileCard() {
 
   if (!profile) return null;
 
-  const claimed = !!profile.handle;
+  // CLAIMED MEANS CHOSEN, NOT PRESENT — and getting this wrong shipped a dead field.
+  //
+  // 0283 gives EVERYBODY a handle on sight (`assign_handle`, so "findable" is never a
+  // state you have to opt into), and the guard that freezes it fires only when
+  // `old.handle_claimed_at is not null`. Keying off `profile.handle` therefore treated
+  // every account as already claimed, so the input never rendered and nobody could choose
+  // their own handle — the exact defect this card was built to remove, rebuilt one level
+  // down. Caught by this file's own live check within an hour of deploying: `.pub-profile`
+  // was visible and `getByLabel(/^Handle$/)` found nothing.
+  const claimed = !!profile.handle_claimed_at;
   const isPublic = profile.profile_visibility === 'public';
   const handleProblem = claimed ? null : whyHandleIsInvalid(handle);
 
@@ -919,7 +930,8 @@ function PublicProfileCard() {
               disabled={busy}
             />
             <span className="label">
-              {handleProblem ?? 'You can only choose this once, so pick one you will keep.'}
+              {handleProblem ??
+                'This one was picked for you. Change it if you like — but you can only choose once, so pick one you will keep.'}
             </span>
             <button
               className="primary"
@@ -938,7 +950,7 @@ function PublicProfileCard() {
         <input
           type="checkbox"
           checked={isPublic}
-          disabled={busy || !claimed}
+          disabled={busy}
           onChange={(e) =>
             void run('Couldn’t change your visibility', () =>
               savePublicProfile({ visibility: e.target.checked ? 'public' : 'private' }),
@@ -947,9 +959,10 @@ function PublicProfileCard() {
         />
         <span>Let people find me</span>
         <span className="label">
-          {claimed
-            ? 'Off, and searching for you finds nothing at all.'
-            : 'Claim a handle first — there is nothing to find you by yet.'}
+          {/* NOT GATED ON CLAIMING. Everybody already has a handle (0283), so there is
+              always something to be found by — making this wait for a claim would have
+              hidden the one switch that matters behind a step nobody needs to take. */}
+          Off, and searching for you finds nothing at all.
         </span>
       </label>
 

@@ -16,12 +16,19 @@
 // A count of zero checks proves nothing until something asserts it should be non-zero.
 // That is this file.
 //
-// WHY A RATCHET RATHER THAN A BAN. Seventeen of the thirty-seven routes had no live check
+// WHY A RATCHET RATHER THAN A BAN. SEVENTEEN of the thirty-seven routes had no live check
 // on the day this was written, and pretending otherwise by allow-listing them silently
 // would be the same defect in a new place. So they are listed BELOW, by name, each with the
 // reason it is not covered — and the test fails if the list grows, if a route is added to
 // the router without either a check or an entry here, or if a listed route GAINS a check
 // and is not removed from the list. The only direction it can move is down.
+//
+// IT MOVED. Later the same day the list went from seventeen to FOUR: nine checks were
+// written for `/places/edit`, `/duplicates`, `/photos/sort`, `/albums`, `/wrapped`, the
+// three `/settings/data/*` destinations and the four legacy redirects — each string
+// measured on production before it was asserted. What is left is four routes that cannot
+// honestly be checked by this harness rather than four that nobody got to, and the reason
+// on each says which.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -67,21 +74,8 @@ export function isCovered(route: string, specSource: string): boolean {
 export const UNCOVERED: Record<string, string> = {
   '/login': 'signed-out screen; `verify:live` is signed in as the test bot throughout',
   '/health': 'an operator diagnostic, not something Erica asked for',
-  '/wrapped': 'seasonal summary; nothing in STATE.md asks for it to be checked live',
-  '/albums': 'no request recorded against it',
-  '/places/edit': 'the bulk editor; item 4s strings are superseded and need re-measuring first',
-  '/duplicates': 'reached from an Attention tile that IS checked; the page itself is not',
-  '/photos/sort': 'covered indirectly by the Move-Import-and-Sort check, not by its own',
   '/photos/import/complete': 'an OAuth landing page; needs a real Google round trip',
   '/settings/import': 'legacy alias kept for saved URLs',
-  '/settings/data/attention':
-    'the destination of a checked redirect; its contents are not asserted',
-  '/settings/data/export': 'the destination of a checked redirect; its contents are not asserted',
-  '/settings/data/trash': 'the destination of a checked redirect; its contents are not asserted',
-  '/attention': 'legacy route; the redirect is asserted by item 10s check, the target is not',
-  '/export': 'legacy route; the redirect is asserted by item 10s check, the target is not',
-  '/inbox': 'legacy route; the redirect is asserted by item 10s check, the target is not',
-  '/trash': 'legacy route; the redirect is asserted by item 10s check, the target is not',
 };
 
 describe('every route is either live-checked or listed as a known gap', () => {
