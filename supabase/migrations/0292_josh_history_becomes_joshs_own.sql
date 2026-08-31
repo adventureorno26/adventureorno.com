@@ -1,4 +1,4 @@
--- 0291 — the data fork: Josh's history becomes Josh's own.
+-- 0292 — the data fork: Josh's history becomes Josh's own.
 --
 -- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
 -- outside a transaction that was rolled back.
@@ -216,7 +216,7 @@ begin
    order by created_at limit 1;
 
   if v_owner is null or v_second is null then
-    raise notice '0291: fewer than two people — nothing to fork.';
+    raise notice '0292: fewer than two people — nothing to fork.';
     return;
   end if;
 
@@ -224,7 +224,7 @@ begin
   select id into v_j_space from public.spaces where owner_profile = v_second order by created_at limit 1;
 
   if v_e_space is null or v_j_space is null or v_e_space = v_j_space then
-    raise notice '0291: the two spaces 0289 makes are not both here — nothing to fork.';
+    raise notice '0292: the two spaces 0289 makes are not both here — nothing to fork.';
     return;
   end if;
 
@@ -232,14 +232,14 @@ begin
   -- second copy of every shared row — so the guard is that Josh's space is still EMPTY.
   select count(*) into n from public.visits where space_id = v_j_space;
   if n > 0 then
-    raise notice '0291: Josh''s space already holds % visit(s) — already forked, nothing to do.', n;
+    raise notice '0292: Josh''s space already holds % visit(s) — already forked, nothing to do.', n;
     return;
   end if;
 
   -- Nothing to fork in an empty schema either. This is the branch CI takes.
   select count(*) into n from public.visits where space_id = v_e_space;
   if n = 0 then
-    raise notice '0291: no visits to fork — structure only.';
+    raise notice '0292: no visits to fork — structure only.';
     return;
   end if;
 
@@ -378,7 +378,7 @@ begin
    where space_id = v_e_space and owner_profile = v_owner  and linked_profile = v_second limit 1;
 
   if v_j_person is null or v_e_person is null or v_e_self is null or v_e_josh is null then
-    raise exception '0291: the four person rows the fork needs are not all present '
+    raise exception '0292: the four person rows the fork needs are not all present '
                     '(josh/josh %, josh/erica %, erica/erica %, erica/josh %) — '
                     'refusing to guess which person a tag means',
                     v_j_person, v_e_person, v_e_self, v_e_josh;
@@ -841,7 +841,7 @@ begin
     returns uuid language sql stable security definer set search_path to 'public' as $fn$
       -- The caller's own space, and nothing else. There is no longer a single occupied
       -- space to guess at, so a guess is now a way of filing a row in the wrong person's
-      -- history (0289 §"default_space", 0291 §8). A write that reaches here with no caller
+      -- history (0289 §"default_space", 0292 §8). A write that reaches here with no caller
       -- must name its space itself.
       select public.current_space();
     $fn$
@@ -865,39 +865,39 @@ begin
   --     database that looks partitioned and is not.
   select count(*) into n from public.visits v join public.places p on p.id = v.place_id
    where v.space_id is distinct from p.space_id;
-  if n > 0 then raise exception '0291: % visit(s) reference a place in another space', n; end if;
+  if n > 0 then raise exception '0292: % visit(s) reference a place in another space', n; end if;
 
   select count(*) into n from public.activities a join public.places p on p.id = a.place_id
    where a.space_id is distinct from p.space_id;
-  if n > 0 then raise exception '0291: % activity/ies reference a place in another space', n; end if;
+  if n > 0 then raise exception '0292: % activity/ies reference a place in another space', n; end if;
 
   select count(*) into n from public.activities a join public.visits v on v.id = a.visit_id
    where a.space_id is distinct from v.space_id;
-  if n > 0 then raise exception '0291: % activity/ies reference a visit in another space', n; end if;
+  if n > 0 then raise exception '0292: % activity/ies reference a visit in another space', n; end if;
 
   select count(*) into n from public.photos ph join public.places p on p.id = ph.place_id
    where ph.space_id is distinct from p.space_id;
-  if n > 0 then raise exception '0291: % photo(s) reference a place in another space', n; end if;
+  if n > 0 then raise exception '0292: % photo(s) reference a place in another space', n; end if;
 
   select count(*) into n from public.places p join public.photos ph on ph.id = p.cover_photo_id
    where p.space_id is distinct from ph.space_id;
-  if n > 0 then raise exception '0291: % place(s) have a cover photo in another space', n; end if;
+  if n > 0 then raise exception '0292: % place(s) have a cover photo in another space', n; end if;
 
   select count(*) into n from public.memory_people mp join public.memory_subjects s on s.id = mp.subject_id
    where mp.space_id is distinct from s.space_id;
-  if n > 0 then raise exception '0291: % tag(s) sit in a different space from their subject', n; end if;
+  if n > 0 then raise exception '0292: % tag(s) sit in a different space from their subject', n; end if;
 
   select count(*) into n from public.memory_people mp join public.people pe on pe.id = mp.person_id
    where mp.space_id is distinct from pe.space_id;
-  if n > 0 then raise exception '0291: % tag(s) name a person in another space', n; end if;
+  if n > 0 then raise exception '0292: % tag(s) name a person in another space', n; end if;
 
   select count(*) into n from public.memory_subjects s join public.visits v on v.id = s.visit_id
    where s.space_id is distinct from v.space_id;
-  if n > 0 then raise exception '0291: % subject(s) describe a visit in another space', n; end if;
+  if n > 0 then raise exception '0292: % subject(s) describe a visit in another space', n; end if;
 
   select count(*) into n from public.memory_subjects s join public.activities a on a.id = s.activity_id
    where s.space_id is distinct from a.space_id;
-  if n > 0 then raise exception '0291: % subject(s) describe an outing in another space', n; end if;
+  if n > 0 then raise exception '0292: % subject(s) describe an outing in another space', n; end if;
 
   -- (b) THE MILEAGE RULE. Every copied outing collapses onto the same canonical key as the
   --     original. If this fails, the same run counts twice, which is the one failure Erica
@@ -909,7 +909,7 @@ begin
    where m.kind = 'activity'
      and coalesce(src.shared_group_id, src.id) is distinct from coalesce(dst.shared_group_id, dst.id);
   if n > 0 then
-    raise exception '0291: % copied outing(s) do not share a canonical key with their original — '
+    raise exception '0292: % copied outing(s) do not share a canonical key with their original — '
                     'the same run would count twice', n;
   end if;
 
@@ -919,22 +919,22 @@ begin
    where (m.kind = 'place'    and not exists (select 1 from public.places     x where x.id = m.dst and x.space_id = v_j_space))
       or (m.kind = 'visit'    and not exists (select 1 from public.visits     x where x.id = m.dst and x.space_id = v_j_space))
       or (m.kind = 'activity' and not exists (select 1 from public.activities x where x.id = m.dst and x.space_id = v_j_space));
-  if n > 0 then raise exception '0291: % materialised row(s) did not land in Josh''s space', n; end if;
+  if n > 0 then raise exception '0292: % materialised row(s) did not land in Josh''s space', n; end if;
 
   -- (d) Both spaces are occupied and Josh is out of Erica's. If either is false the fork
   --     did not happen and everything above was a very expensive no-op.
   if not exists (select 1 from public.visits where space_id = v_j_space) then
-    raise exception '0291: Josh''s space still holds no visits';
+    raise exception '0292: Josh''s space still holds no visits';
   end if;
   if exists (select 1 from public.space_memberships where space_id = v_e_space and profile_id = v_second) then
-    raise exception '0291: Josh is still a member of Erica''s space';
+    raise exception '0292: Josh is still a member of Erica''s space';
   end if;
 
   -- (e) Nothing is homeless, and nothing gained a space it should not have.
   select count(*) into n from public.visits where space_id not in (v_e_space, v_j_space);
-  if n > 0 then raise exception '0291: % visit(s) are in a third space', n; end if;
+  if n > 0 then raise exception '0292: % visit(s) are in a third space', n; end if;
 
-  raise notice '0291: forked. % dependent row(s) moved on the last move statement, '
+  raise notice '0292: forked. % dependent row(s) moved on the last move statement, '
                '% on the last copy statement. Josh''s space: % place(s), % visit(s), '
                '% outing(s), % photo(s).',
     n_moved, n_copied,

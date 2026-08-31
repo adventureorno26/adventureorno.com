@@ -1,8 +1,8 @@
--- 0291 — the same run, counted once.
+-- 0292 — the same run, counted once.
 --
 -- WHY THIS FILE EXISTS, AND WHY THE PRODUCTION REHEARSAL WAS NOT ENOUGH.
 --
--- 0291 was rehearsed against production inside `begin … rollback`: every number on Erica's
+-- 0292 was rehearsed against production inside `begin … rollback`: every number on Erica's
 -- screens identical before and after, and Josh's My Stats identical too — 61 places,
 -- 1468.4 miles, 30 trips, before and after the fork. That is the right measurement and it
 -- proves the migration is safe TO RUN ONCE, on the data that exists today.
@@ -60,7 +60,7 @@ insert into public.places (id, name, lat, lng, saved, space_id, created_by) valu
 
 -- Ann, as a person. SHE ALREADY HAS ONE — 0262 gives every account exactly one person row,
 -- and `people` carries unique (owner_profile, linked_profile) with NO space_id in it, which
--- is the constraint 0291's rehearsal ran into. So there is exactly one row for her however
+-- is the constraint 0292's rehearsal ran into. So there is exactly one row for her however
 -- many spaces she is in, and this file must find it rather than make a second.
 update public.people set space_id = '11110291-0000-0000-0000-000000000001'
  where linked_profile = 'aaaa0291-0000-0000-0000-000000000001';
@@ -68,7 +68,7 @@ update public.people set space_id = '11110291-0000-0000-0000-000000000001'
 -- ---- 1. ONE RUN, TWO ROWS -------------------------------------------------
 -- 15 miles = 24140.16 metres. The original in space one; the materialised copy in space
 -- two, with a fresh id and `shared_group_id` pointing at the original — which is exactly
--- what 0291 section 6 writes, and section 7 writes the same value back onto the original.
+-- what 0292 section 6 writes, and section 7 writes the same value back onto the original.
 -- `original_source` is left NULL so `visible_activities`' Strava rule is not what is under
 -- test here.
 insert into public.activities
@@ -84,7 +84,7 @@ values
 
 -- Ann is on both rows. `activities_default_participants` may already have said so for the
 -- owner; `on conflict do nothing` makes this indifferent to that, which is the same
--- accommodation 0291 makes.
+-- accommodation 0292 makes.
 insert into public.memory_people (subject_id, person_id, participation_status, evidence, created_by, space_id)
 select public.subject_for_activity(a.id), pe.id,
        'accepted', 'own_recording', 'import', a.space_id
@@ -94,7 +94,7 @@ select public.subject_for_activity(a.id), pe.id,
  where a.id in ('d1110291-0000-0000-0000-000000000001','d2220291-0000-0000-0000-000000000002')
   on conflict do nothing;
 
--- THE SAME TRIGGERS 0291 TURNS OFF FIRE HERE, AND THIS IS WHAT THEY DO.
+-- THE SAME TRIGGERS 0292 TURNS OFF FIRE HERE, AND THIS IS WHAT THEY DO.
 -- `activities_sync_visit` rebuilt each place's visits when the two rows above were
 -- inserted, and `activities_default_participants` wrote a participation row of its own.
 -- Both landed through `default_space()`, which has no caller here — so a visit derived from
@@ -159,7 +159,7 @@ begin
   if mi <> 15.00 then
     raise exception 'FAIL: one 15-mile run counted as % miles', mi;
   end if;
-  raise notice 'PASS 0291 step 2: one run in two spaces counts once — % miles, not 30', mi;
+  raise notice 'PASS 0292 step 2: one run in two spaces counts once — % miles, not 30', mi;
 end $$;
 
 -- ---- 3. THE NEGATIVE CONTROL ----------------------------------------------
@@ -182,7 +182,7 @@ begin
     raise exception 'FAIL: the negative control did not double (got % miles). Step 2 proves nothing '
                     'unless a copy with a NULL shared_group_id really is counted twice', mi;
   end if;
-  raise notice 'PASS 0291 step 3: a copy with no shared_group_id doubles to % miles — the guard bites', mi;
+  raise notice 'PASS 0292 step 3: a copy with no shared_group_id doubles to % miles — the guard bites', mi;
 
   update public.activities set shared_group_id = 'd1110291-0000-0000-0000-000000000001'
    where id = 'd2220291-0000-0000-0000-000000000002';
@@ -206,7 +206,7 @@ end $$;
 -- they are in -- this file's fixture deliberately has Ann's row in space one while she is
 -- tagged on an outing in space two. The readers cope because `visit_profiles` and
 -- `activity_profiles` join `people` unscoped and key on `linked_profile`. Making `people`
--- per-space is the follow-up migration 0291's header names; until then this cannot hold for
+-- per-space is the follow-up migration 0292's header names; until then this cannot hold for
 -- that one table, and pretending otherwise would be a lie in a test.
 do $$
 declare
@@ -247,7 +247,7 @@ begin
   if bad <> '' then
     raise exception 'FAIL: rows reference another space across the boundary: %', bad;
   end if;
-  raise notice 'PASS 0291 step 4: nothing in either test space references a row in the other';
+  raise notice 'PASS 0292 step 4: nothing in either test space references a row in the other';
 end $$;
 
 rollback;
