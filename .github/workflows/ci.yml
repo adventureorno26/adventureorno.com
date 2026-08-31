@@ -693,8 +693,13 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: app
 
+      # `npm run verify:live` at the repo root sources ./.env.local first, which exists on
+      # a developer's machine and NEVER on a runner — the first CI run of this job died on
+      # `sh: 1: .: cannot open ./.env.local`. The three values it would have supplied are
+      # already in this job's `env:` above, from repository secrets, so call the workspace
+      # script directly and let the environment do its job.
       - name: Verify what is actually on the site
-        run: npm run verify:live
+        run: npm run verify:live --workspace app
 
       - name: Keep the evidence when it fails
         if: failure()
