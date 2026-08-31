@@ -775,6 +775,105 @@ and it was never applied to the other half.
 and every one of those measurements was a **read**. A boundary proven only by reading is
 half a boundary.
 
+### THE FORK LEFT EVERY CALLER-LESS WRITER WITH NO SPACE — 2026-08-31
+
+**Found by re-auditing yesterday's work against the live systems, and it was live on
+production when it was found.** Erica's instruction on 2026-08-31: *"did you use profiles
+instead of space_id? really review the migrations and work done."* The answer is yes, in one
+specific place, and it was breaking writes.
+
+**The chain.** `0289` gave 46 tables `space_id uuid not null default public.default_space()`.
+`0292` §8 then replaced `default_space()` with, in full, `select public.current_space()` —
+and `current_space()` reads `where m.profile_id = auth.uid()`. **The space became a function
+of the caller's PROFILE.** Every writer that has no profile — the photo gateway, all eleven
+edge functions, pg_cron, a restore — therefore resolves to NULL and dies on the NOT NULL.
+
+`grep -c space_id` over `workers/photo-gateway/src/` and every `supabase/functions/*/index.ts`
+returns **zero, across the board**. 0292's own comment said the consequence out loud —
+*"A write that reaches here with no caller must name its space itself"* — and no writer was
+ever taught to.
+
+**Measured, not inferred**, against a full local replay of the chain with 0292 §8's body
+installed:
+
+```
+insert into public.location_pings (lat, lng, recorded_at, source)
+values (39.1, -77.5, now(), 'overland');
+ERROR:  null value in column "space_id" of relation "location_pings"
+        violates not-null constraint
+```
+
+**What was broken:** photo upload (`photos`), the iPhone Shortcut ingest and Google Timeline
+import (`location_pings`), connecting Strava (`source_connections`), the invite edge function
+(`invites`), `purge_trash`'s nightly writes (`purged_media`, `deleted_hashes`),
+`dedupe_joint_outings`' suggestions, **and creating a profile at all** — `profile_self_person()`
+writes `public.people` with no space of its own, so a new signup died on NOT NULL.
+
+#### WHY NO TEST CAUGHT IT, which is the more important half
+
+**0292 §8 sits inside the branch that actually forks, and CI never forks.** That was a
+considered choice — its comment explains that an empty-schema replay seeds `activity_options`,
+`place_categories`, `peaks`, `parks` and `settings` before any profile exists, so removing the
+fallback unconditionally would break `db-bootstrap.sh` on every push.
+
+The cost was not noticed: **CI replays a schema whose `default_space()` still has the
+"biggest space" fallback.** Production is the only place the new body exists. So `db-test.sh`,
+all 77 SQL tests and the whole e2e suite exercise a *different function* from production, in
+the one place that decides where every row in the database is filed. `verify:live` could not
+see it either — it is read-only.
+
+#### The fix, `0295_a_row_with_no_caller_still_knows_its_space.sql`
+
+> *A row with no caller belongs to the space of the person the row is already about.*
+
+That is not a new policy. It is §THE PARTITION's own splitting rule — *"a row goes to the
+space of whoever is tagged on it"* — applied to a row that has not been written yet. It reads
+a column already on the row: a **fact about the row**, where "the biggest space" was a claim
+about the world. That difference is the whole reason one is acceptable and the other was
+deleted, and it is why this is not a re-introduction of the fallback.
+
+- A `before insert` trigger on **28 tables** fills `space_id` from the row's own profile
+  column (`profile_id` · `owner_profile` · `uploaded_by` · `invited_by` · `deleted_by` ·
+  `initiated_by` · `source_owner_profile` · `created_by`), discovered from the catalogue so
+  the next table anybody adds is covered by default.
+- **4 more** resolve from the row's subject, because they carry no usable profile:
+  `purged_media`→`photos`, `memory_people`→`memory_subjects`, `place_membership`→`places`,
+  and `suggestions` through its own `subject_type`.
+- It applies **only when there is no caller.** A signed-in caller whose `space_id` comes out
+  NULL is left to fail loudly — `default_space()` would have answered, so a NULL there means
+  something worse is wrong than a missing default.
+- The trigger name sorts before `refuse_write_outside_my_space` (0293), so the space is
+  filled before the boundary is checked.
+
+**Two things the test caught that review had not.** `memory_people.created_by` is **TEXT** and
+holds `'import'`/`'rule'` — it is provenance, not a person, and matching owner columns by name
+alone bound the trigger to it and broke every tagging insert. The selection now requires
+`atttypid = 'uuid'`: *a column that is not a uuid is not a profile, whatever it is called.*
+And the negative-control section failed first time round because `set local request.jwt.claims`
+is **transaction**-scoped, not block-scoped, so a caller from the previous section was still in
+scope and `default_space()` was quietly answering — the test caught its own test.
+
+`supabase/tests/0295_…test.sql` installs **production's** `default_space()` itself before
+asserting anything, because under CI's fallback body every assertion passes with 0295 deleted.
+Eight assertions, including a negative control that disables the trigger and requires the
+insert to die.
+
+#### STILL BROKEN AFTER 0295, named rather than papered over
+
+- **`rebuild_revealed_area()` is not space-aware at all.** It unions `photos`, `location_pings`
+  and `activities` across the whole database into **one row, `id = 1`**. It does not fail —
+  its insert is `on conflict (id) do update`, which never touches `space_id` — so it silently
+  merges both spaces' travel into one fog-of-war layer. A cross-space leak on the map, and a
+  design change rather than a default.
+- **`detect-trips`** inserts `places` and `visits` setting no `created_by`, and clusters
+  photos/activities across both spaces. It cannot say whose trip it is; it needs to cluster
+  within a space.
+- **`suggest` → `ingest_runs`** sets no `initiated_by`, so a suggester run still names no
+  space. Whose run is it, when it reads everything?
+
+Each needs its writer changed, which is a code change and a function deploy, not a migration.
+Inventing a space for them is exactly the guess `0292` removed.
+
 ### THE FORK IS APPLIED — JOSH'S HISTORY IS HIS OWN — 2026-08-30
 
 `0291` (reference tables) and `0292` (the data fork) are **applied to production**, both
