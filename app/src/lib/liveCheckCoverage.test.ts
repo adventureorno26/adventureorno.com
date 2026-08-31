@@ -56,7 +56,6 @@ export const UNCOVERED: Record<string, string> = {
   '/health': 'an operator diagnostic, not something Erica asked for',
   '/wrapped': 'seasonal summary; nothing in STATE.md asks for it to be checked live',
   '/albums': 'no request recorded against it',
-  '/bucket': 'requested and live, but unchecked — a real gap, and the next one to close',
   '/places/edit': 'the bulk editor; item 4s strings are superseded and need re-measuring first',
   '/duplicates': 'reached from an Attention tile that IS checked; the page itself is not',
   '/photos/sort': 'covered indirectly by the Move-Import-and-Sort check, not by its own',
