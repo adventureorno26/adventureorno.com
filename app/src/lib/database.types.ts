@@ -6564,6 +6564,7 @@ export type Database = {
             }
             Returns: string
           }
+      answering_a_tag_across_the_boundary: { Args: never; Returns: boolean }
       apply_inbox_field: {
         Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
         Returns: Json

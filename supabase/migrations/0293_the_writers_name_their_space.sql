@@ -1,7 +1,28 @@
 -- 0293 — the writers name their space.
 --
--- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
--- outside a transaction that was rolled back.
+-- APPLIED TO PRODUCTION 2026-08-31, through `apply-migration.mjs`, which printed
+-- `self-wrapped: yes (unwrapped and re-wrapped)` and recorded version 0293 in the same
+-- transaction. Rehearsed against production first inside a transaction forced to abort,
+-- and the rollback PROVEN afterwards — 0 guard functions, 0 guard triggers, 0 ledger row —
+-- before the real apply.
+--
+-- IT USED TO SAY: "DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run
+-- against production outside a transaction that was rolled back."
+--
+-- VERIFIED AFTER APPLYING, on production:
+--
+--   * the exploit was re-run first and was STILL OPEN — Josh, with 0 memberships in
+--     Erica's space, set one of her visits to 2019-01-01 inside a rolled-back transaction;
+--   * after applying, the same call is REFUSED with `42501: that row is not in a space you
+--     are in`, and her `start_date` is still 2026-08-30;
+--   * 46 guard triggers installed, and 0295's 32 `fill_space_from_the_row_owner` triggers
+--     are untouched — the two mechanisms coexist, `fill_` sorting before `refuse_` so the
+--     space is filled before the boundary is checked;
+--   * EVERY capability measurement is byte-identical before and after, for all three
+--     accounts: Erica 2136.1 mi / 132 places / 43 trips / 467 visits / 408 activities /
+--     162 places visible; Josh 208 / 175 / 83; Test Bot 467 / 220 / 162.
+--
+-- `vacuum analyze` was run afterwards, as this header asks.
 --
 -- 0290 closed the READERS and said, in its own header, exactly what it was leaving open:
 --
