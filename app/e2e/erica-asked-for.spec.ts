@@ -328,19 +328,44 @@ it.describe('the card — what she asked for, on the live site', () => {
     //               no route data."* `PlacePanel` agrees in a comment beside the heading:
     //               *"the list must show even when no route has a track to draw."*
     //
-    // So a CONTAINER can honestly show a list and no map. Measured live, settled for 12s:
+    // So a place can honestly show a list and no map.
     //
-    //   /place/6bffaec6-… (the Appalachian Trail)  ROUTES (6)  rows=6  map=NO
-    //   /place/eac4216c-…                          ROUTES (1)  rows=1  map=YES
-    //   /place/c85cbe8d-…                          ROUTES (1)  rows=1  map=YES
-    //   /place/0795746e-… (San Diego)              no Routes section at all
+    // WHOSE SCREEN THESE NUMBERS ARE. Every figure below was measured AS THE TEST BOT
+    // (`testbot@adventureorno.dev`), because that is who `verify:live` signs in as — and
+    // the card is NOT the same for two accounts, which is the single most important thing
+    // on this page to know before hard-coding anything. Measured 2026-08-30, 15s settle,
+    // San Diego read four times including once with cookies cleared, identical every time:
     //
-    // The AT's six routes belong to its segments, so the trail row itself has nothing to
-    // draw — and whenever the sample's first route-having place happened to be one of
-    // those, the old check demanded a map the app never promised there and reported the
+    //   place                                      as the TEST BOT
+    //   /place/0795746e-… (San Diego)              NO Routes section  rows=0  map=NO
+    //   /place/6bffaec6-… (the Appalachian Trail)  Routes (6)         rows=6  map=NO
+    //   /place/eac4216c-…                          Routes (1)         rows=1  map=YES
+    //   /place/c85cbe8d-…                          Routes (1)         rows=1  map=YES
+    //
+    // AND THE SAME SAN DIEGO CARD, READ SIGNED IN AS ERICA the same day, renders
+    // `Routes (6)` WITH a map. That is not a contradiction and neither reading is stale:
+    // the rest of the card is identical on both screens — `Photos and Videos`,
+    // `Beaches (1)`, `Restaurants (2)`, `NOTES AND REVIEWS` — and ONLY Routes differs,
+    // which is what rules out a mis-read id or a half-loaded page. What the bot sees is
+    // `Visits (1)` and no Routes at all.
+    //
+    // The MECHANISM is inferred, not measured, and is written as such: the bot cannot read
+    // those six activities, and the obvious reason is that it is not tagged on them (§0.2
+    // — My Stats is *"every card I am tagged on"*), but that was not isolated here. What IS
+    // measured is the effect, and it repeats: this file's own header calls the Appalachian
+    // Trail *"the one with 62 visits"* and the bot counts 35 on the same card.
+    //
+    // SO THE COUNTS ON A CARD ARE PER-VIEWER, and a check that hard-codes a place is
+    // asserting what THE BOT can see, not what Erica can. San Diego is the sharpest case:
+    // it is the card she designed everything against, it has six routes on her screen, and
+    // pinning this check to it would assert a Routes section that does not exist for the
+    // account the check actually runs as.
+    //
+    // Whenever the sample's first route-having place happened to be one with no drawable
+    // track, the old check demanded a map the app never promised there and reported the
     // section as broken. It was never broken. That is a defect in this check, not in
-    // Routes, and it is why hard-coding San Diego (which has NO Routes section) or the
-    // AT (which has no map) would both go red on a working app.
+    // Routes — and hard-coding either named place would go red on a working app, San Diego
+    // because the bot sees no Routes section at all and the AT because it draws no map.
     //
     // WHAT IT ASSERTS NOW, over the places that HAVE routes rather than over one of them:
     //
