@@ -1,4 +1,4 @@
--- 0293 — removing someone is a decision, not an erasure.
+-- 0294 — removing someone is a decision, not an erasure.
 --
 -- DRAFT — NOT APPLIED. Nothing in this file has been run against production at all, not
 -- even inside a rolled-back transaction, and the distinction matters enough to spell out:
@@ -8,7 +8,7 @@
 --   place, which means its own `do $check$` block passed — three writers rewritten, no
 --   writer still deleting a participation, both views excluding retracted rows, and 0290's
 --   `is_member(space_id)` predicate intact. Every one of the ~45 existing SQL tests still
---   passed, and `0293…test.sql` proved the rule end to end, tie-breaker included.
+--   passed, and `0294…test.sql` proved the rule end to end, tie-breaker included.
 --
 --   NOT REHEARSED AGAINST PRODUCTION. The repo's usual `begin … rollback` dress rehearsal
 --   executes DDL on the live database, and that was not run here. So what is proven is that
@@ -139,11 +139,11 @@ create or replace view public.visit_profiles as
 
 comment on view public.visit_profiles is
   'WAS A TABLE until 0266; a view over memory_people. Retracted participations are excluded '
-  '(0293) — that one predicate is what lets removal become a retraction without touching the '
+  '(0294) — that one predicate is what lets removal become a retraction without touching the '
   '34 readers here that never look at claim_status.';
 comment on view public.activity_profiles is
   'WAS A TABLE until 0266; a view over memory_people. Retracted participations are excluded '
-  '(0293), for the same reason as visit_profiles.';
+  '(0294), for the same reason as visit_profiles.';
 
 -- ---------------------------------------------------------------------------
 -- 2. The three writers retract instead of deleting.
@@ -168,15 +168,15 @@ begin
               / length('delete from public.memory_people mp');
     if v_hits <> 1 then
       raise exception
-        '0293: expected exactly ONE "delete from public.memory_people mp" in %, found % — '
+        '0294: expected exactly ONE "delete from public.memory_people mp" in %, found % — '
         'the function has moved on since this migration was written. Re-read the live body '
         'before applying.', v_fn, v_hits;
     end if;
     if position('using public.memory_subjects s, public.people pe' in v_src) = 0 then
-      raise exception '0293: % no longer joins memory_subjects/people the expected way', v_fn;
+      raise exception '0294: % no longer joins memory_subjects/people the expected way', v_fn;
     end if;
     if position('where s.id = mp.subject_id' in v_src) = 0 then
-      raise exception '0293: % no longer opens its where clause as expected', v_fn;
+      raise exception '0294: % no longer opens its where clause as expected', v_fn;
     end if;
 
     v_new := replace(
@@ -194,7 +194,7 @@ begin
       E'\n   where mp.participation_status <> ''retracted''\n     and s.id = mp.subject_id');
 
     if v_new = v_src then
-      raise exception '0293: rewrite produced no change for %', v_fn;
+      raise exception '0294: rewrite produced no change for %', v_fn;
     end if;
 
     execute v_new;
@@ -202,7 +202,7 @@ begin
   end loop;
 
   if v_changed <> 3 then
-    raise exception '0293: expected to rewrite 3 functions, rewrote %', v_changed;
+    raise exception '0294: expected to rewrite 3 functions, rewrote %', v_changed;
   end if;
 end $mig$;
 
@@ -220,7 +220,7 @@ begin
      and p.proname in ('set_visit_participants','set_place_solo','set_activity_solo')
      and pg_get_functiondef(p.oid) like '%delete from public.memory_people%';
   if n <> 0 then
-    raise exception '0293: % writer(s) still DELETE a participation', n;
+    raise exception '0294: % writer(s) still DELETE a participation', n;
   end if;
 
   -- All three must now retract.
@@ -230,7 +230,7 @@ begin
      and p.proname in ('set_visit_participants','set_place_solo','set_activity_solo')
      and pg_get_functiondef(p.oid) like '%participation_status = ''retracted''%';
   if n <> 3 then
-    raise exception '0293: only % of 3 writers retract', n;
+    raise exception '0294: only % of 3 writers retract', n;
   end if;
 
   -- And both views must hide retracted rows, or the retraction is invisible and a removed
@@ -241,7 +241,7 @@ begin
      and viewname in ('visit_profiles','activity_profiles')
      and definition like '%<> ''retracted''%';
   if n <> 2 then
-    raise exception '0293: only % of 2 views exclude retracted participations', n;
+    raise exception '0294: only % of 2 views exclude retracted participations', n;
   end if;
 
   -- The partition predicate 0290 added must still be there on both.
@@ -251,7 +251,7 @@ begin
      and viewname in ('visit_profiles','activity_profiles')
      and definition like '%is_member(s.space_id)%';
   if n <> 2 then
-    raise exception '0293: the is_member(space_id) predicate was lost on % of 2 views', 2 - n;
+    raise exception '0294: the is_member(space_id) predicate was lost on % of 2 views', 2 - n;
   end if;
 end $check$;
 
