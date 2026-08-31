@@ -741,6 +741,77 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### AN ACCEPTED TAG IS MINE — `0299` APPLIED 2026-08-31, AND ITEM 2b IS COMPLETE
+
+`0294` did the first half: removal **retracts** instead of deleting. `0299` is the other, and
+it is the half that survives a **deletion** rather than a removal — because
+`memory_people.subject_id` is `ON DELETE CASCADE`, so their deleting the card took my accepted
+participation with it before 0294's retraction could ever apply.
+
+**Accepting an outing tag now writes an activity row owned by ME, in MY space**, carrying the
+original's `shared_group_id`. Their untag, their block and their deletion cannot reach it.
+
+#### Why it does not double-count, which is the whole risk
+
+`0292` established the rule on 56 rows: an outing's canonical identity is
+`coalesce(shared_group_id, id)`. A copy with a fresh id and a NULL group would be a second
+key, and the 15-mile run would count as 30. So the copy carries the original's group, and
+where the original has none its own id is written in first — which `0292` measured cannot
+move a number, because every reader reads that same `coalesce`.
+
+It is load-bearing a second way that is easy to miss: `people_memory_keys` emits the outing
+key as `coalesce(shared_group_id, id)`, and **Our Stats is the intersection of those keys**.
+Without the shared group the card would drop out of Our Stats entirely. With it, Our Stats
+keeps working — and correctly loses the card when they untag themselves, which is what §0.2
+says should happen.
+
+Proved on rows the test makes itself: two rows, **one canonical key**, 15 miles not 30; and
+*"they deleted the card and MY record survived, still accepted."*
+
+#### OUTINGS ONLY, and that is not an oversight
+
+`0292` had to answer this exact question and its finding governs:
+
+```
+outings   coalesce(shared_group_id, id)   — a copy can be tied to its original ✅
+visits    the key is v.id, no such column                                      ❌
+places    count(distinct p.id), no such column                                 ❌
+```
+
+A materialised **visit** would count twice for anyone who could see both, with nothing in the
+schema able to say they are the same memory — the very reason Josh's membership had to end.
+STATE's approved wording is already *"when I accept a tag on someone's **outing**"*.
+**Accepted VISIT tags remain hostage to whoever tagged them.** That is the larger separate
+change `0292` sized: a `shared_group_id` on visits and places, plus every reader taught to
+collapse on it. It is now the biggest thing still open under §AN ACCEPTED TAG IS MINE.
+
+#### The one promised fact it cannot carry
+
+*"I keep the facts — date, distance, place."* Date and distance are carried. **Place is not.**
+Pointing at their place would cross the boundary `0292` §10(a) forbids; making a place in my
+space would add one to my place count with no dedupe key to stop the next acceptance adding
+another. Said out loud rather than quietly dropped — attaching the copy to a place of my own
+is a deliberate act afterwards. Their route, their `strava_id` and their `athlete_id` are also
+not copied, deliberately: *"their photos and their route stay theirs."*
+
+#### There is no live case for it yet
+
+Every tag today is inside one space, so the function returns NULL on its
+`v_my_space = v_src.space_id` line every time. **That is the point of the ordering.** STATE
+puts 2b before 3 so that the first tag which ever crosses an account boundary lands on a rule
+that already survives the tagger. Verified after applying: 629 activities unchanged, nothing
+back-filled, nothing auto-accepted, every capability figure identical to the morning baseline.
+
+#### It had to argue with a guard, which is the guard working
+
+`the_readers_stay_enforced.test.sql` failed on it: *"these SECURITY DEFINER functions read
+`public.activities` directly and are not on the allowlist."* That test is deliberately
+annoying and it was right to stop this. `materialise_accepted_outing` **must** read the raw
+table — the source lives in the tagger's space and `visible_activities` is space-scoped since
+`0290`, so the accepter can see nothing through it. What authorises the read is not membership
+but the accepted tag, already proved by the caller. It is on the list now, with that reason,
+and it shows the caller nothing: it writes one row and returns an id.
+
 ### NOBODY JOINS SOMEBODY ELSE'S SPACE — `0298` APPLIED 2026-08-31
 
 Erica, 2026-08-31, asked which of the two ways in should survive the fork:

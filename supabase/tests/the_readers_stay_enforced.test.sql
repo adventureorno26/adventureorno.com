@@ -36,6 +36,23 @@ declare
     -- The guard itself. It must read the table to answer questions about it.
     'can_see_activity',
 
+    -- 0299. MATERIALISING AN ACCEPTED TAG, and it is on this list for the same reason
+    -- 0293 exempts `respond_to_memory_tag` from the cross-space WRITE guard: the whole
+    -- point of the function is to reach a row in a space the caller is NOT in.
+    --
+    -- It copies the outing somebody tagged you on into your own space. The source lives in
+    -- THEIR space, so `visible_activities` — which is space-scoped since 0290 — returns
+    -- nothing for the accepter and the copy could never be made. What authorises it is not
+    -- membership but the accepted tag itself: `respond_to_memory_tag` has already proved
+    -- the caller is the person named on it before calling here, and this function is
+    -- reachable from nowhere else (revoked from public, anon and authenticated).
+    --
+    -- It shows the caller NOTHING. It writes one row and returns its id; no body of it
+    -- reaches a screen. The §7d Strava rule is untouched because the copy deliberately
+    -- carries no `strava_id`, no `athlete_id` and no `summary_polyline` — their recording
+    -- stays theirs, and what lands in your space is the facts you were tagged on.
+    'materialise_accepted_outing',
+
     -- 0283. THE PUBLIC PROFILE, and the one entry here that shows a person something.
     -- It cannot use `visible_activities`, and the reason is not convenience: that view
     -- answers "what may the VIEWER see", and a public profile answers "what did the OWNER

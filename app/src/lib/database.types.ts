@@ -7230,6 +7230,10 @@ export type Database = {
           score: number
         }[]
       }
+      materialise_accepted_outing: {
+        Args: { p_profile: string; p_subject: string }
+        Returns: string
+      }
       may_autowrite: {
         Args: { p_field: string; p_id: string; p_type: string }
         Returns: boolean
