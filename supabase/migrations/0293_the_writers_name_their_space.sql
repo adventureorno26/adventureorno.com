@@ -193,6 +193,40 @@
 --     `space_id` on a table where the statement touched no rows and the extra machinery
 --     is not worth buying before it is needed.
 --
+--   * TEN TABLES HAVE NO `space_id` AND SO CANNOT BE GUARDED BY THIS MECHANISM AT ALL.
+--     Measured on production the same way as everything else — SECURITY DEFINER
+--     functions writing to a `public` base table that carries no `space_id`:
+--
+--       connection_adds     accept_add, decline_add, remove_add, request_add,
+--                           connections_block_clears_the_rest
+--       connection_blocks   block_profile, unblock_profile
+--       connection_follows  follow_profile, unfollow_profile,
+--                           connections_block_clears_the_rest
+--       invite_codes        create_invite_code, redeem_invite_code, revoke_invite_code
+--       job_runs            cluster_unassigned, rebuild_revealed_area
+--       join_requests       approve_join_request, deny_join_request
+--       oauth_states        consume_oauth_state, strava_oauth_start
+--       profiles            approve_join_request, claim_invite, redeem_invite_code,
+--                           save_public_profile, set_handle, set_share_location
+--       service_health      prune_service_health
+--       spaces              ensure_profile_space
+--
+--     MOST OF THESE ARE CORRECT AS THEY STAND, and saying so is the point of listing
+--     them: a follow, a block, an add and a join request are relationships BETWEEN
+--     spaces, and 0290 already ruled on the shape — "blocks are bidirectional and global;
+--     they are not a space question". `profiles`, `invite_codes` and `oauth_states` are
+--     per-PERSON, not per-space. But this file has not audited any of them for a
+--     caller-boundary of their own, and "a space is not the right question here" is not
+--     the same sentence as "this one is safe". THAT IS A SEPARATE AUDIT and it is named
+--     here so it cannot be lost, in the same words 0290 used to name this one.
+--
+--   * `space_memberships` AND `invites` STAND OUT OF THE GUARD, as §2 says. Neither is
+--     left bare — both are covered by the partition's RLS policies for direct access, and
+--     the only SECURITY DEFINER writers that reach them are `ensure_profile_space()` (a
+--     trigger on `profiles`, reachable only by creating a profile) and `claim_invite()`
+--     (which matches the invite's email against the JWT's). But they are the two rows a
+--     boundary is made of, and nothing in this file checks them.
+--
 --   * THE GUARD ASKS ABOUT MEMBERSHIP, NOT ABOUT ROLE. A viewer in Erica's space passes
 --     it. That is correct here — `is_editor_or_owner()` is the role check and it already
 --     runs first in every writer that needs one — but it means this file is not an
