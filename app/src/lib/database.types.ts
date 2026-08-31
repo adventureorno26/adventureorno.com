@@ -1052,6 +1052,63 @@ export type Database = {
           },
         ]
       }
+      invite_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          issued_by: string
+          note: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          role: string
+        }
+        Insert: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          issued_by: string
+          note?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          issued_by?: string
+          note?: string | null
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_codes_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invite_codes_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invites: {
         Row: {
           accepted_at: string | null
@@ -4044,6 +4101,28 @@ export type Database = {
         Args: { p_key: string; p_place: Json; p_visit?: Json }
         Returns: Json
       }
+      create_invite_code: {
+        Args: { p_expires_in_days?: number; p_note?: string; p_role?: string }
+        Returns: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          issued_by: string
+          note: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          role: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invite_codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_manual_activity: {
         Args: {
           p_date: string
@@ -4268,6 +4347,7 @@ export type Database = {
       finish_ingest_run: { Args: { p_run: string }; Returns: undefined }
       follow_profile: { Args: { p_profile: string }; Returns: Json }
       forget_rule: { Args: { p_id: string }; Returns: Json }
+      generate_invite_code: { Args: never; Returns: string }
       geo_coverage: {
         Args: { p_profile?: string }
         Returns: {
@@ -4464,6 +4544,20 @@ export type Database = {
         Args: { p_activity: string; p_name?: string; p_radius_m?: number }
         Returns: Json
       }
+      list_my_invite_codes: {
+        Args: never
+        Returns: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          note: string
+          redeemed_at: string
+          redeemed_name: string
+          role: string
+          status: string
+        }[]
+      }
       list_trash: {
         Args: never
         Returns: {
@@ -4642,6 +4736,7 @@ export type Database = {
       }
       my_tags_to_confirm: { Args: { p_limit?: number }; Returns: Json }
       naming_rules_list: { Args: never; Returns: Json }
+      normalize_invite_code: { Args: { p_code: string }; Returns: string }
       occasion_count: { Args: { p_profile?: string }; Returns: number }
       on_this_day: {
         Args: never
@@ -4952,6 +5047,31 @@ export type Database = {
         }
         Returns: string
       }
+      redeem_invite_code: {
+        Args: { p_code: string }
+        Returns: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          display_name: string | null
+          handle: string
+          handle_claimed_at: string | null
+          id: string
+          profile_visibility: string
+          public_activity: boolean
+          public_places: boolean
+          public_stats: boolean
+          role: string
+          share_location: boolean
+          share_tagged_outings: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       reject_suggestion: { Args: { p_id: string }; Returns: Json }
       remove_add: { Args: { p_profile: string }; Returns: Json }
       remove_from_container: {
@@ -5007,6 +5127,28 @@ export type Database = {
         }
       }
       revealed_area_geojson: { Args: never; Returns: Json }
+      revoke_invite_code: {
+        Args: { p_id: string }
+        Returns: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          issued_by: string
+          note: string | null
+          redeemed_at: string | null
+          redeemed_by: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          role: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invite_codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       revoke_tagging_rule: { Args: { p_rule: string }; Returns: number }
       rule_offer: { Args: { p_activity: string }; Returns: Json }
       same_recording_of: {
