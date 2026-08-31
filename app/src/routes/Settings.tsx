@@ -13,12 +13,11 @@ import {
   fetchClimbingStatsForPeople,
   fetchGeoCoverageForPeople,
   fetchImportRuns,
-  fetchMapPeople,
+  fetchSpaceMembers,
   fetchPeaksBaggedForPeople,
   fetchPlaceIdsForPeople,
   type Attention,
   type ImportRun,
-  type MapPerson,
   type Peak,
   fetchMapProjection,
   fetchPlaces,
@@ -1862,9 +1861,14 @@ function IntegrationsDestination() {
  */
 function DataPrivacyDestination() {
   const { profile } = useAuth();
-  const [members, setMembers] = useState<MapPerson[]>([]);
+  // WHO YOU ARE SHARING WITH IS WHO IS IN YOUR SPACE — not who is on your map.
+  // These were the same list until the fork (0292) and are not any more: Josh still
+  // appears on Erica's map through the cards they are both tagged on, while no longer
+  // being a member of her space. Reading fetchMapPeople() here printed
+  // "Sharing — Erica & Josh" the day his membership ended.
+  const [members, setMembers] = useState<{ display_name: string | null }[]>([]);
   useEffect(() => {
-    fetchMapPeople()
+    fetchSpaceMembers()
       .then(setMembers)
       .catch(() => undefined);
   }, []);

@@ -663,6 +663,24 @@ export async function fetchMapPeople(): Promise<MapPerson[]> {
   return (data ?? []) as MapPerson[];
 }
 
+/** Who is actually a MEMBER of your space — which is what "sharing" means.
+ *
+ *  NOT `fetchMapPeople()`. That answers "who appears on my map", and after the fork those
+ *  are different questions: Josh still shows up on Erica's map through the cards they are
+ *  both tagged on, while no longer being a member of her space at all. The Sharing heading
+ *  used the map list and so told her she was sharing with somebody she was not — a heading
+ *  naming something it does not describe, the same defect "People and tag approvals" had.
+ *
+ *  Reads `space_memberships` directly: RLS already limits it to spaces you belong to, so
+ *  there is nothing to filter here and no definer function to write. */
+export async function fetchSpaceMembers(): Promise<{ display_name: string | null }[]> {
+  const { data, error } = await supabase.from('space_memberships').select('profiles(display_name)');
+  if (error) return [];
+  return ((data ?? []) as { profiles: { display_name: string | null } | null }[])
+    .map((r) => ({ display_name: r.profiles?.display_name ?? null }))
+    .filter((r) => r.display_name);
+}
+
 /** place_id → set of profile ids who contributed (added it, hiked it, or have a
  *  photo there). Drives the people filter on /places/edit, which narrows to the places
  *  everybody you pick contributed to. */

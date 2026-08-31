@@ -6564,6 +6564,7 @@ export type Database = {
             }
             Returns: string
           }
+      answering_a_tag_across_the_boundary: { Args: never; Returns: boolean }
       apply_inbox_field: {
         Args: { p_field: string; p_id: string; p_type: string; p_value: Json }
         Returns: Json
@@ -7107,6 +7108,7 @@ export type Database = {
       handle_from_name: { Args: { p_name: string }; Returns: string }
       handle_is_reserved: { Args: { p_handle: string }; Returns: boolean }
       home_space: { Args: never; Returns: string }
+      home_space_of: { Args: { p_profile: string }; Returns: string }
       import_duplicates_pending: { Args: never; Returns: Json }
       import_file_activity: {
         Args: {
