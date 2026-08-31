@@ -1495,6 +1495,19 @@ function AccountDestination() {
         </Link>
       </div>
 
+      {/* THE DOOR. Joining takes a code from somebody already here (0288), so every
+          member needs somewhere to make one. It is a deeper screen, not a fourth
+          destination — same shape as Data & Privacy ▸ Trash. */}
+      <h2 style={{ marginTop: 28 }}>Inviting people</h2>
+      <div className="card">
+        <p style={{ margin: '0 0 10px', color: 'var(--muted)', fontSize: 14 }}>
+          Nobody can join without a code from you. Each code lets in one person, once.
+        </p>
+        <Link to="/settings/account/invites" className="as-button">
+          Invite codes
+        </Link>
+      </div>
+
       <h2 style={{ marginTop: 28 }}>Map appearance</h2>
       <MapAppearanceSection />
       {profile?.role === 'owner' && <ProjectionCard />}

@@ -5327,6 +5327,85 @@ whether a trashed place is editable there is a product decision and `/trash` alr
   *place* and *trip* counts are identical for both, as they must be. Worth a look; not this
   change.
 
+## 6f. 2026-08-30 — THE DOOR IS A CODE (migration 0288)
+
+Erica, 2026-08-30: *"invite code first. new user sees whatever level of privacy each user
+as chosen. They can see public information."* This is the §4 call recorded in the decision
+table above ("**Sign-up** — Invite code first, not open registration"), now built.
+
+**Two halves, and only the first is what 0288 does.** The DOOR is a code: nobody becomes a
+member by asking and waiting. WHAT YOU SEE once you are in is not narrowed on anyone's
+behalf — each person's own privacy choices govern it and public information stays public.
+`0286` already settled that roles govern WRITES only and visibility belongs to the space
+boundary; nothing in 0288 restricts a read.
+
+### What the door was before
+
+A stranger signed in with Google, landed on `join_requests` (0023), wrote a note, and waited
+for the owner to notice. That made her the bottleneck on somebody else's Tuesday and asked
+her to approve a name and an email she may not recognise. A code moves the decision to the
+moment a member actually chose to invite somebody, which is when they know who it is.
+
+**Nothing was removed.** `join_requests`, `approve_join_request` and the Settings card still
+work, so anyone who already asked can still be let in. The login screen no longer offers it.
+`claim_invite()` (email invites, 0001) is untouched and still runs first on every sign-in.
+
+### The rules, and why each one
+
+| | |
+| --- | --- |
+| **Single-use** | A code is a bearer secret travelling over SMS. Multi-use means one forward turns one invited person into an unbounded number of accounts; `redeemed_by` is only an answer when there is exactly one of it; and revoking a multi-use code cannot un-make the accounts it already made. Inviting three people is three codes. |
+| **Four refusals, four sentences** | unknown / expired / revoked / already-used need four different actions from the person holding the code, so each is a distinct exception whose MESSAGE is the UI copy. `whyItFailed.ts` surfaces Postgres messages verbatim, so that wording lives in the migration, beside the rule that produced it. |
+| **Google first, code second** | Redemption's product is a `profiles` row keyed to `auth.uid()`, so there must be a signed-in user for the code to make an account FOR. |
+| **`redeem` is granted to `authenticated`, NOT `anon`** | An `anon` caller has no `auth.uid()` and nothing for the code to create. The grant would add exactly one capability: letting a stranger destroy a valid code by guessing it. A denial of service dressed as convenience. |
+| **A code is a secret** | `invite_codes_select_own` is the only policy that grants a read — the issuer and the owner. No INSERT/UPDATE/DELETE policy at all; every write goes through a SECURITY DEFINER function, which is what makes redemption atomic. |
+| **Restore-safe** | NO TRIGGER on the table, and every derived NOT NULL column has a COLUMN DEFAULT. This is the 0285 lesson: `restore-data.sh` runs under `session_replication_role = replica`, which disables triggers. `issued_by` deliberately has no default — it is data a restore replays, not something anything derives. |
+| **Where the screen lives** | `/settings/account/invites`, a DEEPER screen under Account. Settings still has exactly three destinations; this is the same shape as `/settings/data/trash`. |
+
+If a genuine reason for a multi-use code ever appears (an event, a group) it wants
+`max_redemptions int not null default 1` and a `redemptions` child table — **not** a
+nullable `redeemed_by` doing double duty.
+
+### The race, and how it was proved
+
+Two people holding the same single-use code, pressing the button together, must not both
+get in. `redeem_invite_code` takes `select … for update` on the code **before any
+validation**, so there is no window between deciding a code is usable and marking it used;
+behind that sits a conditional `update … where redeemed_at is null`, which is the half that
+still holds if the isolation level is ever raised and the loser aborts instead of re-reading.
+
+A `begin … rollback` test file runs on ONE connection, which is exactly where a race cannot
+happen. `scripts/prove-invite-race.sh` opens two live sessions and FORCES the interleaving,
+so it proves the claim or fails — it never passes by getting lucky on timing: A redeems and
+sits on the row lock; B blocks on `for update` (asserted through `pg_stat_activity`, not
+assumed); A commits; B wakes, re-reads, and is refused. Measured:
+
+    A redeemed as aaaa0288-face-0000-0000-00000000000a
+    B: ERROR: That invite code has already been used. Ask whoever gave it to you for
+       another one — each code lets in one person.
+
+Afterwards: exactly one of the two contenders has a profile, and the code names that person.
+
+### Not done
+
+* **Not applied to production, and not rehearsed against it.** Verified only by replaying the
+  whole chain from an EMPTY schema (`scripts/db-test.sh`) plus the two-session race proof on
+  the local disposable stack.
+* **`database.types.ts` cannot know about 0288 yet** — `gen-types.mjs` reads the LIVE schema
+  and is its only writer. `app/src/lib/inviteCodes.ts` carries one named cast to bridge that.
+  After the deploy: run `npm run gen:types` and delete the cast.
+* **§12 and this feature disagree about one Supabase Auth setting, and it is load-bearing.**
+  The setup runbook says *disable "Allow new users to sign up" (invite-only depends on this)*.
+  It does not: invite-only is enforced by the ABSENCE of a `profiles` row, which is why a
+  stranger can sign in with Google today and still see nothing but the login card. But
+  redeeming a code needs an `auth.users` row to attach a profile to, so **with that setting
+  off, a new person never gets a session and never reaches the code box.** The existing
+  "request access" flow has the same dependency, so in practice signups must already be on.
+  **Not changed here** — flipping an auth setting is Erica's call, and if she wants it off
+  then the code has to be redeemed by a signed-out visitor, which means a different design
+  (a pre-auth claim, and the `anon` grant this migration argues against). Confirm before
+  deploy.
+
 ## 7. Removed on purpose — the register
 
 Anything deliberately removed goes here, with the commit, so it is never mistaken for
@@ -7121,7 +7200,10 @@ Copy the project URL and current publishable key from the Supabase dashboard int
 `.env.local` and the corresponding Cloudflare `VITE_*` variables. Then audit:
 
 - Authentication → Sign In/Up: **disable "Allow new users to sign up"** (invite-only depends on
-  this).
+  this). ⚠️ **Read §6f before acting on this line.** Invite-only is actually enforced by the
+  absence of a `profiles` row, and BOTH ways in — redeeming an invite code (0288) and the older
+  "request access" — need an `auth.users` row first. With this setting off, an invited person
+  can never sign in far enough to use their code.
 - Project Settings → API keys: copy the **service_role/secret key** into `.env.local` ONLY when
   Phase 1 asks. Never paste it into chats, commits, or client code.
 - Database: Phase 1's migrations will enable PostGIS; no manual action.

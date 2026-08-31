@@ -10,6 +10,15 @@ interface AuthState {
   profile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  /**
+   * Re-ask whether this session has a profile yet.
+   *
+   * Exists for exactly one moment: redeeming an invite code (0288) CREATES the profile,
+   * and the provider is still holding the `null` it fetched a second earlier. Without
+   * this the person is left staring at the code box that just worked. A reload would
+   * also fix it and would throw away the OAuth landing state, so this asks instead.
+   */
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -83,6 +92,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const refreshProfile = async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      setProfile(null);
+      return;
+    }
+    setProfile(await ensureProfile(data.session.user.id));
+  };
+
   const signOut = async () => {
     // Drop persisted uploads so one account's bytes never resume under another login.
     await clearQueueStorage().catch(() => undefined);
@@ -91,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
