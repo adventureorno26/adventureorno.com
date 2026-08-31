@@ -26,6 +26,7 @@
     "verify:live": "set -a && . ./.env.local && set +a && npm run verify:live --workspace app",
     "check:ledger": "node scripts/check-migration-ledger.mjs",
     "check:drafts": "node scripts/check-draft-migrations.mjs",
+    "check:retraction-preflight": "node scripts/check-retraction-preflight.mjs",
     "db:apply": "node scripts/apply-migration.mjs",
     "backup": "node scripts/backup-db.mjs",
     "backup:objects": "node scripts/backup-r2.mjs",
