@@ -771,6 +771,57 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### A TAG FINDS THE PERSON IT IS ABOUT — `0300` APPLIED 2026-08-31
+
+The first step of **item 7b**, and the smallest: without it nothing else in 7b can be
+observed, because the person being tagged cannot see that they have been.
+
+**The door opened and nobody could find the handle.** `0290` rewrote the tag inbox to read
+the `in_space_*` views, each ending in `where space_id in (select my_space_ids())`. When Ann
+tags Ben the `memory_people` row belongs to **Ann's** space — the subject is hers, and `0295`
+files a participation with its subject deliberately so `0292` §10(a)'s invariant holds. Ben
+is not in Ann's space, so his inbox returned **zero rows, for ever**.
+
+The answering side was already right and had been since `0248`: `respond_to_memory_tag` reads
+the raw tables and authorises on identity, which is why `0293` exempts it from the write
+guard — *"reading someone else's card is not something you do TO their space; answering a tag
+is."*
+
+**Identity is the right key here and it is narrower, not looser.** A space check asks *are
+you inside this history*, which is correct for reading somebody's map and wrong for **a
+question addressed to you by name**. `pe.linked_profile = auth.uid()` admits exactly one
+person. What crosses the boundary is listed deliberately: `subject_id · kind · photo_id · the
+tagger's display name · when`. Not the place, not the distance, not the card's name, not the
+photograph — `photo_id` is an identifier and reading the photo behind it stays separately
+RLS'd. The signature does not move, so the app is untouched and a within-space tag returns
+exactly the row it returned yesterday.
+
+#### IT HAD AN EFFECT ON THE FIRST DAY, which was not expected
+
+The assumption was that this was infrastructure for 7b with no live case. Measured
+immediately after applying: **Erica 0 · Josh 2 · Test Bot 0**.
+
+**Josh has two questions waiting that he could never see.** Both are `visit` tags in Erica's
+space from 2026-08-30, and both were made by **nobody** — `tagged_by` null, `evidence`
+`unknown` — so they are the app's own guess that he was there. Exactly the shape §finding 15
+named: *"parked where the asking screen could never surface them."*
+
+⚠️ **How those two should be treated is Erica's call.** `0279` set a precedent for the
+previous fifteen of exactly this kind — *"just mark it that he accepted the tag"* — but that
+was an instruction about a specific set, not a standing rule. Nothing decides for her; they
+simply stopped being invisible.
+
+**One piece of copy was unreachable until now and is fixed here.** The Tag approvals card
+read `kind === 'photo' ? 'A photo you are in' : 'An outing you were on'` — so both of Josh's
+**visit** tags would have said "outing". It now says *"Somewhere you were"*, matching the
+card's own sentence above it.
+
+**Not done here:** `my_tags_to_confirm()`, the older `tag_claims` inbox, is space-scoped the
+same way **and** inner-joins `visible_activities`, `in_space_places` and
+`in_space_tagging_rules` — so a cross-space claim is not merely filtered, it is dropped by the
+join. Fixing it means deciding how much of somebody else's card you may see before accepting
+it, which is worth asking rather than answering in passing.
+
 ### AN ACCEPTED TAG IS MINE — `0299` APPLIED 2026-08-31, AND ITEM 2b IS COMPLETE
 
 `0294` did the first half: removal **retracts** instead of deleting. `0299` is the other, and

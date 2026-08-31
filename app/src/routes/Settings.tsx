@@ -1087,7 +1087,15 @@ function TagApprovalsCard() {
       {tags.map((t) => (
         <div key={t.subject_id} className="tag-approval-row">
           <span className="tag-approval-what">
-            {t.kind === 'photo' ? 'A photo you are in' : 'An outing you were on'}
+            {/* Until 0300 a tag could only be seen by somebody in the same space, so the
+                visit case was unreachable and everything non-photo said "outing". Josh has
+                two waiting visit tags the moment that changed. The card's own sentence
+                above already says "you were somewhere", so this matches it. */}
+            {t.kind === 'photo'
+              ? 'A photo you are in'
+              : t.kind === 'visit'
+                ? 'Somewhere you were'
+                : 'An outing you were on'}
             <span className="label"> · {new Date(t.created_at).toLocaleDateString()}</span>
           </span>
           <span className="btn-row">
