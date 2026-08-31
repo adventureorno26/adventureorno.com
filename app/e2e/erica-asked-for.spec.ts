@@ -72,14 +72,38 @@ async function ready(page: import('@playwright/test').Page, path: string) {
 /** Settings' Stats card is a <details>; its contents are hidden until it is open —
  *  the same disclosure pattern as the Visits section on a card. */
 async function openStats(page: import('@playwright/test').Page) {
-  // TARGET THE "Stats" DROPDOWN BY NAME. /settings has FOUR `details.stats-dropdown`
-  // — Stats, Cities and states, National Parks, Peaks & climbing — and this helper used
-  // to click the FIRST summary only if NONE of the four was open. So whenever any other
-  // one was open it clicked nothing, the Stats card stayed shut, and the Trips button
-  // inside it was reported as "not visible": a missing feature, according to the file
-  // that decides what Erica has been given. It was never missing.
+  // TARGET THE STATS DROPDOWN BY NAME. /settings has TWENTY `details.stats-dropdown` —
+  // the four cards (the stats card, Cities and states, National Parks, Peaks & climbing)
+  // plus one per state nested inside Cities and states — and this helper used to click
+  // the FIRST summary only if NONE of them was open. So whenever any other one was open
+  // it clicked nothing, the Stats card stayed shut, and the Trips button inside it was
+  // reported as "not visible": a missing feature, according to the file that decides
+  // what Erica has been given. It was never missing.
+  //
+  // REWRITTEN 2026-08-30 under rule 4 at the top of this file. This is a RENAME she
+  // approved, not drift, and it took THREE checks red with it — `:607`, `:626` and
+  // `:686` all open the card through here:
+  //
+  //   WAS: `> summary` matching /^Stats$/ — the card was headed with the bare word
+  //        `Stats`, which named a card rather than the scope its numbers are about.
+  //   IS  (docs/STATE.md §0.2, approved 2026-08-30): *"This is not a household app.
+  //        This is a social application."* — **there are exactly three scopes and no
+  //        operator**, and the bare word `Stats` is not one of them. The card is now
+  //        headed by the scope it is showing, written once in `lib/statsScope`:
+  //        **My Stats** (every card you are tagged on) or **Our Stats** (only the cards
+  //        you and the picked people are all tagged on), then ` · ` and the sentence
+  //        saying what the number counts.
+  //
+  // MEASURED, live, 2026-08-30: the summary reads `My Stats · Every card you are tagged
+  // on.` — so `/^Stats$/` matched none of the twenty and answered 0.
+  //
+  // EITHER WORD, on purpose. Which one the card opens on depends on who the account has
+  // recorded — the test bot has recorded nobody, so it gets My Stats — and both are the
+  // same card. `^` still anchors it, so a state nested inside Cities and states can
+  // never be mistaken for it, and `toHaveCount(1)` below still proves there is exactly
+  // one.
   const stats = page.locator('details.stats-dropdown').filter({
-    has: page.locator('> summary', { hasText: /^Stats$/ }),
+    has: page.locator('> summary', { hasText: /^(My|Our) Stats\b/ }),
   });
   await expect(stats).toHaveCount(1);
   const summary = stats.locator('> summary');
@@ -370,7 +394,21 @@ it.describe('the card — what she asked for, on the live site', () => {
     await openVisits(page);
     const first = page.locator('.visit-row').first();
     await expect(first).toBeVisible();
-    await first.click();
+    // CLICK THE ROW'S "Open" LINK, NOT THE ROW. `.visit-row` is a plain `<div>` and is
+    // inert — it has no handler of its own. What it CONTAINS is two controls: a
+    // `<button class="visit-main visit-open">` that expands that visit's editor in
+    // place (dates, who, trip, delete), and an `<a href="/visit/…">Open</a>` that opens
+    // the visit's card. Clicking the div landed on the button, which expanded the editor
+    // and correctly did not navigate, so this waited 15s for a `/visit/` URL against a
+    // card that was working. Measured live 2026-08-30: the Open link goes to
+    // `/visit/7fb3e76f-…` and renders `.panel.visit-card`.
+    //
+    // Only the TARGET was wrong; every assertion below is untouched. The link is located
+    // through the row rather than page-wide, so this is still "a visit row opens the
+    // card" and not "some link somewhere does".
+    const open = first.getByRole('link', { name: /^Open$/ });
+    await expect(open).toBeVisible();
+    await open.click();
     await expect(page).toHaveURL(/\/visit\//);
 
     // The positive first: it is a panel with a cover and the locked sections.
@@ -403,7 +441,24 @@ it.describe('the card — what she asked for, on the live site', () => {
     await expect(page.locator('.npd-card .panel-hero')).toHaveCount(1);
     await expect(page.getByPlaceholder(/Name this place/i)).toBeVisible();
     await expect(page.getByText(/Add a cover photo/i)).toBeVisible();
-    await expect(page.getByText(/this is visit one/i)).toBeVisible();
+    // BOTH PLACES THE CARD SAYS IT, each named. `getByText(/this is visit one/i)` was a
+    // strict-mode violation resolving to 2 elements, because the blank card says it
+    // TWICE — on the coords line (`38.05567, -95.75000 · this is visit one`) and as the
+    // Visits section's own label. Nothing about the card changed and neither element is
+    // wrong; the locator simply never said which of the two it meant, so the check
+    // crashed on a card that was doing exactly what was asked.
+    //
+    // Both are asserted rather than one picked with `.first()`: both are the card's
+    // promise — §"THE CARD — LOCKED", *"Its Visits section says 'this is visit one',
+    // because saving a new place IS its first visit"* — and `lockedCard.test.ts` guards
+    // the same words at source. Naming them is strictly more than the old line proved.
+    await expect(page.locator('.npd-card .npd-coords')).toContainText(/this is visit one/i);
+    await expect(
+      page
+        .locator('.npd-card h3')
+        .filter({ hasText: /^Visits/ })
+        .locator('.label'),
+    ).toHaveText(/this is visit one/i);
     // Not a chooser, and not the parent picker she deleted.
     await expect(page.getByText(/what are you adding/i)).toHaveCount(0);
     await expect(page.getByText(/Part of a trail/i)).toHaveCount(0);
@@ -445,8 +500,19 @@ it.describe('the card — what she asked for, on the live site', () => {
 
     // …and CANCEL leaves nothing behind. The confirm is the card asking, which is
     // itself the proof that it knows it is holding work.
+    //
+    // THE CARD'S OWN CANCEL, named by the footer it sits in. `getByRole('button',
+    // { name: /^Cancel$/ })` was a strict-mode violation resolving to 3 elements: the
+    // blank card carries THREE controls labelled Cancel — the cover's close ✕
+    // (`aria-label="Cancel"`), the note form's own Cancel, and the card's footer Cancel.
+    // The click therefore never happened, on a card where cancelling works. The one this
+    // check means is the card's: the only one that discards the card, and so the only
+    // one the confirm dialog belongs to.
     page.once('dialog', (d) => void d.accept());
-    await page.getByRole('button', { name: /^Cancel$/ }).click();
+    await page
+      .locator('.npd-footer')
+      .getByRole('button', { name: /^Cancel$/ })
+      .click();
     await expect(page.locator('.panel.npd-card')).toHaveCount(0);
   });
 });
