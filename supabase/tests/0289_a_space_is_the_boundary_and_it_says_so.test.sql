@@ -17,13 +17,25 @@ begin;
 set local check_function_bodies = off;
 
 -- ---- 1. EVERY SPACE-OWNED TABLE ACTUALLY CARRIES ONE -------------------------
+-- REWRITTEN BY 0291. `peaks` and `parks` were in this array and are not any more, because
+-- 0291 deliberately takes their `space_id` away: a summit's elevation and a park's boundary
+-- polygon are facts about the world, neither table has ever had a write policy, a
+-- `created_by` or any other opinion column, and both are filled out-of-repo by an OSM pass.
+-- The judgement built from them stays space-owned — `peak_bags` (who climbed it) and
+-- `places.park` (which of my places is in it) are both still in the list or on a table that
+-- is. 0291 section 2 carries the argument in full; 0291 section 8a asserts the opposite of
+-- what this loop used to assert about those two, so the rule is still checked, just checked
+-- where it is now true.
+--
+-- The `n < 20` floor below still binds: all 24 names existed on production when this was
+-- edited, so the array goes 24 -> 22.
 do $$
 declare t text; n int := 0;
 begin
   foreach t in array array[
     'places','visits','activities','photos','videos','entries','people','memory_subjects',
     'memory_people','visit_evidence','visit_people','place_ratings','place_wishes',
-    'place_membership','place_categories','settings','peak_bags','peaks','parks',
+    'place_membership','place_categories','settings','peak_bags',
     'trail_routes','revealed_area','location_pings','activity_sources','invites']
   loop
     if to_regclass('public.' || t) is null then continue; end if;

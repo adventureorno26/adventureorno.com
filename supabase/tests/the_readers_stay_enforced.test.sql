@@ -130,6 +130,18 @@ declare
     -- total, which is the same argument `data_health` is listed for. "Erica has run 1,968
     -- miles" is a fact about Erica; the route she took on the 4th stays behind 0228.
     'person_totals',
+    -- 0291. Both read `activities` for EXACTLY ONE COLUMN — `shared_group_id` — to map a
+    -- `peak_bags.activity_id` onto its canonical outing key. Nothing from that row is
+    -- returned and nothing is filtered by it; what the caller may see is still decided
+    -- entirely by `visible_activities` and `people_memory_keys`.
+    --
+    -- They must, because a peak bag's own `space_id` is a denormalisation that goes stale
+    -- the moment an outing is copied into a second space, and 0292 copies 56 of them. All
+    -- six of Josh's summits hang off a both-tagged activity whose bag has profile_id NULL,
+    -- so 0292's `where profile_id = josh` moves none of them and his copies arrive with no
+    -- bags attached. Resolving through the canonical outing is what keeps his 6 at 6.
+    'peaks_bagged',
+    'peaks_bagged_for_people',
     -- 0214. Returns an ID, never an attribute. It must read the CLAIMED row's
     -- shared_group_id even when that row is hidden — that is the whole job: find the
     -- recording of the same outing that the caller IS allowed to see. Every id it can
