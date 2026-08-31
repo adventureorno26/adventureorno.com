@@ -1089,6 +1089,15 @@ it.describe('the rest of the app — what she asked for', () => {
     // `@name`. Asserting only the input was wrong twice over: it went red against the
     // first deploy of this card (which had the predicate backwards and rendered neither),
     // and it would go red again the day the bot claims one. Either state is the feature.
+    //
+    // WHAT THIS NO LONGER PROVES, said plainly rather than left to look like coverage:
+    // accepting both states means this check PASSES against the deploy that had the
+    // predicate backwards, because that build renders the fixed `@name` for everybody. The
+    // bug it caught — an unclaimed account being unable to choose — is about
+    // `handle_claimed_at`, which lives in the database and no DOM assertion here can read.
+    // It is guarded at source instead: `Settings.tsx` keys `claimed` off
+    // `handle_claimed_at` with the reason written beside it. A check that cannot see the
+    // difference should say so, not imply otherwise.
     await expect(
       page.locator('.pub-profile input[aria-label="Handle"], .pub-profile .pub-handle-fixed'),
     ).toBeVisible();
@@ -1126,6 +1135,12 @@ it.describe('the rest of the app — what she asked for', () => {
   it('the bucket list groups by state and every row can be wanted', async ({ page }) => {
     await ready(page, '/bucket');
     await expect(page.getByRole('heading', { name: /^Bucket List$/i })).toBeVisible();
+    // WAIT FOR THE GROUPS, not just the page title. `Bucket List` is static and renders
+    // before the rows arrive, so reading the group headings straight after it caught the
+    // page mid-load and reported "the bucket list is not grouped" with an EMPTY list —
+    // against a screen that groups perfectly. The title is not the list, exactly as one
+    // visible row is not the list in the Routes check above.
+    await expect(page.locator('h2, h3').first()).toBeVisible();
     // Grouped — the state headings are the grouping, so at least one must exist.
     const heads = await page.locator('h2, h3').allTextContents();
     expect(
