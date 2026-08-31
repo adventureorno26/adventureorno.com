@@ -175,6 +175,45 @@
 --
 --
 -- ============================================================================
+-- WHAT IT COSTS, MEASURED — BECAUSE A BOUNDARY IS NOT FREE
+-- ============================================================================
+--
+-- Nine readers timed on production inside `begin … rollback`, milliseconds, signed in as
+-- Erica. "partition only" is 0287 applied without this file, which is what separates the
+-- cost of adding a column to 48 tables from the cost of the clause this file adds:
+--
+--                          before   partition only   + THIS FILE
+--     data_health             47           6              34
+--     last_seen               23           8              19
+--     tracking_status         17          12              15
+--     card_view               25          10              12
+--     inbox                  118          26              32
+--     search_photos           11           4              21
+--     wander_stats_for_ppl   109         140         243 · 356
+--     memories_with_people    43          98         172 · 214
+--     people_memory_keys      18          75         151 · 203
+--
+-- READ THESE AS RATIOS, NOT AS MILLISECONDS. Every "after" figure is taken inside a
+-- transaction that has just rewritten 48 tables and thrown away their statistics, so the
+-- absolute numbers are inflated for both of the right-hand columns; the last three are
+-- given as two samples because they were the noisiest. ⚠️ THE REAL APPLY NEEDS A
+-- `vacuum analyze` AFTER IT, which is true of 0287 with or without this file.
+--
+-- What the table does say clearly, and it is the reason the views are written the way they
+-- are: the first three rows were **429 / 386 / 401 ms** with `public.is_member(space_id)`
+-- and are 34 / 19 / 15 with `my_space_ids()`. That is the per-row SECURITY DEFINER call on
+-- 17,207 `location_pings`, and it is a twentyfold regression on the live-location screen
+-- for a clause that does not change a single row until the split.
+--
+-- The last three rows carry a real residual — roughly +75% on top of what the partition
+-- alone costs — and it is not explained away here. They are the person-scoped stats
+-- readers, they join four or five scoped relations each, and a hashed subplan per relation
+-- is what a boundary costs. It is stated rather than buried; if it matters on the day, the
+-- answer is an index on `(space_id, …)` for the join keys these three use, which is a
+-- tuning change and not a correctness one.
+--
+--
+-- ============================================================================
 -- WHAT THIS FILE REQUIRES, AND WHAT IT DOES NOT DO
 -- ============================================================================
 --
@@ -194,124 +233,145 @@ begin;
 --    each stating the same sentence in its own WHERE: you see a row if you are in the
 --    space that owns it. Definer, and revoked from every client role — these exist to be
 --    read from INSIDE a SECURITY DEFINER function and from nowhere else.
+--
+--    `space_id in (select public.my_space_ids())`, NOT `public.is_member(space_id)`, AND
+--    THE REASON IS MEASURED. Both say the same thing. `is_member(space_id)` takes the row's
+--    id as an argument, so the planner must call a SECURITY DEFINER function ONCE PER ROW;
+--    `my_space_ids()` takes none, so it is evaluated once per query and hashed. On
+--    production's 17,207 `location_pings`, inside `begin … rollback`:
+--
+--                          before   is_member(space_id)   my_space_ids()   no clause at all
+--        data_health         47ms          429ms              33ms              21ms
+--        last_seen           23ms          386ms              21ms               8ms
+--        tracking_status     17ms          401ms              17ms              11ms
+--
+--    A twentyfold regression on the live-location screen, for a clause that is inert until
+--    the split. `my_space_ids()` is also the vocabulary the partition itself says the model
+--    is built on: *"Every space you are inside. The plural form is the one the model is
+--    built on."*
+--
+--    The handful of INLINE clauses further down still say `public.is_member(<alias>.space_id)`
+--    — in `visit_detail` and in the seven `activities` readers — because those touch one row
+--    or 573, the per-row cost does not arise, and the sentence reads better where a human
+--    has to check it site by site.
 -- ---------------------------------------------------------------------------
 
 create or replace view public.in_space_approved_fields as
-  select * from public.approved_fields where public.is_member(space_id);
+  select * from public.approved_fields where space_id in (select public.my_space_ids());
 alter view public.in_space_approved_fields set (security_invoker = false);
 revoke all on public.in_space_approved_fields from public;
 revoke all on public.in_space_approved_fields from anon, authenticated;
 
 create or replace view public.in_space_entries as
-  select * from public.entries where public.is_member(space_id);
+  select * from public.entries where space_id in (select public.my_space_ids());
 alter view public.in_space_entries set (security_invoker = false);
 revoke all on public.in_space_entries from public;
 revoke all on public.in_space_entries from anon, authenticated;
 
 create or replace view public.in_space_location_pings as
-  select * from public.location_pings where public.is_member(space_id);
+  select * from public.location_pings where space_id in (select public.my_space_ids());
 alter view public.in_space_location_pings set (security_invoker = false);
 revoke all on public.in_space_location_pings from public;
 revoke all on public.in_space_location_pings from anon, authenticated;
 
 create or replace view public.in_space_memory_people as
-  select * from public.memory_people where public.is_member(space_id);
+  select * from public.memory_people where space_id in (select public.my_space_ids());
 alter view public.in_space_memory_people set (security_invoker = false);
 revoke all on public.in_space_memory_people from public;
 revoke all on public.in_space_memory_people from anon, authenticated;
 
 create or replace view public.in_space_memory_subjects as
-  select * from public.memory_subjects where public.is_member(space_id);
+  select * from public.memory_subjects where space_id in (select public.my_space_ids());
 alter view public.in_space_memory_subjects set (security_invoker = false);
 revoke all on public.in_space_memory_subjects from public;
 revoke all on public.in_space_memory_subjects from anon, authenticated;
 
 create or replace view public.in_space_naming_rules as
-  select * from public.naming_rules where public.is_member(space_id);
+  select * from public.naming_rules where space_id in (select public.my_space_ids());
 alter view public.in_space_naming_rules set (security_invoker = false);
 revoke all on public.in_space_naming_rules from public;
 revoke all on public.in_space_naming_rules from anon, authenticated;
 
 create or replace view public.in_space_peak_bags as
-  select * from public.peak_bags where public.is_member(space_id);
+  select * from public.peak_bags where space_id in (select public.my_space_ids());
 alter view public.in_space_peak_bags set (security_invoker = false);
 revoke all on public.in_space_peak_bags from public;
 revoke all on public.in_space_peak_bags from anon, authenticated;
 
 create or replace view public.in_space_peaks as
-  select * from public.peaks where public.is_member(space_id);
+  select * from public.peaks where space_id in (select public.my_space_ids());
 alter view public.in_space_peaks set (security_invoker = false);
 revoke all on public.in_space_peaks from public;
 revoke all on public.in_space_peaks from anon, authenticated;
 
 create or replace view public.in_space_people as
-  select * from public.people where public.is_member(space_id);
+  select * from public.people where space_id in (select public.my_space_ids());
 alter view public.in_space_people set (security_invoker = false);
 revoke all on public.in_space_people from public;
 revoke all on public.in_space_people from anon, authenticated;
 
 create or replace view public.in_space_photos as
-  select * from public.photos where public.is_member(space_id);
+  select * from public.photos where space_id in (select public.my_space_ids());
 alter view public.in_space_photos set (security_invoker = false);
 revoke all on public.in_space_photos from public;
 revoke all on public.in_space_photos from anon, authenticated;
 
 create or replace view public.in_space_place_membership as
-  select * from public.place_membership where public.is_member(space_id);
+  select * from public.place_membership where space_id in (select public.my_space_ids());
 alter view public.in_space_place_membership set (security_invoker = false);
 revoke all on public.in_space_place_membership from public;
 revoke all on public.in_space_place_membership from anon, authenticated;
 
 create or replace view public.in_space_place_ratings as
-  select * from public.place_ratings where public.is_member(space_id);
+  select * from public.place_ratings where space_id in (select public.my_space_ids());
 alter view public.in_space_place_ratings set (security_invoker = false);
 revoke all on public.in_space_place_ratings from public;
 revoke all on public.in_space_place_ratings from anon, authenticated;
 
 create or replace view public.in_space_place_wishes as
-  select * from public.place_wishes where public.is_member(space_id);
+  select * from public.place_wishes where space_id in (select public.my_space_ids());
 alter view public.in_space_place_wishes set (security_invoker = false);
 revoke all on public.in_space_place_wishes from public;
 revoke all on public.in_space_place_wishes from anon, authenticated;
 
 create or replace view public.in_space_places as
-  select * from public.places where public.is_member(space_id);
+  select * from public.places where space_id in (select public.my_space_ids());
 alter view public.in_space_places set (security_invoker = false);
 revoke all on public.in_space_places from public;
 revoke all on public.in_space_places from anon, authenticated;
 
 create or replace view public.in_space_suggestions as
-  select * from public.suggestions where public.is_member(space_id);
+  select * from public.suggestions where space_id in (select public.my_space_ids());
 alter view public.in_space_suggestions set (security_invoker = false);
 revoke all on public.in_space_suggestions from public;
 revoke all on public.in_space_suggestions from anon, authenticated;
 
 create or replace view public.in_space_tag_claims as
-  select * from public.tag_claims where public.is_member(space_id);
+  select * from public.tag_claims where space_id in (select public.my_space_ids());
 alter view public.in_space_tag_claims set (security_invoker = false);
 revoke all on public.in_space_tag_claims from public;
 revoke all on public.in_space_tag_claims from anon, authenticated;
 
 create or replace view public.in_space_tagging_rules as
-  select * from public.tagging_rules where public.is_member(space_id);
+  select * from public.tagging_rules where space_id in (select public.my_space_ids());
 alter view public.in_space_tagging_rules set (security_invoker = false);
 revoke all on public.in_space_tagging_rules from public;
 revoke all on public.in_space_tagging_rules from anon, authenticated;
 
 create or replace view public.in_space_videos as
-  select * from public.videos where public.is_member(space_id);
+  select * from public.videos where space_id in (select public.my_space_ids());
 alter view public.in_space_videos set (security_invoker = false);
 revoke all on public.in_space_videos from public;
 revoke all on public.in_space_videos from anon, authenticated;
 
 create or replace view public.in_space_visit_people as
-  select * from public.visit_people where public.is_member(space_id);
+  select * from public.visit_people where space_id in (select public.my_space_ids());
 alter view public.in_space_visit_people set (security_invoker = false);
 revoke all on public.in_space_visit_people from public;
 revoke all on public.in_space_visit_people from anon, authenticated;
 
 create or replace view public.in_space_visits as
-  select * from public.visits where public.is_member(space_id);
+  select * from public.visits where space_id in (select public.my_space_ids());
 alter view public.in_space_visits set (security_invoker = false);
 revoke all on public.in_space_visits from public;
 revoke all on public.in_space_visits from anon, authenticated;
@@ -2238,7 +2298,10 @@ begin
    where not exists (
      select 1 from pg_views
       where schemaname = 'public' and viewname = 'in_space_' || v
-        and definition ilike '%is_member%'
+        -- The boundary, however it is spelled. Both forms are accepted so that a later
+        -- change back to `is_member(space_id)` for one table does not silently disarm
+        -- this check — it is the WHERE that matters, not which helper says it.
+        and (definition ilike '%my_space_ids%' or definition ilike '%is_member%')
         and definition ilike '%space_id%');
 
   if leaky is not null then
@@ -2317,7 +2380,7 @@ begin
      -- `is_member(` with an ARGUMENT, not the bare no-argument turnstile — `is_member()`
      -- means "are you inside any space at all", which is not a statement about a row and
      -- must not buy an exemption.
-     and pg_get_functiondef(p.oid) !~* 'is_member[[:space:]]*\([^)]'
+     and pg_get_functiondef(p.oid) !~* '(is_member[[:space:]]*\([^)]|my_space_ids)'
      -- READERS ONLY, which is what this migration is about. Sixty SECURITY DEFINER WRITE
      -- paths also reach these tables without naming a space, and 0281's policies do not
      -- constrain them either, because a definer writer bypasses RLS exactly as a definer
