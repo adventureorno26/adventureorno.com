@@ -176,14 +176,22 @@
 -- WHAT THIS FILE DOES NOT CLOSE
 -- ============================================================================
 --
---   * THE EXEMPTION IS A GUC, AND A GUC IS A STRING. `aon.cross_space_write = 'allow'`
---     stands the guard down. Nothing in the client surface can set it: PostgREST sets only
---     `role`, `request.jwt.claims` and `request.headers`, never an arbitrary name; and
---     `set_config` is in `pg_catalog`, which PostgREST does not expose. Production was
---     checked for a wrapper that would pass user input to it and the only public function
---     calling `set_config` is `rebuild_place_visits`, which passes the literal
---     `'aon.rebuilding'`. It is a residual, it is named, and the test asserts that exactly
---     two functions carry the exemption so a third cannot be added quietly.
+--   * THE EXEMPTION IS A STACK PATTERN, AND A PATTERN CAN FAIL OPEN. If
+--     `respond_to_tag` is renamed or its signature changes, the `like` in
+--     `answering_a_tag_across_the_boundary()` stops matching, the exemption silently
+--     stops applying, and answering a tag across a household starts refusing with a 42501
+--     nobody can trace back here. §3 asserts both signatures exist at apply time, and
+--     §7 of the test exercises the path end to end, so the failure is a red build rather
+--     than a support ticket — but the pattern is still a pattern, and it is named.
+--
+--   * THE GUARD IS PER ROW, BECAUSE A ROW TRIGGER IS. `merge_places_auto` re-points
+--     `location_pings` — 17,207 rows on production — and every one of them now costs an
+--     index probe into `space_memberships` it did not cost before. Measured in the PR
+--     body. If it ever matters, the answer is a statement-level trigger with transition
+--     tables, which asks the same question once per statement; that is a tuning change
+--     and it is not made here, because a `for each statement` trigger cannot see
+--     `space_id` on a table where the statement touched no rows and the extra machinery
+--     is not worth buying before it is needed.
 --
 --   * THE GUARD ASKS ABOUT MEMBERSHIP, NOT ABOUT ROLE. A viewer in Erica's space passes
 --     it. That is correct here — `is_editor_or_owner()` is the role check and it already
@@ -217,6 +225,57 @@ begin;
 --    on it).
 -- ---------------------------------------------------------------------------
 
+-- THE TWO THAT CROSS ON PURPOSE, recognised by being ON THE CALL STACK rather than by
+-- anything they say about themselves. `get diagnostics … pg_context` is the PL/pgSQL call
+-- stack: you appear in it by having actually been called, and there is no way to put
+-- yourself there from outside. That matters more than it sounds:
+--
+--   * THE FIRST DRAFT USED A GUC — `alter function respond_to_tag(…) set
+--     aon.cross_space_write = 'allow'` — and it does not work here. `postgres` is not a
+--     superuser on this project (checked: `usesuper = f`, on production and on the local
+--     stack alike) and ALTER FUNCTION … SET on a custom parameter needs SET privilege on
+--     it, which for a placeholder is superuser-only. It failed with "permission denied to
+--     set parameter" on the first rehearsal.
+--   * SO MUCH THE BETTER, because a GUC is a string and a string is a claim. The draft's
+--     own header had to carry a residual saying so. A stack frame is not a claim; it is
+--     the fact. There is nothing left to name as a residual.
+--   * AND IT TOUCHES NO BODIES. 0290 found two of its sixty-two functions where
+--     production was BEHIND the merged chain, and regenerating them from production
+--     "would have shipped a migration that silently REVERTED both". `respond_to_tag` is
+--     110 lines of participation logic. Not retyping it is the only way to be certain
+--     this file changes nothing about what answering a tag DOES.
+--
+-- THE EXEMPTION IS INHERITED by everything these two call — `subject_for_visit`,
+-- `person_for_profile`, `visible_recording_of` — because those frames sit ABOVE the
+-- caller's on the same stack. That is required, not incidental: those are where the
+-- `memory_subjects` and `people` rows in the tagger's space actually get written.
+--
+-- The signatures are matched whole, anchored on the `PL/pgSQL function ` prefix that
+-- Postgres writes in front of every frame, so a function called `my_respond_to_tag` does
+-- not inherit an exemption by having a longer name.
+create or replace function public.answering_a_tag_across_the_boundary()
+returns boolean
+language plpgsql
+stable
+as $fn$
+declare v_stack text;
+begin
+  get diagnostics v_stack = pg_context;
+  return v_stack like '%PL/pgSQL function respond_to_tag(uuid,boolean) line %'
+      or v_stack like '%PL/pgSQL function respond_to_memory_tag(uuid,boolean) line %';
+end
+$fn$;
+
+revoke all on function public.answering_a_tag_across_the_boundary() from public;
+revoke all on function public.answering_a_tag_across_the_boundary() from anon, authenticated;
+
+comment on function public.answering_a_tag_across_the_boundary() is
+  '0293. True when the PL/pgSQL call stack contains respond_to_tag or '
+  'respond_to_memory_tag — the two writers whose whole purpose is to cross a space '
+  'boundary, because a tag is answered by the person it is about and they are in their '
+  'own space. Read only by refuse_write_outside_my_space(), and only after the '
+  'membership check has already failed.';
+
 create or replace function public.refuse_write_outside_my_space()
 returns trigger
 language plpgsql
@@ -235,14 +294,6 @@ begin
     if tg_op = 'DELETE' then return old; else return new; end if;
   end if;
 
-  -- A FUNCTION THAT SAID, IN ITS OWN DEFINITION, THAT IT CROSSES. Set by
-  -- `alter function … set aon.cross_space_write` in §3 — scoped to that call by
-  -- Postgres and restored on exit, so it cannot leak into the rest of the transaction
-  -- the way a `set_config(…, true)` inside a body would.
-  if current_setting('aon.cross_space_write', true) = 'allow' then
-    if tg_op = 'DELETE' then return old; else return new; end if;
-  end if;
-
   if tg_op <> 'INSERT' then v_old := old.space_id; end if;
   if tg_op <> 'DELETE' then v_new := new.space_id; end if;
 
@@ -250,7 +301,8 @@ begin
   -- `edit_visit` as Josh against Erica's visit, v_old is her space and he is not in it.
   if v_old is not null
      and not exists (select 1 from public.space_memberships m
-                      where m.space_id = v_old and m.profile_id = v_uid) then
+                      where m.space_id = v_old and m.profile_id = v_uid)
+     and not public.answering_a_tag_across_the_boundary() then
     raise exception 'that row is not in a space you are in'
       using errcode = '42501',
             detail  = format('%s on public.%s: row space %s, caller %s',
@@ -263,7 +315,8 @@ begin
   -- around the clause above.
   if v_new is not null and v_new is distinct from v_old
      and not exists (select 1 from public.space_memberships m
-                      where m.space_id = v_new and m.profile_id = v_uid) then
+                      where m.space_id = v_new and m.profile_id = v_uid)
+     and not public.answering_a_tag_across_the_boundary() then
     raise exception 'that row would land in a space you are not in'
       using errcode = '42501',
             detail  = format('%s on public.%s: target space %s, caller %s',
@@ -280,8 +333,8 @@ revoke all on function public.refuse_write_outside_my_space() from anon, authent
 
 comment on function public.refuse_write_outside_my_space() is
   '0293. Refuses a write to a row outside the caller''s space. Stands down when there is '
-  'no caller (auth.uid() is null: service_role, cron, migration replay) and when the '
-  'calling function declares aon.cross_space_write = ''allow''. Attached by 0293 to every '
+  'no caller (auth.uid() is null: service_role, cron, migration replay) and when '
+  'respond_to_tag / respond_to_memory_tag are on the call stack. Attached by 0293 to every '
   'base table carrying a space_id except space_memberships and invites.';
 
 -- ---------------------------------------------------------------------------
@@ -358,39 +411,35 @@ end
 $do$;
 
 -- ---------------------------------------------------------------------------
--- 3. THE TWO THAT CROSS ON PURPOSE.
+-- 3. THE TWO THAT CROSS ON PURPOSE — asserted, so the reason is not only a comment.
 --
---    Declared with `alter function … set`, NOT by editing the bodies. Three reasons, and
---    the first is the one that matters:
+--    The mechanism is `public.answering_a_tag_across_the_boundary()` above; this section
+--    exists so that the two signatures it names are checked to EXIST with exactly those
+--    argument types. A `like` pattern against a call stack fails open if the function it
+--    names was renamed or its signature changed: the pattern would simply never match,
+--    the exemption would silently stop applying, and answering a tag across a household
+--    would start refusing with a 42501 that nobody could trace back to here.
 --
---      * A BODY COPIED FROM THE WRONG SOURCE SILENTLY REVERTS SOMETHING. 0290 found two of
---        its sixty-two functions where production was BEHIND the merged chain, and
---        regenerating from production "would have shipped a migration that silently
---        REVERTED both — a reader migration quietly turning ghost mode back off".
---        `respond_to_tag` is 110 lines of participation logic. Not retyping it is not
---        laziness; it is the only way to be certain this file changes nothing about what
---        answering a tag DOES.
---      * Postgres scopes the setting to the function call and restores the previous value
---        on exit — including on an exception — so the exemption cannot leak sideways into
---        the rest of the transaction the way `set_config('aon.rebuilding','on',true)` in
---        `rebuild_place_visits` does.
---      * It lands in `pg_proc.proconfig`, so the test can assert the exact set of exempt
---        functions rather than trusting a comment.
---
---    The exemption is INHERITED by everything these two call — `subject_for_visit`,
---    `person_for_profile`, `visible_recording_of` — which is required, because those are
---    where the `memory_subjects` and `people` rows in the tagger's space actually get
---    written.
+--    Josh, in Josh's space, answers a claim Erica made about him. The claim row and the
+--    `memory_people` rows it accepts are in HERS. Authorisation is an identity, not a
+--    space: `if c.profile_id <> auth.uid() then raise 'only the tagged person can answer
+--    a tag'` — which admits exactly one person and is strictly narrower than a space
+--    check, not looser. `supabase/tests/0213_josh_gets_asked.test.sql` is that feature.
+--    `respond_to_memory_tag` is the same shape, keyed on `people.linked_profile =
+--    auth.uid()`.
 -- ---------------------------------------------------------------------------
 
--- Josh, in Josh's space, answers a claim Erica made about him. The claim and the
--- memory_people rows are in HERS. Authorised by identity, not by space:
---   `if c.profile_id <> auth.uid() then raise 'only the tagged person can answer a tag'`.
--- supabase/tests/0213_josh_gets_asked.test.sql is this feature.
-alter function public.respond_to_tag(uuid, boolean) set aon.cross_space_write = 'allow';
-
--- Same shape, keyed on `people.linked_profile = auth.uid()` instead of on a claim row:
---   `if v_person is null then raise 'no tag of yours to answer here'`.
-alter function public.respond_to_memory_tag(uuid, boolean) set aon.cross_space_write = 'allow';
+do $do$
+declare missing text;
+begin
+  select string_agg(sig, ', ' order by sig) into missing
+    from unnest(array['public.respond_to_tag(uuid,boolean)',
+                      'public.respond_to_memory_tag(uuid,boolean)']) sig
+   where to_regprocedure(sig) is null;
+  if missing is not null then
+    raise exception '0293: the cross-space exemption names %, which does not exist with that signature. The stack pattern would never match and answering a tag across a household would start refusing.', missing;
+  end if;
+end
+$do$;
 
 commit;

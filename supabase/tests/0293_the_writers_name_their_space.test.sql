@@ -70,6 +70,20 @@ insert into public.visits (id, place_id, start_date, end_date, status, accepted_
    '22220293-0000-0000-0000-000000000002','bbbb0293-0000-0000-0000-000000000002')
   on conflict do nothing;
 
+-- ---- THE OUTCOME LEDGER, AND WHY THE FIRST DRAFT OF THIS FILE WAS WRONG -----
+-- The attack has to run as `authenticated`, because that is who Josh is. But the CHECK —
+-- "and her row is unchanged" — must NOT, because RLS hides Ann's visit from Ben and
+-- `select … into v_start` then quietly returns NULL. `NULL <> date '2026-08-30'` is NULL,
+-- the `if` is false, and the assertion passes without ever having looked at the row.
+--
+-- That is exactly the shape of bug this whole migration is about — a check that cannot
+-- see what it is checking — and the first draft of this file had it. So: the attack runs
+-- as `authenticated` and writes what happened into this table; the verification runs
+-- after `reset role`, where the row is actually visible.
+create temp table v293_outcome (step text primary key, raised boolean, sqlstate text)
+  on commit drop;
+grant insert, select on v293_outcome to authenticated;
+
 -- ---------------------------------------------------------------------------
 -- 1. THE EXPLOIT. `edit_visit`, as Ben, against a visit in Ann's space.
 --
@@ -80,37 +94,17 @@ set local request.jwt.claims = '{"sub":"bbbb0293-0000-0000-0000-000000000002","r
 set local role authenticated;
 
 do $$
-declare
-  v_raised boolean := false;
-  v_start  date;
-  v_end    date;
-  v_state  text;
+declare v_state text;
 begin
   begin
     perform public.edit_visit('a3330293-0000-0000-0000-000000000001'::uuid,
                               date '2019-01-01', date '2019-01-02',
                               null::text, null::boolean, null::text, null::boolean);
+    insert into v293_outcome values ('edit_visit', false, null);
   exception when others then
-    v_raised := true;
     get stacked diagnostics v_state = returned_sqlstate;
+    insert into v293_outcome values ('edit_visit', true, v_state);
   end;
-
-  if not v_raised then
-    raise exception 'FAIL 1: edit_visit let Ben rewrite a visit in Ann''s space. THIS IS THE PRODUCTION EXPLOIT, STILL OPEN.';
-  end if;
-  if v_state <> '42501' then
-    raise exception 'FAIL 1: edit_visit refused Ben, but with sqlstate % rather than 42501. A boundary refusal must be distinguishable from a validation error, or the app cannot tell "not yours" from "bad dates".', v_state;
-  end if;
-
-  -- AND THE ROW MUST BE UNTOUCHED. The refusal is only half the claim; a guard that
-  -- raises after the UPDATE has landed would pass every assertion above.
-  select start_date, end_date into v_start, v_end
-    from public.visits where id = 'a3330293-0000-0000-0000-000000000001';
-  if v_start <> date '2026-08-30' or v_end <> date '2026-08-30' then
-    raise exception 'FAIL 1: edit_visit raised, but Ann''s dates are now % … %. The write landed before the guard did.', v_start, v_end;
-  end if;
-
-  raise notice 'PASS 1: edit_visit refuses Ben a visit in Ann''s space (42501), and her dates are unchanged';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -119,52 +113,70 @@ end $$;
 --    works" says nothing about the DELETE path.
 -- ---------------------------------------------------------------------------
 do $$
-declare v_raised boolean := false; n int;
+declare v_state text;
 begin
   begin
     perform public.delete_visit('a3330293-0000-0000-0000-000000000001'::uuid, 'detach');
-  exception when others then v_raised := true;
+    insert into v293_outcome values ('delete_visit', false, null);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate;
+    insert into v293_outcome values ('delete_visit', true, v_state);
   end;
-
-  if not v_raised then
-    raise exception 'FAIL 2: delete_visit let Ben delete a visit in Ann''s space.';
-  end if;
-
-  select count(*) into n from public.visits where id = 'a3330293-0000-0000-0000-000000000001';
-  if n <> 1 then
-    raise exception 'FAIL 2: delete_visit raised, but Ann''s visit is gone anyway.';
-  end if;
-
-  raise notice 'PASS 2: delete_visit refuses Ben a visit in Ann''s space, and her visit is still there';
 end $$;
 
 -- ---------------------------------------------------------------------------
 -- 3. `merge_places_auto` — the function 0290 named by name as the one nothing stopped
 --    from "merging a place in Erica's space into one in Josh's". It is not granted to
---    `authenticated`, so it is called with the session role reset and Ben's claims still
---    in scope, which is how it is reached in production: from inside another definer.
+--    `authenticated`, so it is reached the way it is reached in production: from inside
+--    another definer, with the caller's claims in scope.
 -- ---------------------------------------------------------------------------
 reset role;
 do $$
-declare v_raised boolean := false; n_place int; n_visit int;
+declare v_state text;
 begin
   begin
     perform public.merge_places_auto('a1110293-0000-0000-0000-000000000001'::uuid,
                                      'b2220293-0000-0000-0000-000000000002'::uuid);
-  exception when others then v_raised := true;
+    insert into v293_outcome values ('merge_places_auto', false, null);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate;
+    insert into v293_outcome values ('merge_places_auto', true, v_state);
   end;
+end $$;
 
-  if not v_raised then
-    raise exception 'FAIL 3: merge_places_auto let Ben merge Ann''s place into his own. This is 0290''s named gap, still open.';
+-- ---- THE VERDICT, read where the rows are actually visible ------------------
+do $$
+declare r record; v_start date; v_end date; n int;
+begin
+  for r in select * from v293_outcome order by step loop
+    if not r.raised then
+      raise exception 'FAIL: %() let Ben write to a row in Ann''s space. THIS IS THE PRODUCTION EXPLOIT, STILL OPEN.', r.step;
+    end if;
+    -- 42501 (insufficient_privilege) specifically: the app has to be able to tell
+    -- "not yours" from "bad dates", and a bare `raise exception` would be P0001.
+    if r.sqlstate <> '42501' then
+      raise exception 'FAIL: %() refused Ben, but with sqlstate % rather than 42501. That is a different refusal than the boundary''s — check it is the guard talking and not a validation error that happens to fire first.', r.step, r.sqlstate;
+    end if;
+  end loop;
+
+  -- AND NOTHING MOVED. The refusal is only half the claim; a guard that raises after the
+  -- write has landed would pass every assertion above. Read as `postgres`, which owns the
+  -- tables and is not filtered by RLS — the mistake this section was rewritten to fix.
+  select start_date, end_date into v_start, v_end
+    from public.visits where id = 'a3330293-0000-0000-0000-000000000001';
+  if v_start is null then
+    raise exception 'FAIL: Ann''s visit cannot be read back at all, so nothing below proves anything.';
+  end if;
+  if v_start <> date '2026-08-30' or v_end <> date '2026-08-30' then
+    raise exception 'FAIL 1: edit_visit raised, but Ann''s dates are now % … %. The write landed before the guard did.', v_start, v_end;
   end if;
 
-  select count(*) into n_place from public.places where id = 'a1110293-0000-0000-0000-000000000001';
-  select count(*) into n_visit from public.visits where id = 'a3330293-0000-0000-0000-000000000001';
-  if n_place <> 1 or n_visit <> 1 then
-    raise exception 'FAIL 3: merge_places_auto raised, but Ann''s place/visit are gone (place=%, visit=%).', n_place, n_visit;
+  select count(*) into n from public.places where id = 'a1110293-0000-0000-0000-000000000001';
+  if n <> 1 then
+    raise exception 'FAIL 3: merge_places_auto raised, but Ann''s place is gone anyway.';
   end if;
 
-  raise notice 'PASS 3: merge_places_auto refuses Ben Ann''s place, and neither her place nor her visit moved';
+  raise notice 'PASS 1-3: edit_visit, delete_visit and merge_places_auto all refuse Ben a row in Ann''s space with 42501, and her visit and place are untouched afterwards';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -192,7 +204,7 @@ reset role;
 set local request.jwt.claims = '{"sub":"aaaa0293-0000-0000-0000-000000000001","role":"authenticated"}';
 set local role authenticated;
 do $$
-declare v public.visits; n int;
+declare v public.visits; v_state text;
 begin
   v := public.edit_visit('a3330293-0000-0000-0000-000000000001'::uuid,
                          date '2026-08-26', date '2026-08-27',
@@ -207,26 +219,39 @@ begin
     perform public.edit_visit('b4440293-0000-0000-0000-000000000002'::uuid,
                               date '2019-01-01', date '2019-01-02',
                               null::text, null::boolean, null::text, null::boolean);
-    raise exception 'FAIL 4: edit_visit let Ann rewrite a visit in Ben''s space. The guard only holds in one direction.';
-  exception when sqlstate '42501' then
-    null;  -- the expected answer
+    insert into v293_outcome values ('edit_visit_mirrored', false, null);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate;
+    insert into v293_outcome values ('edit_visit_mirrored', true, v_state);
   end;
 
+  -- Deleting her own visit must still work: the capability section 2 took away from Ben
+  -- and must not have taken from her.
+  perform public.delete_visit('a3330293-0000-0000-0000-000000000001'::uuid, 'detach');
+  raise notice 'PASS 4b: Ann can still edit and delete her own visits';
+end $$;
+
+reset role;
+do $$
+declare r record; n int;
+begin
+  select * into r from v293_outcome where step = 'edit_visit_mirrored';
+  if not r.raised then
+    raise exception 'FAIL 4: edit_visit let Ann rewrite a visit in Ben''s space. The guard only holds in one direction.';
+  end if;
+  if r.sqlstate <> '42501' then
+    raise exception 'FAIL 4: Ann was refused Ben''s visit with sqlstate % rather than 42501.', r.sqlstate;
+  end if;
   select count(*) into n from public.visits
    where id = 'b4440293-0000-0000-0000-000000000002' and start_date = date '2026-08-28';
   if n <> 1 then
     raise exception 'FAIL 4: Ann was refused Ben''s visit but its dates changed anyway.';
   end if;
-
-  -- Deleting her own visit must still work, which is the capability section 2 took away
-  -- from Ben and must not have taken from her.
-  perform public.delete_visit('a3330293-0000-0000-0000-000000000001'::uuid, 'detach');
   select count(*) into n from public.visits where id = 'a3330293-0000-0000-0000-000000000001';
   if n <> 0 then
     raise exception 'FAIL 4: Ann could not delete her own visit.';
   end if;
-
-  raise notice 'PASS 4b: Ann can still edit and delete her own visits, and is refused Ben''s';
+  raise notice 'PASS 4c: the boundary holds in BOTH directions, and Ann''s own delete really landed';
 end $$;
 reset role;
 rollback;
@@ -269,22 +294,40 @@ end $$;
 
 -- ---------------------------------------------------------------------------
 -- 6. THE EXEMPTION LIST IS EXACTLY TWO, AND THEY ARE THE TWO THAT WERE REASONED ABOUT.
---    The exemption is a GUC and a GUC is a string — the one residual the migration names.
---    Asserting the set (not a count) is what makes a third exemption a build failure
---    rather than a comment nobody reads.
+--    Every name on that list can write into any space in the database, so a third one
+--    appearing must be a build failure rather than a comment nobody reads. Asserted as a
+--    SET, not a count.
+--
+--    The list also has to name functions that EXIST with those exact signatures: the
+--    exemption is a `like` against the call stack, and a pattern naming a function that
+--    was since renamed fails OPEN — it simply never matches, and answering a tag across a
+--    household starts refusing with a 42501 nobody can trace.
 -- ---------------------------------------------------------------------------
 do $$
-declare got text;
+declare src text; got text; missing text;
 begin
-  select coalesce(string_agg(p.proname, ', ' order by p.proname), '(none)') into got
+  select p.prosrc into src
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public'
-     and exists (select 1 from unnest(coalesce(p.proconfig,'{}')) c
-                  where c like 'aon.cross_space_write=%');
-  if got <> 'respond_to_memory_tag, respond_to_tag' then
-    raise exception 'FAIL 6: the set of functions exempt from the space boundary is now "%" — expected "respond_to_memory_tag, respond_to_tag". Every name on that list can write into any space in the database.', got;
+   where n.nspname = 'public' and p.proname = 'answering_a_tag_across_the_boundary';
+  if src is null then
+    raise exception 'FAIL 6: answering_a_tag_across_the_boundary() is gone. Nothing is exempt, and answering a tag across a household now refuses.';
   end if;
-  raise notice 'PASS 6: exactly respond_to_tag and respond_to_memory_tag are exempt';
+
+  select coalesce(string_agg(m[1], ', ' order by m[1]), '(none)') into got
+    from regexp_matches(src, 'PL/pgSQL function ([a-z_]+\([a-z, ]*\)) line ', 'g') m;
+  if got <> 'respond_to_memory_tag(uuid,boolean), respond_to_tag(uuid,boolean)' then
+    raise exception 'FAIL 6: the set of functions exempt from the space boundary is now "%" — expected "respond_to_memory_tag(uuid,boolean), respond_to_tag(uuid,boolean)". Every name on that list can write into any space in the database.', got;
+  end if;
+
+  select string_agg(sig, ', ' order by sig) into missing
+    from unnest(array['public.respond_to_tag(uuid,boolean)',
+                      'public.respond_to_memory_tag(uuid,boolean)']) sig
+   where to_regprocedure(sig) is null;
+  if missing is not null then
+    raise exception 'FAIL 6: the exemption names %, which no longer exists with that signature. The stack pattern fails OPEN: it stops matching and the exemption silently stops applying.', missing;
+  end if;
+
+  raise notice 'PASS 6: exactly respond_to_tag and respond_to_memory_tag are exempt, and both still exist with the signature the pattern names';
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -332,16 +375,24 @@ values
 set local request.jwt.claims = '{"sub":"bbbb0293-0000-0000-0000-000000000002","role":"authenticated"}';
 set local role authenticated;
 do $$
+begin
+  -- If the boundary refused this, it raises here and the test file stops. That is the
+  -- assertion; the readback below is the second half of it.
+  perform public.respond_to_tag('c5550293-0000-0000-0000-000000000001'::uuid, true);
+end $$;
+
+-- Read the answer back as `postgres`, not as Ben: RLS hides Ann's claim row from him, so
+-- reading it under his role returns NULL and the check passes without looking at anything.
+reset role;
+do $$
 declare v_status text;
 begin
-  perform public.respond_to_tag('c5550293-0000-0000-0000-000000000001'::uuid, true);
   select status into v_status from public.tag_claims where id = 'c5550293-0000-0000-0000-000000000001';
   if v_status is distinct from 'accepted' then
-    raise exception 'FAIL 7: Ben could not accept a tag Ann made about him (status is now %). The boundary refused the one write whose entire purpose is to cross it — this is the "bug that looked like a fix" 0290 names.', v_status;
+    raise exception 'FAIL 7: Ben''s answer to a tag Ann made about him did not land (status is now %). The boundary swallowed the one write whose entire purpose is to cross it — this is the "bug that looked like a fix" 0290 names.', v_status;
   end if;
-  raise notice 'PASS 7: a tag made in Ann''s space is still answerable by Ben from his';
+  raise notice 'PASS 7: a tag made in Ann''s space is still answerable by Ben from his, and the answer lands';
 end $$;
-reset role;
 rollback;
 
 -- ---------------------------------------------------------------------------
