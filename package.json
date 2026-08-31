@@ -25,6 +25,7 @@
     "check:docs": "node scripts/check-one-document.mjs",
     "verify:live": "set -a && . ./.env.local && set +a && npm run verify:live --workspace app",
     "check:ledger": "node scripts/check-migration-ledger.mjs",
+    "check:drafts": "node scripts/check-draft-migrations.mjs",
     "db:apply": "node scripts/apply-migration.mjs",
     "backup": "node scripts/backup-db.mjs",
     "backup:objects": "node scripts/backup-r2.mjs",

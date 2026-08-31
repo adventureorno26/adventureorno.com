@@ -1,7 +1,27 @@
 -- 0290 — the readers say which space they are reading.
 --
--- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
--- outside a transaction that was rolled back.
+-- APPLIED TO PRODUCTION. Corrected 2026-08-30 — this header said the opposite, and the
+-- opposite was false. Only these comment lines changed; not one line of SQL below was
+-- touched, because a file production has already replayed must stay byte-identical in
+-- its statements.
+--
+-- IT USED TO SAY: "DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run
+-- against production outside a transaction that was rolled back."
+--
+-- MEASURED AGAINST PRODUCTION, two independent ways, on 2026-08-30:
+--
+--   * `scripts/check-migration-ledger.mjs` reads `supabase_migrations.schema_migrations`
+--     on the live project and reports all 288 migrations recorded — 0290 among them.
+--   * `npm run gen:types` regenerates `app/src/lib/database.types.ts` FROM the live
+--     schema and produced a ZERO diff against the committed file, which carries
+--     `spaces`, `space_memberships` and a `space_id` on ~70 tables.
+--
+-- WHY THIS MATTERED ENOUGH TO WRITE A CHECK FOR. The sentence was the first thing anyone
+-- opening this file would read, and `docs/STATE.md` believed it: the approved-order table
+-- went on calling the partition (item 9) "queued" while it was live in the database. A
+-- migration that lies about its own state is not caught by any test, because it is prose
+-- — so `scripts/check-draft-migrations.mjs` now compares every "not applied" claim in a
+-- header against production's ledger and fails when the two disagree.
 --
 -- The partition — 0289 on this branch, 0281 in PR #185 — makes a space the boundary and
 -- rewrites 70 POLICIES to name one. It says, in its own header, what it leaves behind:
