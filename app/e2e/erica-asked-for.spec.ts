@@ -126,6 +126,20 @@ async function openVisits(page: import('@playwright/test').Page) {
   const summary = page.locator('.visits-summary');
   if ((await page.locator('.visits-details[open]').count()) === 0) await summary.click();
   await expect(page.locator('.visits-details[open]')).toBeVisible();
+  // AND WAIT FOR THE ROWS TO EXIST, not just the container to be open.
+  //
+  // `PlacePanel` computes `loading = visits === null || trailActs === null` and prints
+  // `Loading…` inside this very <details> until BOTH have resolved. Opening the section
+  // therefore proves nothing about its contents: on the Appalachian Trail — 35 visits and
+  // six routes for the test bot — `"Dates should be grouped by year"` failed with
+  // `.visit-year` "element(s) not found" against a card that renders the years perfectly,
+  // because the check read the DOM while the word Loading was still on screen.
+  //
+  // This is the same defect the Routes check below carries a long note about, and the
+  // same one the rule at the top of this file describes: a count of zero proves nothing
+  // until the screen has rendered. Waiting for the word to GO is the app telling us the
+  // rows are decided — and it is a retrying assertion, so it waits rather than sampling.
+  await expect(page.locator('.visits-details p').filter({ hasText: /^Loading/ })).toHaveCount(0);
 }
 
 test.describe('the live site is the deployed build', () => {
