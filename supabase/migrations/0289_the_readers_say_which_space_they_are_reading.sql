@@ -1,9 +1,9 @@
--- 0288 — the readers say which space they are reading.
+-- 0289 — the readers say which space they are reading.
 --
 -- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
 -- outside a transaction that was rolled back.
 --
--- The partition — 0287 on this branch, 0281 in PR #185 — makes a space the boundary and
+-- The partition — 0288 on this branch, 0281 in PR #185 — makes a space the boundary and
 -- rewrites 70 POLICIES to name one. It says, in its own header, what it leaves behind:
 --
 --     "The hard part is that the ~60 SECURITY DEFINER stat readers bypass RLS by
@@ -67,9 +67,9 @@
 --                              production has neither
 --
 -- Generating from production would have shipped a migration that silently REVERTED both —
--- a reader migration quietly turning ghost mode back off. `0287…test.sql` (the partition's own test) caught the first
--- of the two on the empty-schema replay, which is the check earning its keep; the second
--- had no test and would have gone through. That is why the diff was run at all, and it is
+-- a reader migration quietly turning ghost mode back off. The partition's own test caught
+-- the first of the two on the empty-schema replay, which is the check earning its keep; the
+-- second had no test and would have gone through. That is why the diff was run at all, and it is
 -- the reason this section exists rather than a sentence saying "bodies taken from prod".
 --
 --
@@ -179,7 +179,7 @@
 -- ============================================================================
 --
 -- Nine readers timed on production inside `begin … rollback`, milliseconds, signed in as
--- Erica. "partition only" is 0287 applied without this file, which is what separates the
+-- Erica. "partition only" is the partition applied without this file, which is what separates
 -- cost of adding a column to 48 tables from the cost of the clause this file adds:
 --
 --                          before   partition only   + THIS FILE
@@ -197,7 +197,7 @@
 -- transaction that has just rewritten 48 tables and thrown away their statistics, so the
 -- absolute numbers are inflated for both of the right-hand columns; the last three are
 -- given as two samples because they were the noisiest. ⚠️ THE REAL APPLY NEEDS A
--- `vacuum analyze` AFTER IT, which is true of 0287 with or without this file.
+-- `vacuum analyze` AFTER IT, which is true of the partition with or without this file.
 --
 -- What the table does say clearly, and it is the reason the views are written the way they
 -- are: the first three rows were **429 / 386 / 401 ms** with `public.is_member(space_id)`
@@ -217,7 +217,7 @@
 -- WHAT THIS FILE REQUIRES, AND WHAT IT DOES NOT DO
 -- ============================================================================
 --
--- REQUIRES THE PARTITION — 0287 on this branch, 0281 in PR #185. There is no `space_id`
+-- REQUIRES THE PARTITION — 0288 on this branch, 0281 in PR #185. There is no `space_id`
 -- and no `is_member(uuid)` without it. This file is meaningless applied alone and will not
 -- compile.
 --
@@ -2362,6 +2362,17 @@ declare
     'memory_people_refuse_a_blocked_tag',
     -- WRITE PATHS. Named, unclosed, and a WRITER audit rather than a reader one.
     'merge_nearby_dupes','move_visit_to_place',
+    -- `public_profile` (main's 0287) IS THE ONE READER WHOSE BOUNDARY IS NOT THE CALLER'S.
+    -- It answers "what did the OWNER choose to publish", and a public profile is by
+    -- definition read from OUTSIDE that person's space. Scoping it to the caller's spaces
+    -- would return an empty profile to every stranger, which is the entire feature.
+    -- Its correct boundary is the SUBJECT's space, and it is already narrowed to
+    -- `pe.linked_profile = pr.id`. ⚠️ OPEN, and it belongs to whoever owns the public
+    -- profile: after the split, a card in Josh's space that Erica is accepted on will still
+    -- appear on Erica's public profile. `the_readers_stay_enforced` already carries the same
+    -- question in its own words. This file must not invent the answer inside a reader
+    -- migration, so it names it.
+    'public_profile',
     -- `may_autowrite` and `naming_rules_list` read the RULE tables to answer a question
     -- about rules, not about memories, and both are already narrowed to the caller. They
     -- are listed rather than rewritten because a scoped view would change what a rule

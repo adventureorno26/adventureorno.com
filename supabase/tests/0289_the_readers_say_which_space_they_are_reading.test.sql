@@ -1,8 +1,8 @@
--- 0288 — the readers say which space they are reading.
+-- 0289 — the readers say which space they are reading.
 --
 -- WHY THIS FILE EXISTS, AND WHY THE PRODUCTION REHEARSAL WAS NOT ENOUGH.
 --
--- 0288 was rehearsed against production inside `begin … rollback` as both real accounts:
+-- 0289 was rehearsed against production inside `begin … rollback` as both real accounts:
 -- 98 numbers compared, 0 changed. That is the right measurement and it proves exactly one
 -- thing — that the migration moves nothing today. It CANNOT prove the migration works,
 -- because today every row is in ONE space and both humans are in it, so every
@@ -67,7 +67,7 @@ insert into public.visits (id, place_id, start_date, end_date, status, accepted_
 -- every assertion after it is meaningless, so it is asked first and on its own.
 -- READ AS THE OWNER, WITH ANN'S CLAIMS. That is not a shortcut around the grants — it is
 -- exactly the situation the views exist for. They are revoked from `anon` and
--- `authenticated` on purpose (0288 §3c asserts it), so the only thing that ever reads one
+-- `authenticated` on purpose (0289 §3c asserts it), so the only thing that ever reads one
 -- is a SECURITY DEFINER function running as its owner with the caller's JWT in scope.
 -- `auth.uid()` comes from `request.jwt.claims`, not from the session role, so the boundary
 -- is asked the same question here that it is asked in production.
@@ -82,7 +82,7 @@ begin
     raise exception 'FAIL 1: in_space_places hid Ann''s OWN place from Ann. A boundary that hides your own rows is not a boundary, it is an outage.';
   end if;
   if theirs <> 0 then
-    raise exception 'FAIL 1: in_space_places showed Ann a place in Ben''s space. THIS IS THE LEAK 0288 EXISTS TO CLOSE.';
+    raise exception 'FAIL 1: in_space_places showed Ann a place in Ben''s space. THIS IS THE LEAK 0289 EXISTS TO CLOSE.';
   end if;
 
   select count(*) into mine   from public.in_space_visits where id = 'a3330288-0000-0000-0000-000000000001';
@@ -96,7 +96,7 @@ end $$;
 
 -- ---- 2. THE READERS, WHICH IS THE POINT -----------------------------------
 -- A SECURITY DEFINER function runs as its owner and an owner is not subject to RLS, so
--- none of these is protected by a policy. Each one below returned Ben's row before 0288.
+-- none of these is protected by a policy. Each one below returned Ben's row before 0289.
 --
 -- These run as `authenticated`, which also proves the EXECUTE grants still work — a
 -- `create or replace` that had changed a signature would have created a new function with
@@ -168,7 +168,7 @@ begin
 end $$;
 
 -- ---- 4. THE GUARDS ARE NOT VACUOUS ----------------------------------------
--- Every structural check in 0288 passes on a correct database, which tells you nothing
+-- Every structural check in 0289 passes on a correct database, which tells you nothing
 -- unless it also FAILS on a broken one. These are the negative controls.
 --
 -- Each runs in its OWN top-level transaction, which is not a stylistic choice: PL/pgSQL has
@@ -241,6 +241,6 @@ rollback;
 
 begin;
 do $$ begin
-  raise notice 'PASS 0288: two spaces stay two spaces — the scoped views and the readers show each person their own rows and none of the other''s, in both directions, and all three guards that say so fail when the rule is broken';
+  raise notice 'PASS 0289: two spaces stay two spaces — the scoped views and the readers show each person their own rows and none of the other''s, in both directions, and all three guards that say so fail when the rule is broken';
 end $$;
 rollback;
