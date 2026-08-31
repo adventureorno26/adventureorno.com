@@ -1847,31 +1847,20 @@ export type Database = {
           created_at: string
           id: string
           name: string
-          space_id: string
         }
         Insert: {
           boundary: unknown
           created_at?: string
           id?: string
           name: string
-          space_id?: string
         }
         Update: {
           boundary?: unknown
           created_at?: string
           id?: string
           name?: string
-          space_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "parks_space_fk"
-            columns: ["space_id"]
-            isOneToOne: false
-            referencedRelation: "spaces"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       peak_bags: {
         Row: {
@@ -1915,13 +1904,6 @@ export type Database = {
             columns: ["activity_id"]
             isOneToOne: false
             referencedRelation: "visible_activities"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "peak_bags_peak_id_fkey"
-            columns: ["peak_id"]
-            isOneToOne: false
-            referencedRelation: "in_space_peaks"
             referencedColumns: ["id"]
           },
           {
@@ -1977,7 +1959,6 @@ export type Database = {
           lat: number
           lng: number
           name: string
-          space_id: string
         }
         Insert: {
           created_at?: string
@@ -1987,7 +1968,6 @@ export type Database = {
           lat: number
           lng: number
           name: string
-          space_id?: string
         }
         Update: {
           created_at?: string
@@ -1997,17 +1977,8 @@ export type Database = {
           lat?: number
           lng?: number
           name?: string
-          space_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "peaks_space_fk"
-            columns: ["space_id"]
-            isOneToOne: false
-            referencedRelation: "spaces"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       people: {
         Row: {
@@ -4833,13 +4804,6 @@ export type Database = {
             foreignKeyName: "peak_bags_peak_id_fkey"
             columns: ["peak_id"]
             isOneToOne: false
-            referencedRelation: "in_space_peaks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "peak_bags_peak_id_fkey"
-            columns: ["peak_id"]
-            isOneToOne: false
             referencedRelation: "peaks"
             referencedColumns: ["id"]
           },
@@ -4873,47 +4837,6 @@ export type Database = {
           },
           {
             foreignKeyName: "peak_bags_space_fk"
-            columns: ["space_id"]
-            isOneToOne: false
-            referencedRelation: "spaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      in_space_peaks: {
-        Row: {
-          created_at: string | null
-          ele_m: number | null
-          geom: unknown
-          id: string | null
-          lat: number | null
-          lng: number | null
-          name: string | null
-          space_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          ele_m?: number | null
-          geom?: unknown
-          id?: string | null
-          lat?: number | null
-          lng?: number | null
-          name?: string | null
-          space_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          ele_m?: number | null
-          geom?: unknown
-          id?: string | null
-          lat?: number | null
-          lng?: number | null
-          name?: string | null
-          space_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "peaks_space_fk"
             columns: ["space_id"]
             isOneToOne: false
             referencedRelation: "spaces"
@@ -7183,6 +7106,7 @@ export type Database = {
       }
       handle_from_name: { Args: { p_name: string }; Returns: string }
       handle_is_reserved: { Args: { p_handle: string }; Returns: boolean }
+      home_space: { Args: never; Returns: string }
       import_duplicates_pending: { Args: never; Returns: Json }
       import_file_activity: {
         Args: {
