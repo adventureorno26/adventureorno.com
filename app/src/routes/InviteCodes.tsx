@@ -13,7 +13,7 @@ import { whyItFailed } from '../lib/whyItFailed';
 /**
  * Invite codes — make one, read it out, take it back.
  *
- * The door is a code now (0287), so somebody has to be able to make one. This is that
+ * The door is a code now (0288), so somebody has to be able to make one. This is that
  * screen. It sits UNDER Account rather than beside it: Settings has exactly three
  * destinations and this is not a fourth, it is a deeper screen the way
  * `/settings/data/trash` is.

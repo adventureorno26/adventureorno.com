@@ -3,7 +3,7 @@
 #
 # WHY THIS IS NOT IN supabase/tests/. Every file there is ONE `begin … rollback`
 # transaction on ONE connection, which is exactly the thing a race cannot happen
-# inside. `0287_one_code_lets_in_one_person.test.sql` proves everything a single
+# inside. `0288_one_code_lets_in_one_person.test.sql` proves everything a single
 # session can prove — including that the conditional `update … where redeemed_at is
 # null` matches nothing once a code is spent — but the row lock that serialises two
 # LIVE sessions needs two live sessions. This script opens them.
@@ -38,9 +38,9 @@ docker inspect "$DB" >/dev/null 2>&1 || {
 psql_db() { docker exec -i "$DB" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q "$@"; }
 psql_soft() { docker exec -i "$DB" psql -U postgres -d postgres -q "$@"; }
 
-ISSUER=aaaa0287-face-0000-0000-000000000001
-RACER_A=aaaa0287-face-0000-0000-00000000000a
-RACER_B=aaaa0287-face-0000-0000-00000000000b
+ISSUER=aaaa0288-face-0000-0000-000000000001
+RACER_A=aaaa0288-face-0000-0000-00000000000a
+RACER_B=aaaa0288-face-0000-0000-00000000000b
 
 cleanup() {
   psql_soft >/dev/null 2>&1 <<SQL || true

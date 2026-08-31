@@ -1,4 +1,4 @@
-// Invite codes — the door (migration 0287).
+// Invite codes — the door (migration 0288).
 //
 // A new person cannot sign up without a valid code. Erica, 2026-08-30: *"invite code
 // first. new user sees whatever level of privacy each user as chosen. They can see
@@ -14,7 +14,7 @@
 import { supabase } from './supabase';
 
 /**
- * The RPC names in 0287 are not in `database.types.ts` yet.
+ * The RPC names in 0288 are not in `database.types.ts` yet.
  *
  * `scripts/gen-types.mjs` regenerates that file from the LIVE (production) schema and
  * is the only writer of it, so an unapplied migration cannot appear there — and the
@@ -22,7 +22,7 @@ import { supabase } from './supabase';
  * whole point of typing it (see supabase.ts).
  *
  * This is the one cast that buys the gap, named and in one place rather than `as any`
- * scattered about. WHEN 0287 IS DEPLOYED: run `npm run gen:types`, then delete this and
+ * scattered about. WHEN 0288 IS DEPLOYED: run `npm run gen:types`, then delete this and
  * call `supabase.rpc` directly — the return types below are already the shapes the
  * generator will produce.
  */

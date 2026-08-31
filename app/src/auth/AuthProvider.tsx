@@ -13,7 +13,7 @@ interface AuthState {
   /**
    * Re-ask whether this session has a profile yet.
    *
-   * Exists for exactly one moment: redeeming an invite code (0287) CREATES the profile,
+   * Exists for exactly one moment: redeeming an invite code (0288) CREATES the profile,
    * and the provider is still holding the `null` it fetched a second earlier. Without
    * this the person is left staring at the code box that just worked. A reload would
    * also fix it and would throw away the OAuth landing state, so this asks instead.

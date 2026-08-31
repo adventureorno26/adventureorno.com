@@ -1,4 +1,4 @@
--- 0287 — a code lets in ONE person, and says which of the four "no"s it is saying.
+-- 0288 — a code lets in ONE person, and says which of the four "no"s it is saying.
 --
 -- LOCAL disposable stack only (scripts/db-test.sh). Runs the RPCs under
 -- `set local role authenticated` with fictional JWTs, so it exercises the REAL grants

@@ -1,7 +1,7 @@
 // The one piece of invite-code logic that lives in the browser: how a code is SHOWN.
 //
 // Everything that decides anything — unknown, expired, revoked, already used — is in
-// the database (0287), because only the database can tell those apart and each needs
+// the database (0288), because only the database can tell those apart and each needs
 // different words. The browser's whole job is to group ten characters so a person can
 // read them down a phone line, and to never let that grouping reach the server: the
 // dashes are decoration, and `normalize_invite_code` throws them away again.

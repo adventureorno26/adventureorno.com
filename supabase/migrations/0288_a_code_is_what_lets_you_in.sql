@@ -1,4 +1,4 @@
--- 0287 — an invite code is what turns a Google sign-in into an account.
+-- 0288 — an invite code is what turns a Google sign-in into an account.
 --
 -- Erica, 2026-08-30: *"invite code first. new user sees whatever level of privacy each
 -- user as chosen. They can see public information."*
@@ -106,7 +106,7 @@ $$;
 
 comment on function public.normalize_invite_code(text) is
   'One code, however it was typed: strips separators and case, maps the I/1 and O/0 '
-  'confusions onto Crockford base32. NULL for an empty string (0287).';
+  'confusions onto Crockford base32. NULL for an empty string (0288).';
 
 -- The generator. This is a COLUMN DEFAULT, deliberately (0285): a restore under
 -- session_replication_role = replica supplies the stored code and never calls it, and no
@@ -125,7 +125,7 @@ $$;
 
 comment on function public.generate_invite_code() is
   'Ten Crockford base32 characters. Used as the DEFAULT for invite_codes.code so a '
-  'restore with triggers disabled still satisfies NOT NULL (0287, per 0285).';
+  'restore with triggers disabled still satisfies NOT NULL (0288, per 0285).';
 
 revoke execute on function public.normalize_invite_code(text) from public, anon;
 revoke execute on function public.generate_invite_code() from public, anon, authenticated;
@@ -162,7 +162,7 @@ create unique index if not exists invite_codes_code_key on public.invite_codes (
 create index if not exists invite_codes_issued_by_idx on public.invite_codes (issued_by, created_at desc);
 
 comment on table public.invite_codes is
-  'Single-use codes. Holding one is what turns a Google sign-in into a profile (0287). '
+  'Single-use codes. Holding one is what turns a Google sign-in into a profile (0288). '
   'Never insert directly — create_invite_code/redeem_invite_code own every write.';
 comment on column public.invite_codes.code is
   'The secret, normalised (Crockford base32, 10 chars). DEFAULT-generated so restores '
@@ -238,7 +238,7 @@ $$;
 
 comment on function public.create_invite_code(text, int, text) is
   'Issue one single-use code, returning it in full — this is the only moment the issuer '
-  'can read it out to give away (0287).';
+  'can read it out to give away (0288).';
 
 -- ---------------------------------------------------------------------------
 -- 4. List.
@@ -284,7 +284,7 @@ $$;
 
 comment on function public.list_my_invite_codes() is
   'The caller''s own codes with a computed status (live/expired/revoked/redeemed) and '
-  'who each redeemed one let in (0287).';
+  'who each redeemed one let in (0288).';
 
 -- ---------------------------------------------------------------------------
 -- 5. Revoke.
@@ -329,7 +329,7 @@ $$;
 
 comment on function public.revoke_invite_code(uuid) is
   'Take back an unused code. Idempotent. Refuses a redeemed code, because revoking one '
-  'would not un-make the account it created (0287).';
+  'would not un-make the account it created (0288).';
 
 -- ---------------------------------------------------------------------------
 -- 6. Redeem — the atomic one.
@@ -418,7 +418,7 @@ $$;
 
 comment on function public.redeem_invite_code(text) is
   'The door. Turns a signed-in Google session with a valid code into a profile, exactly '
-  'once per code — `for update` serialises two people racing the same code (0287).';
+  'once per code — `for update` serialises two people racing the same code (0288).';
 
 -- ---------------------------------------------------------------------------
 -- 7. Grants. A new SECDEF function is EXECUTE-to-PUBLIC until told otherwise.

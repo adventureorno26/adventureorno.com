@@ -23,7 +23,7 @@ import { whyItFailed } from '../lib/whyItFailed';
  *
  * WHY THERE IS NO "that code didn't work". The four ways a code can fail need four
  * different actions from the person holding it — retype it, ask for a new one, talk to
- * whoever gave it to you, ask for another. 0287 raises a different sentence for each and
+ * whoever gave it to you, ask for another. 0288 raises a different sentence for each and
  * `whyItFailed` shows Postgres messages verbatim, so what is rendered here is what the
  * database said, not a guess made in the browser.
  */

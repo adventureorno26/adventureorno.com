@@ -5327,17 +5327,17 @@ whether a trashed place is editable there is a product decision and `/trash` alr
   *place* and *trip* counts are identical for both, as they must be. Worth a look; not this
   change.
 
-## 6f. 2026-08-30 — THE DOOR IS A CODE (migration 0287)
+## 6f. 2026-08-30 — THE DOOR IS A CODE (migration 0288)
 
 Erica, 2026-08-30: *"invite code first. new user sees whatever level of privacy each user
 as chosen. They can see public information."* This is the §4 call recorded in the decision
 table above ("**Sign-up** — Invite code first, not open registration"), now built.
 
-**Two halves, and only the first is what 0287 does.** The DOOR is a code: nobody becomes a
+**Two halves, and only the first is what 0288 does.** The DOOR is a code: nobody becomes a
 member by asking and waiting. WHAT YOU SEE once you are in is not narrowed on anyone's
 behalf — each person's own privacy choices govern it and public information stays public.
 `0286` already settled that roles govern WRITES only and visibility belongs to the space
-boundary; nothing in 0287 restricts a read.
+boundary; nothing in 0288 restricts a read.
 
 ### What the door was before
 
@@ -5380,7 +5380,7 @@ so it proves the claim or fails — it never passes by getting lucky on timing: 
 sits on the row lock; B blocks on `for update` (asserted through `pg_stat_activity`, not
 assumed); A commits; B wakes, re-reads, and is refused. Measured:
 
-    A redeemed as aaaa0287-face-0000-0000-00000000000a
+    A redeemed as aaaa0288-face-0000-0000-00000000000a
     B: ERROR: That invite code has already been used. Ask whoever gave it to you for
        another one — each code lets in one person.
 
@@ -5391,7 +5391,7 @@ Afterwards: exactly one of the two contenders has a profile, and the code names 
 * **Not applied to production, and not rehearsed against it.** Verified only by replaying the
   whole chain from an EMPTY schema (`scripts/db-test.sh`) plus the two-session race proof on
   the local disposable stack.
-* **`database.types.ts` cannot know about 0287 yet** — `gen-types.mjs` reads the LIVE schema
+* **`database.types.ts` cannot know about 0288 yet** — `gen-types.mjs` reads the LIVE schema
   and is its only writer. `app/src/lib/inviteCodes.ts` carries one named cast to bridge that.
   After the deploy: run `npm run gen:types` and delete the cast.
 * **§12 and this feature disagree about one Supabase Auth setting, and it is load-bearing.**
@@ -7201,7 +7201,7 @@ Copy the project URL and current publishable key from the Supabase dashboard int
 
 - Authentication → Sign In/Up: **disable "Allow new users to sign up"** (invite-only depends on
   this). ⚠️ **Read §6f before acting on this line.** Invite-only is actually enforced by the
-  absence of a `profiles` row, and BOTH ways in — redeeming an invite code (0287) and the older
+  absence of a `profiles` row, and BOTH ways in — redeeming an invite code (0288) and the older
   "request access" — need an `auth.users` row first. With this setting off, an invited person
   can never sign in far enough to use their code.
 - Project Settings → API keys: copy the **service_role/secret key** into `.env.local` ONLY when
