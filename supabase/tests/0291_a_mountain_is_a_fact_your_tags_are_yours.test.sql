@@ -192,17 +192,27 @@ begin
     raise exception 'FAIL 3: a place created in the second space was stamped park = %, not the containing park', coalesce(v_park, 'NULL');
   end if;
 
-  -- …and the gazetteer is still closed to a caller with no account.
-  set local role anon;
-  select count(*) into n from public.peaks where id = '60291000-0000-0000-0000-000000000001';
-  if n <> 0 then
-    reset role; raise exception 'FAIL 3: anon read % peaks', n;
-  end if;
-  select count(*) into n from public.parks where id = '70291000-0000-0000-0000-000000000001';
-  reset role;
-  if n <> 0 then
-    raise exception 'FAIL 3: anon read % parks', n;
-  end if;
+  -- …and the gazetteer is still closed to a caller with no account. `anon` holds no grant
+  -- on either table, so the honest assertion is that it cannot GET AT them — which is
+  -- stronger than "it reads zero rows", and shows up as insufficient_privilege rather than
+  -- as an empty result. Leaving the boundary must not have handed anything to the public.
+  begin
+    set local role anon;
+    select count(*) into n from public.peaks where id = '60291000-0000-0000-0000-000000000001';
+    reset role;
+    if n <> 0 then raise exception 'FAIL 3: anon read % peaks', n; end if;
+  exception when insufficient_privilege then
+    reset role;
+  end;
+
+  begin
+    set local role anon;
+    select count(*) into n from public.parks where id = '70291000-0000-0000-0000-000000000001';
+    reset role;
+    if n <> 0 then raise exception 'FAIL 3: anon read % parks', n; end if;
+  exception when insufficient_privilege then
+    reset role;
+  end;
 
   perform set_config('request.jwt.claims', '', true);
   raise notice 'PASS 3: a member reads a peak and a park nobody filed in his space, anon reads neither, and his new place is stamped with the park that contains it';

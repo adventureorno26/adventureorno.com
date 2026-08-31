@@ -221,19 +221,27 @@ grant execute on function public.home_space() to authenticated;
 --    gazetteer; `anon` reads nothing. Neither table has ever had a write policy, and neither
 --    gains one here.
 -- ---------------------------------------------------------------------------
+-- `in_space_peaks` was `select * from peaks where space_id in (my_space_ids())`, so it holds
+-- a dependency ON THE COLUMN and the drop below fails with "cannot drop column space_id of
+-- table peaks because other objects depend on it" until it is gone. It goes FIRST, and by
+-- hand rather than with `cascade`, because a `cascade` here would silently take anything
+-- else that had come to depend on it. Section 7 replaces its only two readers; nothing else
+-- in the schema names it.
+drop view if exists public.in_space_peaks;
+
+-- The POLICIES depend on the column too — `using (public.is_member(space_id))` is a
+-- dependent object in exactly the way the view is, and the drop fails with the same message
+-- until they are gone. So the order is: view, then policies, then the column, then the new
+-- policies. Between the two there is no window in which anything is readable that should
+-- not be: this is one transaction, and `peaks` and `parks` have never had a write policy.
+drop policy if exists peaks_select on public.peaks;
+drop policy if exists parks_select on public.parks;
+
 alter table public.peaks drop column if exists space_id;
 alter table public.parks drop column if exists space_id;
 
-drop policy if exists peaks_select on public.peaks;
 create policy peaks_select on public.peaks for select using (public.is_member());
-
-drop policy if exists parks_select on public.parks;
 create policy parks_select on public.parks for select using (public.is_member());
-
--- `in_space_peaks` was `select * from peaks where space_id in (my_space_ids())`. There is no
--- longer a `space_id` to filter on. Section 7 replaces its only two readers first in
--- ordering terms; the drop is safe here because nothing else in the schema names it.
-drop view if exists public.in_space_peaks;
 
 -- ---------------------------------------------------------------------------
 -- 3. The three personal tables get keys that can hold a second space's copy.
