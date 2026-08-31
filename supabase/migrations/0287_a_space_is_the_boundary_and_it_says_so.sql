@@ -1,4 +1,25 @@
--- 0281 — a space is the boundary, and every rule says so out loud.
+-- 0287 — a space is the boundary, and every rule says so out loud.
+--
+-- ⚠️ REBASED FROM 0281 TO 0287 BY `feat/space-scope-readers-v2`, AND THE FOUR `_select`
+--    POLICIES BELOW WERE MERGED RATHER THAN COPIED. THIS IS A FINDING FOR PR #185.
+--
+--    PR #185 branched before 0283–0286 and sits in the 0281 slot. Replayed from an empty
+--    schema on top of main, NEITHER ORDERING IS CORRECT, and this was measured, not
+--    reasoned about:
+--
+--      * At 0281 (before 0284/0286) — `0281…test.sql` step 2 FAILS with
+--        "6 policy/policies on a space-owned table still use the session-wide check",
+--        because 0284 and 0286 re-create `places_select`, `photos_select`, `visits_select`
+--        and `activities_select` afterwards and the space clause is undone.
+--      * At 0287 (after 0286), copied verbatim — the space clause survives and
+--        **`not is_blocked_between(...)` is silently dropped from all four**, because
+--        0281 was written against the pre-0283 text. That is a blocked person becoming
+--        able to see places, photos, visits and activities again: a security regression
+--        introduced by a migration whose entire purpose is to tighten visibility.
+--
+--    So the four policies carry BOTH clauses below. #185 needs this merge whatever number
+--    it eventually lands on; nothing else in this file was changed.
+--
 --
 -- Erica, 2026-08-22: *"I want to be able to share this application with other people."*
 -- STATE.md §3s step 1: *"Every read policy in the database ends in `is_member()` — are you
@@ -465,13 +486,17 @@ grant select on public.spaces, public.space_memberships to authenticated;
 drop policy if exists places_select on public.places;
 create policy places_select on public.places for select using (
   deleted_at is null and public.is_member(space_id)
+  -- 0284's block, kept. A boundary migration that dropped it would re-open what 0284 shut.
+  and not public.is_blocked_between(created_by, (select auth.uid()))
   and (saved or created_by = (select auth.uid()) or (created_by is null and public.is_owner(space_id))));
 drop policy if exists places_write on public.places;
 create policy places_write on public.places for all
   using (public.is_editor_or_owner(space_id)) with check (public.is_editor_or_owner(space_id));
 
 drop policy if exists visits_select on public.visits;
-create policy visits_select on public.visits for select using (public.is_member(space_id));
+create policy visits_select on public.visits for select using (
+  public.is_member(space_id)
+  and not public.is_blocked_between(created_by, (select auth.uid())));
 drop policy if exists visits_write on public.visits;
 create policy visits_write on public.visits for all
   using (public.is_editor_or_owner(space_id)) with check (public.is_editor_or_owner(space_id));
@@ -479,6 +504,7 @@ create policy visits_write on public.visits for all
 drop policy if exists activities_select on public.activities;
 create policy activities_select on public.activities for select using (
   public.is_member(space_id)
+  and not public.is_blocked_between(owner_profile, (select auth.uid()))
   and (lower(coalesce(original_source, '')) <> 'strava'
     or owner_profile = (select auth.uid())
     or exists (select 1 from public.activity_profiles ap
@@ -491,6 +517,7 @@ create policy activities_select on public.activities for select using (
 drop policy if exists photos_select on public.photos;
 create policy photos_select on public.photos for select using (
   deleted_at is null and public.is_member(space_id)
+  and not public.is_blocked_between(uploaded_by, (select auth.uid()))
   and (uploaded_by = (select auth.uid())
     or (uploaded_by is null and public.is_owner(space_id))
     or (place_id is not null and public.place_is_saved(place_id))));

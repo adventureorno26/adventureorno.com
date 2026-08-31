@@ -1,10 +1,10 @@
--- 0287 — the readers say which space they are reading.
+-- 0288 — the readers say which space they are reading.
 --
 -- DRAFT — REHEARSED, NOT APPLIED. Nothing in this file has been run against production
 -- outside a transaction that was rolled back.
 --
--- 0281 makes a space the boundary and rewrites 70 POLICIES to name one. It says, in its
--- own header, what it leaves behind:
+-- The partition — 0287 on this branch, 0281 in PR #185 — makes a space the boundary and
+-- rewrites 70 POLICIES to name one. It says, in its own header, what it leaves behind:
 --
 --     "The hard part is that the ~60 SECURITY DEFINER stat readers bypass RLS by
 --      construction, so after a fork they see BOTH copies of every shared card and every
@@ -12,7 +12,7 @@
 --
 -- That is this file. A policy cannot help here: SECURITY DEFINER runs as the function's
 -- owner, and an owner is not subject to RLS. The boundary has to be written into the
--- readers themselves, exactly as 0281 wrote it into the seven views.
+-- readers themselves, exactly as the partition wrote it into the seven views.
 --
 --
 -- ============================================================================
@@ -25,7 +25,7 @@
 --
 --     226  SECURITY DEFINER functions in `public`
 --      74  of them are readers of space-owned relations
---       8  of those 74 read ONLY the seven views 0281 already scopes, so 0281 scopes them
+--       8  of those 74 read ONLY the seven views the partition already scopes, so it scopes them
 --          transitively and they are not touched here:
 --            activity_lines, activity_lines_for_people, climbing_stats,
 --            climbing_stats_for_people, mileage_by_person, mileage_by_person_for_people,
@@ -44,10 +44,33 @@
 -- recorded here rather than left for somebody to rediscover.
 --
 -- WHY NOT security_invoker. Flipping the readers to invoker rights would apply RLS, and
--- RLS after 0281 does contain the space clause — but it contains everything ELSE too. Erica
+-- RLS after the partition does contain the space clause — but it contains everything ELSE too. Erica
 -- ruled on 2026-08-30 that a card which hides who was there "lies by omission"; §0.2 has
 -- the measurement: she would lose 305 participant rows on visits she can still see. The
 -- boundary is written down instead. Same ruling, same reason, one section later.
+--
+--
+-- ============================================================================
+-- THE BODIES COME FROM THE CHAIN, NOT FROM PRODUCTION — AND THAT IS A FINDING
+-- ============================================================================
+--
+-- The ENUMERATION above is production's, because "which functions exist and what do they
+-- read" is a question about the live database. The BODIES this file writes out are not:
+-- they are taken from `scripts/db-bootstrap.sh` replaying the whole chain into an empty
+-- schema, and the two were diffed function by function before a line was generated.
+--
+-- Sixty of the sixty-two are byte-identical. TWO ARE NOT, and in both the chain is AHEAD of
+-- production, because 0283–0286 are merged to main and have not been applied:
+--
+--     can_see_memory_subject   the chain has the `visit` branch; production does not
+--     last_seen                the chain has ghost mode and `ph.deleted_at is null`;
+--                              production has neither
+--
+-- Generating from production would have shipped a migration that silently REVERTED both —
+-- a reader migration quietly turning ghost mode back off. `0287…test.sql` (the partition's own test) caught the first
+-- of the two on the empty-schema replay, which is the check earning its keep; the second
+-- had no test and would have gone through. That is why the diff was run at all, and it is
+-- the reason this section exists rather than a sentence saying "bodies taken from prod".
 --
 --
 -- ============================================================================
@@ -122,7 +145,7 @@
 --                                       `reassign_activity`).
 --
 --   ⚠️ THE TWO WRITE PATHS ARE A REAL GAP AND THIS FILE DOES NOT CLOSE IT. Both are
---   SECURITY DEFINER, so 0281's rewritten policies do not constrain them either — a definer
+--   SECURITY DEFINER, so the partition's rewritten policies do not constrain them either — a
 --   writer bypasses RLS exactly as a definer reader does. After the split, nothing in the
 --   database stops `merge_nearby_dupes` from merging a place in Erica's space into one in
 --   Josh's. That is a WRITER audit, it is a different question with a different answer, and
@@ -137,7 +160,7 @@
 -- Erica, 2026-08-30: *"Any row count that changes for either of them, on any screen, that
 -- cannot be explained."* Both accounts were signed in as themselves against PRODUCTION,
 -- inside `begin … rollback`, before and after this file, over 45 numbers each. Every one is
--- identical, which is the expected result and the only acceptable one: 0281 puts every
+-- identical, which is the expected result and the only acceptable one: the partition puts every
 -- existing row in ONE space and both humans in it, so `is_member(space_id)` is true for
 -- every row either of them can reach today. The clause is inert until the split fills
 -- Josh's space — which is the whole point of landing it first.
@@ -155,11 +178,12 @@
 -- WHAT THIS FILE REQUIRES, AND WHAT IT DOES NOT DO
 -- ============================================================================
 --
--- REQUIRES 0281. There is no `space_id` and no `is_member(uuid)` without it. This file is
--- meaningless applied alone and will not compile.
+-- REQUIRES THE PARTITION — 0287 on this branch, 0281 in PR #185. There is no `space_id`
+-- and no `is_member(uuid)` without it. This file is meaningless applied alone and will not
+-- compile.
 --
 -- IT DOES NOT split the data. Every row is still in one space after this runs, so nothing
--- moves. This is the precondition 0281's header asks for, so that the split — which forks
+-- moves. This is the precondition the partition's header asks for, so that the split — which forks
 -- 108 visits, 56 outings and 76 places into both spaces — lands into readers that already
 -- know which copy is theirs, instead of doubling every shared number the moment it runs.
 
@@ -294,9 +318,11 @@ revoke all on public.in_space_visits from anon, authenticated;
 
 
 -- ---------------------------------------------------------------------------
--- 2. THE READERS. 62 function bodies, each taken from production verbatim and
---    changed only where a space-owned relation is named. `create or replace` on an
---    EXISTING function keeps its ACL, so no grant moves here and 0154's matrix is unmoved.
+-- 2. THE READERS. 62 function bodies, each taken VERBATIM FROM THE REPLAYED
+--    MIGRATION CHAIN — not from production — and changed only where a space-owned relation
+--    is named. See the header for why that distinction cost two reverted fixes.
+--    `create or replace` on an EXISTING function keeps its ACL, so no grant moves here
+--    and 0154's matrix is unmoved.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.activities_of_type(p_type text, p_profile uuid DEFAULT NULL::uuid)
@@ -406,17 +432,20 @@ AS $function$
   select exists (
     select 1 from public.in_space_memory_subjects s
      where s.id = p_subject
-       and public.is_member()
-       and not public.is_blocked_between(s.owner_profile, auth.uid())
+       and public.is_member(s.space_id)
        and case s.kind
              when 'photo' then exists (
                select 1 from public.in_space_photos ph
                 where ph.id = s.photo_id
                   and ph.deleted_at is null
                   and (ph.uploaded_by = auth.uid()
-                    or (ph.uploaded_by is null and public.is_owner())
+                    or (ph.uploaded_by is null and public.is_owner(s.space_id))
                     or (ph.place_id is not null and public.place_is_saved(ph.place_id))))
              when 'outing' then public.can_see_activity(s.activity_id)
+             -- The space boundary IS the rule for a visit: `visits_select` has never said
+             -- anything more than "are you inside", and a participation row must not be
+             -- harder to see than the visit it describes.
+             when 'visit' then true
              else false
            end);
 $function$;
@@ -831,12 +860,18 @@ create or replace function public.last_seen()
  SET search_path TO 'public'
 AS $function$
 begin
+  -- SECURITY DEFINER bypasses RLS, so the membership check is the only thing
+  -- standing between a logged-in-but-not-member session and everyone's
+  -- coordinates. 0093 revoked anon EXECUTE across the board; this guard covers
+  -- the mid-join-flow case that grant alone does not.
   if not public.is_member() then
     raise exception 'not authorized' using errcode = '42501';
   end if;
 
   return query
   with latest as (
+    -- One row per person: their most recent ping. DISTINCT ON is the cheap way
+    -- to do this against 17k rows.
     select distinct on (lp.profile_id)
       lp.profile_id, lp.lat, lp.lng, lp.recorded_at
     from public.in_space_location_pings lp
@@ -844,6 +879,7 @@ begin
     order by lp.profile_id, lp.recorded_at desc
   ),
   their_photo as (
+    -- The marker face: that person's most recent photo. Every marker is a photo.
     select distinct on (ph.uploaded_by) ph.uploaded_by, ph.id
     from public.in_space_photos ph
     where ph.uploaded_by is not null
@@ -862,6 +898,7 @@ begin
   from public.profiles p
   join latest l on l.profile_id = p.id
   left join their_photo tp on tp.uploaded_by = p.id
+  -- Ghost mode: hidden from everyone but yourself.
   where p.share_location or p.id = auth.uid()
   order by l.recorded_at desc;
 end $function$;
@@ -2262,9 +2299,11 @@ declare
     'memory_people_refuse_a_blocked_tag',
     -- WRITE PATHS. Named, unclosed, and a WRITER audit rather than a reader one.
     'merge_nearby_dupes','move_visit_to_place',
-    -- `visit_detail` keeps `public.visits v` because `counts_as_trip(v.*)` is typed to the
-    -- table's composite and a view's row is a different type. It carries the clause inline.
-    'visit_detail'
+    -- `may_autowrite` and `naming_rules_list` read the RULE tables to answer a question
+    -- about rules, not about memories, and both are already narrowed to the caller. They
+    -- are listed rather than rewritten because a scoped view would change what a rule
+    -- ENGINE can see, which is a naming question and not a boundary one.
+    'may_autowrite','naming_rules_list'
   ];
   unexpected text;
 begin
@@ -2274,8 +2313,30 @@ begin
    where n.nspname = 'public' and p.prokind = 'f' and p.prosecdef
      and pg_get_functiondef(p.oid) ~*
          '(from|join)[[:space:]]+(public\.)?(places|visits|photos|videos|entries|people|memory_people|memory_subjects|visit_people|peaks|peak_bags|place_ratings|place_wishes|place_membership|location_pings|suggestions|tag_claims|tagging_rules|naming_rules|approved_fields)[^A-Za-z0-9_]'
-     -- A function that also states the boundary inline has already answered the question.
-     and pg_get_functiondef(p.oid) !~* 'is_member[[:space:]]*\('
+     -- A function that states the boundary inline has already answered the question.
+     -- `is_member(` with an ARGUMENT, not the bare no-argument turnstile — `is_member()`
+     -- means "are you inside any space at all", which is not a statement about a row and
+     -- must not buy an exemption.
+     and pg_get_functiondef(p.oid) !~* 'is_member[[:space:]]*\([^)]'
+     -- READERS ONLY, which is what this migration is about. Sixty SECURITY DEFINER WRITE
+     -- paths also reach these tables without naming a space, and 0281's policies do not
+     -- constrain them either, because a definer writer bypasses RLS exactly as a definer
+     -- reader does. That is a real, open hole — `merge_places_auto` will merge across the
+     -- boundary the day the split lands. It is a WRITER audit with a different answer, and
+     -- listing sixty names here that nobody has reasoned about individually would be an
+     -- allowlist pretending to be a review. The header names it; this guard does not
+     -- pretend to cover it.
+     --
+     -- The UPDATE half of this is written to survive an alias. The first draft said
+     -- `update <table> set` and let four writers through — `update public.activities a`
+     -- puts the alias between the table and the SET, and `rename_activities_for_place`,
+     -- `untag_person_on_photo` and two trigger functions were then asked to justify
+     -- themselves as readers. They are not readers.
+     and pg_get_functiondef(p.oid) !~*
+         '(insert[[:space:]]+into|update[[:space:]]+(public\.)?[a-z_]+([[:space:]]+[a-z_]+)?[[:space:]]+set|delete[[:space:]]+from|[[:space:]]perform[[:space:]])'
+     -- A TRIGGER is not a reader either. It is invoked by a write, it shows nobody
+     -- anything, and `auth.uid()` is frequently NULL inside one.
+     and p.prorettype <> 'pg_catalog.trigger'::regtype
      and not (p.proname = any(allowed));
 
   if unexpected is not null then
