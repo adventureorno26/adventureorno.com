@@ -741,6 +741,47 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### THE WRITERS NAME THEIR SPACE NOW — `0293` APPLIED 2026-08-31
+
+**The hole below is measured shut.** `0293_the_writers_name_their_space.sql` is applied to
+production and merged (#214). The exploit was re-run against production **first**, on the
+day's schema, and was still open — Josh, with **0** memberships in Erica's space, set one of
+her visits to `2019-01-01`, accepted, inside a transaction that was rolled back. Her date
+never moved from `2026-08-30`.
+
+After applying, the identical call:
+
+```
+ERROR:  42501: that row is not in a space you are in
+DETAIL: UPDATE on public.visits: row space ca2483fa…, caller 12ef0b67…
+HINT:   a space is the boundary (0289); a writer names it (0293)
+```
+
+**The mechanism does not enumerate.** One `before row` trigger on each of **46** space-owned
+tables, all running one guard, so the next SECURITY DEFINER function anybody writes is
+guarded by default. Two table exclusions (`space_memberships`, `invites`) and two function
+exemptions (`respond_to_tag`, `respond_to_memory_tag`, recognised through the PL/pgSQL call
+stack rather than a settable GUC — `postgres` is not superuser here, so the GUC design
+failed on its first rehearsal).
+
+**Nobody lost a capability**, which was the abort criterion. Every measurement byte-identical
+before and after, all three accounts: Erica **2136.1 mi · 132 places · 43 trips · 467 visits ·
+408 activities · 162 places visible**; Josh **208 · 175 · 83**; Test Bot **467 · 220 · 162**.
+
+**The 88-versus-60 discrepancy is settled at 88.** The file's own regex is wider than the
+brief's — it counts trigger functions and matches `update <t>` anywhere in a body — and
+nothing depends on which count is right, because the mechanism guards by table, not by
+enumerating writers. Measured on production: 238 SECURITY DEFINER functions, 96 writing to a
+space-owned table, **83 with no expression capable of noticing a cross-space write** and 57
+that never look at `auth.uid()` at all.
+
+**Ten tables carry no `space_id` and this mechanism cannot reach them** — `connection_adds`,
+`connection_blocks`, `connection_follows`, `invite_codes`, `job_runs`, `join_requests`,
+`oauth_states`, `profiles`, `service_health`, `spaces`. The file argues most are correct
+(relationships *between* spaces, or per-person) and says plainly that *"'a space is not the
+right question here' is not the same sentence as 'this one is safe'"*. **That audit is
+outstanding and is carried here so it is not lost.**
+
 ### THE BOUNDARY ONLY STOPS READS — A CONFIRMED CROSS-SPACE WRITE — 2026-08-30
 
 **Reproduced on production, in a transaction that was rolled back.** Josh, who is **not** a
