@@ -694,6 +694,40 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### THE BOUNDARY ONLY STOPS READS — A CONFIRMED CROSS-SPACE WRITE — 2026-08-30
+
+**Reproduced on production, in a transaction that was rolled back.** Josh, who is **not** a
+member of Erica's space, rewrote the dates of one of her visits:
+
+```sql
+set local request.jwt.claims = '{"sub":"<josh>","role":"authenticated"}';
+set local role authenticated;
+select public.edit_visit('4d2f0605-…'::uuid, '2019-01-01', '2019-01-02', null, null, null, null);
+```
+
+It did not error. Read back as superuser, her visit read **2019-01-01**. Production is
+intact — the rollback was verified, `2026-08-30` is still there — but **the hole is open.**
+
+**Why.** `edit_visit` is SECURITY DEFINER, which bypasses RLS by construction, and it never
+asks which space the row belongs to. Measured on production: **62 SECURITY DEFINER functions
+write to space-owned tables and 55 of them name no space at all** — `delete_visit`,
+`merge_places_auto`, `attach_child_visit`, `create_visit`, `detach_child_visit`,
+`ensure_visit`, `apply_inbox_field` among them.
+
+**`0290` space-scoped the READERS. The WRITERS were never scoped.** That asymmetry was
+harmless while everyone shared one household — "any signed-in member" and "someone allowed
+to touch this row" were the same set. **The fork is what made it exploitable**, the moment
+there were two spaces.
+
+**Severity, stated honestly.** The only accounts that exist are Erica, Josh and the test
+bot, so nobody untrusted can reach it today. It is **not an active breach**. It **is** the
+gate on anyone else ever holding an account — the same gate the read work was treated as,
+and it was never applied to the other half.
+
+**The lesson worth keeping:** the partition was reviewed, rehearsed and measured 98 ways,
+and every one of those measurements was a **read**. A boundary proven only by reading is
+half a boundary.
+
 ### THE FORK IS APPLIED — JOSH'S HISTORY IS HIS OWN — 2026-08-30
 
 `0291` (reference tables) and `0292` (the data fork) are **applied to production**, both
