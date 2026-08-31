@@ -643,6 +643,85 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### THE PARTITION IS APPLIED — AND IT WAS APPLIED BY ACCIDENT — 2026-08-30
+
+`0289` (the partition) and `0290` (62 space-scoped readers) are **applied to production**.
+They were not applied deliberately, and the way it happened is worth more than the fact.
+
+**What happened.** I wrote a rehearsal as `begin; <0289> <0290> …measurements…; rollback;`
+so the numbers could be read without changing anything. **Both migrations are self-wrapped**
+— `0289` carries its own `begin;` at line 136 and `commit;` at line 1150. That inner
+`commit;` ended my outer transaction. Everything after it ran for real and the closing
+`rollback;` had nothing left to undo.
+
+**The warning was on screen an hour earlier and I did not read it.** `apply-migration.mjs`
+prints `self-wrapped: yes (unwrapped and re-wrapped)` — the tool saying these files manage
+their own transactions. It printed that while applying `0288`.
+
+**The rule this leaves behind: never hand-roll a rehearsal for a migration in this repo.**
+Strip the file's own `begin`/`commit` first, exactly as `apply-migration.mjs` does, and
+re-query afterwards to prove the rollback actually happened. *A rehearsal you have not
+proven rolled back is an apply.*
+
+**What the damage was: none that could be found.** The measurements taken after the inner
+commit were, unknowingly, real post-apply readings — so the abort criterion was genuinely
+tested against the applied state, for both accounts, by luck rather than diligence:
+
+| | before | after |
+| --- | --- | --- |
+| Erica places / miles | 132 / 2136.1 | **132 / 2136.1** |
+| Our Stats places | 55 | **55** |
+| Josh places / miles | 61 / 1468.7 | **61 / 1468.7** |
+| visits · places · activities visible | 558 · 169 · 481 | **558 · 169 · 481** |
+
+Live, signed in: Insights reads 132 places, 2,136.1 miles, 43 trips, 4 races; `/places`
+lists 150; a place card renders its sections; no errors. Memberships are sane — **Erica's
+space** holds Erica (owner), Josh (editor) and Test Bot (editor); **Josh's space** holds
+Josh (owner).
+
+**The ledger rows were written by hand afterwards**, and only after proving the migrations
+were *fully* present — 2 spaces, 4 memberships, 70 tables carrying `space_id`, 20
+`in_space_` views, and **0 rows missing a `space_id`** in places, visits or activities. The
+script's own warning is that recording an unapplied migration makes it skip forever, which
+is worse than the gap. Ledger clean at 288.
+
+**A fresh backup WITH a tested restore was taken immediately after** and both succeeded —
+the first restore verification against the partitioned shape.
+
+**Still to do: the data fork.** Josh's space holds **0** rows. `0291` must materialise
+**207 visits, 168 outings and 81 places** into it, both-tagged rows going into both spaces
+per the decision above. The trap, named so it cannot be walked into: a copied outing that
+gets a fresh `id` without carrying its `shared_group_id` becomes a second canonical key
+under `coalesce(shared_group_id, id)`, and **15 miles run together would count as 30** —
+the exact thing §0.2 forbids.
+
+### THE LIVE CHECK RUNS IN CI NOW — AND NEVER HAD — 2026-08-30
+
+`verify:live` is the file that decides whether a request is done (2026-08-11: *"a request
+counts as done when its check is green HERE"*). **No workflow had ever run it.** It ran only
+when somebody typed it locally, which is how **seven** of its checks sat red against
+production without anything going red.
+
+It now runs after `deploy-production`, and it **refuses to run blind**: the three values
+`liveTest` needs to mint a session are asserted first, in a step that exits 1 naming the
+missing one. A skip and a pass are indistinguishable in a green run — the same defect as
+`backup-freshness` passing on `NaN`.
+
+**Its first CI run failed, correctly**, on `sh: 1: .: cannot open ./.env.local` — the root
+script sources a file that exists on a developer's machine and never on a runner. The guard
+passed (the secrets were present) and the job then died loudly on a real error instead of
+reporting green having run nothing. Fixed in #201 by calling the workspace script directly.
+
+**The seven red checks were all test-side; none was a product regression.** Fixed in #199 —
+**30 passed, 0 failed**, with no line of `app/src` touched. Two findings came out of it that
+outlive the fix:
+
+- **The live suite runs as the TEST BOT, so a green suite proves what the bot can see, not
+  what Erica sees.** San Diego renders `Routes (6)` for her and **no Routes section at all**
+  for the bot. Any check pinned to a specific place asserts the bot's visibility.
+- **Three controls named "Cancel" on the blank card**, and the middle one is mounted with
+  `onCancel={() => undefined}` — a dead no-op sitting between two working ones.
+
 ### THE DOOR IS OPEN — 2026-08-30
 
 `0288_a_code_is_what_lets_you_in` is **applied to production** and the ledger is clean at
