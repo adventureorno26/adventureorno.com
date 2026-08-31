@@ -279,8 +279,18 @@ export default function AddActivity({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
+              /* AN ACTIVITY HAS NEVER NEEDED A TITLE, and the form never said so.
+                 Erica, 2026-08-31: "to add an activity I have to give it a title."
+                 She did not — `save()` already sends `name: trimmed || null` for a route
+                 and `add_activity_to_visit` does `coalesce(p_name, v_opt.label)` — but the
+                 label read "Name", the placeholder read "Kayaking", and Miles directly
+                 below it said "optional". Every signal on screen said required. A field
+                 that is optional and does not say so is a field that is required.
+                 A PLACE still must be named: it becomes a card of its own. */
               placeholder={
-                picked.kind === 'place' ? `Name this ${picked.label.toLowerCase()}` : picked.label
+                picked.kind === 'place'
+                  ? `Name this ${picked.label.toLowerCase()}`
+                  : `optional — we'll call it ${picked.label}`
               }
             />
           </label>

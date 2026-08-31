@@ -60,6 +60,7 @@ const BLANK = SOURCES.find(([p]) => p.endsWith('components/NewPlaceDraft.tsx'))?
 // than asserted. The name/rating guard below follows the markup here rather than staying
 // pointed at the file it used to live in.
 const COVER = SOURCES.find(([p]) => p.endsWith('components/CardCover.tsx'))?.[1] ?? '';
+const ADD_ACTIVITY = SOURCES.find(([p]) => p.endsWith('components/AddActivity.tsx'))?.[1] ?? '';
 
 // Words that are fine in general but must never appear in the CARD's visit list.
 const BANNED_IN_VISITS = [
@@ -150,6 +151,41 @@ describe('the locked card — the sections, in the locked order', () => {
   it('the letter is text, never an icon', () => {
     // Her standing rule, and the reason a letter is allowed where a pictogram is not.
     expect(COVER).not.toMatch(/<svg|<img[^>]*icon|📷|🏔|🥾/);
+  });
+});
+
+describe('adding an activity asks for no title', () => {
+  // Erica, 2026-08-31: "I like the view of the card when I click on Virginia Beach, except
+  // that to add an activity I have to give it a title."
+  //
+  // She did not have to. `save()` sends `name: trimmed || null` for a route and
+  // `add_activity_to_visit` does `coalesce(p_name, v_opt.label)`, so an unnamed run has
+  // always been called "Run". But the field was labelled "Name", its placeholder was the
+  // activity's own label — which reads as a value you must replace — and the Miles field
+  // directly beneath it said "optional". Every signal on the screen said required.
+  //
+  // A FIELD THAT IS OPTIONAL AND DOES NOT SAY SO IS A FIELD THAT IS REQUIRED. Guarded
+  // here rather than with a live check because the control sits inside an expanded visit
+  // row behind a `.kind-select` class five other selects share — a browser check on it
+  // would be testing the locator, not the promise.
+  it('says the name is optional, and what it will be called instead', () => {
+    expect(ADD_ACTIVITY.length, 'AddActivity.tsx should be readable').toBeGreaterThan(500);
+    // The route branch of the placeholder must offer the word, and must say what happens.
+    expect(ADD_ACTIVITY, 'the activity name placeholder must say it is optional').toMatch(
+      // Deliberately loose between the two: the sentence between them is copy and will be
+      // edited. What must hold is that the word "optional" and the fallback name travel
+      // together — the first draft of this regex excluded quotes and broke on "we'll".
+      /optional[\s\S]{0,60}\$\{picked\.label\}/,
+    );
+  });
+
+  it('still requires a name for a PLACE, which becomes a card of its own', () => {
+    // The other half of the same rule, and the reason this is not simply "make it
+    // optional everywhere": a restaurant added to a visit gets a card, and "Restaurant"
+    // is not a name for it.
+    expect(ADD_ACTIVITY, 'a place must still be named').toMatch(
+      /picked\.kind === 'place' && !trimmed/,
+    );
   });
 });
 

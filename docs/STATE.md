@@ -771,6 +771,32 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### AN ACTIVITY NEEDS NO TITLE — 2026-08-31
+
+Erica: *"I like the view of the card when I click on Virginia Beach, except that to add an
+activity I have to give it a title."*
+
+**She did not have to, and that is the whole finding.** `save()` has always sent
+`name: trimmed || null` for a route, and `add_activity_to_visit` does
+`coalesce(p_name, v_opt.label)` — so an unnamed run has always been called "Run". But the
+field was labelled **Name**, its placeholder was the activity's own label (which reads as a
+value you are meant to replace), and the **Miles** field directly beneath it said
+*"optional"*. Every signal on the screen said required.
+
+**A field that is optional and does not say so is a field that is required.** The placeholder
+now reads `optional — we'll call it Hike`, which is both the permission and the consequence.
+
+**A PLACE still must be named**, and that is not an inconsistency: a restaurant added to a
+visit becomes a card of its own, and "Restaurant" is not a name for it. Both halves are
+guarded.
+
+**Guarded in `lockedCard.test.ts`, not with a live check, and the reason is worth keeping.**
+The control sits inside an expanded visit row behind a `.kind-select` class that **five other
+selects share** — the first attempt at a browser check silently drove the place-CATEGORY
+picker instead and reported a clean skip. A check that can pass while pointed at the wrong
+control is testing its locator, not the promise. The source guard asserts the two things that
+must travel together: the word *optional* and the fallback name.
+
 ### A TAG SAYS WHAT IT IS ABOUT — `0301` APPLIED 2026-08-31
 
 Erica, 2026-08-31, on the copy `0300` shipped: *"I don't want anything to say somewhere you
