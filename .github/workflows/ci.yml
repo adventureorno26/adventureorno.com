@@ -627,3 +627,79 @@ jobs:
           SMOKE_BASE_URL: https://adventureorno.com
           EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/smoke-pages.mjs
+
+  # ---------------------------------------------------------------------------
+  # THE LIVE CHECK, IN CI AT LAST.
+  #
+  # `verify:live` is the file that decides whether a request Erica made is done —
+  # 2026-08-11: "a request counts as done when its check is green HERE." It has existed
+  # for weeks and NOTHING HAS EVER RUN IT. Not this workflow, not the nightly. It ran
+  # only when somebody typed it locally.
+  #
+  # That is how SEVEN of its checks sat red against production without a single thing
+  # going red, and it is why the count was discovered by hand on 2026-08-30 rather than
+  # reported. A check nobody runs is a comment.
+  #
+  # AFTER THE DEPLOY, NOT BEFORE. It asks "is it on the site", so it has to run against
+  # the site as it now is. Running it on a PR would test the previous deploy and call it
+  # this PR's result.
+  #
+  # IT MUST FAIL RATHER THAN SKIP. The fixture skips when it cannot mint a session, and a
+  # skip is indistinguishable from a pass in a green run — the same defect as
+  # backup-freshness passing on NaN, and the same one that hid these seven. So the
+  # prerequisites are asserted FIRST, as a step that exits 1 with the missing name.
+  verify-live:
+    name: Verify live
+    if: >-
+      ${{ !cancelled()
+          && needs['deploy-production'].result == 'success' }}
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # THE ANTI-SKIP GUARD. liveTest mints a session through the admin API; without all
+      # three of these `canMintSession` is false and every authed check quietly skips.
+      # Name the missing one and stop, rather than reporting a green run of nothing.
+      - name: Refuse to run blind
+        run: |
+          missing=""
+          [ -n "$VITE_SUPABASE_URL" ]            || missing="$missing VITE_SUPABASE_URL"
+          [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ] || missing="$missing VITE_SUPABASE_PUBLISHABLE_KEY"
+          [ -n "$SUPABASE_SECRET_KEY" ]          || missing="$missing SUPABASE_SECRET_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Cannot mint a session, so the authed live checks would SKIP and this job would pass having proved nothing. Missing:$missing"
+            exit 1
+          fi
+          echo "All three present - the live checks will actually run."
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: app
+
+      - name: Verify what is actually on the site
+        run: npm run verify:live
+
+      - name: Keep the evidence when it fails
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-live-failures
+          path: app/test-results/
+          retention-days: 14
