@@ -1,4 +1,14 @@
--- 0287 — a space is the boundary, and every rule says so out loud.
+-- 0289 — a space is the boundary, and every rule says so out loud.
+--
+-- APPLIED TO PRODUCTION. This line used to read "0287", a leftover from being rebased out
+-- of the 0281 slot, and 0287 is a DIFFERENT applied migration
+-- (`0287_a_public_profile_that_was_never_once_read.sql`) — so every "0287" in the notes
+-- below pointed at the wrong file. Corrected 2026-08-30; comments only, no SQL touched.
+-- Verified applied the same way as 0290: production's ledger records it, and
+-- `npm run gen:types` off the live schema yields a zero diff against the committed types,
+-- which carry `spaces`, `space_memberships` and a `space_id` on ~70 tables.
+-- `scripts/check-draft-migrations.mjs` now fails when a file calls itself by another
+-- number, because that is the same class of defect as one that lies about being applied.
 --
 -- ⚠️ REBASED FROM 0281 TO 0287 BY `feat/space-scope-readers-v2`, AND THE FOUR `_select`
 --    POLICIES BELOW WERE MERGED RATHER THAN COPIED. THIS IS A FINDING FOR PR #185.

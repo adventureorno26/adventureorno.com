@@ -72,13 +72,22 @@ async function ready(page: import('@playwright/test').Page, path: string) {
 /** Settings' Stats card is a <details>; its contents are hidden until it is open —
  *  the same disclosure pattern as the Visits section on a card. */
 async function openStats(page: import('@playwright/test').Page) {
-  // TARGET THE STATS DROPDOWN BY NAME. /settings has TWENTY `details.stats-dropdown` —
-  // the four cards (the stats card, Cities and states, National Parks, Peaks & climbing)
-  // plus one per state nested inside Cities and states — and this helper used to click
-  // the FIRST summary only if NONE of them was open. So whenever any other one was open
-  // it clicked nothing, the Stats card stayed shut, and the Trips button inside it was
-  // reported as "not visible": a missing feature, according to the file that decides
-  // what Erica has been given. It was never missing.
+  // TARGET THE STATS DROPDOWN BY NAME. /settings/account has FOUR `details.stats-dropdown`
+  // cards — the stats card, Cities and states, National Parks, Peaks & climbing — plus one
+  // nested per state inside Cities and states, and this helper used to click the FIRST
+  // summary only if NONE of them was open. So whenever any other one was open it clicked
+  // nothing, the Stats card stayed shut, and the Trips button inside it was reported as
+  // "not visible": a missing feature, according to the file that decides what Erica has
+  // been given. It was never missing.
+  //
+  // THE COUNT IS PER-VIEWER, and this comment got it wrong once already. It said TWENTY,
+  // taken from a brief rather than measured. Measured as the TEST BOT — who this file
+  // signs in as — `details.stats-dropdown` is **4** on production, because the nested
+  // state panels only exist for an account with cities and states recorded and the bot has
+  // none. STATE.md item 3 records 22 from Erica's screen. Both are right for their account;
+  // neither is a property of the page. So the helper selects BY NAME and asserts
+  // `toHaveCount(1)` on the match, which holds on any account, rather than counting the
+  // set — a count here would be a fact about whoever ran it last.
   //
   // REWRITTEN 2026-08-30 under rule 4 at the top of this file. This is a RENAME she
   // approved, not drift, and it took THREE checks red with it — `:607`, `:626` and
@@ -95,7 +104,7 @@ async function openStats(page: import('@playwright/test').Page) {
   //        saying what the number counts.
   //
   // MEASURED, live, 2026-08-30: the summary reads `My Stats · Every card you are tagged
-  // on.` — so `/^Stats$/` matched none of the twenty and answered 0.
+  // on.` — so `/^Stats$/` matched none of them and answered 0.
   //
   // EITHER WORD, on purpose. Which one the card opens on depends on who the account has
   // recorded — the test bot has recorded nobody, so it gets My Stats — and both are the
@@ -117,6 +126,20 @@ async function openVisits(page: import('@playwright/test').Page) {
   const summary = page.locator('.visits-summary');
   if ((await page.locator('.visits-details[open]').count()) === 0) await summary.click();
   await expect(page.locator('.visits-details[open]')).toBeVisible();
+  // AND WAIT FOR THE ROWS TO EXIST, not just the container to be open.
+  //
+  // `PlacePanel` computes `loading = visits === null || trailActs === null` and prints
+  // `Loading…` inside this very <details> until BOTH have resolved. Opening the section
+  // therefore proves nothing about its contents: on the Appalachian Trail — 35 visits and
+  // six routes for the test bot — `"Dates should be grouped by year"` failed with
+  // `.visit-year` "element(s) not found" against a card that renders the years perfectly,
+  // because the check read the DOM while the word Loading was still on screen.
+  //
+  // This is the same defect the Routes check below carries a long note about, and the
+  // same one the rule at the top of this file describes: a count of zero proves nothing
+  // until the screen has rendered. Waiting for the word to GO is the app telling us the
+  // rows are decided — and it is a retrying assertion, so it waits rather than sampling.
+  await expect(page.locator('.visits-details p').filter({ hasText: /^Loading/ })).toHaveCount(0);
 }
 
 test.describe('the live site is the deployed build', () => {
@@ -916,5 +939,79 @@ it.describe('the rest of the app — what she asked for', () => {
       size,
       'the credit should be small — it was 12px+ in MapLibre default dress',
     ).toBeLessThanOrEqual(11);
+  });
+
+  // ───────── ADDED 2026-08-30, AND LATE — which is the point of recording it ─────────
+  //
+  // Rule 1 at the top of this file says a request gets a check here BEFORE the work
+  // starts. These four did not. §"CONNECTING TO SOMEONE — approved 2026-08-30" shipped to
+  // production across PRs #188, #192, #193 and #194 — a people directory, a public profile
+  // on a handle, add/remove/block, and invite codes — and NOT ONE of them had a line in
+  // this file. Thirty checks, none of which mentioned people, profiles, handles, blocking
+  // or invites.
+  //
+  // That is the exact failure this file exists to prevent, arriving in the file itself:
+  // `docs/STATE.md`'s approved-order table still called item 7 *queued* while it was
+  // live and working, because nothing red was ever going to say otherwise. Written now,
+  // measured against production, rather than backdated.
+
+  // Erica, 2026-08-30: "I don't know that I want to use the term friend, just add."
+  it('"just add" — the people screens never say friend', async ({ page }) => {
+    await ready(page, '/people');
+    // The positive first: the directory itself, not a blank page.
+    await expect(page.getByRole('heading', { name: /^People$/ })).toBeVisible();
+    await expect(page.getByPlaceholder(/handle or name/i)).toBeVisible();
+    // Only now does absence mean anything.
+    await expect(page.getByText(/\bfriends?\b/i)).toHaveCount(0);
+    // …and none of §0.2's retired scope words, which this screen is a prime place to leak.
+    const body = await page.locator('body').innerText();
+    for (const word of ['Just me', 'Just Josh', 'Just Erica', 'Together', 'Both', 'Anyone']) {
+      expect(body, `"${word}" is retired (§0.2) and is on /people`).not.toMatch(
+        new RegExp(`\\b${word}\\b`),
+      );
+    }
+  });
+
+  // "/people is who is out there, and where do I stand with them" — and it is reached from
+  // Settings ▸ Account, because "the approved navigation has exactly four destinations and
+  // this is not one of them".
+  it('the people directory is found through Settings, not the nav', async ({ page }) => {
+    await ready(page, '/people');
+    await expect(page.getByRole('heading', { name: /^People$/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /your people/i })).toBeVisible();
+    // The nav stays at four destinations — People is not a fifth.
+    const nav = await page.locator('nav.primary-nav a').allTextContents();
+    expect(nav.map((t) => t.trim())).toEqual(['Map', 'Add', 'Insights', 'Settings']);
+    // And the way in is on Account.
+    await ready(page, '/settings/account');
+    await expect(page.locator('a[href^="/people"]').first()).toBeVisible();
+  });
+
+  // "Unknown handle, private account and a block all give the same 'No page here.'" — the
+  // sameness is the requirement: a different answer for each would let a blocked user tell
+  // that they had been blocked, which is the thing the one answer exists to hide.
+  it('an unknown handle says "No page here" and will not say which', async ({ page }) => {
+    await ready(page, '/profile/definitely-not-a-real-handle-9x7q');
+    await expect(page.getByText(/no page here/i)).toBeVisible();
+    // It must not distinguish "does not exist" from "not public" — measured live, it says
+    // so in as many words.
+    await expect(page.getByText(/will not tell you which/i)).toBeVisible();
+  });
+
+  // "Someone can only join with a code from you. Each code lets in one person and then
+  // stops working" — invite codes, migration 0288, PR #194.
+  it('an invite code lets in one person and then stops', async ({ page }) => {
+    // NOT THROUGH `ready`. Its /settings branch waits for a heading matching /settings/i,
+    // and this page's headings are `Invite codes · Make a code · Your codes` — the word
+    // Settings is only the back-bar link. Waiting for it here would fail on a page that is
+    // correct, which is the trap that helper's own comment describes. Its own heading is
+    // the equivalent proof that the screen arrived.
+    await page.goto('/settings/account/invites');
+    await expect(page.getByRole('heading', { name: /invite codes/i })).toBeVisible();
+    await expect(page.getByText(/only join with a code from you/i)).toBeVisible();
+    await expect(page.getByText(/lets in one person/i)).toBeVisible();
+    // A way to make one, and somewhere they are listed.
+    await expect(page.getByRole('button', { name: /^Make a code$/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /your codes/i })).toBeVisible();
   });
 });
