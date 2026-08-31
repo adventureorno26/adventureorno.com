@@ -124,7 +124,45 @@ const BOT_EMAIL = process.env.TEST_BOT_EMAIL ?? 'testbot@adventureorno.dev';
 
 export const canMintSession = Boolean(SUPABASE_URL && KEY && SECRET);
 
-async function mintSession(email: string): Promise<unknown> {
+/** Sleep, for the backoff below. */
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A HARNESS FAILURE MUST NOT READ AS A PRODUCT FAILURE.
+ *
+ * `verify:live` mints ONE session per test, so a full run asks Supabase for ~34 magic
+ * links and several runs in an afternoon ask for hundreds. On 2026-08-30 that hit the
+ * auth rate limit and four checks failed with *"Test timeout of 60000ms exceeded while
+ * setting up page"* — reported against `"I DO NOT WANT THE PLACES HERE SECTION"` and
+ * three other card checks, none of which had run at all. The card was fine. A verifier
+ * that cries wolf is worse than none (the words are in `playwright.live.config.ts`), and
+ * this is precisely that: the report blamed the app for the harness running out of quota.
+ *
+ * So the mint retries with backoff, and when it finally gives up it says, in the error,
+ * that this is the SIGN-IN and not the site.
+ */
+async function mintWithRetry(email: string, attempts = 4): Promise<unknown> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await mintOnce(email);
+    } catch (e) {
+      last = e;
+      // 1s, 3s, 9s — comfortably inside the 60s fixture budget, and enough to ride out
+      // the short auth-rate-limit windows that caused this.
+      if (i < attempts - 1) await pause(1000 * 3 ** i);
+    }
+  }
+  throw new Error(
+    `COULD NOT SIGN IN — this is the test harness, not the site. After ${attempts} attempts ` +
+      `the Supabase admin API would not mint a session for ${email}. The commonest cause is ` +
+      `the auth RATE LIMIT: one full verify:live run mints ~34 links, so repeated runs in a ` +
+      `short window get refused. Wait a few minutes and run it again before believing any ` +
+      `check that failed alongside this one. Last error: ${(last as Error)?.message ?? last}`,
+  );
+}
+
+async function mintOnce(email: string): Promise<unknown> {
   const gen = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
     method: 'POST',
     headers: {
@@ -156,7 +194,7 @@ export const liveTest = base.extend({
           'SUPABASE_SECRET_KEY. They are in .env.local; `npm run verify:live` loads it.',
       );
     }
-    await injectSession(context, await mintSession(BOT_EMAIL));
+    await injectSession(context, await mintWithRetry(BOT_EMAIL));
     await use(page);
   },
 });
