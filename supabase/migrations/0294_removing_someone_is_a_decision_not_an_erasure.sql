@@ -1,7 +1,29 @@
 -- 0294 — removing someone is a decision, not an erasure.
 --
--- DRAFT — NOT APPLIED. Nothing in this file has been run against production at all, not
--- even inside a rolled-back transaction, and the distinction matters enough to spell out:
+-- APPLIED TO PRODUCTION 2026-08-31, through `apply-migration.mjs`, which printed
+-- `self-wrapped: yes (unwrapped and re-wrapped)` and recorded version 0294 in the same
+-- transaction.
+--
+-- IT USED TO SAY: "DRAFT — NOT APPLIED. Nothing in this file has been run against
+-- production at all, not even inside a rolled-back transaction." That was true when it was
+-- written, and the gap it named was closed before applying rather than waved through:
+--
+--   * THE PRODUCTION DRESS REHEARSAL WAS RUN, inside a transaction forced to abort, and
+--     the rollback PROVEN afterwards — both views back without the filter, all three
+--     writers still deleting, no ledger row. It succeeding at all is the evidence that
+--     mattered: this file does not retype the three bodies, it asserts a fragment appears
+--     exactly once in each LIVE body and rewrites it, so the rehearsal is what proves they
+--     had not drifted. `0293` landed between this file being written and being applied.
+--   * THE PREFLIGHT WAS RE-RUN on the day: outing accepted 653 / accepted_legacy 88, visit
+--     accepted 889 / proposed 2, and rows the new view filter would hide: NONE.
+--
+-- VERIFIED AFTER APPLYING: both views carry `<> 'retracted'`, both still carry 0289's
+-- `is_member(s.space_id)`, 0 of the three writers still DELETE and all 3 now RETRACT, and
+-- `npm run gen:types` is a ZERO diff. Every capability measurement is byte-identical to the
+-- morning's baseline across 0293, 0294, 0295 and 0296 — Erica 2136.1 mi · 132 places · 43
+-- trips, Josh 208 · 175 · 83, Test Bot 467 · 220 · 162.
+--
+-- The original note, kept because the distinction it draws is the useful part:
 --
 --   REHEARSED, on a DISPOSABLE LOCAL STACK, by replaying the whole chain from an empty
 --   schema with `scripts/db-test.sh`. All 293 migrations applied cleanly with this file in
