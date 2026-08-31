@@ -445,14 +445,18 @@ declare
   d text;
   n int;
 begin
-  -- (a) The 0285 rule: every NOT NULL column here has a DEFAULT, so a restore under
-  --     session_replication_role = replica (triggers off) can insert a row.
+  -- (a) The 0285 rule. Every NOT NULL column whose value is DERIVED rather than
+  --     supplied has a DEFAULT, so an insert under session_replication_role = replica
+  --     (triggers off) still satisfies NOT NULL. `issued_by` is deliberately not in
+  --     this list: it is data the caller provides and a restore replays, not something
+  --     anything derives — a default for it would be an invented fact.
   select count(*) into n
     from information_schema.columns
    where table_schema = 'public' and table_name = 'invite_codes'
+     and column_name in ('id','code','role','created_at','expires_at')
      and is_nullable = 'NO' and column_default is null;
   if n <> 0 then
-    raise exception '% NOT NULL column(s) on invite_codes have no default — a restore will fail', n;
+    raise exception '% derived NOT NULL column(s) on invite_codes have no default — a restore will fail', n;
   end if;
 
   -- (b) And no trigger to depend on, which is how (a) stays true.
