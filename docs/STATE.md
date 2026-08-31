@@ -771,6 +771,38 @@ that ask is withdrawn.
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
 
+### A TAG SAYS WHAT IT IS ABOUT — `0301` APPLIED 2026-08-31
+
+Erica, 2026-08-31, on the copy `0300` shipped: *"I don't want anything to say somewhere you
+were. You can see the full card if you add someone."*
+
+Two instructions, and the second **answers the question `0300` left open** — how much of
+somebody else's card you may see before accepting a tag on it. **The answer is the
+connection.** Added → you see the card. Not added → you are still told what KIND of thing it
+is and when, because a question you cannot identify is not a question you can answer.
+
+**Nothing says "somewhere you were" anywhere in `app/src`.** The inbox now returns the card's
+name — a place for a visit, the activity's name for an outing — and the screen says the name
+when there is one.
+
+⚠️ **THIS AMENDS §7d AND IS RECORDED AS AN AMENDMENT.** The Strava rule says one person does
+not see another's Strava-origin recordings. Her rule is more permissive in one specific case:
+a card **you are tagged on**, by somebody **you have added**. That is narrower than it reads —
+it needs a mutual, accepted connection *and* a tag naming you — but it is a change to a
+standing rule and it is written down as one rather than left to be found in a diff. It
+returns a NAME, never a distance, a route or a polyline.
+
+**A tag nobody made names nothing.** `tagged_by` is NULL on the app's own guesses (§finding
+15), so there is nobody to have added and the card stays unnamed unless you are in its space.
+An assertion nobody made is not somebody sharing something with you.
+
+Measured after applying: Josh's two waiting tags read `visit · tagged_by (nobody) · card not
+named` — right on both counts. He can answer them either way, which before `0300` he could
+not do at all.
+
+`the_readers_stay_enforced` refused it as an unlisted direct reader of `activities` and was
+right to; the entry names the amendment and the gate.
+
 ### A TAG FINDS THE PERSON IT IS ABOUT — `0300` APPLIED 2026-08-31
 
 The first step of **item 7b**, and the smallest: without it nothing else in 7b can be

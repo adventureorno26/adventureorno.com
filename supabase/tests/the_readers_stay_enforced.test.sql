@@ -36,6 +36,25 @@ declare
     -- The guard itself. It must read the table to answer questions about it.
     'can_see_activity',
 
+    -- 0301. THE TAG INBOX, and the one entry here added on an explicit instruction that
+    -- AMENDS §7d rather than working within it. Erica, 2026-08-31: *"You can see the full
+    -- card if you add someone."*
+    --
+    -- It reads `activities` for one thing only — the NAME of a card you have been tagged on
+    -- — and it cannot use `visible_activities`, because since 0290 that view is space-scoped
+    -- and the whole point is a tag from a space you are not in (0300). What it returns is
+    -- GATED in the function itself:
+    --
+    --     is_member(subject's space)  OR  are_added(you, the tagger)
+    --
+    -- The first changes nothing that was not already visible. The second is her rule, and it
+    -- is narrower than it reads: it needs a MUTUAL, accepted connection AND a tag naming
+    -- you. A machine-made tag has no tagger, so `are_added` is false and the name stays
+    -- hidden — an assertion nobody made is not somebody sharing something with you.
+    --
+    -- It returns a NAME, never a distance, a route or a polyline.
+    'my_memory_tags_to_confirm',
+
     -- 0299. MATERIALISING AN ACCEPTED TAG, and it is on this list for the same reason
     -- 0293 exempts `respond_to_memory_tag` from the cross-space WRITE guard: the whole
     -- point of the function is to reach a row in a space the caller is NOT in.

@@ -93,6 +93,11 @@ export interface MemoryTagToConfirm {
   kind: string;
   photo_id: string | null;
   tagged_by: string | null;
+  /** The card's name — a place for a visit, the activity's name for an outing.
+   *  NULL when you are not entitled to it: 0301 gates it on sharing a space with the
+   *  subject, or having ADDED the tagger. Erica, 2026-08-31: "You can see the full card
+   *  if you add someone." */
+  card: string | null;
   created_at: string;
 }
 
