@@ -12,6 +12,18 @@ export interface Profile {
   role: Role;
   display_name: string | null;
   created_at: string;
+  // WHAT A STRANGER MAY SEE (0283). `AuthProvider` reads the row with `select('*')`, so
+  // these arrived in the payload the day the migration landed and were simply absent from
+  // this type — which is why nothing in the app could read, let alone set, them. Optional
+  // because a row written before 0283 has them null until it is next saved.
+  handle?: string | null;
+  handle_claimed_at?: string | null;
+  avatar_url?: string | null;
+  bio?: string | null;
+  profile_visibility?: string | null;
+  public_stats?: boolean | null;
+  public_places?: boolean | null;
+  public_activity?: boolean | null;
 }
 
 export interface Place {

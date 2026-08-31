@@ -418,6 +418,26 @@ run. Until it is, this is "the fix is deployed", not "the bypass is measured shu
 Erica, 2026-08-30: *"we need to figure out a way to keep the stats if I approve a tag someone
 else has made and then they defriend me or untag me."*
 
+> **A SECOND DEFECT UNDER THIS ONE, found 2026-08-30 and now fixed.** Everything below is
+> about what happens AFTER you accept. It turned out you could not accept at all: the whole
+> flow — `my_memory_tags_to_confirm()` and `respond_to_memory_tag()`, applied in `0248` and
+> wrapped in `lib/memoryPeople.ts` — had exactly one surface, `routes/Inbox.tsx`, and
+> **nothing imports that file.** `App.tsx` mounts no `/inbox` route and `/inbox` REDIRECTS to
+> `/settings/data/attention` (measured live). So the screen that answers a tag could not be
+> opened by anybody.
+>
+> It was invisible because the section header on Data & Privacy read **"People and tag
+> approvals"** and rendered `JoinRequestsCard` — which answers requests to SIGN IN, a
+> different question. The page named the control and did not contain it.
+>
+> **Fixed:** a `Tag approvals` section on Data & Privacy, reusing the applied RPCs, with no
+> new migration. It is **not owner-gated** — anybody can be tagged, so anybody must be able to
+> answer; the join-request card beside it stays owner-only, which is §8b-i's line between
+> account access and memory participation. The join section is renamed `People and membership`
+> so it says what it does. A live check guards it.
+>
+> The design question below is untouched and still open.
+
 **Measured 2026-08-30, and the answer is that nothing survives.** Accepting a tag only flips
 `participation_status` on a row that lives inside the OTHER person's subject:
 
@@ -1092,8 +1112,12 @@ turned into a history of itself last time."* Written on 08-17, broken by me on 0
   now **return `{stated, asked, removed}`** — they returned `void`, so six screens reported a
   question as a fact. Narrative in §7f.
   **Still open**: `my_tags_to_confirm` surfaced ACTIVITY claims only until 0240 — visit claims
-  had been storable and answerable since 0201 with nobody ever asked. Photo tagging (8b-i) is
-  still not built.
+  had been storable and answerable since 0201 with nobody ever asked. ~~Photo tagging (8b-i) is
+  still not built.~~ **WRONG — corrected 2026-08-30.** Photo tagging is built AND reachable:
+  `0248` supplies `tag_person_on_photo` / `untag_person_on_photo` / `respond_to_memory_tag`,
+  `lib/memoryPeople.ts` wraps all three, and `components/PhotoPeople.tsx` renders the tagging
+  control inside `PhotoGallery`. What was NOT reachable was ANSWERING a tag — see the
+  correction under §AN ACCEPTED TAG IS MINE.
 - **Step 7 — ✅ one Export & Backup screen (0237, 0238, 0239, `/export`).** Data health said
   *"Download everything you can take with you"* over three buttons that exported 162 places
   — no outings, no visits, no photos, no journal. Now `export_manifest` / `export_header` /
@@ -1160,8 +1184,11 @@ outing counts once however many recordings exist" is the statistics contract and
 would tell somebody they did the same run twice. A photograph is never summed with an outing,
 a pending tag is labelled and not counted, and a page about a person shows only what the asker
 may see — his unshared Strava recording is not on it. Reachable for now from Settings ▸ People
-▸ *Your people*, which says out loud that it is a temporary home: the approved permanent one is
-the Map's `People: Anyone` control, which is not built.
+▸ *Your people*, which says out loud that it is a temporary home: ~~the approved permanent one is
+the Map's `People: Anyone` control, which is not built.~~ **SUPERSEDED 2026-08-30 by §0.2**, and
+it has to be, because `Anyone` is on that section's RETIRED WORDS list. The map's control is
+built and is the two-button scope picker — measured live, `.person-filter` offers exactly
+`My Stats | Our Stats` where it renders at all. There is no `People: Anyone` control to build.
 
 **ONE OR SEVERAL PEOPLE, ALL OR ANY** *(0255)*. §8b-i: *"Remove `Together / Just me / Just
 Josh` as the permanent model; **Together is a people query with ALL selected**."* So the
@@ -1487,11 +1514,15 @@ Three more things fell out of looking:
   which twelve changed run to run; on the run where none had activities it reported "the
   section stopped rendering" about an app that was rendering it. It waits for the list now.
 
-All 25 live checks are green.
+~~All 25 live checks are green.~~ **Stale count, corrected 2026-08-30** — the file holds **38** checks now. A number written into prose goes out of date the next time somebody adds a check, which is why the count is not asserted anywhere; `verify:live` reports it.
 
-**What is still not built from the contract**: Settings' three destinations
-(`Account | Integrations | Data & Privacy`, the last being one continuous page), and everything
-events/messaging, which waits on previews.
+~~**What is still not built from the contract**: Settings' three destinations
+(`Account | Integrations | Data & Privacy`, the last being one continuous page)~~ — **BUILT, and
+corrected 2026-08-30.** Measured on production: the destination bar reads exactly
+`Account · Integrations · Data & Privacy`, `.settings-tabs` is 0 nodes, and all seven legacy
+routes redirect (`/settings`, `/attention`, `/trash`, `/export`, `/inbox`, `/places`,
+`/timeline`). See item 10. **Still not built**: everything events/messaging, which waits on
+previews.
 
 #### 3s. OTHER USERS — what exists, and the plan she asked for *(2026-08-22)*
 

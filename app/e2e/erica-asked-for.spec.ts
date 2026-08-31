@@ -202,8 +202,34 @@ it.describe('the card — what she asked for, on the live site', () => {
 
   it('the rating sits UNDER the name', async ({ page }) => {
     await ready(page, SAN_DIEGO);
-    const name = await page.locator('.hero-title .title-with-rating').boundingBox();
-    const rating = await page.locator('.hero-title .hero-rating').boundingBox();
+    // MEASURE WHERE IT SETTLES, not where it is passing through. This read both boxes the
+    // moment the card existed and compared their `y`, and on 2026-08-30 it reported "the
+    // rating is above the name" with y = -505 against -499 — BOTH NEGATIVE, i.e. the hero
+    // was still above the top of the viewport, six pixels of a card that had not finished
+    // arriving. Nothing about the layout had changed.
+    //
+    // So the title is scrolled into view and both boxes are read from a settled element.
+    // The assertion is untouched: the rating still has to sit at or below the name.
+    const title = page.locator('.hero-title .title-with-rating');
+    const stars = page.locator('.hero-title .hero-rating');
+    await expect(title).toBeVisible();
+    await expect(stars).toBeVisible();
+    await title.scrollIntoViewIfNeeded();
+    // One box read twice, unchanged, is the proof that layout has stopped moving — a
+    // single read cannot tell "settled" from "mid-flight", which is what went wrong.
+    await expect
+      .poll(
+        async () => {
+          const a = await title.boundingBox();
+          await page.waitForTimeout(120);
+          const b = await title.boundingBox();
+          return a && b && Math.abs(a.y - b.y) < 1 && b.y >= 0;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    const name = await title.boundingBox();
+    const rating = await stars.boundingBox();
     expect(name, 'no name on the card').not.toBeNull();
     expect(rating, 'no rating on the card').not.toBeNull();
     expect(rating!.y, 'the rating is above the name').toBeGreaterThanOrEqual(name!.y);
@@ -1013,5 +1039,104 @@ it.describe('the rest of the app — what she asked for', () => {
     // A way to make one, and somewhere they are listed.
     await expect(page.getByRole('button', { name: /^Make a code$/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: /your codes/i })).toBeVisible();
+  });
+
+  // ───────── ADDED 2026-08-30, BEFORE THE WORK IS LIVE — rule 1, used properly ─────────
+  //
+  // The four checks above were added LATE, after their feature had already shipped, and
+  // said so. These two are the other way round: written against production first, red on
+  // purpose, and they go green when the deploy carrying `PublicProfileCard` lands. That
+  // is what rule 1 describes — *"A new request gets a check here BEFORE the work starts.
+  // It fails. The work makes it pass."*
+  //
+  // THE GAP THEY DESCRIBE, measured live 2026-08-30: `/people` and `/profile/:handle` were
+  // built and worked and were empty for everybody, because `0283` defaults
+  // `profile_visibility` to `private` with all three switches false and NOTHING in the app
+  // could change any of them — no handle field, no bio, no switches, anywhere. Probed live
+  // as the test bot: `/settings/account` had no avatar, no bio and no public-profile
+  // control. `find_profiles()` only matches a public row, so the directory could not
+  // contain a single person. No migration was needed: `set_handle()` and
+  // `save_public_profile()` have been applied since 0283 and had no caller.
+  it('"just add" — and you can be added, because you can publish yourself', async ({ page }) => {
+    await ready(page, '/settings/account');
+    // The positive first: the section exists and is named.
+    await expect(page.getByRole('heading', { name: /your public profile/i })).toBeVisible();
+    // The three things that were missing: a handle to be found by, the one switch that
+    // makes you findable, and a sentence saying what a stranger actually sees.
+    await expect(page.locator('.pub-profile')).toBeVisible();
+    await expect(page.getByLabel(/^Handle$/)).toBeVisible();
+    await expect(page.getByText(/let people find me/i)).toBeVisible();
+    // The outcome is STATED, not left to be added up from the switches.
+    await expect(page.locator('.pub-profile')).toContainText(
+      /no handle yet|profile is private|Your name and handle/i,
+    );
+  });
+
+  it('the public-profile switches say what each one shares', async ({ page }) => {
+    await ready(page, '/settings/account');
+    await expect(page.locator('.pub-profile')).toBeVisible();
+    const switches = page.locator('.pub-switches');
+    await expect(switches).toBeVisible();
+    for (const label of ['My totals', 'My places', 'My recent outings']) {
+      await expect(switches.getByText(label, { exact: true })).toBeVisible();
+    }
+    // NOT the retired vocabulary. This is a screen about what OTHER people see, which is
+    // exactly where a scope word would leak back in.
+    const body = await page.locator('.pub-profile').innerText();
+    for (const word of ['Just me', 'Just Josh', 'Just Erica', 'Together', 'Both', 'Anyone']) {
+      expect(body, `"${word}" is retired (§0.2) and is on the public profile card`).not.toMatch(
+        new RegExp(`\\b${word}\\b`),
+      );
+    }
+    // And never "friend" — the word is add.
+    expect(body).not.toMatch(/\bfriends?\b/i);
+  });
+
+  // Erica asked for the bucket list and it has been live for months with NO live check —
+  // recorded as the next gap to close in `liveCheckCoverage.test.ts`, and closed here.
+  // Measured live first: headings `Bucket List` then a heading per state, and every row
+  // carries a `Want to go` control.
+  it('the bucket list groups by state and every row can be wanted', async ({ page }) => {
+    await ready(page, '/bucket');
+    await expect(page.getByRole('heading', { name: /^Bucket List$/i })).toBeVisible();
+    // Grouped — the state headings are the grouping, so at least one must exist.
+    const heads = await page.locator('h2, h3').allTextContents();
+    expect(
+      heads.filter((t) => t.trim() && !/^bucket list$/i.test(t.trim())).length,
+      `the bucket list is not grouped: ${heads.join(' | ')}`,
+    ).toBeGreaterThan(0);
+    // The control she asked for, on the rows.
+    expect(await page.getByRole('button', { name: /want to go/i }).count()).toBeGreaterThan(0);
+    // §0.2's retired words must not be here either — this screen said "Both" for a year.
+    const body = await page.locator('body').innerText();
+    for (const word of ['Just me', 'Just Josh', 'Just Erica', 'Together', 'Both', 'Anyone']) {
+      expect(body, `"${word}" is retired (§0.2) and is on /bucket`).not.toMatch(
+        new RegExp(`\\b${word}\\b`),
+      );
+    }
+  });
+
+  // ALSO RED ON PURPOSE until this deploys — rule 1.
+  //
+  // §"AN ACCEPTED TAG IS MINE" and §0.2 both turn on being ASKED before somebody else's
+  // claim counts: *"Only accepted tags count in Our Stats. A proposed tag is a claim, not
+  // shared history."* The flow was BUILT and APPLIED in 0248 and was UNREACHABLE: its only
+  // surface was `routes/Inbox.tsx`, which nothing imports, and `/inbox` redirects to
+  // `/settings/data/attention` — measured live 2026-08-30. Worse, the section heading on
+  // Data & Privacy read "People and tag approvals" over a card that answered JOIN requests,
+  // which is account access and a different question. The heading promised a control the
+  // page did not contain.
+  it('a tag is a claim until you answer it — and you can answer it', async ({ page }) => {
+    await page.goto('/settings/data');
+    await expect(page.getByRole('heading', { name: /settings/i }).first()).toBeVisible();
+    // The positive first: the section exists, by the name that describes it.
+    await expect(page.getByRole('heading', { name: /^Tag approvals$/i })).toBeVisible();
+    await expect(page.locator('.tag-approvals')).toBeVisible();
+    // It says what a tag IS while there is nothing to answer, rather than drawing a box.
+    await expect(page.locator('.tag-approvals')).toContainText(
+      /Nothing to answer|their claim and not your history/i,
+    );
+    // And the old heading that promised this over the wrong card is gone.
+    await expect(page.getByRole('heading', { name: /People and tag approvals/i })).toHaveCount(0);
   });
 });

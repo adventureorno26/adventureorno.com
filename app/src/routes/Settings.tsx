@@ -42,11 +42,25 @@ import { fetchShareLocation, setShareLocation } from '../lib/lastSeen';
 import { CATEGORIES } from '../lib/categories';
 import PeopleFilter from '../components/PeopleFilter';
 import { myStats, scopeLabel, scopeSentence, type PeopleSelection } from '../lib/statsScope';
-import { fetchMyPeople, type PersonContact } from '../lib/memoryPeople';
+import {
+  fetchMemoryTagsToConfirm,
+  fetchMyPeople,
+  respondToMemoryTag,
+  type MemoryTagToConfirm,
+  type PersonContact,
+} from '../lib/memoryPeople';
 import { nextOpenPanel, panelIsOpen, type OpenPanel } from '../lib/disclosure';
 import type { Place } from '../lib/types';
 import { showSnack } from '../lib/snackbar';
 import { whyItFailed } from '../lib/whyItFailed';
+import {
+  BIO_MAX,
+  claimHandle,
+  savePublicProfile,
+  suggestHandle,
+  whatAStrangerSees,
+  whyHandleIsInvalid,
+} from '../lib/publicProfile';
 import {
   backfillPage,
   beginStravaLink,
@@ -824,6 +838,265 @@ function PeaksCard({ scope, panelKey, open, onToggle }: { scope: PeopleSelection
  * layers in the right order, and getting that wrong is how a map ends up blank
  * with nothing in the console.
  */
+/**
+ * YOUR PUBLIC PROFILE — built 2026-08-30, and it is the missing half of item 7.
+ *
+ * `/people` and `/profile/:handle` shipped and worked, and both were empty for everybody:
+ * `0283` defaults `profile_visibility` to `private` with all three switches `false`, and
+ * there was no way anywhere in the app to change any of them. `find_profiles()` only ever
+ * matches a public row, so the directory could find nobody — not because search was
+ * broken, but because nobody could publish themselves. This card is the door.
+ *
+ * NO MIGRATION. `set_handle()` and `save_public_profile()` have been applied since 0283;
+ * both are SECURITY DEFINER on `auth.uid()`, which is what lets a member edit their own
+ * card when `profiles` itself is owner-only for writes (0286).
+ *
+ * THE HANDLE IS CLAIMED ONCE and the field says so before you commit, because 0283's guard
+ * holds a claimed handle still afterwards — a link to a person has to keep meaning that
+ * person.
+ *
+ * THE OUTCOME IS STATED, not left to be added up from four switches: `whatAStrangerSees()`
+ * turns them into one sentence, so the card answers "who can see what" rather than asking
+ * her to work it out. Privacy is the user's own choice (Erica, 2026-08-30: *"it's fine for
+ * users to share their home address and whatever else they want to share"*), so nothing
+ * here is hidden on her behalf and the default stays private.
+ */
+function PublicProfileCard() {
+  const { profile, refreshProfile } = useAuth();
+  const [handle, setHandle] = useState('');
+  const [bio, setBio] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+    setHandle(profile.handle ?? suggestHandle(profile.display_name));
+    setBio(profile.bio ?? '');
+  }, [profile]);
+
+  async function run(what: string, fn: () => Promise<unknown>) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fn();
+      await refreshProfile();
+    } catch (e) {
+      // The reason, not a generic fallback — PostgrestError is a plain object, so
+      // `e instanceof Error` is false for it (the defect item 6 removed everywhere else).
+      setErr(whyItFailed(what, e, { online: navigator.onLine }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!profile) return null;
+
+  const claimed = !!profile.handle;
+  const isPublic = profile.profile_visibility === 'public';
+  const handleProblem = claimed ? null : whyHandleIsInvalid(handle);
+
+  return (
+    <div className="card pub-profile">
+      <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+        {whatAStrangerSees(profile)}
+      </p>
+
+      {/* 1. THE HANDLE — the thing a person can type and say out loud. */}
+      <label className="npd-field">
+        <span>Handle</span>
+        {claimed ? (
+          <div className="pub-handle-fixed">
+            <b>@{profile.handle}</b>{' '}
+            <span className="label">chosen — a handle cannot be changed</span>
+          </div>
+        ) : (
+          <>
+            <input
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              placeholder="your_handle"
+              aria-label="Handle"
+              disabled={busy}
+            />
+            <span className="label">
+              {handleProblem ?? 'You can only choose this once, so pick one you will keep.'}
+            </span>
+            <button
+              className="primary"
+              disabled={busy || !!handleProblem}
+              onClick={() => void run('Couldn’t claim that handle', () => claimHandle(handle))}
+            >
+              Claim @{handle || '…'}
+            </button>
+          </>
+        )}
+      </label>
+
+      {/* 2. THE ONE SWITCH THAT MATTERS. Everything below it is moot while this is off,
+             and the copy says so rather than leaving three live-looking toggles. */}
+      <label className="npd-field pub-visible">
+        <input
+          type="checkbox"
+          checked={isPublic}
+          disabled={busy || !claimed}
+          onChange={(e) =>
+            void run('Couldn’t change your visibility', () =>
+              savePublicProfile({ visibility: e.target.checked ? 'public' : 'private' }),
+            )
+          }
+        />
+        <span>Let people find me</span>
+        <span className="label">
+          {claimed
+            ? 'Off, and searching for you finds nothing at all.'
+            : 'Claim a handle first — there is nothing to find you by yet.'}
+        </span>
+      </label>
+
+      {/* 3. WHAT THEY SEE, each one hers to decide. */}
+      <fieldset className="pub-switches" disabled={busy || !isPublic}>
+        <legend className="label">And they may see</legend>
+        {(
+          [
+            ['stats', 'public_stats', 'My totals'],
+            ['places', 'public_places', 'My places'],
+            ['activity', 'public_activity', 'My recent outings'],
+          ] as const
+        ).map(([key, col, label]) => (
+          <label key={key} className="npd-field">
+            <input
+              type="checkbox"
+              checked={!!profile[col]}
+              onChange={(e) =>
+                void run(`Couldn’t change ${label.toLowerCase()}`, () =>
+                  savePublicProfile({ [key]: e.target.checked }),
+                )
+              }
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      {/* 4. A LINE ABOUT YOU. */}
+      <label className="npd-field">
+        <span>Bio</span>
+        <textarea
+          value={bio}
+          maxLength={BIO_MAX}
+          rows={2}
+          disabled={busy}
+          onChange={(e) => setBio(e.target.value)}
+          aria-label="Bio"
+        />
+        <span className="label">
+          {bio.length}/{BIO_MAX}
+        </span>
+        <button
+          disabled={busy || bio === (profile.bio ?? '')}
+          onClick={() => void run('Couldn’t save your bio', () => savePublicProfile({ bio }))}
+        >
+          Save bio
+        </button>
+      </label>
+
+      {err && <div className="pub-error">{err}</div>}
+      {claimed && isPublic && (
+        <Link to={`/profile/${profile.handle}`} className="as-button">
+          See what they see
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/**
+ * TAG APPROVALS — built 2026-08-30, because the heading above it had been lying.
+ *
+ * §"AN ACCEPTED TAG IS MINE" and §0.2 both turn on a person being ASKED before somebody
+ * else's claim about them counts: *"Only accepted tags count in Our Stats. A proposed tag
+ * is a claim, not shared history."* The whole flow was BUILT and APPLIED — `0248` gives
+ * `my_memory_tags_to_confirm()` and `respond_to_memory_tag()`, and `lib/memoryPeople.ts`
+ * has wrapped them for months.
+ *
+ * IT WAS UNREACHABLE. Its only surface was `routes/Inbox.tsx`, which **nothing imports** —
+ * `App.tsx` mounts no `/inbox` route, and `/inbox` REDIRECTS to `/settings/data/attention`
+ * (measured live 2026-08-30). So the file is dead code, and the one screen that could
+ * answer a tag could not be opened. Meanwhile the section header here has read *"People
+ * and tag approvals"* the whole time and rendered join requests — account access, a
+ * different question entirely — so the page promised a control it did not contain.
+ *
+ * NOT OWNER-GATED, and that is the point. Anybody can be tagged, so anybody must be able
+ * to answer. The join-request card beside it stays owner-only because who may SIGN IN is
+ * the account owner's business; who is in YOUR photograph is yours. §8b-i keeps account
+ * access and memory participation apart on purpose, and this is that line.
+ */
+function TagApprovalsCard() {
+  const [tags, setTags] = useState<MemoryTagToConfirm[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  function load() {
+    fetchMemoryTagsToConfirm()
+      .then(setTags)
+      .catch(() => setTags([]));
+  }
+  useEffect(load, []);
+
+  async function answer(t: MemoryTagToConfirm, accept: boolean) {
+    setBusy(t.subject_id);
+    setErr(null);
+    try {
+      await respondToMemoryTag(t.subject_id, accept);
+      setTags((ts) => (ts ?? []).filter((x) => x.subject_id !== t.subject_id));
+      showSnack({ message: accept ? 'Confirmed it’s you.' : 'Removed you from that.' });
+    } catch (e) {
+      setErr(
+        whyItFailed(accept ? 'Couldn’t confirm that' : 'Couldn’t remove you from that', e, {
+          online: navigator.onLine,
+        }),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Nothing to answer is the normal state, and it says so rather than rendering an
+  // empty box — the same rule the Trips list follows.
+  if (tags === null) return null;
+
+  return (
+    <div className="card tag-approvals">
+      <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+        {tags.length === 0
+          ? 'Nothing to answer. When somebody says you were somewhere, or that you are in a photo, it waits here until you say so.'
+          : 'Somebody says you were part of these. Until you accept, they are their claim and not your history.'}
+      </p>
+      {tags.map((t) => (
+        <div key={t.subject_id} className="tag-approval-row">
+          <span className="tag-approval-what">
+            {t.kind === 'photo' ? 'A photo you are in' : 'An outing you were on'}
+            <span className="label"> · {new Date(t.created_at).toLocaleDateString()}</span>
+          </span>
+          <span className="btn-row">
+            <button
+              className="primary"
+              disabled={busy === t.subject_id}
+              onClick={() => void answer(t, true)}
+            >
+              Yes, that’s me
+            </button>
+            <button disabled={busy === t.subject_id} onClick={() => void answer(t, false)}>
+              No
+            </button>
+          </span>
+        </div>
+      ))}
+      {err && <div className="pub-error">{err}</div>}
+    </div>
+  );
+}
+
 function MapAppearanceSection() {
   const [choice, setChoice] = useState<MapAppearance>(mapAppearance());
 
@@ -1495,6 +1768,13 @@ function AccountDestination() {
         </Link>
       </div>
 
+      {/* BEING FINDABLE IS THE OTHER HALF OF People, so it sits directly under it: that
+          card is how you find somebody, this is how somebody finds you. Built 2026-08-30
+          — until then nothing in the app could set a handle or make a profile public, so
+          `/people` searched a directory that could not contain anyone. */}
+      <h2 style={{ marginTop: 28 }}>Your public profile</h2>
+      <PublicProfileCard />
+
       {/* THE DOOR. Joining takes a code from somebody already here (0288), so every
           member needs somewhere to make one. It is a deeper screen, not a fourth
           destination — same shape as Data & Privacy ▸ Trash. */}
@@ -1590,12 +1870,21 @@ function DataPrivacyDestination() {
       <h2 style={{ marginTop: 28 }}>Sharing{memberNames ? ` — ${memberNames}` : ''}</h2>
       <SharedHub />
 
+      {/* TAG APPROVALS COME FIRST AND ARE NOT OWNER-GATED. Anybody can be tagged, so
+          anybody must be able to answer — §8b-i keeps account access and memory
+          participation apart, and this is that line. Until 2026-08-30 the only surface
+          for this was `routes/Inbox.tsx`, which nothing imports and whose `/inbox` route
+          redirects away, so the heading below said "tag approvals" over a card that
+          answered join requests instead. */}
+      <h2 style={{ marginTop: 28 }}>Tag approvals</h2>
+      <TagApprovalsCard />
+
       {profile?.role === 'owner' && (
         <>
           {/* TWO DIFFERENT LISTS, and the order says which is which. Membership is who
               can SIGN IN; below it are the people you can TAG, who need no account —
               §8b-i keeps account access and memory participation apart on purpose. */}
-          <h2 style={{ marginTop: 28 }}>People and tag approvals</h2>
+          <h2 style={{ marginTop: 28 }}>People and membership</h2>
           <JoinRequestsCard />
           <PeopleCard meId={profile.id} />
           <h3 style={{ margin: '20px 0 8px' }}>Your people</h3>

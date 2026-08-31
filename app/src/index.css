@@ -7947,3 +7947,72 @@ button.mi-row:hover {
    already supplies the margin, the padding and the bottom clearance those screens used
    to get from `.page`, and zeroing them again would only look like it did something.
    The class is here so the markup says which of the two a div is. */
+
+/* ─────────── YOUR PUBLIC PROFILE (Settings ▸ Account, 2026-08-30) ───────────
+   The card that lets somebody publish themselves. It reuses `.npd-field` — the
+   same label/input/hint stack the new-place card uses — so a field here looks
+   like a field everywhere else rather than inventing a third form dress. */
+.pub-profile .npd-field + .npd-field {
+  margin-top: 14px;
+}
+.pub-profile .pub-handle-fixed {
+  padding: 6px 0;
+}
+/* The switches read as a row: box, then label, then the muted consequence. */
+.pub-profile .pub-visible,
+.pub-switches .npd-field {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 8px;
+}
+.pub-profile .pub-visible .label,
+.pub-switches .npd-field .label {
+  grid-column: 2;
+}
+.pub-switches {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+  margin: 14px 0 0;
+}
+/* Disabled means "this cannot apply yet", so it must LOOK inert rather than just
+   refuse the click — the switches below Let people find me are meaningless while
+   the profile is private. */
+.pub-switches[disabled] {
+  opacity: 0.5;
+}
+.pub-profile textarea {
+  width: 100%;
+  resize: vertical;
+}
+/* The reason sits ON the card, not only in a toast that outlives the evidence by
+   six seconds — the same rule item 6 applied to every other failure path. */
+.pub-error {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--danger-bg, rgba(255, 90, 90, 0.12));
+  color: var(--danger, #ff6b6b);
+  font-size: 13px;
+}
+
+/* ─────────── TAG APPROVALS (Settings ▸ Data & Privacy, 2026-08-30) ───────────
+   One row per thing somebody says you were part of: what it is on the left, the
+   two answers on the right. Text controls only, per her standing preference. */
+.tag-approval-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.tag-approval-row:first-of-type {
+  border-top: none;
+}
+.tag-approval-what {
+  min-width: 0;
+  flex: 1 1 auto;
+}
