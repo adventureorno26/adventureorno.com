@@ -198,7 +198,9 @@ Target routes (old routes redirect until links and saved URLs have migrated):
 ```text
 /                              Map
 /add                           Add/import/create event
+/people                        find people, and your own connections
 /people/:personId              one person's memories
+/profile/:handle               one person's public profile
 /events/nearby                 nearby/open event results
 /events/:eventId               event detail, RSVP and invitation management
 /events/:eventId/conversation  event conversation
@@ -369,6 +371,35 @@ directly.
 users to share their home address and whatever else they want to share."* So there is no
 category the app hides on their behalf. What a person marks public is public; the default is
 private, and the decision is theirs.
+
+#### The screens, shipped 2026-08-30 (migrations 0283 / 0284)
+
+Two routes, two questions. `/people` is *who is out there, and where do I stand with them*;
+`/profile/:handle` is *who is this*. The handle is the path segment because it is what a
+person can type and say out loud, and `people` and `profile` are both in 0283's reserved
+list, so no handle can ever collide with either route. Reached from **Settings ▸ Account ▸
+People** — the approved navigation has exactly four destinations and this is not one of them.
+
+- **`/people`** searches through `find_profiles()` and shows, beside each result, only the
+  action that FITS the relationship: `Cancel` where you have asked, `Accept`/`Decline` where
+  they asked you, `Remove` where it is mutual. Below it, your own connections in sections
+  ordered by what is owed — what somebody is waiting on you for first — with nobody listed
+  twice.
+- **`/profile/:handle`** renders `public_profile()`: identity always, then **their own**
+  totals, places and recent outings, each only where they switched it on. §0.2 — a person's
+  own stats are all of theirs — so the page carries no scope control and nothing to
+  intersect with.
+- **Unknown handle, private account and a block all give the same "No page here."**
+
+**Two gaps, named rather than left to be found.** `find_profiles()` and `public_profile()`
+are SECURITY DEFINER and were written before blocking existed, so neither filters a blocked
+account and RLS cannot save them. The client covers it by resolving every handle through the
+`profiles` table, whose policy DOES consider a block (0284/0286) — which is a client-side
+enforcement, not a database one, and it depends on `is_member()`, so it will need revisiting
+with the space partition (item 9). **The honest fix is in the database:** teach both
+functions `is_blocked_between()`. Until then a blocked user calling PostgREST directly can
+still read the other's public card, which is the one place §CONNECTING TO SOMEONE's *"never
+only in the UI"* is not yet satisfied.
 
 ### AN ACCEPTED TAG IS MINE — and today it is not
 

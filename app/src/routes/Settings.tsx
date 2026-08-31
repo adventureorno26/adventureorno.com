@@ -1480,6 +1480,21 @@ function AccountDestination() {
       </p>
       <button onClick={() => void signOut()}>Sign out</button>
 
+      {/* PEOPLE — the door to searching for somebody, and to what people are waiting on
+          you to answer. It sits under Account rather than in the primary nav because the
+          approved navigation has exactly four destinations and this is not one of them;
+          a connection is about you, beside the other things that are. */}
+      <h2 style={{ marginTop: 28 }}>People</h2>
+      <div className="card">
+        <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13 }}>
+          Find somebody by handle or name, add them, or follow them. An add is mutual — they decide
+          too. A follow is one-way and shows you only what they made public.
+        </p>
+        <Link to="/people" className="as-button primary">
+          Find people
+        </Link>
+      </div>
+
       <h2 style={{ marginTop: 28 }}>Map appearance</h2>
       <MapAppearanceSection />
       {profile?.role === 'owner' && <ProjectionCard />}

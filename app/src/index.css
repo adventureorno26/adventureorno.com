@@ -7883,6 +7883,65 @@ button.mi-row:hover {
   border-bottom-color: var(--accent);
 }
 
+/* ---------- People directory & public profiles (0283 / 0284) ----------
+   Built on `.person-row`, which already draws a name on the left and something on the
+   right; these rules only give it room for a stack of actions and let that stack wrap
+   on a phone rather than squeezing the name to nothing. */
+.person-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+.connection-row {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+.connection-who {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.connection-who p.label {
+  margin: 2px 0 0;
+}
+.connection-avatar,
+.profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-soft);
+  flex: none;
+}
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+}
+.connection-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+/* On somebody's own page the buttons are the main event, not a trailing control. */
+.connection-actions-page {
+  margin-top: 8px;
+}
+.people-search input {
+  width: 100%;
+}
+.profile-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.profile-head h1 {
+  margin: 0;
+}
+
 /* `.embedded` — a screen rendered as a TAB BODY rather than as a route of its own
    (Places and Timeline, inside Insights). It deliberately carries no rules: `.insights`
    already supplies the margin, the padding and the bottom clearance those screens used
