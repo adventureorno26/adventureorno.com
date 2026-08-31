@@ -556,23 +556,42 @@ reason to share the row now.
 
 Ordered, because each depends on the one above it.
 
-1. **Partition the data.** Every read policy ends in `is_member()`, so *add a user* and
-   *give them my entire history* are the same button today. One indivisible migration:
-   **57 tables, 81 policies, 201 SECURITY DEFINER functions.**
-2. **Add / remove / block, and follow.** A directory, public profiles with a handle, a
-   **mutual** add and a **one-way** follow that exposes only what the person made public,
-   and removal and blocking — blocking bidirectional and enforced in RLS, not in the UI.
-   `profiles` has six columns today and none of them is a handle, an avatar or a visibility
-   setting.
+> **THREE OF THESE FIVE ARE DONE — corrected 2026-08-30, each verified rather than assumed.**
+> The list below is kept in its original wording because it is the order of work and the
+> dependencies still hold; what changed is which rungs are behind us. Items **1**, **2** and
+> **4** are built; **2b** and **3** are the whole of what is left.
+
+1. ~~**Partition the data.**~~ ✅ **APPLIED TO PRODUCTION.** `0289` and `0290` are live —
+   the ledger on the live project records both, and `npm run gen:types` off the live schema
+   is a zero diff against committed types carrying `spaces`, `space_memberships` and a
+   `space_id` on ~70 tables. *(Original: every read policy ends in `is_member()`, so add a
+   user and give them my entire history are the same button. One indivisible migration: 57
+   tables, 81 policies, 201 SECURITY DEFINER functions.)* **Not verified:** correct behaviour
+   for a second account, which needs two real accounts. No client surface exists yet.
+2. ~~**Add / remove / block, and follow.**~~ ✅ **BUILT AND LIVE** — see item 7 in the
+   approved order for what was measured on production. A directory, public profiles on a
+   handle, a mutual add, a one-way follow, removal and blocking, with blocking enforced in
+   the database (`0287` teaches `find_profiles()` and `public_profile()`
+   `is_blocked_between()`), not only in the UI.
+   ~~`profiles` has six columns today and none of them is a handle, an avatar or a visibility
+   setting.~~ **That sentence is two days out of date:** `0283` added `handle`,
+   `handle_claimed_at`, `avatar_url`, `bio`, `profile_visibility`, `public_stats`,
+   `public_places` and `public_activity`, and Settings ▸ Account ▸ *Your public profile*
+   sets them (2026-08-30). Everybody is assigned a handle on sight; claiming one is a
+   separate, once-only act keyed on `handle_claimed_at`.
 2b. **An accepted tag becomes the accepter's own record**, per the section above, and
    removal retracts rather than deletes. Without this, everything a person accepts stays
    hostage to whoever tagged them.
 3. **Cross-account tagging with acceptance.** The acceptance machinery works, but it is
    keyed to people *inside* one account and the write path takes a single profile id, so
    *"I was out with Maya"* cannot be recorded at all.
-4. **The three scopes**, on the map pill, Settings ▸ Stats and Insights together.
+4. ~~**The three scopes**, on the map pill, Settings ▸ Stats and Insights together.~~
+   ✅ **BUILT** — item 4b. The control is two buttons and a picker; measured live, the map,
+   Insights and Settings ▸ Stats all read the one vocabulary, and `/insights` states
+   *"My Stats — Every card you are tagged on."*
 
-The pills are last because they are the only easy part.
+The pills are last because they are the only easy part. **They are done; 2b and 3 are not,
+and they are the two that need a migration rather than a screen.**
 
 ---
 
