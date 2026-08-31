@@ -207,11 +207,33 @@
 --
 --
 -- ============================================================================
--- WHAT IT COSTS, MEASURED
+-- WHAT IT COSTS, MEASURED ON PRODUCTION INSIDE `begin … rollback`
 -- ============================================================================
 --
--- See the PR body. Timings are taken on production inside `begin … rollback` and are not
--- reproduced here, because a number in a migration header is a number nobody re-measures.
+-- A row trigger costs one index probe per row written, so the bill lands entirely on the
+-- bulkiest write path there is. That is `merge_places_auto`, which re-points every
+-- `location_pings` row belonging to a place. Signed in as Erica, updating all 17,118 of
+-- her pings in one statement:
+--
+--     without the guard   1156 ms
+--     with the guard      2967 ms      2.6x, +1.8 s
+--
+-- THAT IS THE WHOLE COST AND IT IS ON THE WORST CASE. Every other write in the
+-- application touches one row to a few dozen: the same rehearsal measured `edit_visit`
+-- end to end at 63 ms including the refusal. A merge is an occasional, deliberate,
+-- already-slow administrative action, and 1.8 s on it is the price of the boundary
+-- holding for the other eighty-seven writers without any of them being edited.
+--
+-- IF IT EVER MATTERS, the answer is a statement-level trigger with transition tables,
+-- which asks the same question once per statement instead of once per row — the same
+-- hoisting 0290 got from `my_space_ids()` in a query. It is not done here because it is
+-- a tuning change, it is materially more machinery, and 1.8 s on a merge is not yet a
+-- problem anyone has.
+--
+-- ⚠️ THE REAL APPLY NEEDS A `vacuum analyze` AFTER IT — same as 0289 and 0290. Adding 46
+-- triggers does not invalidate statistics, but the measurements above were taken inside a
+-- transaction that had just created them, and nothing here has been observed on a
+-- warmed-up committed schema.
 
 begin;
 
