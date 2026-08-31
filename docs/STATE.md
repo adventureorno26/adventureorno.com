@@ -472,6 +472,53 @@ And separately: `set_visit_participants` and `set_activity_solo` must **retract,
 so that removal is a decision with a record rather than an erasure. Photos are already the
 model to copy.
 
+#### SCOPED AND PREFLIGHTED 2026-08-30 — measured, not estimated
+
+The retract half is smaller than it looks, but **only because of one line**, and getting that
+line wrong would be worse than not doing it at all.
+
+**What the change is.** Three writers (`set_visit_participants`, `set_place_solo`,
+`set_activity_solo`) currently `delete from public.memory_people` for anyone no longer named.
+They become an `update … set participation_status = 'retracted'`. Nothing else about them
+moves. `memory_people`'s CHECK **already allows `retracted`** — `('proposed','accepted',
+'accepted_legacy','declined','retracted')` — so no constraint changes.
+
+**The trap, and the one line that defuses it.** *Nothing filters these rows by status.* Of the
+**41 readers** of `visit_profiles` / `activity_profiles`, **34 never mention `claim_status` at
+all**. So if the writers start marking rows retracted and nothing else changes, a removed
+person **keeps counting in every statistic** — the exact opposite of what removal means, and
+the 0280 defect class again.
+
+The defusing line is that since `0266` those two names are **VIEWS over `memory_people`**, not
+tables. Adding `and mp.participation_status <> 'retracted'` to the two view definitions
+corrects all 41 readers at once. That is what turns this from a 34-function sweep into a
+5-object migration — 2 views and 3 writers.
+
+**The preflight, run against production and clear.** `npm run check:retraction-preflight`
+(read-only) answers the one question that gates it: are any visit/outing participations
+*already* retracted, such that adding the view filter would move Erica's live numbers?
+
+```
+outing  accepted         653      visit  accepted    887
+outing  accepted_legacy   88      visit  proposed      4
+rows the view filter would hide:  NONE
+```
+
+**Clear.** Applying it moves no existing number; it only affects removals made afterwards.
+
+**WHY IT IS STILL NOT WRITTEN.** The three writers must be transcribed from their **live**
+bodies, not from `0266` — `0290` has since rewritten several of these to take `space_id`, and
+the live `visit_profiles` now ends `where pe.linked_profile is not null and
+is_member(s.space_id)`. `0266`'s own standard was that *"every one was matched against the live
+definition exactly once before being replaced"*, and a migration that silently rewrites two
+writers and not the third compiles perfectly and means something else. That transcription plus
+a rehearsal in a rolled-back transaction is the next pass, and it should not be done in the
+tail of a long session.
+
+**One thing that will look wrong and is not:** run the preflight and both views report **0
+rows**. That is the admin connection having no `auth.uid()`, so `is_member()` is false. The
+gating counts are read from `memory_people` directly for exactly this reason.
+
 ### THE THREE SECURITY DEFINER VIEWS — decided 2026-08-30
 
 `activity_profiles`, `activity_provenance`, `visit_profiles` answer *"who was on this?"*.
