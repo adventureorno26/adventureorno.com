@@ -1087,15 +1087,17 @@ function TagApprovalsCard() {
       {tags.map((t) => (
         <div key={t.subject_id} className="tag-approval-row">
           <span className="tag-approval-what">
-            {/* Until 0300 a tag could only be seen by somebody in the same space, so the
-                visit case was unreachable and everything non-photo said "outing". Josh has
-                two waiting visit tags the moment that changed. The card's own sentence
-                above already says "you were somewhere", so this matches it. */}
-            {t.kind === 'photo'
-              ? 'A photo you are in'
-              : t.kind === 'visit'
-                ? 'Somewhere you were'
-                : 'An outing you were on'}
+            {/* NAME THE CARD. Erica, 2026-08-31: "I don't want anything to say somewhere
+                you were. You can see the full card if you add someone." 0301 returns the
+                card's name, gated on sharing a space or having added the tagger, and NULL
+                when neither holds — so this says what it is rather than gesturing at it. */}
+            {t.card
+              ? t.card
+              : t.kind === 'photo'
+                ? 'A photo you are in'
+                : t.kind === 'visit'
+                  ? 'A place you were tagged at'
+                  : 'An outing you were tagged on'}
             <span className="label"> · {new Date(t.created_at).toLocaleDateString()}</span>
           </span>
           <span className="btn-row">

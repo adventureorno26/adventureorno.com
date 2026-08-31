@@ -6582,6 +6582,7 @@ export type Database = {
         Args: { p_id: string; p_role: string }
         Returns: undefined
       }
+      are_added: { Args: { p_a: string; p_b: string }; Returns: boolean }
       assert_member: { Args: never; Returns: undefined }
       assign_activity_place: {
         Args: { p_lat: number; p_lng: number }
@@ -7357,6 +7358,7 @@ export type Database = {
       my_memory_tags_to_confirm: {
         Args: never
         Returns: {
+          card: string
           created_at: string
           kind: string
           photo_id: string

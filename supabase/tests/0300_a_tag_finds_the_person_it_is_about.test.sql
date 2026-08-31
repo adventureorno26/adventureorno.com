@@ -120,10 +120,16 @@ end $$;
 do $$
 declare v_n integer;
 begin
-  create or replace function public.my_memory_tags_to_confirm()
-  returns table(subject_id uuid, kind text, photo_id uuid, tagged_by text, created_at timestamptz)
+  -- The OLD, space-scoped body. It carries the CURRENT column list (0301 added `card`)
+  -- because the thing under test is the `in_space_*` joins, not the shape of the row —
+  -- and `create or replace` refuses a changed return type, so this drops first. Rolled
+  -- back with the rest of the transaction.
+  drop function if exists public.my_memory_tags_to_confirm();
+  create function public.my_memory_tags_to_confirm()
+  returns table(subject_id uuid, kind text, photo_id uuid, tagged_by text,
+                created_at timestamptz, card text)
   language sql stable security definer set search_path to 'public' as $old$
-    select s.id, s.kind, s.photo_id, who.display_name, mp.created_at
+    select s.id, s.kind, s.photo_id, who.display_name, mp.created_at, null::text
       from public.in_space_memory_people mp
       join public.in_space_memory_subjects s on s.id = mp.subject_id
       join public.in_space_people pe on pe.id = mp.person_id
