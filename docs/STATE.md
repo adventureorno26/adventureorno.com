@@ -619,21 +619,64 @@ Every line below was measured, not inferred. None of it was in any prior list.
 | 15 | **Unanswered participation claims were counting in shared stats** — 15 rows sat in `proposed` with `tagged_by`, `rule_id` and real evidence all NULL. They were not person-to-person tags at all but the app's own guess that both members were on a visit, parked where the asking screen could never surface them, because it only shows claims a PERSON raised. Six of the 164 shared keys were among them | Erica, 2026-08-30: *"I do not want you to go back and ask permission for the 55 he is already included on — just mark it that he accepted the tag."* Done in `0279`: **15 → 0 proposed**, 1234 → 1249 accepted. Only `participation_status` changed — `decided_by` stays NULL and `evidence` stays `unknown`, so the record still admits these were never personally confirmed rather than forging a decision. A claim a real person raises is untouched and still has to be answered |
 | 13 | Genuinely healthy | **Zero console errors, zero failed requests, zero horizontal overflow across 15 routes.** R2 and the database agree exactly: 366 objects, 366 referenced keys, 0 orphans, 0 missing |
 
-### A GAP IN THE VERIFICATION HARNESS ITSELF — found 2026-08-30
+### THE VERIFICATION HARNESS — A CLAIM MADE HERE EARLIER TODAY WAS WRONG
 
-`app/playwright.live.config.ts` runs `erica-asked-for.spec.ts` against production, and the
-authed checks in it need `TEST_BOT_EMAIL` / `TEST_BOT_PASSWORD`. **Neither is in
-`.env.local`.** Stage 1 of the 08-28 plan asked for exactly this ("put them in `.env.local`
-so `verify:live` stops SKIPPING every authed card check") and it was never done.
+Earlier on 2026-08-30 this file recorded that the authed live checks **skip silently**
+because `TEST_BOT_EMAIL` / `TEST_BOT_PASSWORD` are absent from `.env.local`. **That was
+wrong, and the correction matters more than the original claim.**
 
-The consequence is the dangerous kind: the authed checks **skip silently**. A skipped check
-and a passing check look the same in a green run, which is the same defect class as
-`backup-freshness` passing on `NaN`. Every "live-verified" tick from here to that fix was
-obtained by driving a signed-in Chrome by hand, not by the harness.
+`app/e2e/fixtures.ts` has two fixtures. `authedTest` does need a password. **`liveTest`,
+which is the one `erica-asked-for.spec.ts` actually imports, deliberately does not** — it
+mints a session through Supabase's admin `generate_link` endpoint using
+`SUPABASE_SECRET_KEY`, which IS in `.env.local`, and `TEST_BOT_EMAIL` falls back to
+`testbot@adventureorno.dev`. The file says so in its own words: *"nor should the live check
+depend on one existing."*
 
-**This is Erica's to close, not mine** — it needs a real account's credentials, and I do
-not handle passwords. Until it is closed, "the live suite is green" does not mean the
-authed screens were checked.
+So `npm run verify:live` runs authed, against production, today. Run on 2026-08-30 it
+reported **23 passed, 7 failed** — not 30 skipped.
+
+**There is no credential for Erica to find.** The earlier entry asked her to supply one and
+that ask is withdrawn.
+
+**The real gap is narrower and still open:** CI's secret list holds `AON_SUPABASE_SECRET_KEY`
+(the disabled legacy JWT, §8) and **not** `SUPABASE_SECRET_KEY`, so `canMintSession` is false
+in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
+without anything going red. Adding that secret is what closes it.
+
+### THE DOOR IS OPEN — 2026-08-30
+
+`0288_a_code_is_what_lets_you_in` is **applied to production** and the ledger is clean at
+286. A member can mint a code, verified live as Erica.
+
+With the gate live, `disable_signup` was turned **off** (it had been `true`, which would
+have made the whole feature dead on arrival — an invited person could never get a session
+to redeem with). **Erica approved this on 2026-08-30.** It is safe because the profile row,
+not the auth row, is the gate: an account with a session and no profile was measured at
+**0 places, 0 visits, 0 activities, 0 photos, 0 profiles**. The code is what creates the
+profile.
+
+The ordering was deliberate — signups stayed off until the gate existed, so there was never
+a window where a stranger could make an account with nothing to stop them going further.
+
+### 0287 IS APPLIED — THE PUBLIC PROFILE CAN BE READ AT ALL — 2026-08-30
+
+`public_profile()` was declared STABLE and created temporary tables, which Postgres refuses
+(`0A000`). Every published profile raised instead of rendering. It looked healthy only
+because nobody has published themselves, so every call returned NULL at the early exit and
+the body had never once run. Applied and verified live: a published profile now returns
+`places=132`. The same migration closed the function's own `TODO` about blocking, which had
+outlived the block lists landing in `0284` by a day.
+
+### THE SEVEN RED LIVE CHECKS — 2026-08-30
+
+All seven were diagnosed against the live site. **Every one is test-side; none is a product
+regression.** Three assert `summary` text `/^Stats$/` on a control that now reads
+*"My Stats · …"* — they are asserting the very label §0.2 retired. Two are strict-mode
+locator ambiguities (`/this is visit one/` matches a coords line and a label; `/^Cancel$/`
+matches three buttons). One clicks `.visit-row`, which is an inert `<div>` — the row's
+`<a href="/visit/…">Open</a>` navigates correctly and renders `.panel.visit-card` with its
+locked sections, measured live. One looks for `.route-mini`, which exists (San Diego renders
+`Routes (6)`); its sampling missed rather than the section being gone.
 
 ### THE APPROVED ORDER
 
