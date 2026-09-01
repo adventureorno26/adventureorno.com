@@ -661,7 +661,7 @@ because a sentence inside a merged migration header is not where an outstanding 
 | | What | Where it came from |
 | --- | --- | --- |
 | **1** | **An accepted VISIT tag is still hostage.** `0299` materialises outings only. Visits key on `v.id` and places on `p.id` with no `shared_group_id`, so a copy would count twice with nothing able to say the two rows are one memory | `0292`'s finding, restated by `0299`. The fix is a `shared_group_id` on visits and places plus every reader taught to collapse on it — the third migration `0292` sized and nobody has written |
-| **2** | **Ten tables carry no `space_id`** and `0293`'s guard cannot reach them: `connection_adds`, `connection_blocks`, `connection_follows`, `invite_codes`, `job_runs`, `join_requests`, `oauth_states`, `profiles`, `service_health`, `spaces` | `0293`'s header argues most are correct and then says plainly: *"'a space is not the right question here' is not the same sentence as 'this one is safe'."* **That audit has not been done** |
+| ~~**2**~~ | ~~**Ten tables carry no `space_id`** and `0293`'s guard cannot reach them~~ ✅ **AUDITED 2026-09-01 — all ten protected.** Seven attacks run as Josh on production, all touching zero rows; `0302` removed three dead grants. Two constraints recorded rather than changed: `profiles` gates on the GLOBAL `is_owner()` (safe only while `invite_codes.role` excludes `owner`, now guarded), and `job_runs`/`service_health` read on bare `is_member()` | See §THE TEN TABLES THAT CARRY NO SPACE |
 | **3** | **`detect-trips` clusters across both spaces** and inserts `places` and `visits` setting no `created_by`, so it cannot say whose trip it is | Found by `0295`; needs a code change and a function deploy, not a migration |
 | **4** | **`suggest` → `ingest_runs` names no initiator**, so a suggester run belongs to nobody | Same |
 | **5** | **`JoinRequestsCard` offers something it can no longer do.** Settings ▸ Data & Privacy still invites you to approve somebody *into* your space; after `0298` they get their own instead | `0298`. The control does not do what it says — the exact defect item 6 exists to remove. App change |
@@ -770,6 +770,72 @@ that ask is withdrawn.
 (the disabled legacy JWT, §8) and **not** `SUPABASE_SECRET_KEY`, so `canMintSession` is false
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
+
+### THE TEN TABLES THAT CARRY NO SPACE — AUDITED 2026-09-01, `0302` APPLIED
+
+`0293`'s header named this audit and asked that it not be lost: *"'A space is not the right
+question here' is not the same sentence as 'this one is safe'."* Here it is. **All ten are
+protected**, and the interesting parts are what it took to establish that and what it turned
+up on the way.
+
+| table | how it is protected |
+| --- | --- |
+| `connection_adds` · `connection_blocks` · `connection_follows` | SELECT-only grant; every write goes through a SECURITY DEFINER function |
+| `oauth_states` | **no grant to `authenticated` at all**, RLS on, no policies — `service_role` only. The strictest of the ten |
+| `service_health` · `job_runs` | SELECT-only reading, `is_member()` |
+| `join_requests` | INSERT/SELECT/UPDATE constrained to your own row |
+| `invite_codes` | readable by its issuer or the owner; `role` CHECK admits only `editor\|viewer` |
+| `profiles` | writes gate on `is_owner()` |
+| `spaces` | `is_owner(id)` — the space-scoped variant |
+
+**Seven attacks were run as Josh on production**, each in a rolled-back transaction: delete
+every `job_runs` row, rename and delete Erica's space, update and delete her **profile**, wipe
+`join_requests`, rewrite every invite code. **All seven touched zero rows.**
+
+#### ⚠️ AND THE FIRST VERSION OF THAT PROBE SAID THE OPPOSITE
+
+It asked *"did the statement error?"* — and five of the seven did not, so it reported
+**ACCEPTED** and would have raised a false alarm saying a stranger could delete another
+person's profile. **An UPDATE or DELETE that RLS filters to nothing SUCCEEDS**: it returns
+without error and changes nothing. `0293`'s own test was caught by this exact shape from the
+other side — *"the assertion passed without ever looking at the row."*
+
+**Count the rows. Never the absence of an error.** The test carries a section whose only job
+is to prove the method can see a one, so that the zeros mean refused rather than "the WHERE
+matched nothing".
+
+#### What `0302` changes: three dead grants
+
+`authenticated` held INSERT/UPDATE/DELETE on tables with **no policy for those commands**, so
+RLS refused every one. Unreachable — which is why removing them changed no behaviour, and why
+they were worth removing: they are one forgotten `create policy` away from being live.
+
+```
+invite_codes    INSERT, UPDATE, DELETE
+job_runs        INSERT, UPDATE, DELETE
+join_requests   DELETE
+```
+
+Checked first: the app writes none of them. `join.ts` upserts `join_requests`
+(INSERT/UPDATE, kept) and all three `profiles` call sites are `.select()`. After applying,
+those three attacks fail at the **grant** level with `42501` instead of being silently
+filtered — a louder no.
+
+#### Two things deliberately NOT changed, recorded as constraints
+
+**`profiles` writes gate on `is_owner()` — the GLOBAL role, not a space.** A second profile
+with `role='owner'` could update or delete every profile row. Not reachable today, and the
+audit says why in three steps: exactly one profile is `owner`; `invite_codes.role` has a CHECK
+admitting only `editor|viewer`; and `approve_join_request` raises on any other role. **The
+only route to a second global owner is Erica deliberately making one.** `0302` §3 fails the
+build if that CHECK is ever widened. `profiles` cannot be narrowed to a space the way the
+other 46 tables were — it has no `space_id` and cannot have one, because a profile is what a
+space is made *of*.
+
+**`job_runs` and `service_health` read on `is_member()` with no argument** — after the
+partition that means *in at least one space*, so a third account will read every job run and
+all 12,726 service-health rows. Infrastructure telemetry, no place or person or date, but it
+IS cross-space by design and should be a decision rather than a discovery.
 
 ### AN ACTIVITY NEEDS NO TITLE — 2026-08-31
 
