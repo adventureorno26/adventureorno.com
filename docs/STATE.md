@@ -668,7 +668,7 @@ because a sentence inside a merged migration header is not where an outstanding 
 | **6** | **The space boundary has never been proved with two REAL accounts.** Everything is proved by SQL fixtures and by the test bot | `0289`'s test and `0293`'s test both construct their own two spaces. `0287`'s blocking guard is also still "the fix is deployed", not "the bypass is measured shut" |
 | **7** | **`current_space()` is `limit 1` over an unordered scan** — deterministic today only because nobody is in two spaces | `0291` already built the fix and said why: `home_space()` orders by `(role = 'owner') desc, space_id`. Nothing points `default_space()` at it yet |
 | ~~**8**~~ | ~~**CI's `default_space()` is not production's**~~ ✅ **GUARDED 2026-09-01.** `scripts/space-test-preamble.test.mjs` fails any SQL test that calls `home_space_of(` without installing production's body, with the fix in the message. A proxy, and it says so | See §A TEST THAT REASONS ABOUT SPACES |
-| **9** | **`db-bootstrap` seeds `auth.users` with NULL `confirmation_token`**, which makes GoTrue's admin API 500 and `npm run seed:e2e` fail locally | Found while verifying `0298`. Repaired by hand in the local stack; not fixed in the repo |
+| ~~**9**~~ | ~~**NULL `confirmation_token` breaks GoTrue's admin API**~~ ✅ **FIXED 2026-09-01.** It was not `db-bootstrap` — `export-restore-roundtrip.sh` and `prove-invite-race.sh` inserted `auth.users (id, email)` only and never cleaned up, leaving six NULL token columns behind for the life of the stack | See §A FIXTURE USER GOTRUE CANNOT READ |
 
 ---
 
@@ -770,6 +770,35 @@ that ask is withdrawn.
 (the disabled legacy JWT, §8) and **not** `SUPABASE_SECRET_KEY`, so `canMintSession` is false
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
+
+### A FIXTURE USER GOTRUE CANNOT READ — fixed 2026-09-01
+
+`npm run seed:e2e` failed on a local stack with `500: Database error finding users`, and the
+cause was a fixture nobody had connected to it.
+
+**GoTrue scans six columns into Go `string`, not `*string`** — `confirmation_token`,
+`recovery_token`, `email_change`, `email_change_token_new`, `email_change_token_current`,
+`reauthentication_token`. A NULL in any of them makes its **admin API** fail outright:
+
+```
+sql: Scan error on column index 3, name "confirmation_token":
+     converting NULL to string is unsupported
+```
+
+`scripts/export-restore-roundtrip.sh` inserted `auth.users (id, email)` and nothing else, so
+those six defaulted to NULL — and it **never cleans up**. One run leaves the row behind and
+`listUsers` 500s for the life of the stack, which takes `seed:e2e`, `mutating.spec.ts` and
+every Playwright run that needs a session with it. `scripts/prove-invite-race.sh` had the
+same shape.
+
+Both now name the six columns as `''`. Proved end to end: with the broken rows cleared, the
+round-trip run green (*"export→restore→re-export round-trip is byte-identical"*) and
+`seed:e2e` succeeded immediately afterwards, where before it threw.
+
+**One incidental trap, recorded because it cost a minute and will cost the next person the
+same:** the explanatory comment sits in a heredoc inside a `$( )` command substitution, and
+an apostrophe in *"GoTrue's"* broke the shell parse. `bash -n` caught it. The comment now
+says so.
 
 ### A TEST THAT REASONS ABOUT SPACES MUST INSTALL ONE — guarded 2026-09-01
 

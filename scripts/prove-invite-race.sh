@@ -55,10 +55,14 @@ cleanup
 echo "Setting up: one member, one single-use code, two people holding it."
 CODE="$(psql_db -tA <<SQL
 begin;
-insert into auth.users (id, email) values
-  ('$ISSUER','race.issuer@example.invalid'),
-  ('$RACER_A','race.a@example.invalid'),
-  ('$RACER_B','race.b@example.invalid');
+-- Empty-string tokens, not NULL. See the note in export-restore-roundtrip.sh: a NULL in
+-- any of the GoTrue token columns makes the admin API return 500 for the life of the
+-- stack. No apostrophes in this comment on purpose — it sits in a heredoc inside a
+-- command substitution, where a stray quote breaks the shell parse.
+insert into auth.users (id, email, confirmation_token, recovery_token, email_change, email_change_token_new, email_change_token_current, reauthentication_token) values
+  ('$ISSUER','race.issuer@example.invalid','','','','','',''),
+  ('$RACER_A','race.a@example.invalid','','','','','',''),
+  ('$RACER_B','race.b@example.invalid','','','','','','');
 insert into public.profiles (id, role, display_name) values ('$ISSUER','editor','RaceIssuer');
 set local request.jwt.claims = '{"sub":"$ISSUER","role":"authenticated"}';
 select (public.create_invite_code('Race', 14, 'viewer')).code;
