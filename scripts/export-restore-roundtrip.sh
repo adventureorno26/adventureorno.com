@@ -41,8 +41,21 @@ update public.visits set trip_marked = true
 -- with "cannot insert into view", which is also exactly the failure it was built to catch on
 -- the real data. It is still the ONLY record of who was on a visit and who did an activity,
 -- so it is still exactly what a restore must not lose.
-insert into auth.users (id,email)
-  values ('d1d1d1d1-0000-0000-0000-000000000001','rt@example.invalid')
+-- ⚠️ THE EMPTY-STRING TOKENS ARE NOT NOISE. GoTrue scans `confirmation_token`,
+-- `recovery_token`, `email_change`, `email_change_token_new`, `email_change_token_current`
+-- and `reauthentication_token` into Go `string`, not `*string`, so a NULL in any of them
+-- makes its admin API fail with:
+--
+--     500: Database error finding users
+--     sql: Scan error on column index 3, name "confirmation_token":
+--          converting NULL to string is unsupported
+--
+-- A fixture row left behind by this script therefore breaks `npm run seed:e2e` and every
+-- Playwright run that needs it, for the whole life of the local stack — found 2026-09-01,
+-- after three fixture users with NULL tokens sat in the stack and 500'd `listUsers`.
+-- The column defaults are NULL, so they have to be named.
+insert into auth.users (id, email, confirmation_token, recovery_token, email_change, email_change_token_new, email_change_token_current, reauthentication_token)
+  values ('d1d1d1d1-0000-0000-0000-000000000001','rt@example.invalid','','','','','','')
   on conflict (id) do nothing;
 insert into public.profiles (id,display_name,role)
   values ('d1d1d1d1-0000-0000-0000-000000000001','RT Person','owner')
