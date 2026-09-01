@@ -21,18 +21,35 @@ const users = [
     password: process.env.TEST_OWNER_PASSWORD || 'Local-E2E-owner-2026!',
     role: 'owner',
     display_name: 'E2E Owner',
+    key: 'owner',
   },
   {
     email: process.env.TEST_EDITOR_EMAIL || 'editor.e2e@example.invalid',
     password: process.env.TEST_EDITOR_PASSWORD || 'Local-E2E-editor-2026!',
     role: 'editor',
     display_name: 'E2E Editor',
+    key: 'editor',
   },
   {
     email: process.env.TEST_VIEWER_EMAIL || 'viewer.e2e@example.invalid',
     password: process.env.TEST_VIEWER_PASSWORD || 'Local-E2E-viewer-2026!',
     role: 'viewer',
     display_name: 'E2E Viewer',
+    key: 'viewer',
+  },
+  // THE STRANGER STAYS IN THEIR OWN SPACE. Everything above shares the owner's, on purpose,
+  // because those three test what a ROLE may write. This one tests the other axis: a valid
+  // account that is simply not in your space. It is deliberately NOT collapsed below.
+  {
+    email: process.env.TEST_STRANGER_EMAIL || 'stranger.e2e@example.invalid',
+    password: process.env.TEST_STRANGER_PASSWORD || 'Local-E2E-stranger-2026!',
+    // profiles.role is `editor` — a permission level — but the KEY is `stranger`, because
+    // the role is no longer unique across these fixtures and keying the map by it would
+    // have let the stranger overwrite the real editor and then be collapsed into the
+    // owner's space, which is the exact opposite of what this fixture is for.
+    role: 'editor',
+    display_name: 'E2E Stranger',
+    key: 'stranger',
   },
 ];
 
@@ -74,7 +91,7 @@ for (const fixture of users) {
     display_name: fixture.display_name,
   });
   if (profileError) throw profileError;
-  seeded.set(fixture.role, user.id);
+  seeded.set(fixture.key, user.id);
 }
 
 // ---- ONE SPACE, CONSTRUCTED DELIBERATELY (0298) ----------------------------
@@ -103,6 +120,8 @@ const { data: ownerMembership, error: mErr } = await supabase
 if (mErr) throw mErr;
 if (!ownerMembership) throw new Error('The owner has no space membership to share.');
 
+// NOT the stranger — see the fixture note above. 0298 gives every new profile its own
+// space, so leaving them out of this loop is all it takes to keep them outside.
 for (const role of ['editor', 'viewer']) {
   const id = seeded.get(role);
   if (!id) continue;
