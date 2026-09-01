@@ -667,7 +667,7 @@ because a sentence inside a merged migration header is not where an outstanding 
 | ~~**5**~~ | ~~**`JoinRequestsCard` offers something it can no longer do**~~ ✅ **DONE 2026-09-01.** The card and `lib/join.ts` are deleted; the RPCs stay, because they still decide who may hold an account. Guarded | See §A DOOR THAT LED NOWHERE |
 | **6** | **The space boundary has never been proved with two REAL accounts.** Everything is proved by SQL fixtures and by the test bot | `0289`'s test and `0293`'s test both construct their own two spaces. `0287`'s blocking guard is also still "the fix is deployed", not "the bypass is measured shut" |
 | **7** | **`current_space()` is `limit 1` over an unordered scan** — deterministic today only because nobody is in two spaces | `0291` already built the fix and said why: `home_space()` orders by `(role = 'owner') desc, space_id`. Nothing points `default_space()` at it yet |
-| **8** | **CI's `default_space()` is not production's**, so any test asserting WHERE A ROW LANDS must install production's body itself | `0292` §8 lives inside the branch that forks and an empty schema never forks. `0295`, `0297` and `0299`'s tests carry the preamble; **nothing enforces that the next one does** |
+| ~~**8**~~ | ~~**CI's `default_space()` is not production's**~~ ✅ **GUARDED 2026-09-01.** `scripts/space-test-preamble.test.mjs` fails any SQL test that calls `home_space_of(` without installing production's body, with the fix in the message. A proxy, and it says so | See §A TEST THAT REASONS ABOUT SPACES |
 | **9** | **`db-bootstrap` seeds `auth.users` with NULL `confirmation_token`**, which makes GoTrue's admin API 500 and `npm run seed:e2e` fail locally | Found while verifying `0298`. Repaired by hand in the local stack; not fixed in the repo |
 
 ---
@@ -770,6 +770,32 @@ that ask is withdrawn.
 (the disabled legacy JWT, §8) and **not** `SUPABASE_SECRET_KEY`, so `canMintSession` is false
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
+
+### A TEST THAT REASONS ABOUT SPACES MUST INSTALL ONE — guarded 2026-09-01
+
+The divergence that cost an hour on `0297` now fails the build instead of being remembered.
+
+**CI's `default_space()` is not production's.** `0292` §8 replaces it with
+`select current_space()` inside the branch that actually forks, and an empty schema never
+forks — a considered choice, because a replay seeds five reference tables before any profile
+exists and removing the fallback unconditionally would break `db-bootstrap.sh` on every push.
+
+The cost was not noticed: a replay keeps 0289's *"biggest space"* fallback, which fills
+`space_id` **non-null** and, once two spaces exist, fills it **wrong** — every caller-less row
+goes to whichever space has the most members. `0295`'s trigger only fires on NULL, so under
+the fallback it never runs at all. `0297`'s test was written without the preamble and failed:
+Ben's ping landed in Ann's space, so of course her fog covered his ground. **That was CI's
+schema talking, not production's.**
+
+`scripts/space-test-preamble.test.mjs` now fails any `supabase/tests/*.test.sql` that calls
+`home_space_of(` without installing production's body first, with the fix quoted in the
+failure message. All five current such tests already carry it. Proved it can fail: removing
+the preamble from `0297`'s test turns the run red, and restoring it turns it green.
+
+⚠️ **It is a proxy and says so.** What matters is *"does this test assert where a row lands"*,
+and no regular expression answers that. `home_space_of(` is the marker every such test has
+happened to use. If one ever asserts about `space_id` without calling it, this will not catch
+it.
 
 ### A DOOR THAT LED NOWHERE — the join-request card is gone, 2026-09-01
 
