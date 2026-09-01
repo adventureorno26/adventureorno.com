@@ -81,12 +81,6 @@ import PeopleCard from '../components/PeopleCard';
 import YourPeopleCard from '../components/YourPeopleCard';
 import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
-import {
-  approveJoinRequest,
-  denyJoinRequest,
-  fetchPendingJoinRequests,
-  type JoinRequest,
-} from '../lib/join';
 
 const TAG_COLORS = [
   '#38bdf8',
@@ -170,84 +164,6 @@ function TagsCard() {
       </div>
       {msg && (
         <div className="banner" style={{ marginTop: 8 }}>
-          {msg}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function JoinRequestsCard() {
-  const [reqs, setReqs] = useState<JoinRequest[] | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  function load() {
-    fetchPendingJoinRequests()
-      .then(setReqs)
-      .catch(() => setReqs([]));
-  }
-  useEffect(load, []);
-
-  async function act(r: JoinRequest, action: 'viewer' | 'editor' | 'deny') {
-    setBusy(r.id);
-    setMsg(null);
-    try {
-      if (action === 'deny') await denyJoinRequest(r.id);
-      else await approveJoinRequest(r.id, action);
-      setMsg(
-        action === 'deny'
-          ? `Denied ${r.email ?? 'request'}.`
-          : `Approved ${r.email ?? 'request'} as ${action === 'editor' ? 'contributor' : 'viewer'}.`,
-      );
-      load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Could not update request');
-    }
-    setBusy(null);
-  }
-
-  if (reqs === null) return <p style={{ color: 'var(--muted)' }}>Loading…</p>;
-  return (
-    <div className="card">
-      {reqs.length === 0 ? (
-        <p style={{ color: 'var(--muted)', margin: 0 }}>No pending requests.</p>
-      ) : (
-        reqs.map((r) => (
-          <div key={r.id} className="join-req">
-            <div>
-              <b>{r.display_name ?? r.email ?? 'Someone'}</b>
-              {r.email && r.display_name ? <span className="muted"> · {r.email}</span> : null}
-              {r.note ? (
-                <div className="muted" style={{ fontSize: 13 }}>
-                  “{r.note}”
-                </div>
-              ) : null}
-            </div>
-            <div className="join-req-actions">
-              <button
-                className="primary"
-                disabled={busy === r.id}
-                onClick={() => void act(r, 'editor')}
-              >
-                Approve · Contributor
-              </button>
-              <button disabled={busy === r.id} onClick={() => void act(r, 'viewer')}>
-                Viewer
-              </button>
-              <button
-                className="danger"
-                disabled={busy === r.id}
-                onClick={() => void act(r, 'deny')}
-              >
-                Deny
-              </button>
-            </div>
-          </div>
-        ))
-      )}
-      {msg && (
-        <div className="banner" style={{ marginTop: 10 }}>
           {msg}
         </div>
       )}
@@ -1910,9 +1826,16 @@ function DataPrivacyDestination() {
         <>
           {/* TWO DIFFERENT LISTS, and the order says which is which. Membership is who
               can SIGN IN; below it are the people you can TAG, who need no account —
-              §8b-i keeps account access and memory participation apart on purpose. */}
+              §8b-i keeps account access and memory participation apart on purpose.
+
+              THE JOIN-REQUEST CARD IS GONE (0298). It offered "Approve · Contributor",
+              which called `approve_join_request` and, after 0298, gave that person their
+              OWN space rather than membership of this one — the control did not do what
+              it said. Erica, 2026-08-31: "Retire it — tagging is the link. Nobody ever
+              joins someone else's space." Nothing could make a request either: there was
+              no request-to-join screen anywhere, so the page offered to approve something
+              nobody could ask for, into a space nobody could join. */}
           <h2 style={{ marginTop: 28 }}>People and membership</h2>
-          <JoinRequestsCard />
           <PeopleCard meId={profile.id} />
           <h3 style={{ margin: '20px 0 8px' }}>Your people</h3>
           <YourPeopleCard />

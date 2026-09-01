@@ -664,7 +664,7 @@ because a sentence inside a merged migration header is not where an outstanding 
 | ~~**2**~~ | ~~**Ten tables carry no `space_id`** and `0293`'s guard cannot reach them~~ ✅ **AUDITED 2026-09-01 — all ten protected.** Seven attacks run as Josh on production, all touching zero rows; `0302` removed three dead grants. Two constraints recorded rather than changed: `profiles` gates on the GLOBAL `is_owner()` (safe only while `invite_codes.role` excludes `owner`, now guarded), and `job_runs`/`service_health` read on bare `is_member()` | See §THE TEN TABLES THAT CARRY NO SPACE |
 | **3** | **`detect-trips` clusters across both spaces** and inserts `places` and `visits` setting no `created_by`, so it cannot say whose trip it is | Found by `0295`; needs a code change and a function deploy, not a migration |
 | **4** | **`suggest` → `ingest_runs` names no initiator**, so a suggester run belongs to nobody | Same |
-| **5** | **`JoinRequestsCard` offers something it can no longer do.** Settings ▸ Data & Privacy still invites you to approve somebody *into* your space; after `0298` they get their own instead | `0298`. The control does not do what it says — the exact defect item 6 exists to remove. App change |
+| ~~**5**~~ | ~~**`JoinRequestsCard` offers something it can no longer do**~~ ✅ **DONE 2026-09-01.** The card and `lib/join.ts` are deleted; the RPCs stay, because they still decide who may hold an account. Guarded | See §A DOOR THAT LED NOWHERE |
 | **6** | **The space boundary has never been proved with two REAL accounts.** Everything is proved by SQL fixtures and by the test bot | `0289`'s test and `0293`'s test both construct their own two spaces. `0287`'s blocking guard is also still "the fix is deployed", not "the bypass is measured shut" |
 | **7** | **`current_space()` is `limit 1` over an unordered scan** — deterministic today only because nobody is in two spaces | `0291` already built the fix and said why: `home_space()` orders by `(role = 'owner') desc, space_id`. Nothing points `default_space()` at it yet |
 | **8** | **CI's `default_space()` is not production's**, so any test asserting WHERE A ROW LANDS must install production's body itself | `0292` §8 lives inside the branch that forks and an empty schema never forks. `0295`, `0297` and `0299`'s tests carry the preamble; **nothing enforces that the next one does** |
@@ -770,6 +770,29 @@ that ask is withdrawn.
 (the disabled legacy JWT, §8) and **not** `SUPABASE_SECRET_KEY`, so `canMintSession` is false
 in Actions. The suite runs locally and skips in CI — which is why seven checks could sit red
 without anything going red. Adding that secret is what closes it.
+
+### A DOOR THAT LED NOWHERE — the join-request card is gone, 2026-09-01
+
+`0298` retired the mechanism; this removes the control that still offered it. Settings ▸
+Data & Privacy rendered **"Approve · Contributor"**, which called `approve_join_request` and,
+after `0298`, gave that person **their own space** rather than membership of yours. The
+control did not do what it said — the exact defect item 6 exists to remove.
+
+**And nothing could make a request either.** `submitJoinRequest` and `fetchMyJoinRequest`
+were already dead: there is no request-to-join screen anywhere in the app. So the page
+offered to approve something nobody could ask for, into a space nobody could join, and
+`join_requests` has 0 rows.
+
+`app/src/lib/join.ts` is deleted — `Settings.tsx` was its only importer. **The RPCs stay**:
+`0298` kept `approve_join_request` and `claim_invite` because they still decide *who may hold
+an account*, which is still wanted; what is retired is the surface that offered to approve
+somebody into a space.
+
+Guarded in `lockedCard.test.ts`, because a dead door is exactly the thing that gets restored
+by somebody tidying an unused import. The guard **strips comments and skips
+`database.types.ts`** — its first two drafts failed on the generated schema mirror and then
+on the comment that explains the removal, which is the same mistake `0300`'s migration made
+about itself. *A guard that reads prose is asserting the wrong thing.*
 
 ### THE TEN TABLES THAT CARRY NO SPACE — AUDITED 2026-09-01, `0302` APPLIED
 
