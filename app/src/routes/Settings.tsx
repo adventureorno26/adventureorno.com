@@ -79,7 +79,6 @@ import {
 } from '../lib/importFile';
 import PeopleCard from '../components/PeopleCard';
 import YourPeopleCard from '../components/YourPeopleCard';
-import SharedHub from '../components/SharedHub';
 import { runClusteringNow } from '../lib/timeline';
 
 const TAG_COLORS = [
@@ -1811,7 +1810,6 @@ function DataPrivacyDestination() {
       {profile?.role === 'owner' && <GeocodeCard />}
 
       <h2 style={{ marginTop: 28 }}>Sharing{memberNames ? ` — ${memberNames}` : ''}</h2>
-      <SharedHub />
 
       {/* TAG APPROVALS COME FIRST AND ARE NOT OWNER-GATED. Anybody can be tagged, so
           anybody must be able to answer — §8b-i keeps account access and memory

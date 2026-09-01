@@ -5039,10 +5039,6 @@ textarea {
   color: var(--accent);
   margin-bottom: 4px;
 }
-/* Shared hub (Settings): links + want-to boards. */
-.shared-hub .card {
-  margin-top: 12px;
-}
 .fav-label {
   font-size: 13px;
   font-weight: 600;
@@ -5175,11 +5171,6 @@ textarea {
 }
 .our-stats .stat .label {
   color: var(--muted);
-}
-.settings-page .app-tile {
-  height: 28px;
-  padding: 0 12px;
-  font-size: 12px;
 }
 /* Trail setup form — compact. */
 .trail-setup {
@@ -5582,31 +5573,6 @@ textarea {
   max-width: 96px;
   border-radius: 999px;
   flex: 0 0 auto;
-}
-.app-launcher {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  margin-top: 8px;
-}
-.app-tile {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 13px;
-}
-.app-tile:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
 }
 .hub-links {
   display: flex;

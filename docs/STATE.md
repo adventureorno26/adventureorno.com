@@ -160,7 +160,94 @@ recordings still count once. Events stay outside historical totals until an acce
 or outing is explicitly created. **The scope vocabulary is defined once, in §0.2 — there is
 no ALL/ANY operator and no `Together`, `Just me`, `Just Josh`, `Both`, `All` or `Anyone`.**
 
-### Approved navigation and information architecture
+### THE HOUSEHOLD APP IS GONE — measured and guarded, 2026-09-01
+
+Erica asked how to be sure the old language is removed *completely* — from the repo, Supabase
+and Cloudflare. Measured rather than assumed, and the answer split into three things that get
+called the same name:
+
+**1. The words a person reads — already clean, now wider.** The shipped bundle contains zero
+`Erica`, `Josh`, `Together`, `Just me`, `household`, `couple` or `flok`, checked
+case-sensitively on word boundaries (an earlier count of "18 Erica" was `America`,
+`numerical` and `spherical` — a bad grep, not a leak). `lockedCard.test.ts` now bans
+`household`, `couple` and `flok` alongside the existing list, and it reads only what renders,
+so the comments explaining the retired model do not trip it. `partner` is deliberately NOT
+banned: the people contract allows a partner to be a **favourite**, so the word can honestly
+be a label; what is banned is partner as a *scope*, guarded in `participants.test.ts`.
+
+**2. Comments and history — deliberately kept.** Recording what a thing used to say is this
+file's whole method. Removing them would delete the reasoning and leave the conclusions.
+
+**3. The model — the only one that matters, and no scanner finds it.**
+
+#### `SharedHub`, and why a word-scan would never have caught it
+
+Until today, Settings mounted **"Our apps"** — a launcher for Wegmans, Total Wine,
+CellarTracker, Amazon Music, Spotify, Audible, Netflix and AnyList, under the line
+*"Tap to open — sign in there with your shared household login."*
+
+That is the household app in one component: a couple's shopping and streaming shortcuts,
+shipped, on a platform meant to be a social network. **The giveaway was what the feature WAS,
+not what it said.** Deleted, with its CSS, and guarded so it cannot return.
+
+**A scanner finds vocabulary; only reading finds a model.** The model-shaped remnants that are
+still there and are *not* words: `profiles.role` is `owner | editor | viewer` — a household
+hierarchy, not a social graph; `is_owner()` is global rather than per-space (§THE TEN TABLES);
+and a `space` is still a container for one person's history rather than a node in a network.
+Those are named here so they are worked, not scanned for.
+
+In the live database exactly one object name carries the old vocabulary — `together_since`.
+In the Cloudflare workers, only comments.
+
+### APPROVED NAVIGATION — 2026-09-01. THIS SUPERSEDES THE FOUR-TAB STRUCTURE BELOW.
+
+Erica, 2026-09-01: *"I really want to make sure the foundation of this platform has changed
+from a private household/couple history app to fundamentally a social network, activity
+platform, group planner, event system, and location-sharing application."*
+
+**The persistent primary navigation is exactly five, and the profile is not one of them:**
+
+```text
+Home | Explore | Create | Plans | Inbox          + Profile, opened through the avatar
+```
+
+| Tab | Holds |
+| --- | --- |
+| **Home** | upcoming plans · connection activity · nearby events · progress and recommendations, **with the map embedded as a dashboard section** |
+| **Explore** | the full map · places · events · activities · recommendations |
+| **Create** | activity · plan · trip · event · post · recommendation |
+| **Plans** | trips · groups · events · tasks · invitations |
+| **Inbox** | messages · requests · notifications · tag approvals |
+
+**The map appears twice on purpose, and that settles a question this file had left open.** A
+useful preview on Home, the complete map in Explore. The earlier IA made the map the homepage
+and nothing else; that is a map app's answer, not a social platform's.
+
+**THE 2026-08-20 FOUR-TAB STRUCTURE (`Map | Add | Insights | Settings`) IS RETIRED** and must
+not be cited again, along with its ruling that *"People, Events and Messages are capabilities,
+not extra primary tabs"* — Plans and Inbox are now tabs precisely because they are the
+product, not accessories to a map.
+
+#### WHERE EVERY EXISTING SCREEN GOES, so nothing is dropped by silence
+
+| Today | Lands in |
+| --- | --- |
+| `/` map · `/place/:id` · `/place/:id/routes` · `/place/:id/day/:date` · `/visit/:id` · `/place/:id/compare` | **Explore** (and the card opens from Home's embedded map too) |
+| `/places` · `/places/edit` · `/albums` | **Explore** |
+| `/add` · `/photos/sort` · `/photos/import/complete` | **Create** |
+| `/bucket` — places you want to go | **Plans** |
+| `/insights` (+ places/timeline tabs) · `/wrapped` | **Home** (progress) with the detail on **Profile** |
+| `/people` · `/people/:personId` · `/profile/:handle` | **Profile**, and new connection activity surfaces on **Home** |
+| `/settings/data/attention` — needs attention | **Inbox** |
+| `/settings/*` · `/settings/account/invites` · `/settings/integrations` · `/settings/data/**` · `/duplicates` · `/health` · `/settings/import` | **Profile** (via the avatar) |
+
+**WHAT HAS NO HOME YET, and that is the honest part.** Events, groups, tasks, messages,
+notifications and posts have **no tables, no routes and no screens** — three of the five tabs
+lead to rooms that do not exist. So the shell is not built first: **one vertical slice at a
+time, end to end** (Erica, 2026-09-01), starting with **Events**, because events alone feed
+Plans, Inbox and Explore at once.
+
+### Approved navigation and information architecture *(RETIRED 2026-09-01 — kept as history, see above)*
 
 The persistent primary navigation is exactly:
 
