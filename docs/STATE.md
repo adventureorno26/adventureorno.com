@@ -160,6 +160,44 @@ recordings still count once. Events stay outside historical totals until an acce
 or outing is explicitly created. **The scope vocabulary is defined once, in §0.2 — there is
 no ALL/ANY operator and no `Together`, `Just me`, `Just Josh`, `Both`, `All` or `Anyone`.**
 
+### THE BOUNDARY, PROVED WITH TWO REAL ACCOUNTS — 2026-09-01
+
+STATE.md has carried *"the partition has never been proved with two real accounts"* since the
+fork. It is proved now, at the boundary a stranger would actually reach.
+
+**Everything before this proved it from inside the database.** `0289`'s test sets
+`request.jwt.claims` in psql; `0293`'s does the same for writes. Those are the right tests and
+they stay — but they answer *"does Postgres refuse it"*, and what a person has is an HTTP
+client and a bearer token. `app/e2e/two-spaces.spec.ts` asks the same questions through
+**PostgREST**, with two real sessions.
+
+**A fourth fixture, and it is not a permission level.** `owner`/`editor`/`viewer` share one
+space and differ by what they may WRITE — `0286`: roles govern writes, visibility belongs to
+the space boundary. A viewer proves nothing about the boundary because they are *inside* it.
+The `stranger` is a valid account that is simply not in your space, seeded into their own by
+`0298` and deliberately left out of the collapse that puts the other three together.
+
+```
+✓ the owner creates something of their own
+✓ the owner can see and change it — so the zeros below mean refused
+✓ a stranger cannot READ it — not the place, the visit, or its participants
+✓ a stranger cannot WRITE it — counted, not merely un-errored
+✓ a stranger calling edit_visit is refused by 0293, not merely filtered
+✓ and the owner's row is untouched by any of it
+```
+
+**COUNT THE ROWS, NEVER THE ABSENCE OF AN ERROR** — the lesson from the ten-tables audit,
+built into the file. A PATCH or DELETE that RLS filters to nothing returns **200 with an
+empty array**, so every mutation sends `Prefer: return=representation` and asserts on the
+LENGTH of what comes back. The owner runs the same calls first, so a zero means *refused*
+rather than *"the filter matched nothing"*.
+
+**Proved it can fail:** adding the stranger to the owner's space turns section 3 red with
+*"a stranger must not read the place"*, and removing them turns it green.
+
+It is gated to a local disposable stack exactly as `mutating.spec.ts` is, so it runs in the
+weekly full-browser job rather than on every PR — it mutates rows, and that gate is why.
+
 ### `current_space()` STOPS GUESSING — `0303` APPLIED 2026-09-01
 
 It decides the `space_id` default on **47 columns**, through `default_space()`, which since
@@ -810,7 +848,7 @@ because a sentence inside a merged migration header is not where an outstanding 
 | ~~**3**~~ | ~~**`detect-trips` clusters across both spaces**~~ ✅ **FIXED 2026-09-01 — and it was never deployed**, so it was not a live fault. Scoped to the caller's space, names `created_by`, refuses a callerless run. Deliberately still not deployed | See §THE LAST TWO WRITERS |
 | ~~**4**~~ | ~~**`suggest` → `ingest_runs` names no initiator**~~ ✅ **FIXED AND DEPLOYED 2026-09-01** (v11). Proved on production that the insert was refused before and is accepted with `initiated_by`. Not exercised end to end — a real run writes suggestions | See §THE LAST TWO WRITERS |
 | ~~**5**~~ | ~~**`JoinRequestsCard` offers something it can no longer do**~~ ✅ **DONE 2026-09-01.** The card and `lib/join.ts` are deleted; the RPCs stay, because they still decide who may hold an account. Guarded | See §A DOOR THAT LED NOWHERE |
-| **6** | **The space boundary has never been proved with two REAL accounts.** Everything is proved by SQL fixtures and by the test bot | `0289`'s test and `0293`'s test both construct their own two spaces. `0287`'s blocking guard is also still "the fix is deployed", not "the bypass is measured shut" |
+| ~~**6**~~ | ~~**The space boundary has never been proved with two REAL accounts**~~ ✅ **PROVED 2026-09-01.** `app/e2e/two-spaces.spec.ts` — six assertions through PostgREST with two real sessions, mutations counted rather than un-errored, and a negative control. **Still open within it:** `0287`'s blocking guard is a separate question and remains "the fix is deployed", not "the bypass is measured shut" | See §THE BOUNDARY, PROVED |
 | ~~**7**~~ | ~~**`current_space()` is `limit 1` over an unordered scan**~~ ✅ **FIXED 2026-09-01 (`0303`).** Ordered by `(role='owner') desc, space_id`, matching `home_space()`. Zero behaviour change today — 0 profiles hold two memberships — which is why it was free to do now | See §`current_space()` STOPS GUESSING |
 | ~~**8**~~ | ~~**CI's `default_space()` is not production's**~~ ✅ **GUARDED 2026-09-01.** `scripts/space-test-preamble.test.mjs` fails any SQL test that calls `home_space_of(` without installing production's body, with the fix in the message. A proxy, and it says so | See §A TEST THAT REASONS ABOUT SPACES |
 | ~~**9**~~ | ~~**NULL `confirmation_token` breaks GoTrue's admin API**~~ ✅ **FIXED 2026-09-01.** It was not `db-bootstrap` — `export-restore-roundtrip.sh` and `prove-invite-race.sh` inserted `auth.users (id, email)` only and never cleaned up, leaving six NULL token columns behind for the life of the stack | See §A FIXTURE USER GOTRUE CANNOT READ |

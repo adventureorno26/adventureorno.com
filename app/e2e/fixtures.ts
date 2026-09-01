@@ -30,7 +30,12 @@ if (requireAuth && !hasAuthEnv) {
   );
 }
 
-export type Role = 'owner' | 'editor' | 'viewer';
+/** `stranger` is NOT a permission level — it is a person in a DIFFERENT SPACE.
+ *  owner/editor/viewer share one space and differ by what they may WRITE (§0286: roles
+ *  govern writes, visibility belongs to the space boundary). The stranger exists to test
+ *  the other axis: somebody with a perfectly valid account who is simply not in your
+ *  space, which is the only thing that decides what they may SEE. */
+export type Role = 'owner' | 'editor' | 'viewer' | 'stranger';
 
 const ROLE_CREDS: Record<Role, { email: string; password: string }> = {
   owner: {
@@ -44,6 +49,10 @@ const ROLE_CREDS: Record<Role, { email: string; password: string }> = {
   viewer: {
     email: process.env.TEST_VIEWER_EMAIL || 'viewer.e2e@example.invalid',
     password: process.env.TEST_VIEWER_PASSWORD || 'Local-E2E-viewer-2026!',
+  },
+  stranger: {
+    email: process.env.TEST_STRANGER_EMAIL || 'stranger.e2e@example.invalid',
+    password: process.env.TEST_STRANGER_PASSWORD || 'Local-E2E-stranger-2026!',
   },
 };
 
