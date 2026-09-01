@@ -36,10 +36,10 @@ jobs:
       # persist-credentials: false — checkout otherwise leaves the job's token in
       # .git/config, where anything later in the job (or an uploaded artifact) can
       # read it. zizmor's `artipacked`; ci.yml already does this everywhere.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
 
@@ -76,10 +76,10 @@ jobs:
       # persist-credentials: false — checkout otherwise leaves the job's token in
       # .git/config, where anything later in the job (or an uploaded artifact) can
       # read it. zizmor's `artipacked`; ci.yml already does this everywhere.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
       # The database dump holds photo ROWS; the JPEGs live in R2. A restore needs
@@ -100,10 +100,10 @@ jobs:
       # persist-credentials: false — checkout otherwise leaves the job's token in
       # .git/config, where anything later in the job (or an uploaded artifact) can
       # read it. zizmor's `artipacked`; ci.yml already does this everywhere.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
       # THE ALERT. A failed job already turns this workflow red and GitHub emails
@@ -128,13 +128,13 @@ jobs:
       # persist-credentials: false — checkout otherwise leaves the job's token in
       # .git/config, where anything later in the job (or an uploaded artifact) can
       # read it. zizmor's `artipacked`; ci.yml already does this everywhere.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22
-      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
           version: latest
       - name: Install age
