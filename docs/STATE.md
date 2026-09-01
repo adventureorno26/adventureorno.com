@@ -160,6 +160,42 @@ recordings still count once. Events stay outside historical totals until an acce
 or outing is explicitly created. **The scope vocabulary is defined once, in §0.2 — there is
 no ALL/ANY operator and no `Together`, `Just me`, `Just Josh`, `Both`, `All` or `Anyone`.**
 
+### THE LAST TWO WRITERS NAME THEIR SPACE — 2026-09-01
+
+The two `0295` could not reach. **One of them was never deployed**, which the outstanding
+list had not noticed.
+
+**`suggest` — live, fixed and deployed (v10 → v11).** Its `ingest_runs` insert named nobody,
+and every write in it goes through the service-role client, so `auth.uid()` is null and
+`0295` had nothing to resolve a space from. Proved on production before touching the code:
+
+```
+insert into public.ingest_runs (source) values ('aon-probe');
+ERROR: 23502: public.ingest_runs was written with no caller and no initiated_by,
+       so it names no space
+                                        -- and with initiated_by named: ACCEPTED
+```
+
+The caller's id is now hoisted out of the auth guard and passed as `initiated_by`. A
+**service-role** invocation still fails, deliberately — it has nobody to name, and `suggest`
+is user-invoked only (no cron schedules it), so there is nothing to break.
+
+**`detect-trips` — NOT DEPLOYED, and that is the finding.** It is in the repo and in the live
+function list it is absent, so it cannot have been breaking production. Its nightly cron was
+unscheduled by `0100`. **Fixed anyway and deliberately not deployed**: deploying it would
+start something that does not currently run.
+
+What it did wrong was worse than a missing column. It clustered **every photo and activity in
+the database** into trips — one household's worth of answer — and after the fork a trip built
+from both people's photos belongs to neither. It now resolves the **caller's** space, scopes
+all five of its reads to it, and names `created_by` on the places and visits it creates so
+`0295` can file them. A call with no caller is **refused** rather than guessed at, which is
+the same sentence `0292` wrote when it deleted the "biggest space" fallback.
+
+⚠️ **NOT VERIFIED END TO END.** The database mechanism is proven and the deploy is confirmed,
+but `suggest` was not actually run, because a real run writes suggestion rows to Erica's
+account and `dry_run` skips the very insert being fixed.
+
 ### THE HOUSEHOLD APP IS GONE — measured and guarded, 2026-09-01
 
 Erica asked how to be sure the old language is removed *completely* — from the repo, Supabase
@@ -749,8 +785,8 @@ because a sentence inside a merged migration header is not where an outstanding 
 | --- | --- | --- |
 | **1** | **An accepted VISIT tag is still hostage.** `0299` materialises outings only. Visits key on `v.id` and places on `p.id` with no `shared_group_id`, so a copy would count twice with nothing able to say the two rows are one memory | `0292`'s finding, restated by `0299`. The fix is a `shared_group_id` on visits and places plus every reader taught to collapse on it — the third migration `0292` sized and nobody has written |
 | ~~**2**~~ | ~~**Ten tables carry no `space_id`** and `0293`'s guard cannot reach them~~ ✅ **AUDITED 2026-09-01 — all ten protected.** Seven attacks run as Josh on production, all touching zero rows; `0302` removed three dead grants. Two constraints recorded rather than changed: `profiles` gates on the GLOBAL `is_owner()` (safe only while `invite_codes.role` excludes `owner`, now guarded), and `job_runs`/`service_health` read on bare `is_member()` | See §THE TEN TABLES THAT CARRY NO SPACE |
-| **3** | **`detect-trips` clusters across both spaces** and inserts `places` and `visits` setting no `created_by`, so it cannot say whose trip it is | Found by `0295`; needs a code change and a function deploy, not a migration |
-| **4** | **`suggest` → `ingest_runs` names no initiator**, so a suggester run belongs to nobody | Same |
+| ~~**3**~~ | ~~**`detect-trips` clusters across both spaces**~~ ✅ **FIXED 2026-09-01 — and it was never deployed**, so it was not a live fault. Scoped to the caller's space, names `created_by`, refuses a callerless run. Deliberately still not deployed | See §THE LAST TWO WRITERS |
+| ~~**4**~~ | ~~**`suggest` → `ingest_runs` names no initiator**~~ ✅ **FIXED AND DEPLOYED 2026-09-01** (v11). Proved on production that the insert was refused before and is accepted with `initiated_by`. Not exercised end to end — a real run writes suggestions | See §THE LAST TWO WRITERS |
 | ~~**5**~~ | ~~**`JoinRequestsCard` offers something it can no longer do**~~ ✅ **DONE 2026-09-01.** The card and `lib/join.ts` are deleted; the RPCs stay, because they still decide who may hold an account. Guarded | See §A DOOR THAT LED NOWHERE |
 | **6** | **The space boundary has never been proved with two REAL accounts.** Everything is proved by SQL fixtures and by the test bot | `0289`'s test and `0293`'s test both construct their own two spaces. `0287`'s blocking guard is also still "the fix is deployed", not "the bypass is measured shut" |
 | **7** | **`current_space()` is `limit 1` over an unordered scan** — deterministic today only because nobody is in two spaces | `0291` already built the fix and said why: `home_space()` orders by `(role = 'owner') desc, space_id`. Nothing points `default_space()` at it yet |

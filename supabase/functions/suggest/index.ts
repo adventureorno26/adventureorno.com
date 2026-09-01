@@ -180,6 +180,11 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization') ?? '';
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   if (!jwt) return json({ error: 'unauthenticated' }, 401);
+  // WHO ASKED FOR THIS RUN. Hoisted out of the guard below because `ingest_runs` needs it:
+  // every write here goes through the service-role client, so `auth.uid()` is null and
+  // 0295 resolves the row's space from `initiated_by`. Null it, and the insert raises
+  // "was written with no caller and no initiated_by, so it names no space".
+  let initiatedBy: string | null = null;
   if (jwtRole(jwt) !== 'service_role') {
     const asCaller = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
@@ -188,6 +193,7 @@ Deno.serve(async (req) => {
       data: { user },
     } = await asCaller.auth.getUser();
     if (!user) return json({ error: 'invalid session' }, 401);
+    initiatedBy = user.id;
     const { data: prof } = await admin
       .from('profiles')
       .select('role')
@@ -210,9 +216,12 @@ Deno.serve(async (req) => {
   const notes: Record<string, number> = {};
   let runId: string | null = null;
   if (!dryRun) {
+    // `initiated_by` is not decoration: it is what tells 0295's trigger which space this
+    // run belongs to. A service-role caller has nobody to name, and that is the one case
+    // where the insert is still expected to fail loudly rather than guess — see the header.
     const { data: run } = await admin
       .from('ingest_runs')
-      .insert({ source: 'suggester' })
+      .insert({ source: 'suggester', initiated_by: initiatedBy })
       .select('id')
       .maybeSingle();
     runId = (run?.id as string) ?? null;

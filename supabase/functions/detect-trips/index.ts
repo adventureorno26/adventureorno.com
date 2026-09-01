@@ -110,6 +110,13 @@ Deno.serve(async (req) => {
   const isServiceCall = req.headers.get('apikey') === SERVICE_ROLE_KEY;
   const authHeader = req.headers.get('Authorization') ?? '';
   const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  // WHOSE TRIPS THESE ARE. Before the fork there was one household and the question did not
+  // arise; this clustered every photo and activity in the database into one answer. After
+  // 0292 there are two spaces, and a trip built from both people's photos belongs to
+  // neither. So the run is scoped to the CALLER's space, and a call with no caller is
+  // refused rather than guessed at — 0292 deleted the "biggest space" guess for exactly
+  // this reason.
+  let callerId: string | null = null;
   if (!isServiceCall) {
     if (!jwt) return json({ error: 'unauthenticated' }, 401);
     const asCaller = createClient(SUPABASE_URL, ANON_KEY, {
@@ -119,6 +126,7 @@ Deno.serve(async (req) => {
       data: { user },
     } = await asCaller.auth.getUser();
     if (!user) return json({ error: 'invalid session' }, 401);
+    callerId = user.id;
     const { data: prof } = await admin
       .from('profiles')
       .select('role')
@@ -127,10 +135,28 @@ Deno.serve(async (req) => {
     if (prof?.role !== 'owner') return json({ error: 'owner required' }, 403);
   }
 
+  // No caller, no space, no trips. A service-role invocation cannot say whose trips it is
+  // building, and inventing an answer is what the partition exists to prevent.
+  if (!callerId) {
+    return json(
+      { error: 'detect-trips needs a signed-in caller: a trip belongs to somebody’s space' },
+      400,
+    );
+  }
+  const { data: membership } = await admin
+    .from('space_memberships')
+    .select('space_id')
+    .eq('profile_id', callerId)
+    .limit(1)
+    .maybeSingle();
+  const space = membership?.space_id as string | undefined;
+  if (!space) return json({ error: 'that account is in no space' }, 400);
+
   // Home center from settings (radius here is our own 3mi, not settings.radius_m).
   const { data: hz } = await admin
     .from('settings')
     .select('value')
+    .eq('space_id', space)
     .eq('key', 'home_zone')
     .maybeSingle();
   const home = ((hz?.value as { lat?: number; lng?: number } | null) ?? {}) as {
@@ -141,8 +167,12 @@ Deno.serve(async (req) => {
 
   // 1. Gather timestamped events.
   const [{ data: photos }, { data: acts }] = await Promise.all([
-    admin.from('photos').select('lat, lng, taken_at').not('taken_at', 'is', null),
-    admin.from('activities').select('lat, lng, start_date').not('lat', 'is', null),
+    admin.from('photos').select('lat, lng, taken_at').eq('space_id', space).not('taken_at', 'is', null),
+    admin
+      .from('activities')
+      .select('lat, lng, start_date')
+      .eq('space_id', space)
+      .not('lat', 'is', null),
   ]);
   const events: Ev[] = [];
   for (const p of photos ?? [])
@@ -169,6 +199,7 @@ Deno.serve(async (req) => {
   const { data: tripPlaces } = await admin
     .from('places')
     .select('id, first_visit, last_visit')
+    .eq('space_id', space)
     .contains('categories', ['trip']);
   const existingRanges = (tripPlaces ?? [])
     .filter((t) => t.first_visit)
@@ -177,7 +208,8 @@ Deno.serve(async (req) => {
   // Existing saved places to attach (loaded once).
   const { data: allPlaces } = await admin
     .from('places')
-    .select('id, lat, lng, first_visit, last_visit, part_of, categories, saved, bucket');
+    .select('id, lat, lng, first_visit, last_visit, part_of, categories, saved, bucket')
+    .eq('space_id', space);
 
   const created: { name: string; start: string; end: string; attached: number }[] = [];
 
@@ -215,12 +247,17 @@ Deno.serve(async (req) => {
         suggested: true,
         saved: false,
         needs_geocode: false,
+        // Named so 0295 can file it: this runs as service_role, so `auth.uid()` is null
+        // and the space is resolved from `created_by`.
+        created_by: callerId,
       })
       .select('id')
       .single();
     if (perr || !place) continue;
 
-    await admin.from('visits').insert({ place_id: place.id, start_date: start, end_date: end });
+    await admin
+      .from('visits')
+      .insert({ place_id: place.id, start_date: start, end_date: end, created_by: callerId });
 
     // Attach existing saved places inside the dates + bbox.
     let attached = 0;
