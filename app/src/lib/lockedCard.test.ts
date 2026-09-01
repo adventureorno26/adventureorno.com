@@ -154,6 +154,45 @@ describe('the locked card — the sections, in the locked order', () => {
   });
 });
 
+describe("nobody joins somebody else's space", () => {
+  // Erica, 2026-08-31: "Retire it — tagging is the link. Nobody ever joins someone else's
+  // space." 0298 removed the mechanism; this removes the control that still offered it.
+  //
+  // Settings ▸ Data & Privacy rendered "Approve · Contributor", which called
+  // `approve_join_request` and — after 0298 — gave that person their OWN space rather than
+  // membership of this one. The control did not do what it said. Nothing could make a
+  // request either: there was no request-to-join screen anywhere, so the page offered to
+  // approve something nobody could ask for, into a space nobody could join.
+  //
+  // Guarded because a dead door is exactly the kind of thing that gets restored by someone
+  // tidying up an unused import.
+  it('offers no way to approve somebody into your space', () => {
+    // `database.types.ts` is skipped: it is a GENERATED mirror of the schema, and
+    // `approve_join_request` still exists in the database on purpose — 0298 kept it,
+    // because it still decides who may hold an account. What is retired is the SURFACE
+    // that offered to approve somebody into a space, and a surface is what this scans.
+    //
+    // COMMENTS STRIPPED, and that is not fussiness either: the first draft failed on the
+    // comment in Settings.tsx that EXPLAINS the removal. A guard that reads prose is
+    // asserting the wrong thing — the same mistake 0300's own migration made about itself.
+    const code = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    for (const [path, src] of SOURCES.filter(([p]) => !p.endsWith('database.types.ts'))) {
+      expect(code(src), `${path} must not offer to approve a join request`).not.toMatch(
+        /approveJoinRequest|approve_join_request/,
+      );
+      expect(code(src), `${path} must not read pending join requests`).not.toMatch(
+        /fetchPendingJoinRequests/,
+      );
+    }
+  });
+
+  it('has no lib/join.ts left to import', () => {
+    const join = SOURCES.find(([p]) => p.endsWith('lib/join.ts'));
+    expect(join, 'app/src/lib/join.ts is retired and should be gone').toBeUndefined();
+  });
+});
+
 describe('adding an activity asks for no title', () => {
   // Erica, 2026-08-31: "I like the view of the card when I click on Virginia Beach, except
   // that to add an activity I have to give it a title."
