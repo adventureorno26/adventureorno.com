@@ -160,6 +160,28 @@ recordings still count once. Events stay outside historical totals until an acce
 or outing is explicitly created. **The scope vocabulary is defined once, in §0.2 — there is
 no ALL/ANY operator and no `Together`, `Just me`, `Just Josh`, `Both`, `All` or `Anyone`.**
 
+### `current_space()` STOPS GUESSING — `0303` APPLIED 2026-09-01
+
+It decides the `space_id` default on **47 columns**, through `default_space()`, which since
+`0292` §8 is exactly `select public.current_space()`. So it is the single expression deciding
+where almost every row in the database is filed — and it was `limit 1` over an **unordered**
+scan, which returns whichever row the planner reaches first. Deterministic by accident for
+one membership; **a coin flip on every insert** for two.
+
+`0291` had already built the answer and said why in its own header — *"for a two-space member
+it returns a DIFFERENT space depending on the plan"* — so `home_space()` orders by
+`(role = 'owner') desc, space_id`. `current_space()` now does the same. The tie-break is not
+arbitrary: **a space you own is more yours than one you were added to**, and `space_id` after
+it makes the answer total.
+
+**Done now precisely because it cannot matter yet.** Zero profiles hold two memberships, and
+after `0298` nothing creates a second — so it is free to change today, and the day it *can*
+matter is the day somebody is debugging why two rows written a second apart disagree. Types
+are a zero diff and every capability figure is unchanged.
+
+The test **manufactures** the two-membership case by hand, because nothing in the product
+creates it any more — a test that waited for it to arise would never run.
+
 ### THE LAST TWO WRITERS NAME THEIR SPACE — 2026-09-01
 
 The two `0295` could not reach. **One of them was never deployed**, which the outstanding
@@ -789,7 +811,7 @@ because a sentence inside a merged migration header is not where an outstanding 
 | ~~**4**~~ | ~~**`suggest` → `ingest_runs` names no initiator**~~ ✅ **FIXED AND DEPLOYED 2026-09-01** (v11). Proved on production that the insert was refused before and is accepted with `initiated_by`. Not exercised end to end — a real run writes suggestions | See §THE LAST TWO WRITERS |
 | ~~**5**~~ | ~~**`JoinRequestsCard` offers something it can no longer do**~~ ✅ **DONE 2026-09-01.** The card and `lib/join.ts` are deleted; the RPCs stay, because they still decide who may hold an account. Guarded | See §A DOOR THAT LED NOWHERE |
 | **6** | **The space boundary has never been proved with two REAL accounts.** Everything is proved by SQL fixtures and by the test bot | `0289`'s test and `0293`'s test both construct their own two spaces. `0287`'s blocking guard is also still "the fix is deployed", not "the bypass is measured shut" |
-| **7** | **`current_space()` is `limit 1` over an unordered scan** — deterministic today only because nobody is in two spaces | `0291` already built the fix and said why: `home_space()` orders by `(role = 'owner') desc, space_id`. Nothing points `default_space()` at it yet |
+| ~~**7**~~ | ~~**`current_space()` is `limit 1` over an unordered scan**~~ ✅ **FIXED 2026-09-01 (`0303`).** Ordered by `(role='owner') desc, space_id`, matching `home_space()`. Zero behaviour change today — 0 profiles hold two memberships — which is why it was free to do now | See §`current_space()` STOPS GUESSING |
 | ~~**8**~~ | ~~**CI's `default_space()` is not production's**~~ ✅ **GUARDED 2026-09-01.** `scripts/space-test-preamble.test.mjs` fails any SQL test that calls `home_space_of(` without installing production's body, with the fix in the message. A proxy, and it says so | See §A TEST THAT REASONS ABOUT SPACES |
 | ~~**9**~~ | ~~**NULL `confirmation_token` breaks GoTrue's admin API**~~ ✅ **FIXED 2026-09-01.** It was not `db-bootstrap` — `export-restore-roundtrip.sh` and `prove-invite-race.sh` inserted `auth.users (id, email)` only and never cleaned up, leaving six NULL token columns behind for the life of the stack | See §A FIXTURE USER GOTRUE CANNOT READ |
 
