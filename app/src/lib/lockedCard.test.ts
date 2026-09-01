@@ -51,6 +51,32 @@ const BANNED: { word: RegExp; why: string }[] = [
     word: /\bboth of us\b/i,
     why: 'Erica, 2026-08-15: the view is TOGETHER. "Both of us" was still on the visit form.',
   },
+  // ---- THE HOUSEHOLD IS GONE, and these are the words that would bring it back ----
+  //
+  // Erica, 2026-09-01: "I really want to make sure the foundation of this platform has
+  // changed from a private household/couple history app to fundamentally a social network,
+  // activity platform, group planner, event system, and location-sharing application."
+  //
+  // This catches WORDS. It did not catch `SharedHub` — an "Our apps" launcher with Wegmans,
+  // Netflix and Spotify behind the line "sign in there with your shared household login" —
+  // because the giveaway there was what the feature WAS, not what it said. A scanner finds
+  // vocabulary; only reading finds a model. Both are needed.
+  {
+    word: /\bhouseholds?\b/i,
+    why: 'There is no household (§0.2). It is a social platform, not a shared home account.',
+  },
+  {
+    word: /\bcouples?\b/i,
+    why: 'Two people are two connections, not a unit the product knows about.',
+  },
+  {
+    word: /\bflok\b/i,
+    why: 'CLAUDE.md: a working title, NOT decided — never in the product, the docs or the repo.',
+  },
+  // `partner` is deliberately NOT here. The people contract allows a partner to be a
+  // FAVOURITE — a shortcut — so the word can honestly appear as a label. What is banned is
+  // partner as a SCOPE, a counting rule or a storage type, and that lives in
+  // participants.test.ts where the scopes are guarded.
 ];
 
 const CARD = SOURCES.find(([p]) => p.endsWith('components/PlacePanel.tsx'))?.[1] ?? '';
@@ -65,7 +91,7 @@ const ADD_ACTIVITY = SOURCES.find(([p]) => p.endsWith('components/AddActivity.ts
 // Words that are fine in general but must never appear in the CARD's visit list.
 const BANNED_IN_VISITS = [
   { word: '· Trip', why: 'A multi-day visit counts as a trip; it is never labelled.' },
-  { word: '>Together<', why: '"Together" now means tagging someone in a flok.' },
+  { word: '>Together<', why: '"Together" now means tagging somebody on a card (§0.2).' },
 ];
 
 describe('the locked card — words that must never come back', () => {
@@ -151,6 +177,23 @@ describe('the locked card — the sections, in the locked order', () => {
   it('the letter is text, never an icon', () => {
     // Her standing rule, and the reason a letter is allowed where a pictogram is not.
     expect(COVER).not.toMatch(/<svg|<img[^>]*icon|📷|🏔|🥾/);
+  });
+});
+
+describe('the household app is gone', () => {
+  // `SharedHub` was mounted on Settings until 2026-09-01: "Our apps", a launcher for
+  // Wegmans, Total Wine, CellarTracker, Netflix, Spotify, Audible and AnyList, under the
+  // line "Tap to open — sign in there with your shared household login."
+  //
+  // It is the clearest thing in the repo that was NOT a word: a couple's shopping and
+  // streaming shortcuts, shipped, on a platform meant to be a social network. No vocabulary
+  // scan would ever have found it. Erica, 2026-09-01: delete it.
+  it('has no shared-apps launcher', () => {
+    for (const [path, src] of SOURCES) {
+      expect(src, `${path} must not bring back the household app launcher`).not.toMatch(
+        /SharedHub|app-launcher/,
+      );
+    }
   });
 });
 
